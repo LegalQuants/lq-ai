@@ -1,0 +1,295 @@
+{
+  "what": "The ZIP from Settings, Account, Export my data (the file itself is not kept here), opened with Python's zipfile.",
+  "files_in_the_zip": [
+    {
+      "name": "README.md",
+      "bytes": 2509
+    },
+    {
+      "name": "user.json",
+      "bytes": 386
+    },
+    {
+      "name": "chats.json",
+      "bytes": 43878
+    },
+    {
+      "name": "messages.json",
+      "bytes": 160961
+    },
+    {
+      "name": "projects.json",
+      "bytes": 2133
+    },
+    {
+      "name": "files.json",
+      "bytes": 5841
+    },
+    {
+      "name": "files/ba2f2489-862f-4668-b432-65d97fc5a278__long-framework-agreement-232813.txt",
+      "bytes": 83191
+    },
+    {
+      "name": "files/d88e061c-8658-433a-ae74-7c43dcb075cd__delivery-note-232745.txt",
+      "bytes": 292
+    },
+    {
+      "name": "files/ab3fb7e6-a3a4-42c2-8f4d-b87082335752__long-framework-agreement-225508.txt",
+      "bytes": 83191
+    },
+    {
+      "name": "files/7eda47af-d578-4f5b-9e05-83c823c70e97__delivery-note-225140.txt",
+      "bytes": 292
+    },
+    {
+      "name": "files/8c91df56-54a3-42e8-a48d-459a0b398e54__long-framework-agreement-221857.txt",
+      "bytes": 83191
+    },
+    {
+      "name": "files/c0991828-68e8-4fa1-8743-41926bfc54f5__long-framework-agreement-221627.txt",
+      "bytes": 83191
+    },
+    {
+      "name": "files/101bacf2-57ae-4af6-a104-8cbaeb4adb43__long-framework-agreement-221400.txt",
+      "bytes": 83191
+    },
+    {
+      "name": "files/c91b9c1d-b74d-4a9d-880a-a627b6850d27__delivery-note-214736.txt",
+      "bytes": 292
+    },
+    {
+      "name": "files/35271cf1-6ecc-4ab1-8186-fc4109f32d5d__delivery-note-213049.txt",
+      "bytes": 292
+    },
+    {
+      "name": "files/cc26a9f2-419a-4764-a871-24d738fda7e1__delivery-note-213037.txt",
+      "bytes": 292
+    },
+    {
+      "name": "files/89ecd0a3-c1c9-4413-8741-06ede0a69f46__scanned-letter.png",
+      "bytes": 70
+    },
+    {
+      "name": "files/28e3953b-8fdf-484b-8ef6-dfcee90b38e5__fictional-vendor-agreement.md",
+      "bytes": 2555
+    },
+    {
+      "name": "files/62a41e99-6de3-40d3-9755-4d0b931b838b__data-processing-addendum.txt",
+      "bytes": 1216
+    },
+    {
+      "name": "files/d6159824-bc29-4fe5-80a2-6c342aab9d6c__services-agreement.txt",
+      "bytes": 1495
+    },
+    {
+      "name": "knowledge_bases.json",
+      "bytes": 2
+    },
+    {
+      "name": "audit_log.json",
+      "bytes": 4772854
+    },
+    {
+      "name": "work_product_attribution.json",
+      "bytes": 46812
+    },
+    {
+      "name": "skills.json",
+      "bytes": 2
+    },
+    {
+      "name": "skill_workspaces.json",
+      "bytes": 2
+    },
+    {
+      "name": "orchestration_runs.json",
+      "bytes": 2905595
+    }
+  ],
+  "structure_of_one_completed_documents_run": {
+    "which": "the most recent completed contract_qa_documents_v1 run in the export",
+    "root_id": "3850a40c-1784-4137-962d-1036d1a2343d",
+    "keys": [
+      "chat_id",
+      "created_at",
+      "message_id",
+      "planning",
+      "plans",
+      "profile",
+      "project_id",
+      "root_id",
+      "sessions",
+      "status",
+      "stop_reason",
+      "updated_at"
+    ],
+    "planning_keys": [
+      "attempt_timeout_seconds",
+      "budget_usd",
+      "child_skill_version",
+      "contract_version",
+      "deadline",
+      "delegation_grants",
+      "documents",
+      "gateway_revision",
+      "goal",
+      "max_active_children",
+      "max_children",
+      "model",
+      "owner_id",
+      "packet_digest",
+      "plan_id",
+      "planning_allowance_usd",
+      "policy_version",
+      "profile",
+      "project_id",
+      "root",
+      "root_allowance_usd",
+      "root_id",
+      "root_skill_version"
+    ],
+    "documents_in_planning": [
+      {
+        "number": 1,
+        "filename": "long-framework-agreement-232813.txt",
+        "attached_for_run": false
+      }
+    ],
+    "plans": [
+      {
+        "revision": 1,
+        "status": "approved",
+        "keys": [
+          "approval",
+          "created_at",
+          "plan",
+          "plan_hash",
+          "revision",
+          "status"
+        ]
+      }
+    ],
+    "sessions": [
+      {
+        "role": "root",
+        "status": "completed",
+        "effects": 4,
+        "files": []
+      },
+      {
+        "role": "child",
+        "status": "completed",
+        "effects": 11,
+        "files": [
+          {
+            "name": "findings.json",
+            "has_content": true,
+            "characters": 636
+          },
+          {
+            "name": "note-payment-terms.md",
+            "has_content": true,
+            "characters": 128
+          },
+          {
+            "name": "notes.md",
+            "has_content": true,
+            "characters": 118
+          }
+        ]
+      },
+      {
+        "role": "child",
+        "status": "completed",
+        "effects": 11,
+        "files": [
+          {
+            "name": "findings.json",
+            "has_content": true,
+            "characters": 536
+          },
+          {
+            "name": "note-renewal-and-termination.md",
+            "has_content": true,
+            "characters": 138
+          },
+          {
+            "name": "notes.md",
+            "has_content": true,
+            "characters": 128
+          }
+        ]
+      }
+    ],
+    "step_kinds_recorded_in_the_children": [
+      "document_read",
+      "findings_read",
+      "findings_saved",
+      "findings_shared",
+      "model_turn",
+      "note_saved",
+      "notes_read",
+      "notes_started",
+      "notes_updated"
+    ],
+    "child_result_keys": [
+      "artifact",
+      "failure_code",
+      "findings",
+      "status",
+      "summary",
+      "verification"
+    ],
+    "root_result_keys": [
+      "coverage",
+      "kind",
+      "summary",
+      "topics",
+      "verification"
+    ],
+    "text_markers_looked_for": {
+      "raw_response": false,
+      "provider_response": false,
+      "\"role\": \"tool\"": false
+    },
+    "note": "Presence of a field name is all this shows. The values were not compared with the runbook's list item by item."
+  },
+  "orchestration_runs.json": {
+    "top_level_type": "list",
+    "runs": 118,
+    "keys_of_the_first_run": [
+      "chat_id",
+      "created_at",
+      "message_id",
+      "planning",
+      "plans",
+      "profile",
+      "project_id",
+      "root_id",
+      "sessions",
+      "status",
+      "stop_reason",
+      "updated_at"
+    ],
+    "statuses": [
+      "closed",
+      "completed",
+      "failed",
+      "halted",
+      "rejected"
+    ],
+    "profiles": [
+      "contract_qa_documents_v1",
+      "model_demo_v1"
+    ]
+  },
+  "messages.json": {
+    "messages_of_kind_run": 118,
+    "each_has_autonomous_session_id": true
+  },
+  "work_product_attribution.json": {
+    "rows": 80,
+    "rows_for_run_messages": 59
+  },
+  "readme_mentions_orchestration_runs": true
+}

@@ -1,0 +1,99 @@
+{
+  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "effects": [],
+  "evidence": "citations",
+  "evidence_result": null,
+  "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "1.0.0",
+    "contract_version": 2,
+    "deadline": "2026-10-06T17:41:43.813464Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [
+      {
+        "attached_for_run": false,
+        "document_id": "71a16d78-61f3-49a3-888b-dce8a8eb87fe",
+        "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+        "filename": "msa.txt",
+        "number": 1
+      },
+      {
+        "attached_for_run": true,
+        "document_id": "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+        "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+        "filename": "dpa.md",
+        "number": 2
+      }
+    ],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Explain payment, renewal and termination questions independently.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "9b785cbf-7ea3-4058-85b0-13d909648e79",
+    "packet_digest": null,
+    "plan_id": "25484912-3d0c-47a9-a773-71f2518659ce",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "ded1f0223bd15b73d32dc85ae2591e833edbf9291a197787ef3a711d9501ee18",
+    "profile": "contract_qa_documents_v1",
+    "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [
+          "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+          "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+        "name": "contract-questions-orchestrator"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+    "root_skill_version": "1.0.0"
+  },
+  "profile": "contract_qa_documents_v1",
+  "profile_title": "Contract Questions on your documents",
+  "reads": "Only the documents you select for this run. No other matter files or live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+  "spent_usd": "0.0000",
+  "status": "planning",
+  "stop_reason": null,
+  "tree": null
+}

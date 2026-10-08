@@ -1,0 +1,1874 @@
+[
+  {
+    "detail": {
+      "autonomous_session_id": null,
+      "completion_tokens": null,
+      "message_id": "72710d49-ff27-4d44-bc5e-bc0b2ecef9ca",
+      "message_kind": "user",
+      "prompt_tokens": null,
+      "role": "user"
+    },
+    "kind": "message",
+    "ts": "2026-10-06T15:41:37.151484Z"
+  },
+  {
+    "detail": {
+      "autonomous_session_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "completion_tokens": 180,
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "message_kind": "run",
+      "prompt_tokens": 120,
+      "role": "assistant"
+    },
+    "kind": "message",
+    "ts": "2026-10-06T15:41:37.151485Z"
+  },
+  {
+    "detail": {
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "skill_name": "orchestration-chat-demo",
+      "source": null
+    },
+    "kind": "skill",
+    "ts": "2026-10-06T15:41:37.151485Z"
+  },
+  {
+    "detail": {
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "skill_name": "contract-qa",
+      "source": null
+    },
+    "kind": "skill",
+    "ts": "2026-10-06T15:41:37.151485Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.planning_started",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "chat_id": "dbf12c8b-dff3-4370-a79c-0b629b82c71e",
+        "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+        "profile": "model_demo_v1"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.156230Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.205782Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "plan",
+        "reserved_usd": "0.0647",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.267706Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "plan"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.268944Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.0647",
+        "generation": 1,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.275795Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0647,
+        "outcome": "success",
+        "tool": "plan"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.276238Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.plan_saved",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "child_count": 2,
+        "revision": 1
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.295520Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 2,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.301435Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.approved",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "revision": 1
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.347196Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 3,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.394324Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.children_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "child_count": 2,
+        "revision": 1
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.438223Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 4,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.459932Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.507447Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "analysis",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.543664Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.582037Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.583168Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.601340Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.601838Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.642931Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.644431Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.660670Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.661125Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1841",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.729701Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.730819Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.1841",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.735801Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.1841,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.736203Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "retrieve_chunks",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.763330Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.764421Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.770494Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.770952Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1901",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.817830Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.818974Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.1901",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.824009Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.1901,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.824428Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.849932Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.850909Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.869508Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.870064Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.899541Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.900649Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.917512Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.917991Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "drafting",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.933980Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.960572Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.961676Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.976926Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:37.977366Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_share",
+        "reserved_usd": "0",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.003852Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_share"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.004963Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.020676Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_share"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.021114Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.047863Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "delivery",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.061632Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.topic_delivered",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "completed",
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.076530Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 2,
+        "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.083128Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.126530Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "analysis",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.157410Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.192398Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.193528Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.208594Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.209082Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.246959Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.247890Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.262048Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.262455Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1842",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.329604Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.330696Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.1842",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.335468Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.1842,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.335901Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "retrieve_chunks",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.361531Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.362676Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.367741Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.368171Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1902",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.413442Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.414494Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.1902",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.419079Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.1902,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.419528Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.444802Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.446068Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.461448Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.461897Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.487542Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.488593Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.504117Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.504571Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "drafting",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.519030Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.544109Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.545382Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.559919Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.560355Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_share",
+        "reserved_usd": "0",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.586353Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_share"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.587470Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.603308Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_share"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.603794Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.630277Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "delivery",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.644120Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.topic_delivered",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "completed",
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.658279Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 2,
+        "session_id": "86cd8330-31ae-4f66-bb35-6ed8d3f572f6"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.665088Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 5,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.697169Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "drafting",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.750248Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 5,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.788182Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.789253Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 5,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.804639Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.805150Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 5,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.833968Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.835176Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0",
+        "generation": 5,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.850260Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.850756Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 5,
+        "intent": "run_skill",
+        "reserved_usd": "0.0616",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.896118Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.897203Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "charged_usd": "0.0616",
+        "generation": 5,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.901958Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "cost_usd": 0.0616,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.902376Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.929420Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "phase": "delivery",
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.943292Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.root_delivered",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "chat_id": "dbf12c8b-dff3-4370-a79c-0b629b82c71e",
+        "coverage": "complete",
+        "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+        "verification": "unverified"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.966861Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+      "details": {
+        "generation": 6,
+        "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+      },
+      "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+      "run_root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+      "session_id": "fc50e777-e2be-43ce-8467-d247a6514963"
+    },
+    "kind": "audit",
+    "ts": "2026-10-06T15:41:38.973410Z"
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "message_id": "1b57825a-d858-477a-8e5b-c00a65e52896",
+  "rows": [
+    {
+      "id": "7fc3970d-9faa-4e10-9eca-6827d54b4caf",
+      "message_id": "1b57825a-d858-477a-8e5b-c00a65e52896",
+      "user_id": "05e59fb7-d4ab-4bd0-b9dc-35f3ccc9e06c",
+      "chat_id": "684e0cfd-0706-4882-ac1a-8897ff49a233",
+      "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+      "routed_inference_tier": 1,
+      "provider": "controlled",
+      "model": "scripted-1",
+      "model_version": "scripted-1",
+      "skill_ids": [
+        "orchestration-chat-demo",
+        "contract-qa"
+      ],
+      "playbook_id": null,
+      "content_hash": "c944dda36da57f23b7fd1f3d09ec47384f02f872a9c68fa188eb446d2eeb5eef",
+      "timestamp": "2026-10-06T15:26:56.981767+00:00"
+    }
+  ]
+}

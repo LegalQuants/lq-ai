@@ -1,0 +1,23 @@
+{
+  "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+  "rows": [
+    {
+      "id": "8b9f2a1b-af41-426e-8dc4-0b8204e49f58",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "user_id": "05e59fb7-d4ab-4bd0-b9dc-35f3ccc9e06c",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+      "routed_inference_tier": 1,
+      "provider": "controlled",
+      "model": "scripted-1",
+      "model_version": "scripted-1",
+      "skill_ids": [
+        "contract-questions-orchestrator",
+        "contract-qa"
+      ],
+      "playbook_id": null,
+      "content_hash": "c6f679be890c208c190d370e3caf32bfc75b44d4576982f0d14fe7fb2ebdb6ca",
+      "timestamp": "2026-10-06T15:26:11.287844+00:00"
+    }
+  ]
+}

@@ -25,12 +25,14 @@ from app.autonomous.orchestration.contracts import (
     EgressTier,
     InferenceTier,
     PhaseGrants,
+    PhaseTools,
     PreparedPlan,
     ShortText,
     SkillPin,
     Snapshot,
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.tools import get_tool
 from app.errors import Forbidden
 from app.models.document import Document
 from app.models.file import File
@@ -99,7 +101,9 @@ class InferencePolicy(Snapshot):
 
     provider: ShortText
     native_model: ShortText
-    max_input_bytes: Annotated[int, Field(ge=1, le=131072)]
+    # A profile sets this (ADR 0038 D5). A run that reads documents re-sends
+    # what a child has read on each turn, so its ceiling is above one packet.
+    max_input_bytes: Annotated[int, Field(ge=1, le=1_048_576)]
     max_output_tokens: Annotated[int, Field(ge=1, le=8192)]
 
     @model_validator(mode="after")
@@ -125,9 +129,15 @@ class OperatorPolicy(Snapshot):
     require_anonymization: bool
     inference: InferencePolicy | None = None
     deployment_children: Annotated[int, Field(ge=1, le=32)] | None = None
+    # ADR 0038 D4: registry tools a research child may be offered, per phase,
+    # and how many model turns may use them. None means no tool loop.
+    tools: PhaseTools | None = None
+    turn_limit: Annotated[int, Field(ge=1, le=16)] | None = None
 
     @model_validator(mode="after")
     def unique_catalog(self) -> OperatorPolicy:
+        if (self.tools is None) != (self.turn_limit is None):
+            raise ValueError("a tool grant and a turn limit are set together")
         if len({(s.pin.name, s.profile) for s in self.skills}) != len(self.skills):
             raise ValueError("duplicate skill profile")
         if len({s.name for s in self.sources}) != len(self.sources):
@@ -145,6 +155,10 @@ class OperatorPolicy(Snapshot):
         if self.demo_project_id is None:
             # Existing sample approvals predate the optional project allowlist.
             value.pop("demo_project_id")
+        if self.tools is None:
+            # Likewise the tool grant: a policy without one keeps its version.
+            value.pop("tools")
+            value.pop("turn_limit")
         return hashlib.sha256(
             json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -271,6 +285,29 @@ class CurrentPolicy:
                     raise Forbidden(
                         message="Selected source is unavailable or outside skill policy"
                     )
+
+        for child in plan.children:
+            # The approved tool list is rechecked against what the operator
+            # allows now, so removing a tool or lowering the limit stops a run.
+            if not child.tools.names() and not child.turn_limit:
+                continue
+            if (
+                policy.tools is None
+                or policy.turn_limit is None
+                or not policy.tools.contains(child.tools)
+                or child.turn_limit > policy.turn_limit
+            ):
+                raise Forbidden(message="Approved tools exceed current operator policy")
+            for phase in Phase:
+                for name in child.tools.for_phase(phase):
+                    tool = get_tool(name)
+                    if (
+                        tool is None
+                        or tool.destructive
+                        or tool.requires_confirmation
+                        or tool.intent not in child.execution.grants.for_phase(phase)
+                    ):
+                        raise Forbidden(message="Approved tool is unavailable or not granted")
 
         selected_ids = set(plan.root.resources.document_ids)
         if selected_ids:

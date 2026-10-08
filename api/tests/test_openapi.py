@@ -209,6 +209,12 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/orchestration/chat-runs",
         "/api/v1/autonomous/orchestration/chat-runs/{root_id}",
         "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt",
+        # ADR 0038 — governed runs in chat
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}/close",
+        "/api/v1/chats/{chat_id}/run-profiles",
+        "/api/v1/chats/{chat_id}/run-documents",
+        "/api/v1/chats/{chat_id}/runs",
+        "/api/v1/admin/orchestration/profiles",
         "/api/v1/skill-workspaces",
         "/api/v1/skill-workspaces/{workspace_id}",
         "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
@@ -369,7 +375,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/community-skills
     # /api/v1/admin/community-skills/{slug}
     # /api/v1/admin/community-skills/{slug}/install
-    assert len(actual) == 157
+    # ADR 0038 adds five paths (157 -> 162): closing an uncertain run, the chat
+    # run intake, its two composer reads, and the admin profile-registry read.
+    assert len(actual) == 162
 
 
 @pytest.mark.unit

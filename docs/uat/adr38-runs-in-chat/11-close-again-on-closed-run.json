@@ -1,0 +1,6 @@
+{
+  "status": 200,
+  "same_state_as_before": true,
+  "body_status": "closed",
+  "stop_reason": "owner_closed"
+}

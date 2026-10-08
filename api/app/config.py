@@ -290,13 +290,47 @@ class Settings(BaseSettings):
         default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
     )
 
+    # ADR 0038 D5 — the first run profile that reads real documents. It has
+    # its own switch and its own pinned route: enabling the fictional profile
+    # above never enables this one, and nothing is inherited from it.
+    orchestration_documents_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_ENABLED"
+    )
+    orchestration_documents_provider: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_PROVIDER"
+    )
+    orchestration_documents_model: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_MODEL"
+    )
+    orchestration_documents_budget_usd: Decimal = Field(
+        default=Decimal("5.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_BUDGET_USD",
+    )
+    orchestration_documents_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_MINIMUM_TIER"
+    )
+    orchestration_documents_timeout_seconds: int = Field(
+        default=300,
+        ge=1,
+        le=900,
+        validation_alias="LQ_AI_ORCHESTRATION_DOCUMENTS_TIMEOUT_SECONDS",
+    )
+
     orchestration_deployment_children: int | None = Field(
         default=None,
         ge=1,
         le=32,
         validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
-        description="Explicit shared child capacity. Required before enabling the demonstration.",
+        description="Explicit shared child capacity. Required before enabling any run profile.",
     )
+
+    @property
+    def orchestration_enabled(self) -> bool:
+        """True when the operator has switched on at least one run profile."""
+        return self.orchestration_chat_enabled or self.orchestration_documents_enabled
 
     @field_validator("orchestration_deployment_children", mode="before")
     @classmethod

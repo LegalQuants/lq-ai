@@ -1,0 +1,41 @@
+[
+  {
+    "created_at": "2026-10-06T15:41:45.614768+00:00",
+    "id": "3feb0c6c-f575-4b5d-8d62-28381f3ff723",
+    "partial": false,
+    "source_file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+    "source_offset_end": 188,
+    "source_offset_start": 115,
+    "source_page": null,
+    "source_text": "within seventy-two (72) hours of becoming aware of a Personal Data Breach",
+    "verification_confidence": 1.0,
+    "verification_method": "exact_match",
+    "verified": true
+  },
+  {
+    "created_at": "2026-10-06T15:41:45.614768+00:00",
+    "id": "6fb28602-3452-4769-9aa7-f952bf5a5639",
+    "partial": false,
+    "source_file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+    "source_offset_end": 21,
+    "source_offset_start": 0,
+    "source_page": null,
+    "source_text": "twelve months of fees",
+    "verification_confidence": null,
+    "verification_method": null,
+    "verified": false
+  },
+  {
+    "created_at": "2026-10-06T15:41:45.614768+00:00",
+    "id": "c13c68df-4fb9-410c-bcce-7eebcaa203c7",
+    "partial": false,
+    "source_file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+    "source_offset_end": 107,
+    "source_offset_start": 64,
+    "source_page": null,
+    "source_text": "within thirty (30) days of the invoice date",
+    "verification_confidence": 1.0,
+    "verification_method": "exact_match",
+    "verified": true
+  }
+]

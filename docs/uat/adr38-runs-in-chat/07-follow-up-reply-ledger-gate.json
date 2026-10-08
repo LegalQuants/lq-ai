@@ -1,0 +1,20 @@
+{
+  "what": "The ordinary follow-up reply in 07 has no quotations, yet its ledger holds a gate row; the page shows it as a 'Fiduciary-grade' badge. Ordinary-chat behaviour (api/app/citation/gate.py is not modified in the working tree), not specific to runs.",
+  "reply_message_id": "dab41b29-b1e2-4421-b43b-76c75ce3408a",
+  "ledger": {
+    "chat_id": "c9426d19-8013-4aca-9527-953aa2256065",
+    "entries": [],
+    "gates": [
+      {
+        "message_id": "dab41b29-b1e2-4421-b43b-76c75ce3408a",
+        "gate_status": "fiduciary_grade",
+        "pass_count": 0,
+        "supported_count": 0,
+        "fail_count": 0,
+        "total_assertions": 0,
+        "confidence": null,
+        "created_at": "2026-10-06T15:19:53.538076+00:00"
+      }
+    ]
+  }
+}

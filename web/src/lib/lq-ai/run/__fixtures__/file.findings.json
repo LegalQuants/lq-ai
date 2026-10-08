@@ -1,0 +1,10 @@
+{
+  "content": "{\"status\":\"completed\",\"summary\":\"Customer can prevent renewal with written notice at least 30 days before the current term ends. [\u00a75]\",\"findings\":[\"Customer can prevent renewal with written notice at least 30 days before the current term ends. [\u00a75]\\n\\n> \\\"at least 30 days before the current term ends.\\\" [\u00a75]\"],\"verification\":\"unverified\",\"failure_code\":null,\"artifact\":null}",
+  "digest": "3bd4bba9314b27b60c461698153776aff2547832d4508383fbb0cf7dcb6e586e",
+  "name": "findings.json",
+  "revision": 1,
+  "session_id": "4ce72f09-58b1-4add-80ab-b16c8c1cfad7",
+  "shared": true,
+  "size_bytes": 379,
+  "updated_at": "2026-10-06T15:41:38.014778Z"
+}

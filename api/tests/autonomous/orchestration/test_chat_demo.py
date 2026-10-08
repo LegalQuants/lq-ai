@@ -7,33 +7,22 @@ import asyncio
 import hashlib
 import json
 from collections.abc import AsyncIterator
-from copy import deepcopy
-from decimal import Decimal
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from tests.autonomous.orchestration.model_harness import BASE, approve, plan, read, start
 
-from app.api.dependencies import get_active_user
-from app.api.orchestration import service
 from app.autonomous.orchestration.chat_demo import contract_qa_outcome
 from app.autonomous.orchestration.service import DemonstrationService, ModelDemoGateway
 from app.config import get_settings
 from app.db.session import get_db
 from app.main import app
 from app.models.orchestration import OrchestrationAdmission
-from app.models.user import User
-from app.skills.loader import load_registry
-from app.skills.registry import MutableSkillRegistry
 from app.workers.orchestration_worker import orchestration_session_job, orchestration_watchdog
-
-BASE = "/api/v1/autonomous/orchestration"
 
 
 @pytest.mark.unit
@@ -44,204 +33,6 @@ async def test_disabled_chat_worker_does_no_database_or_queue_work() -> None:
     assert await orchestration_watchdog({"orchestration_runtime": disabled}) == {
         "status": "disabled"
     }
-
-
-class ModelGateway:
-    def __init__(self) -> None:
-        self.config: dict[str, Any] = {
-            "configuration_revision": "b" * 64,
-            "providers": [
-                {
-                    "name": "selected",
-                    "type": "openai",
-                    "tier": 1,
-                    "enabled": True,
-                    "base_url": "https://fixture.invalid",
-                }
-            ],
-            "model_aliases": {},
-            "inference_tiers": {"overrides": {}, "defaults": {}},
-            "cost_tracking": {
-                "enabled": True,
-                "rates": {"selected/native": {"input_per_mtok": "2", "output_per_mtok": "6"}},
-            },
-            "anonymization": {"enabled": True, "apply_at_tiers": [1]},
-        }
-        self.requests: list[Any] = []
-        self.operations: list[str] = []
-        self.proposal = json.dumps(
-            {
-                "tasks": [
-                    {
-                        "topic": topic,
-                        "question": question,
-                        "boundaries": "Only the fictional agreement",
-                        "output_contract": "A clause-based answer",
-                        "stopping_condition": "One answer",
-                    }
-                    for topic, question in (
-                        ("Payments", "What must Customer pay and when?"),
-                        (
-                            "Renewal and termination",
-                            "How can Customer prevent renewal or terminate?",
-                        ),
-                    )
-                ]
-            }
-        )
-        self.child_gate = asyncio.Event()
-        self.child_gate.set()
-        self.two_entered = asyncio.Event()
-        self.active = self.peak = 0
-        self.uncertain = False
-        self.synthesis_finish_reason = "stop"
-
-    async def get_admin_config(self) -> dict[str, Any]:
-        return deepcopy(self.config)
-
-    async def chat_completion(
-        self, request: Any, *, configuration_revision: str
-    ) -> SimpleNamespace:
-        assert configuration_revision == self.config["configuration_revision"]
-        self.requests.append(request)
-        payload = json.loads(request.messages[1].content)
-        operation = payload["inputs"]["operation"]
-        self.operations.append(operation)
-        if self.uncertain:
-            raise TimeoutError("private provider details must not escape")
-        if operation == "propose_plan":
-            content = self.proposal
-        elif operation == "answer_contract_question":
-            assert "# Contract QA" in request.messages[0].content
-            assert "Supporting file: reference/" in request.messages[0].content
-            assert "§5 Term and renewal" in payload["inputs"]["document"]
-            assert payload["inputs"]["question"] == payload["task"]["question"]
-            self.active += 1
-            self.peak = max(self.peak, self.active)
-            if self.active >= 2:
-                self.two_entered.set()
-            try:
-                await self.child_gate.wait()
-                assert (
-                    "Return only the Contract QA answer as Markdown"
-                    in payload["inputs"]["response_contract"]
-                )
-                content = (
-                    "Customer can prevent renewal with written notice at least 30 days "
-                    "before the current term ends. [§5]\n\n"
-                    '> "at least 30 days before the current term ends." [§5]'
-                )
-            finally:
-                self.active -= 1
-        else:
-            assert operation == "synthesize_answers"
-            assert len(payload["inputs"]["topics"]) == 2
-            assert all("[§5]" in t["outcome"]["findings"][0] for t in payload["inputs"]["topics"])
-            content = "Model-generated from fictional inputs; unverified.\nRenewal requires 30 days' notice [§5]."
-        return SimpleNamespace(
-            routed_provider="selected",
-            routed_model="native",
-            routed_inference_tier=1,
-            anonymization_applied=True,
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content=content),
-                    finish_reason=self.synthesis_finish_reason
-                    if operation == "synthesize_answers"
-                    else "stop",
-                )
-            ],
-            usage=SimpleNamespace(prompt_tokens=20, completion_tokens=30),
-        )
-
-
-@pytest_asyncio.fixture
-async def model_demo(
-    env: SimpleNamespace, test_db_url: str, monkeypatch: pytest.MonkeyPatch
-) -> AsyncIterator[SimpleNamespace]:
-    skills = MutableSkillRegistry(load_registry(Path(__file__).resolve().parents[4] / "skills"))
-    settings = get_settings().model_copy(
-        update={
-            "database_url": test_db_url,
-            "orchestration_chat_enabled": True,
-            "orchestration_chat_project_id": str(env.project_id),
-            "orchestration_chat_provider": "selected",
-            "orchestration_chat_model": "native",
-            "orchestration_chat_minimum_tier": 1,
-            "orchestration_chat_budget_usd": Decimal("2.0000"),
-            "orchestration_deployment_children": 2,
-        }
-    )
-    gateway = ModelGateway()
-    runtime = DemonstrationService(settings, skills, env.factory, gateway=gateway)
-    await runtime.for_profile("model_demo_v1").executor().checkpoints.setup()
-    async with env.factory() as db:
-        user = await db.get(User, env.owner_id)
-    queued: list[tuple[UUID, UUID]] = []
-
-    async def enqueue(root_id: UUID, session_id: UUID) -> bool:
-        queued.append((root_id, session_id))
-        return True
-
-    monkeypatch.setattr("app.api.orchestration.enqueue_orchestration_job", enqueue)
-    monkeypatch.setattr("app.workers.orchestration_worker.enqueue_orchestration_job", enqueue)
-    previous = app.dependency_overrides.copy()
-    app.dependency_overrides[get_active_user] = lambda: user
-    app.dependency_overrides[service] = lambda: runtime
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            yield SimpleNamespace(
-                client=client,
-                runtime=runtime,
-                env=env,
-                gateway=gateway,
-                ctx={"orchestration_runtime": runtime},
-                queued=queued,
-                user=user,
-            )
-    finally:
-        gateway.child_gate.set()
-        app.dependency_overrides.clear()
-        app.dependency_overrides.update(previous)
-
-
-async def start(api: SimpleNamespace) -> dict[str, Any]:
-    response = await api.client.post(
-        f"{BASE}/chat-runs",
-        json={
-            "request_id": str(uuid4()),
-            "project_id": str(api.env.project_id),
-            "goal": "Explain payment, renewal and termination questions independently.",
-        },
-    )
-    assert response.status_code == 202, response.text
-    return response.json()
-
-
-async def read(api: SimpleNamespace, root_id: str) -> dict[str, Any]:
-    response = await api.client.get(f"{BASE}/chat-runs/{root_id}")
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-async def plan(api: SimpleNamespace) -> dict[str, Any]:
-    initial = await start(api)
-    root_id = initial["root_id"]
-    result = await orchestration_session_job(api.ctx, root_id, root_id)
-    assert result["status"] == "completed", result
-    return await read(api, root_id)
-
-
-async def approve(api: SimpleNamespace, value: dict[str, Any]) -> None:
-    tree = value["tree"]
-    response = await api.client.post(
-        f"{BASE}/{value['root_id']}/approve",
-        json={
-            "revision": tree["plan"]["revision"],
-            "plan_hash": tree["plan_hash"],
-        },
-    )
-    assert response.status_code == 200, response.text
 
 
 async def test_complete_skill_backed_run_through_worker_and_receipts(
@@ -295,6 +86,25 @@ async def test_complete_skill_backed_run_through_worker_and_receipts(
         assert len(skill_receipt["skill"]["digest"]) == 64
         assert skill_receipt["accounting"]["provider"] == "selected"
         assert child["outcome"]["artifact"] and "[§5]" in child["outcome"]["findings"][0]
+        # ADR 0038 D4: the child read the agreement through its granted tool.
+        assert [t["name"] for t in child["tools"]] == ["read_document", "read_note", "save_note"]
+        read_step = next(e for e in child["effects"] if e["effect_key"] == "topic:t1:c0")
+        assert read_step["intent"] == "retrieve_chunks" and read_step["status"] == "completed"
+        assert read_step["step"]["kind"] == "document_read"
+        assert read_step["step"]["label"] == "Read a selected document"
+        assert read_step["step"]["reason"] == "The agreement is needed."
+        assert read_step["step"]["summary"]["document"] == 1
+        assert read_step["step"]["summary"]["truncated"] is False
+        assert "text" not in read_step["step"]["summary"]
+    assert any("§5 Term and renewal" in result for result in api.gateway.tool_results)
+    assert len(api.gateway.synthesis_topics) == 2
+    assert all("[§5]" in t["outcome"]["findings"][0] for t in api.gateway.synthesis_topics)
+    # A run with no chat sends no chat correlation, and a truthful purpose.
+    assert {c[2] for c in api.gateway.correlations} == {"orchestration_run"}
+    assert all(c[0] is None and c[1] is None for c in api.gateway.correlations)
+    assert final["chat_id"] is None and final["profile"] == "model_demo_v1"
+    assert final["tree"]["plan"]["contract_version"] == 3
+    assert final["tree"]["plan"]["documents"][0]["filename"] == "fictional-vendor-agreement.md"
 
 
 async def test_retained_run_includes_only_its_pinned_agreement(

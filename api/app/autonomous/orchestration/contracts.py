@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, Self
@@ -170,6 +171,61 @@ class PhaseGrants(Snapshot):
         return all(set(other.for_phase(p)) <= set(self.for_phase(p)) for p in Phase)
 
 
+class PhaseTools(Snapshot):
+    """Registry tool names a model may be offered in each phase (ADR 0038 D3, D4).
+
+    Names, not authority. Every call still needs the matching intent in
+    ``PhaseGrants``, current operator policy and durable effect admission. The
+    plan carries this list so approval of the exact plan is consent for it.
+    """
+
+    intake: tuple[ShortText, ...] = ()
+    analysis: tuple[ShortText, ...] = ()
+    drafting: tuple[ShortText, ...] = ()
+    ethics_review: tuple[ShortText, ...] = ()
+    delivery: tuple[ShortText, ...] = ()
+
+    @field_validator("*")
+    @classmethod
+    def unique_tools(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("duplicate tool")
+        return tuple(sorted(value))
+
+    def for_phase(self, phase: Phase) -> tuple[str, ...]:
+        return getattr(self, phase.value)
+
+    def contains(self, other: PhaseTools) -> bool:
+        return all(set(other.for_phase(p)) <= set(self.for_phase(p)) for p in Phase)
+
+    def names(self) -> frozenset[str]:
+        return frozenset(name for p in Phase for name in self.for_phase(p))
+
+
+class DocumentRef(Snapshot):
+    """One owner-selected document, numbered in selection order (ADR 0038 D5).
+
+    The number is what a child cites and what the read tool accepts. The file
+    name is display data from the owner's own record. Neither grants a read:
+    the boundary rechecks selection, ownership and project attachment.
+    """
+
+    number: Annotated[int, Field(ge=1, le=128)]
+    document_id: UUID
+    file_id: UUID
+    filename: ShortText
+    attached_for_run: bool = False
+
+
+def _numbered_selection(documents: tuple[DocumentRef, ...], resources: ResourceScope) -> None:
+    if [d.number for d in documents] != list(range(1, len(documents) + 1)):
+        raise ValueError("selected documents must be numbered in order")
+    if len({d.file_id for d in documents}) != len(documents) or {
+        d.document_id for d in documents
+    } != set(resources.document_ids):
+        raise ValueError("selected documents differ from the root resource scope")
+
+
 class ExecutionScope(Snapshot):
     resources: ResourceScope
     grants: PhaseGrants
@@ -188,6 +244,10 @@ class ChildAssignment(Snapshot):
     task: ResearchTask
     execution: ExecutionScope
     budget_usd: Money
+    # Contract version 3 (ADR 0038 D4). Omitted from earlier plans' canonical
+    # form by PreparedPlan's serializer, so retained approvals keep their hash.
+    tools: PhaseTools = PhaseTools()
+    turn_limit: Annotated[int, Field(ge=0, le=16)] = 0
 
     @model_validator(mode="after")
     def internal_delivery_only(self) -> Self:
@@ -209,8 +269,12 @@ class ChildAssignment(Snapshot):
 class PreparedPlan(Snapshot):
     """Canonical executable plan built from resolved server policy, never an LLM."""
 
-    contract_version: Literal[1, 2] = 1
+    contract_version: Literal[1, 2, 3] = 1
     planning_digest: Digest | None = None
+    # Contract version 3 (ADR 0038): the registry profile and the numbered
+    # document selection are part of what the owner approves.
+    profile: ShortText | None = None
+    documents: Annotated[tuple[DocumentRef, ...], Field(max_length=128)] = ()
     plan_id: UUID
     revision: Annotated[int, Field(ge=1)]
     root_id: UUID
@@ -245,8 +309,18 @@ class PreparedPlan(Snapshot):
 
     @model_validator(mode="after")
     def bounded_delegation(self) -> Self:
-        if (self.contract_version == 2) != (self.planning_digest is not None):
+        if (self.contract_version >= 2) != (self.planning_digest is not None):
             raise ValueError("model plans require their planning scope digest")
+        if self.contract_version == 3:
+            if self.profile is None:
+                raise ValueError("registry plans name their profile")
+            _numbered_selection(self.documents, self.root.resources)
+        elif (
+            self.profile is not None
+            or self.documents
+            or any(child.tools.names() or child.turn_limit for child in self.children)
+        ):
+            raise ValueError("profiles, documents and tools require contract version 3")
         if len({child.dispatch_id for child in self.children}) != len(self.children):
             raise ValueError("duplicate dispatch identity")
         if self.root_allowance_usd + sum(c.budget_usd for c in self.children) > self.budget_usd:
@@ -265,6 +339,8 @@ class PreparedPlan(Snapshot):
                 raise ValueError("child drops privileged classification")
             if self.root.anonymize and not scope.anonymize:
                 raise ValueError("child disables required anonymization")
+            if bool(child.tools.names()) != bool(child.turn_limit):
+                raise ValueError("a tool grant and a turn limit are set together")
         return self
 
     @model_serializer(mode="wrap")
@@ -272,6 +348,14 @@ class PreparedPlan(Snapshot):
         value = handler(self)
         if self.contract_version == 1:
             value.pop("planning_digest", None)
+        if self.contract_version < 3:
+            # Fields added for version 3 must not enter an earlier plan's
+            # canonical form: its stored hash is the owner's consent binding.
+            value.pop("profile", None)
+            value.pop("documents", None)
+            for child in value["children"]:
+                child.pop("tools", None)
+                child.pop("turn_limit", None)
         return value
 
     def approval_hash(self) -> str:
@@ -288,6 +372,20 @@ class PreparedPlan(Snapshot):
             ensure_ascii=True,
         )
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class RunCorrelation:
+    """The chat turn a run is bound to (ADR 0038 D1, D2).
+
+    Resolved by the server from the message's link to the run's root session,
+    never from model output. It labels routing-log and tool-call-log rows so a
+    run is found through the same channels as an ordinary chat turn. It is not
+    part of an effect's identity and grants nothing.
+    """
+
+    chat_id: UUID
+    message_id: UUID
 
 
 class ApprovalBinding(Snapshot):

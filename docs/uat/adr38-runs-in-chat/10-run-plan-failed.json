@@ -1,0 +1,126 @@
+{
+  "root_id": "bff8aa8e-f7e6-4b79-959b-5e3a297c74a0",
+  "status": "failed",
+  "stop_reason": "invalid_proposal",
+  "profile": "model_demo_v1",
+  "profile_title": "Contract Questions Orchestrator",
+  "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+  "evidence": "unverified",
+  "evidence_result": null,
+  "chat_id": "7fe06f7f-8ea7-48de-a340-3e473b75a9d0",
+  "message_id": "a830e223-f58c-4f09-8a91-7b722e1c6138",
+  "planning": {
+    "contract_version": 2,
+    "plan_id": "9f5c66f5-94db-4998-96d7-9ea07eba15ff",
+    "root_id": "bff8aa8e-f7e6-4b79-959b-5e3a297c74a0",
+    "owner_id": "05e59fb7-d4ab-4bd0-b9dc-35f3ccc9e06c",
+    "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+    "goal": "Explain the payment and termination terms.",
+    "policy_version": "681699ca0a0a971ddf386a74afff295cff6215dc57fb7c83d7dfe3ef0ece7e3c",
+    "root": {
+      "resources": {
+        "document_ids": [
+          "eee18abd-8013-436f-a8e2-cfb6d52be298"
+        ],
+        "source_names": []
+      },
+      "grants": {
+        "intake": [],
+        "analysis": [
+          "plan"
+        ],
+        "drafting": [],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+      },
+      "minimum_inference_tier": 1,
+      "maximum_egress_tier": 0,
+      "privileged": false,
+      "anonymize": true
+    },
+    "delegation_grants": {
+      "intake": [],
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "delivery": []
+    },
+    "budget_usd": "2.0000",
+    "root_allowance_usd": "0.1240",
+    "planning_allowance_usd": "0.0620",
+    "max_active_children": 2,
+    "deadline": "2026-10-06T16:21:00.256163Z",
+    "attempt_timeout_seconds": 60,
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "gateway_revision": "c881da7f6e627f808261a254d1b9bb3b81e3b02b94ab186b74261408dca78633",
+    "model": "controlled/scripted-1",
+    "child_skill_version": "1.0.0",
+    "root_skill_version": "1.0.0",
+    "profile": "model_demo_v1",
+    "documents": [
+      {
+        "number": 1,
+        "document_id": "eee18abd-8013-436f-a8e2-cfb6d52be298",
+        "file_id": "28e3953b-8fdf-484b-8ef6-dfcee90b38e5",
+        "filename": "fictional-vendor-agreement.md",
+        "attached_for_run": false
+      }
+    ],
+    "max_children": 4
+  },
+  "packet": "# Fictional vendor agreement — demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## §1 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## §2 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## §3 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## §4 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00–17:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## §5 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## §6 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## §7 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in §8 survive\ntermination. There is no survival period stated for confidentiality.\n\n## §8 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
+  "effects": [
+    {
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "reserved_usd": "0.0162",
+      "charged_usd": "0.0162",
+      "intent": "plan",
+      "created_at": "2026-10-06T15:21:00.851886Z",
+      "completed_at": "2026-10-06T15:21:04.064188Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "tier": 1,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "scripted-1",
+        "provider": "controlled",
+        "charged_usd": "0.0162",
+        "reserved_usd": "0.0162",
+        "config_digest": "ed1638fa1a1632fe25332c2fceeafc51ceb813585f9890efc64001fa0d92caf7",
+        "anonymization_applied": true,
+        "estimated_prompt_tokens": 7751,
+        "reported_usage_cost_usd": "0.0011"
+      },
+      "outcome": "success",
+      "step": {
+        "kind": "planning",
+        "tool": null,
+        "label": null,
+        "reason": null,
+        "summary": null
+      }
+    }
+  ],
+  "spent_usd": "0.0162",
+  "reserved_usd": "0.0000",
+  "tree": null
+}

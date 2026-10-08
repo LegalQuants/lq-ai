@@ -1,0 +1,67 @@
+{
+  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "documents": [
+    {
+      "attached_to_project": true,
+      "characters": 244,
+      "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+      "filename": "msa.txt",
+      "mime_type": "text/plain",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 244
+    },
+    {
+      "attached_to_project": false,
+      "characters": 190,
+      "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+      "filename": "dpa.md",
+      "mime_type": "text/markdown",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 190
+    },
+    {
+      "attached_to_project": true,
+      "characters": 4,
+      "file_id": "e21f9e40-ff41-48c3-922d-2946aa17001c",
+      "filename": "draft.docx",
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "reason": "unsupported_type",
+      "selectable": false,
+      "size_bytes": 4
+    },
+    {
+      "attached_to_project": true,
+      "characters": 0,
+      "file_id": "eb22050d-ce71-471a-8d32-b0c1f5950d9c",
+      "filename": "scan.pdf",
+      "mime_type": "application/pdf",
+      "reason": "not_ingested",
+      "selectable": false,
+      "size_bytes": 1
+    },
+    {
+      "attached_to_project": true,
+      "characters": 0,
+      "file_id": "d448bd8d-8fe0-4848-a4b3-4966d5af85d0",
+      "filename": "broken.pdf",
+      "mime_type": "application/pdf",
+      "reason": "ingestion_failed",
+      "selectable": false,
+      "size_bytes": 1
+    },
+    {
+      "attached_to_project": true,
+      "characters": 2,
+      "file_id": "68981ce8-7762-4e4b-9862-d1ae348d34ce",
+      "filename": "image-only.pdf",
+      "mime_type": "application/pdf",
+      "reason": "no_text",
+      "selectable": false,
+      "size_bytes": 2
+    }
+  ],
+  "max_documents": 8,
+  "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3"
+}

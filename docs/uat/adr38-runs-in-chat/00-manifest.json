@@ -1,0 +1,1276 @@
+{
+  "what": "Every file in this folder except README.md and this file: the scenario of browser/walk.py that produced it (scratch, git-ignored), when it finished, and a fingerprint (first 16 hex of a SHA-256) of the run UI's source files as they stood when it finished. Files with scenario null were not produced by a scenario of the final pass.",
+  "files": 139,
+  "distinct_web_code_fingerprints": [
+    "58236ab3166d0621"
+  ],
+  "files_without_a_scenario": [
+    "30-local-model-composer.png",
+    "30-local-model-run-profiles.json",
+    "30-local-model-run.json",
+    "31-local-model-plan.png",
+    "33-local-model-final.png",
+    "40-local-model-run-profiles.json",
+    "40-local-model-run.json",
+    "41-local-model-plan.png",
+    "43-local-model-final.png",
+    "46-local-model-fictional-first-run.json",
+    "47-local-model-documents-attempt-1-run.json",
+    "47-local-model-documents-attempt-1-synthesis-failed.png",
+    "48-local-model-documents-attempt-2-before-the-fixes.png",
+    "48-local-model-documents-attempt-2-run.json"
+  ],
+  "rows": [
+    {
+      "file": "00-admin-orchestration-profiles.json",
+      "bytes": 3168,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "01-profile-menu.png",
+      "bytes": 52742,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "01-run-profiles-available.json",
+      "bytes": 3060,
+      "modified_utc": "2026-10-06T15:18:32Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "02-run-mode-request-typed.png",
+      "bytes": 71891,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "03-planning-full.png",
+      "bytes": 14927,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "04-composer-notice-against-run-message.json",
+      "bytes": 2789,
+      "modified_utc": "2026-10-06T15:19:54Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "04-plan-awaiting-approval-full.png",
+      "bytes": 58657,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "04-receipts-at-the-plan-stage-and-after-rejection.json",
+      "bytes": 1015,
+      "modified_utc": "2026-10-06T15:28:13Z",
+      "scenario": "plan_boundaries",
+      "scenario_finished_utc": "2026-10-06T15:28:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "04-run-awaiting-approval.json",
+      "bytes": 16890,
+      "modified_utc": "2026-10-06T15:18:54Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "04-title-from-request.json",
+      "bytes": 555,
+      "modified_utc": "2026-10-06T15:27:43Z",
+      "scenario": "title_from_request",
+      "scenario_finished_utc": "2026-10-06T15:27:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "05-in-progress-full.png",
+      "bytes": 54829,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "05-run-in-progress.json",
+      "bytes": 30867,
+      "modified_utc": "2026-10-06T15:19:31Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "06-chat-messages-fictional-run-fields-checked.json",
+      "bytes": 1742,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "06-chat-messages-fictional-run.json",
+      "bytes": 4083,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "06-chat-receipts-fictional-run.json",
+      "bytes": 75035,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "06-completed-receipts-open-full.png",
+      "bytes": 328354,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "06-completed-tier-details.png",
+      "bytes": 67713,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "06-inference-routing-log-rows-fictional-run.json",
+      "bytes": 5402,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "06-run-follows-without-manual-refresh.json",
+      "bytes": 1640,
+      "modified_utc": "2026-10-06T15:27:36Z",
+      "scenario": "autoupdate",
+      "scenario_finished_utc": "2026-10-06T15:27:36Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "06-work-product-attribution-fictional-run.json",
+      "bytes": 764,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "07-chat-search-finds-the-run.json",
+      "bytes": 827,
+      "modified_utc": "2026-10-06T15:19:54Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "07-follow-up-reply-ledger-gate.json",
+      "bytes": 753,
+      "modified_utc": "2026-10-06T15:19:54Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "07-follow-up-what-the-model-was-sent.json",
+      "bytes": 1092,
+      "modified_utc": "2026-10-06T15:19:54Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "07-follow-up.png",
+      "bytes": 61137,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "fictional",
+      "scenario_finished_utc": "2026-10-06T15:19:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "08-rejected-full.png",
+      "bytes": 53799,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "rejected",
+      "scenario_finished_utc": "2026-10-06T15:20:03Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "08-run-profiles-after-reject.json",
+      "bytes": 3060,
+      "modified_utc": "2026-10-06T15:20:02Z",
+      "scenario": "rejected",
+      "scenario_finished_utc": "2026-10-06T15:20:03Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "08-run-rejected.json",
+      "bytes": 16886,
+      "modified_utc": "2026-10-06T15:20:02Z",
+      "scenario": "rejected",
+      "scenario_finished_utc": "2026-10-06T15:20:03Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "09-halt-steps-before-and-after.json",
+      "bytes": 3921,
+      "modified_utc": "2026-10-06T15:20:59Z",
+      "scenario": "halted",
+      "scenario_finished_utc": "2026-10-06T15:20:59Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "09-halted-full.png",
+      "bytes": 44506,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "halted",
+      "scenario_finished_utc": "2026-10-06T15:20:59Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "09-run-halted.json",
+      "bytes": 27647,
+      "modified_utc": "2026-10-06T15:20:59Z",
+      "scenario": "halted",
+      "scenario_finished_utc": "2026-10-06T15:20:59Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "09-run-profiles-after-halt.json",
+      "bytes": 389,
+      "modified_utc": "2026-10-06T15:20:57Z",
+      "scenario": "halted",
+      "scenario_finished_utc": "2026-10-06T15:20:59Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "10-plan-failed-full.png",
+      "bytes": 14310,
+      "modified_utc": "2026-10-06T15:37:51Z",
+      "scenario": "bad_plan",
+      "scenario_finished_utc": "2026-10-06T15:21:06Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "10-run-plan-failed.json",
+      "bytes": 6495,
+      "modified_utc": "2026-10-06T15:21:06Z",
+      "scenario": "bad_plan",
+      "scenario_finished_utc": "2026-10-06T15:21:06Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "10-run-profiles-after-failed-plan.json",
+      "bytes": 3060,
+      "modified_utc": "2026-10-06T15:21:06Z",
+      "scenario": "bad_plan",
+      "scenario_finished_utc": "2026-10-06T15:21:06Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-close-again-on-closed-run.json",
+      "bytes": 112,
+      "modified_utc": "2026-10-06T15:23:31Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-close-on-completed-run-refused.json",
+      "bytes": 210,
+      "modified_utc": "2026-10-06T15:23:31Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-closed-chat-receipts.json",
+      "bytes": 1223,
+      "modified_utc": "2026-10-06T15:23:31Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-closed-full.png",
+      "bytes": 72657,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-run-after-halt-still-uncertain.json",
+      "bytes": 20989,
+      "modified_utc": "2026-10-06T15:23:23Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-run-closed.json",
+      "bytes": 21039,
+      "modified_utc": "2026-10-06T15:23:26Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-run-uncertain.json",
+      "bytes": 21006,
+      "modified_utc": "2026-10-06T15:23:18Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "11-uncertain-full.png",
+      "bytes": 55706,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-active-run-notice-uncertain.png",
+      "bytes": 51129,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-after-close-other-chat-can-start-again.png",
+      "bytes": 53285,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-pressing-a-disabled-option.json",
+      "bytes": 589,
+      "modified_utc": "2026-10-06T15:21:14Z",
+      "scenario": "active_notice",
+      "scenario_finished_utc": "2026-10-06T15:21:15Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-profile-menu-unavailable.png",
+      "bytes": 57352,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "active_notice",
+      "scenario_finished_utc": "2026-10-06T15:21:15Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-run-profiles-active-run-in-other-chat.json",
+      "bytes": 3493,
+      "modified_utc": "2026-10-06T15:21:12Z",
+      "scenario": "active_notice",
+      "scenario_finished_utc": "2026-10-06T15:21:15Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-run-profiles-after-close.json",
+      "bytes": 3060,
+      "modified_utc": "2026-10-06T15:23:26Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-run-profiles-uncertain-run-in-other-chat.json",
+      "bytes": 3504,
+      "modified_utc": "2026-10-06T15:23:18Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-second-start-refused-while-uncertain.json",
+      "bytes": 254,
+      "modified_utc": "2026-10-06T15:23:18Z",
+      "scenario": "uncertain",
+      "scenario_finished_utc": "2026-10-06T15:23:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "12-second-start-refused.json",
+      "bytes": 254,
+      "modified_utc": "2026-10-06T15:21:14Z",
+      "scenario": "active_notice",
+      "scenario_finished_utc": "2026-10-06T15:21:15Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "13-after-reload-while-running.png",
+      "bytes": 57756,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "reload",
+      "scenario_finished_utc": "2026-10-06T15:24:22Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "13-reload-receipt-counts.json",
+      "bytes": 1718,
+      "modified_utc": "2026-10-06T15:24:22Z",
+      "scenario": "reload",
+      "scenario_finished_utc": "2026-10-06T15:24:22Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-documents-profile-off-run-profiles.json",
+      "bytes": 3086,
+      "modified_utc": "2026-10-06T15:29:19Z",
+      "scenario": "one_switch_off",
+      "scenario_finished_utc": "2026-10-06T15:29:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-fictional-profile-off-run-profiles.json",
+      "bytes": 3086,
+      "modified_utc": "2026-10-06T15:29:25Z",
+      "scenario": "one_switch_off",
+      "scenario_finished_utc": "2026-10-06T15:29:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-hostile-answer.png",
+      "bytes": 61044,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "hostile",
+      "scenario_finished_utc": "2026-10-06T15:24:58Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-hostile-dialogs-and-dom.json",
+      "bytes": 2592,
+      "modified_utc": "2026-10-06T15:24:58Z",
+      "scenario": "hostile",
+      "scenario_finished_utc": "2026-10-06T15:24:58Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-hostile-plan-full.png",
+      "bytes": 64644,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "hostile",
+      "scenario_finished_utc": "2026-10-06T15:24:58Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-one-switch-off-at-a-time.json",
+      "bytes": 1225,
+      "modified_utc": "2026-10-06T15:29:31Z",
+      "scenario": "one_switch_off",
+      "scenario_finished_utc": "2026-10-06T15:29:31Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "14-run-hostile.json",
+      "bytes": 50898,
+      "modified_utc": "2026-10-06T15:24:58Z",
+      "scenario": "hostile",
+      "scenario_finished_utc": "2026-10-06T15:24:58Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "15-chat-only-file-in-picker.png",
+      "bytes": 69934,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "chat_only_file",
+      "scenario_finished_utc": "2026-10-06T15:27:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "15-document-picker.png",
+      "bytes": 67787,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "15-run-documents.json",
+      "bytes": 1877,
+      "modified_utc": "2026-10-06T15:25:00Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "15-run-profiles-documents-profile-chosen.json",
+      "bytes": 3060,
+      "modified_utc": "2026-10-06T15:25:00Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "16-admin-audit-log-rows-shown.json",
+      "bytes": 1247,
+      "modified_utc": "2026-10-06T15:27:57Z",
+      "scenario": "admin_audit",
+      "scenario_finished_utc": "2026-10-06T15:27:57Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "16-chat-only-file-added-to-matter-on-plan.png",
+      "bytes": 68493,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "chat_only_file",
+      "scenario_finished_utc": "2026-10-06T15:27:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "16-chat-only-file-added-to-matter.json",
+      "bytes": 1769,
+      "modified_utc": "2026-10-06T15:27:54Z",
+      "scenario": "chat_only_file",
+      "scenario_finished_utc": "2026-10-06T15:27:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "16-documents-plan-full.png",
+      "bytes": 60665,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "16-matter-files-after-the-plan-was-proposed.json",
+      "bytes": 288,
+      "modified_utc": "2026-10-06T15:27:54Z",
+      "scenario": "matter_rail",
+      "scenario_finished_utc": "2026-10-06T15:27:54Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-chat-messages-documents-run-fields-checked.json",
+      "bytes": 1417,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "17-chat-messages-documents-run.json",
+      "bytes": 2635,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "17-chat-receipts-documents-run.json",
+      "bytes": 78357,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "17-citation-chip-click-effect.json",
+      "bytes": 1057,
+      "modified_utc": "2026-10-06T15:27:45Z",
+      "scenario": "chip_probe",
+      "scenario_finished_utc": "2026-10-06T15:27:45Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-answer-full.png",
+      "bytes": 141163,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-citations.json",
+      "bytes": 1525,
+      "modified_utc": "2026-10-06T15:25:38Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-ledger-panel-text.json",
+      "bytes": 513,
+      "modified_utc": "2026-10-06T15:25:39Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-ledger-panel.png",
+      "bytes": 64976,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-ledger.json",
+      "bytes": 2741,
+      "modified_utc": "2026-10-06T15:25:38Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-documents-run.json",
+      "bytes": 49025,
+      "modified_utc": "2026-10-06T15:25:38Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-inference-routing-log-rows-documents-run.json",
+      "bytes": 5397,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "17-long-document-read-cut-short.png",
+      "bytes": 77280,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "long_document",
+      "scenario_finished_utc": "2026-10-06T15:28:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-long-document-reads.json",
+      "bytes": 743,
+      "modified_utc": "2026-10-06T15:28:43Z",
+      "scenario": "long_document",
+      "scenario_finished_utc": "2026-10-06T15:28:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-long-document-run.json",
+      "bytes": 45878,
+      "modified_utc": "2026-10-06T15:28:43Z",
+      "scenario": "long_document",
+      "scenario_finished_utc": "2026-10-06T15:28:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "17-work-product-attribution-documents-run.json",
+      "bytes": 772,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "18-chat-messages-bad_quote-run-fields-checked.json",
+      "bytes": 1447,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "18-chat-messages-bad_quote-run.json",
+      "bytes": 2789,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "18-chat-receipts-bad_quote-run.json",
+      "bytes": 77359,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "18-documents-bad-quote-answer-citations.png",
+      "bytes": 70358,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-answer.png",
+      "bytes": 56365,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-citations.json",
+      "bytes": 2035,
+      "modified_utc": "2026-10-06T15:26:14Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-ledger-panel-text.json",
+      "bytes": 675,
+      "modified_utc": "2026-10-06T15:26:15Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-ledger-panel.png",
+      "bytes": 69141,
+      "modified_utc": "2026-10-06T15:37:52Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-ledger.json",
+      "bytes": 3527,
+      "modified_utc": "2026-10-06T15:26:14Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-documents-bad-quote-run.json",
+      "bytes": 49171,
+      "modified_utc": "2026-10-06T15:26:14Z",
+      "scenario": "bad_quote",
+      "scenario_finished_utc": "2026-10-06T15:26:16Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "18-inference-routing-log-rows-bad_quote-run.json",
+      "bytes": 5398,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "18-work-product-attribution-bad_quote-run.json",
+      "bytes": 772,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "19-receipts-drawer-audit.png",
+      "bytes": 79954,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "19-receipts-drawer-model-calls.png",
+      "bytes": 81557,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "documents",
+      "scenario_finished_utc": "2026-10-06T15:25:43Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "20-autonomous-orchestration-chat-notice-no-form.png",
+      "bytes": 29061,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "autonomous",
+      "scenario_finished_utc": "2026-10-06T15:26:20Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "20-autonomous-pages-no-intake-form.json",
+      "bytes": 1307,
+      "modified_utc": "2026-10-06T15:26:20Z",
+      "scenario": "autonomous",
+      "scenario_finished_utc": "2026-10-06T15:26:20Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "20-autonomous-sessions-list.png",
+      "bytes": 57858,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "autonomous",
+      "scenario_finished_utc": "2026-10-06T15:26:20Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "20-run-receipt-page-documents-run.png",
+      "bytes": 51229,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "autonomous",
+      "scenario_finished_utc": "2026-10-06T15:26:20Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "21-autonomous-off-run-menu.png",
+      "bytes": 58305,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "unavailable_reasons",
+      "scenario_finished_utc": "2026-10-06T15:27:56Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "21-chat-without-matter.png",
+      "bytes": 44922,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "no_matter",
+      "scenario_finished_utc": "2026-10-06T15:26:23Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "21-run-profiles-autonomous-off.json",
+      "bytes": 3148,
+      "modified_utc": "2026-10-06T15:27:55Z",
+      "scenario": "unavailable_reasons",
+      "scenario_finished_utc": "2026-10-06T15:27:56Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "21-run-profiles-chat-in-another-matter.json",
+      "bytes": 3113,
+      "modified_utc": "2026-10-06T15:27:54Z",
+      "scenario": "unavailable_reasons",
+      "scenario_finished_utc": "2026-10-06T15:27:56Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "21-run-profiles-chat-without-matter.json",
+      "bytes": 3120,
+      "modified_utc": "2026-10-06T15:26:20Z",
+      "scenario": "no_matter",
+      "scenario_finished_utc": "2026-10-06T15:26:23Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "23-chat-messages-tool_refused-run-fields-checked.json",
+      "bytes": 1368,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "23-chat-messages-tool_refused-run.json",
+      "bytes": 2569,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "23-chat-receipts-tool_refused-run.json",
+      "bytes": 76424,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "23-inference-routing-log-rows-tool_refused-run.json",
+      "bytes": 5402,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "23-run-tool-refused.json",
+      "bytes": 53022,
+      "modified_utc": "2026-10-06T15:27:00Z",
+      "scenario": "tool_refused",
+      "scenario_finished_utc": "2026-10-06T15:27:00Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "23-tool-refused-audit-rows.json",
+      "bytes": 3106,
+      "modified_utc": "2026-10-06T15:27:00Z",
+      "scenario": "tool_refused",
+      "scenario_finished_utc": "2026-10-06T15:27:00Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "23-tool-refused-steps.png",
+      "bytes": 75433,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "tool_refused",
+      "scenario_finished_utc": "2026-10-06T15:27:00Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "23-work-product-attribution-tool_refused-run.json",
+      "bytes": 764,
+      "modified_utc": "2026-10-06T15:29:32Z",
+      "scenario": "evidence",
+      "scenario_finished_utc": "2026-10-06T15:29:32Z",
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "24-export-ready.png",
+      "bytes": 37548,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "export",
+      "scenario_finished_utc": "2026-10-06T15:28:52Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "24-export-zip-contents.json",
+      "bytes": 6760,
+      "modified_utc": "2026-10-06T15:28:52Z",
+      "scenario": "export",
+      "scenario_finished_utc": "2026-10-06T15:28:52Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "25-matter-workspace-plan-awaiting-approval.png",
+      "bytes": 73499,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "matter_workspace",
+      "scenario_finished_utc": "2026-10-06T15:26:32Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-back-on-admin-profiles.json",
+      "bytes": 3168,
+      "modified_utc": "2026-10-06T15:29:13Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-admin-profiles.json",
+      "bytes": 3170,
+      "modified_utc": "2026-10-06T15:29:02Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-completed-run-readable.png",
+      "bytes": 58930,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-refusals.json",
+      "bytes": 552,
+      "modified_utc": "2026-10-06T15:29:02Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-retained-run-after-halt.json",
+      "bytes": 16814,
+      "modified_utc": "2026-10-06T15:29:06Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-run-menu.png",
+      "bytes": 69257,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "26-switched-off-run-profiles.json",
+      "bytes": 3428,
+      "modified_utc": "2026-10-06T15:29:02Z",
+      "scenario": "switched_off",
+      "scenario_finished_utc": "2026-10-06T15:29:13Z",
+      "web_code_fingerprint": "58236ab3166d0621",
+      "web_code_changed_during_the_scenario": false
+    },
+    {
+      "file": "30-local-model-composer.png",
+      "bytes": 35939,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "30-local-model-run-profiles.json",
+      "bytes": 3082,
+      "modified_utc": "2026-10-06T15:29:41Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "30-local-model-run.json",
+      "bytes": 55309,
+      "modified_utc": "2026-10-06T15:31:25Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "31-local-model-plan.png",
+      "bytes": 58909,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "33-local-model-final.png",
+      "bytes": 145076,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "40-local-model-run-profiles.json",
+      "bytes": 3082,
+      "modified_utc": "2026-10-06T15:31:26Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "40-local-model-run.json",
+      "bytes": 60860,
+      "modified_utc": "2026-10-06T15:35:00Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "41-local-model-plan.png",
+      "bytes": 58092,
+      "modified_utc": "2026-10-06T15:37:53Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "43-local-model-final.png",
+      "bytes": 160488,
+      "modified_utc": "2026-10-06T15:37:54Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "46-local-model-fictional-first-run.json",
+      "bytes": 54315,
+      "modified_utc": "2026-10-06T15:36:03Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "47-local-model-documents-attempt-1-run.json",
+      "bytes": 53555,
+      "modified_utc": "2026-10-06T15:36:03Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "47-local-model-documents-attempt-1-synthesis-failed.png",
+      "bytes": 136770,
+      "modified_utc": "2026-10-06T15:37:54Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "48-local-model-documents-attempt-2-before-the-fixes.png",
+      "bytes": 179378,
+      "modified_utc": "2026-10-06T15:37:54Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    },
+    {
+      "file": "48-local-model-documents-attempt-2-run.json",
+      "bytes": 61389,
+      "modified_utc": "2026-10-06T15:36:03Z",
+      "scenario": null,
+      "scenario_finished_utc": null,
+      "web_code_fingerprint": null,
+      "web_code_changed_during_the_scenario": null
+    }
+  ]
+}

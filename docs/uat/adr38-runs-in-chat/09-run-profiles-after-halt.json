@@ -1,0 +1,11 @@
+{
+  "what": "GET /chats/{id}/run-profiles when the page first showed 'Halted' and 16 s later (after the call already sent had finished), with what the composer's notice said at each moment.",
+  "when_the_page_showed_halted": {
+    "active_run": null,
+    "composer_notice": null
+  },
+  "sixteen_seconds_later": {
+    "active_run": null,
+    "composer_notice_without_reloading": null
+  }
+}

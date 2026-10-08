@@ -1,0 +1,9 @@
+{
+  "what": "While another chat's run is active, a click was forced on the disabled 'Contract Questions Orchestrator' option in the Run menu (Playwright click with force=True; a normal click is refused because the option is aria-disabled). The page is unchanged.",
+  "reasons_shown_in_the_menu": {
+    "model_demo_v1": "Another run of yours is still active. One run can be active at a time.",
+    "contract_qa_documents_v1": "Another run of yours is still active. One run can be active at a time."
+  },
+  "run_mode_panels_after_the_click": 0,
+  "propose_plan_buttons_after_the_click": 0
+}

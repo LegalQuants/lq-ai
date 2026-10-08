@@ -1,0 +1,91 @@
+{
+  "chat_id": "dbf12c8b-dff3-4370-a79c-0b629b82c71e",
+  "effects": [],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "4844d04c-2055-41af-85ee-3b8fd8bb3381",
+  "packet": "# Fictional vendor agreement \u2014 demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## \u00a71 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## \u00a72 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## \u00a73 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## \u00a74 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00\u201317:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## \u00a75 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## \u00a76 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## \u00a77 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in \u00a78 survive\ntermination. There is no survival period stated for confidentiality.\n\n## \u00a78 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
+  "planning": {
+    "attempt_timeout_seconds": 120,
+    "budget_usd": "2.0000",
+    "child_skill_version": "1.0.0",
+    "contract_version": 2,
+    "deadline": "2026-10-06T16:41:37.133857Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [
+      {
+        "attached_for_run": false,
+        "document_id": "6a7b0968-c9d3-4511-b0f3-4d52a73c5dda",
+        "file_id": "0f400f9c-3769-4e77-9ea7-ecb4c6676e8b",
+        "filename": "fictional-vendor-agreement.md",
+        "number": 1
+      }
+    ],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Explain payment, renewal and termination questions independently.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "39263ff8-5f5b-4c62-b333-7256056ca26c",
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "plan_id": "14a796bd-707d-4706-bda0-daeda2ee39b4",
+    "planning_allowance_usd": "0.2478",
+    "policy_version": "7c6edade8113099abbf511288a11b977d200676737118537c502a1c2816a722b",
+    "profile": "model_demo_v1",
+    "project_id": "b22c0441-fdff-4498-8c52-63eb6db913dd",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [
+          "6a7b0968-c9d3-4511-b0f3-4d52a73c5dda"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "name": "orchestration-chat-demo"
+      }
+    },
+    "root_allowance_usd": "0.4956",
+    "root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+    "root_skill_version": "1.0.0"
+  },
+  "profile": "model_demo_v1",
+  "profile_title": "Contract Questions Orchestrator",
+  "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "fc50e777-e2be-43ce-8467-d247a6514963",
+  "spent_usd": "0.0000",
+  "status": "planning",
+  "stop_reason": null,
+  "tree": null
+}

@@ -11,6 +11,11 @@ profile, it extends D2/D4/D7 with durable waits, tree-wide budget reservations
 and internal child delivery with root-owned user output. The bounded fictional
 chat profile exercises this run tree; ordinary single-session behavior remains.
 
+**Proposed amendment (2026-10-06):** [ADR 0038 D4](0038-skill-backed-orchestration-profile.md#d4--approved-children-may-call-granted-tools)
+would let approved run children use native tool calls within their granted set, in
+place of D1's closed-choice planner contract. Ordinary matter sessions are unchanged.
+It is not in force until ADR 0038 is ratified.
+
 ## Context
 
 WS-D is the milestone's headline user capability: *"describe a matter in plain language and have LQ.AI pursue the right inquiry."* A lawyer states a matter — "Does our Delaware NDA's assignment clause survive a change-of-control? Find controlling authority." — and LQ.AI runs a **matter-scoped agentic session** that plans, retrieves authoritative content, adapts as it learns, and produces a work product (WS-B) backed by a one-click-traceable citation ledger (WS-A).

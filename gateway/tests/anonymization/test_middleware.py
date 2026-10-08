@@ -236,6 +236,60 @@ def test_pre_anonymize_walks_user_assistant_and_system_roles() -> None:
 
 
 @pytest.mark.unit
+def test_pre_anonymize_leaves_a_tool_result_and_tool_call_arguments_as_sent() -> None:
+    """A ``tool`` message is not walked, so a tool result reaches the provider as sent.
+
+    A governed run's child reads a document through a tool (ADR 0038 D4, D5),
+    so the document's text travels as a tool result. This pins what the
+    provider receives for it: the stored text, not pseudonyms, as with the
+    retrieval context in ordinary chat. The arguments of an earlier tool call
+    are not content either and are sent as the model wrote them.
+    """
+
+    arguments = '{"name": "note-smith.md", "content": "John Smith signed."}'
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(role="user", content="User: Jane Doe."),
+            ChatCompletionMessage(
+                role="assistant",
+                content=None,
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "save_note", "arguments": arguments},
+                    }
+                ],
+            ),
+            ChatCompletionMessage(role="tool", tool_call_id="call_1", content="John Smith signed."),
+        ]
+    )
+    config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
+    analyzer = _StubAnalyzer(
+        {
+            "User: Jane Doe.": [_Span("PERSON", 6, 14)],
+            # The analyzer would find the name if it were asked.
+            "John Smith signed.": [_Span("PERSON", 0, 10)],
+            arguments: [_Span("PERSON", 39, 49)],
+        }
+    )
+
+    mapper = pre_anonymize_request(
+        chat_request=req,
+        config=config,
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=analyzer),
+    )
+
+    assert mapper is not None
+    assert req.messages[0].content == "User: PERSON_0001."
+    assert req.messages[1].tool_calls is not None
+    assert req.messages[1].tool_calls[0]["function"]["arguments"] == arguments
+    assert req.messages[2].content == "John Smith signed."
+    assert mapper.reverse() == {"PERSON_0001": "Jane Doe"}
+
+
+@pytest.mark.unit
 def test_pre_anonymize_same_name_across_messages_stable_pseudonym() -> None:
     """The same name in two messages resolves to one pseudonym."""
 
@@ -506,6 +560,34 @@ def test_post_anonymize_leaves_none_content_as_none() -> None:
     post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
 
     assert response.choices[0].message.content is None
+
+
+@pytest.mark.unit
+def test_post_anonymize_does_not_restore_tool_call_arguments() -> None:
+    """Only content is restored: a pseudonym in a tool call's arguments stays one.
+
+    A governed run's child calls tools (ADR 0038 D4). An argument the model
+    copied from pseudonymized text reaches the application as the pseudonym,
+    so a tool must validate its arguments rather than trust them.
+    """
+
+    mapper = PseudonymMapper()
+    mapper.assign("PERSON", "John Smith")  # PERSON_0001
+    response = _make_response(contents=[None])
+    arguments = '{"name": "note-a.md", "content": "PERSON_0001 signed."}'
+    response.choices[0].message.tool_calls = [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "save_note", "arguments": arguments},
+        }
+    ]
+
+    post_anonymize_response(response=response, mapper=mapper, anonymizer=Anonymizer())
+
+    calls = response.choices[0].message.tool_calls
+    assert calls is not None
+    assert calls[0]["function"]["arguments"] == arguments
 
 
 @pytest.mark.unit

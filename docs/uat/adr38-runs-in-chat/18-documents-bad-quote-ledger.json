@@ -1,0 +1,113 @@
+{
+  "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+  "entries": [
+    {
+      "id": "4a2bee06-fdd5-4e33-a2d6-7c8adc1fdd70",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "source_kind": "kb_document",
+      "verification_status": "exact_match",
+      "confidence": 1.0,
+      "provider": null,
+      "retrieved_at": null,
+      "treatment_id": null,
+      "treatment": null,
+      "created_at": "2026-10-06T15:26:11.287844+00:00",
+      "source": {
+        "kind": "kb_document",
+        "source_file_id": "62a41e99-6de3-40d3-9755-4d0b931b838b",
+        "passages": [
+          {
+            "text": "The Processor shall notify the Controller without undue delay and in any event within 48 hours after becoming aware of a personal data breach.",
+            "offset_start": 771,
+            "offset_end": 913,
+            "page": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "cb57ff47-179f-4a21-8167-8e7dc39c3bf9",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "source_kind": "kb_document",
+      "verification_status": "exact_match",
+      "confidence": 1.0,
+      "provider": null,
+      "retrieved_at": null,
+      "treatment_id": null,
+      "treatment": null,
+      "created_at": "2026-10-06T15:26:11.287844+00:00",
+      "source": {
+        "kind": "kb_document",
+        "source_file_id": "d6159824-bc29-4fe5-80a2-6c342aab9d6c",
+        "passages": [
+          {
+            "text": "The Customer shall pay the Supplier a fee of GBP 4,500 per month, invoiced monthly in advance.",
+            "offset_start": 361,
+            "offset_end": 455,
+            "page": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "f998fa81-7ddb-4fc9-8289-babde4ae0075",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "source_kind": "kb_document",
+      "verification_status": "exact_match",
+      "confidence": 1.0,
+      "provider": null,
+      "retrieved_at": null,
+      "treatment_id": null,
+      "treatment": null,
+      "created_at": "2026-10-06T15:26:11.287844+00:00",
+      "source": {
+        "kind": "kb_document",
+        "source_file_id": "d6159824-bc29-4fe5-80a2-6c342aab9d6c",
+        "passages": [
+          {
+            "text": "Undisputed invoices must be paid within 45 days of the invoice date.",
+            "offset_start": 456,
+            "offset_end": 524,
+            "page": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "facceebc-e0b9-420e-82cb-c5371ad551dc",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "source_kind": "kb_document",
+      "verification_status": "unverified",
+      "confidence": null,
+      "provider": null,
+      "retrieved_at": null,
+      "treatment_id": null,
+      "treatment": null,
+      "created_at": "2026-10-06T15:26:11.287844+00:00",
+      "source": {
+        "kind": "kb_document",
+        "source_file_id": "d6159824-bc29-4fe5-80a2-6c342aab9d6c",
+        "passages": [
+          {
+            "text": "The Supplier shall refund all fees paid for any month in which the service is unavailable for more than one hour.",
+            "offset_start": 0,
+            "offset_end": 113,
+            "page": null
+          }
+        ]
+      }
+    }
+  ],
+  "gates": [
+    {
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "gate_status": "flagged",
+      "pass_count": 3,
+      "supported_count": 0,
+      "fail_count": 1,
+      "total_assertions": 4,
+      "confidence": 1.0,
+      "created_at": "2026-10-06T15:26:11.287844+00:00"
+    }
+  ]
+}

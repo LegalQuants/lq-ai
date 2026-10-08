@@ -1,0 +1,41 @@
+[
+  {
+    "id": "997a7f2a-350e-48d2-b4a2-77e8e6376feb",
+    "source_file_id": "d6159824-bc29-4fe5-80a2-6c342aab9d6c",
+    "source_offset_start": 361,
+    "source_offset_end": 455,
+    "source_page": null,
+    "source_text": "The Customer shall pay the Supplier a fee of GBP 4,500 per month, invoiced monthly in advance.",
+    "verified": true,
+    "verification_method": "exact_match",
+    "verification_confidence": 1.0,
+    "partial": false,
+    "created_at": "2026-10-06T15:25:34.726686+00:00"
+  },
+  {
+    "id": "b4573fb6-ec80-4a78-96f0-0497d7143135",
+    "source_file_id": "62a41e99-6de3-40d3-9755-4d0b931b838b",
+    "source_offset_start": 771,
+    "source_offset_end": 913,
+    "source_page": null,
+    "source_text": "The Processor shall notify the Controller without undue delay and in any event within 48 hours after becoming aware of a personal data breach.",
+    "verified": true,
+    "verification_method": "exact_match",
+    "verification_confidence": 1.0,
+    "partial": false,
+    "created_at": "2026-10-06T15:25:34.726686+00:00"
+  },
+  {
+    "id": "c818491b-42ec-43ce-a378-900a2ff693ea",
+    "source_file_id": "d6159824-bc29-4fe5-80a2-6c342aab9d6c",
+    "source_offset_start": 456,
+    "source_offset_end": 524,
+    "source_page": null,
+    "source_text": "Undisputed invoices must be paid within 45 days of the invoice date.",
+    "verified": true,
+    "verification_method": "exact_match",
+    "verification_confidence": 1.0,
+    "partial": false,
+    "created_at": "2026-10-06T15:25:34.726686+00:00"
+  }
+]

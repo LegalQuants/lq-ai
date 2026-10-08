@@ -408,6 +408,46 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 ```
 
+#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0070; ADR 0038 proposed)
+
+The sketch above does not show `messages.kind`. Migration 0020 added it, with
+`chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
+[0070](../api/alembic/versions/0070_runs_in_chat.py) changes `messages` as below.
+It is implemented on an unmerged branch, and
+[ADR 0038](adr/0038-skill-backed-orchestration-profile.md) is proposed, not
+ratified.
+
+```sql
+ALTER TABLE messages DROP CONSTRAINT chk_messages_kind;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_kind
+  CHECK (kind IN ('user', 'ai', 'refusal', 'system', 'run'));
+ALTER TABLE messages ADD COLUMN autonomous_session_id uuid
+  CONSTRAINT fk_messages_autonomous_session_id
+  REFERENCES autonomous_sessions(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_run_binding
+  CHECK (autonomous_session_id IS NULL OR (kind = 'run' AND role = 'assistant'));
+CREATE UNIQUE INDEX uq_messages_autonomous_session
+  ON messages(autonomous_session_id) WHERE autonomous_session_id IS NOT NULL;
+```
+
+- A governed run's reply is one assistant message of kind `run`.
+  `autonomous_session_id` links it to the run's root autonomous session and is
+  NULL on every other message. Deleting the session leaves the message and
+  clears the link (`ON DELETE SET NULL`).
+- `chk_messages_run_binding` allows the link only on an assistant message of
+  kind `run`. The partial unique index `uq_messages_autonomous_session` allows
+  one message per session and indexes only rows where the link is set.
+- `chats.autonomous_session_id` is not reused for this: it marks hidden,
+  session-owned chats and removes them from chat lists.
+- The message holds the link. Run records stay authoritative. At delivery one
+  transaction writes the answer into `content`, the message's `applied_skills`,
+  tier, provider, model, token and cost fields, and its `work_product_attribution`
+  row, together with the delivery audit row. A run that ends without an answer
+  leaves `content` empty, and history replay skips assistant messages with no
+  content.
+- Downgrade refuses while any message has `kind = 'run'` or a session link;
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-0071-adr-0038-proposed).
+
 ### `inference_routing_log` FK closure (Task C3)
 
 Migration 0006 also closes the A2-deferred FK constraints on the
@@ -1321,6 +1361,37 @@ CREATE INDEX idx_inference_log_provider_time ON inference_routing_log(routed_pro
 CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) WHERE refused = TRUE;
 ```
 
+The sketch omits `purpose`. Migration 0029 added it as `purpose VARCHAR(32)`, nullable,
+with `idx_inference_log_model_purpose_timestamp` on `(routed_model, purpose, timestamp DESC)`.
+It labels the kind of traffic so cost calibration and receipts can tell the kinds
+apart. The gateway sets it from the request's `lq_ai_purpose` field, or to
+`embedding` on the embeddings path. A request with no label records `chat`, and so
+does a label outside the gateway's closed set, so a caller cannot add a value by
+sending a string. A row written before migration 0029 has NULL, which cost
+calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
+(`gateway/app/api/inference.py`):
+
+| Value | Recorded for |
+|---|---|
+| `chat` | Ordinary chat completions; also the fallback for no label or an unknown one |
+| `embedding` | Embeddings calls |
+| `judge_paraphrase` | Citation Engine paraphrase and ensemble judge calls (stages 3 and 4) |
+| `judge_case_content` | Citation Engine whole-opinion judge for case law |
+| `judge_authority_content` | The same judge for other authority sources |
+| `judge_treatment` | Case-law treatment-layer judge |
+| `tabular_extraction` | Tabular Review cell extraction |
+| `playbook_executor` | Playbook executor |
+| `playbook_easy_extract` | Easy Playbook extraction |
+| `autonomous_executor` | A legacy single autonomous session's model calls |
+| `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
+
+Only `chat`, `embedding` and `judge_paraphrase` were in the set before ADR 0038
+(proposed). The other labels were already sent by the backend and recorded as
+`chat`; recording them as themselves is implemented on an unmerged branch. Two
+Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
+`playbook_easy_assemble_describe_tier`, are longer than the 32-character column
+and are not in the set, so those rows still record `chat`.
+
 ---
 
 ### `tool_egress_log`
@@ -1819,7 +1890,9 @@ Revision **0067** includes `profile` (`demonstration` by default, or
 call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
 Sample roots continue to require a current prepared revision and no planning
-snapshot. A root in `planning` cannot reference a prepared revision.
+snapshot. A root in `planning` cannot reference a prepared revision. Migration 0070
+later replaces the enumerated `profile` check and 0071 adds the `closed` status; see
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-0071-adr-0038-proposed).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -1969,6 +2042,65 @@ of `minimum_inference_tier` and `privileged`.
 A scope ceiling of `0` refuses in the API and is never sent to the gateway.
 An unreadable policy fail-closes: no dispatch, refused audit row with
 `ceiling_source="unresolved"`.
+
+### Governed runs in chat and closing a run (0070, 0071; ADR 0038 proposed)
+
+Implemented on an unmerged branch; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
+is proposed, not ratified. Both migrations are additive on a 0.8.0 database, which
+already carries the orchestration tables. The authoritative DDL is in
+[`0070_runs_in_chat.py`](../api/alembic/versions/0070_runs_in_chat.py) and
+[`0071_close_uncertain_runs.py`](../api/alembic/versions/0071_close_uncertain_runs.py);
+this section names the constraints they replace. The `messages` changes of 0070 are
+described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0070-adr-0038-proposed).
+
+**0070: registry profiles.** The profile is validated against the application's
+closed profile registry, so the database keeps only its shape.
+
+| Constraint on `orchestration_roots` | Before | After |
+|---|---|---|
+| `orchestration_roots_profile_check` | `profile IN ('demonstration','model_demo_v1')` | `profile ~ '^[a-z][a-z0-9_]{0,63}$'` |
+| `ck_orchestration_planning` | A model-planned root: `profile = 'model_demo_v1'` and a planning snapshot | A model-planned root: `profile <> 'demonstration'` and a planning snapshot |
+
+`demonstration` stays reserved for the earlier sample profile, which was removed; a
+registry profile cannot use it. The registered profiles are `model_demo_v1`, the
+fictional agreement, and `contract_qa_documents_v1`, the documents the owner selects.
+
+**0071: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
+outcome is never repeated, and its reservation is retained. Closing is the owner's way
+to end such a run without a retry.
+
+| Constraint | Change |
+|---|---|
+| `orchestration_roots_status_check` | `status` also accepts `closed`. |
+| `ck_orchestration_planning` | A root with no current plan revision may also have status `closed`: it was closed while its planning call was uncertain. |
+| `orchestration_effects_status_check` | `status` also accepts `closed`. |
+| `orchestration_effects_check` | The row-shape rule gains the `closed` branch below. |
+
+```sql
+CHECK (
+  (status = 'completed' AND charged_usd IS NOT NULL AND result IS NOT NULL
+    AND completed_at IS NOT NULL)
+  OR (status = 'closed' AND charged_usd IS NOT NULL AND result IS NULL
+    AND completed_at IS NOT NULL)
+  OR (status IN ('admitted','uncertain') AND charged_usd IS NULL AND result IS NULL
+    AND completed_at IS NULL))
+```
+
+A `closed` effect is one whose outcome was never established. Its reservation was
+settled as a charge (`charged_usd` holds the reserved amount), it has no `result`, and
+`completed_at` is set. Closing a run does this to each unresolved effect, ends the
+root as `closed` with stop reason `owner_closed`, and sets the run's running sessions
+to `halted`. `closed` is outside the partial unique indexes
+`uq_orchestration_active_owner` (one active root per owner) and
+`uq_orchestration_one_inflight` (one admitted or uncertain effect per session), so
+closing releases the owner's single active-run allowance and a closed effect no longer
+blocks its session.
+
+**Downgrade.** Both migrations refuse to downgrade while the rows they introduced are
+retained, as 0067 does: 0070 while any message has `kind = 'run'` or a session link, or
+any root has a profile other than `demonstration` and `model_demo_v1`; 0071 while any
+root or effect has status `closed`. Nothing is dropped silently; those runs need an
+explicit export and removal first.
 
 ### `autonomous_schedules` (M4)
 

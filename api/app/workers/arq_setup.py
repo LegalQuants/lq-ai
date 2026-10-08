@@ -160,13 +160,25 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     # No try/except: propagation is the contract (see docstring).
     holder = install_skill_registry(app, get_settings())
     settings = get_settings()
-    if settings.orchestration_chat_enabled:
+    if settings.orchestration_enabled:
+        from app.autonomous.orchestration.checkpoints import CheckpointRuntime
         from app.autonomous.orchestration.service import DemonstrationService
         from app.db.session import get_session_factory
+        from app.errors import Forbidden
 
         runtime = DemonstrationService(settings, holder, get_session_factory())
-        runtime.require_policy()
-        await runtime.executor().checkpoints.setup()
+        # Fail at startup, not at the first run: every profile the operator
+        # switched on must have a complete policy, and the checkpoint schema
+        # must be the one this build expects.
+        enabled = runtime.enabled_profiles()
+        for profile in enabled:
+            runtime.for_profile(profile).require_policy()
+        if not enabled or settings.orchestration_deployment_children is None:
+            raise Forbidden(message="An enabled run profile is not fully configured")
+        await CheckpointRuntime(
+            settings.database_url,
+            deployment_children=settings.orchestration_deployment_children,
+        ).setup()
         ctx["orchestration_runtime"] = runtime
     skill_count = len(holder.current().names())
     log.info(
@@ -235,7 +247,7 @@ def _build_cron_jobs() -> list[Any]:
         # advance next_run_at from each schedule's cron_expr (M4-B3).
         cron(autonomous_schedule_dispatcher, second=0),
     ]
-    if get_settings().orchestration_chat_enabled:
+    if get_settings().orchestration_enabled:
         jobs.append(cron(orchestration_watchdog, second=15))
     return jobs
 

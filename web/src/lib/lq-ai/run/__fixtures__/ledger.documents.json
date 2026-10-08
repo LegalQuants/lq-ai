@@ -1,0 +1,89 @@
+{
+  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "entries": [
+    {
+      "confidence": 1.0,
+      "created_at": "2026-10-06T15:41:45.614768+00:00",
+      "id": "0ae17cac-a470-492d-954b-08a0326fae01",
+      "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+      "provider": null,
+      "retrieved_at": null,
+      "source": {
+        "kind": "kb_document",
+        "passages": [
+          {
+            "offset_end": 188,
+            "offset_start": 115,
+            "page": null,
+            "text": "within seventy-two (72) hours of becoming aware of a Personal Data Breach"
+          }
+        ],
+        "source_file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e"
+      },
+      "source_kind": "kb_document",
+      "treatment": null,
+      "treatment_id": null,
+      "verification_status": "exact_match"
+    },
+    {
+      "confidence": 1.0,
+      "created_at": "2026-10-06T15:41:45.614768+00:00",
+      "id": "0ecac30c-4a71-4ce3-9da3-e2fd4692d531",
+      "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+      "provider": null,
+      "retrieved_at": null,
+      "source": {
+        "kind": "kb_document",
+        "passages": [
+          {
+            "offset_end": 107,
+            "offset_start": 64,
+            "page": null,
+            "text": "within thirty (30) days of the invoice date"
+          }
+        ],
+        "source_file_id": "62803688-7e2f-45eb-8916-3f31285da37b"
+      },
+      "source_kind": "kb_document",
+      "treatment": null,
+      "treatment_id": null,
+      "verification_status": "exact_match"
+    },
+    {
+      "confidence": null,
+      "created_at": "2026-10-06T15:41:45.614768+00:00",
+      "id": "6222ab99-a834-47af-ae02-652caf349aa2",
+      "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+      "provider": null,
+      "retrieved_at": null,
+      "source": {
+        "kind": "kb_document",
+        "passages": [
+          {
+            "offset_end": 21,
+            "offset_start": 0,
+            "page": null,
+            "text": "twelve months of fees"
+          }
+        ],
+        "source_file_id": "62803688-7e2f-45eb-8916-3f31285da37b"
+      },
+      "source_kind": "kb_document",
+      "treatment": null,
+      "treatment_id": null,
+      "verification_status": "unverified"
+    }
+  ],
+  "gates": [
+    {
+      "confidence": 1.0,
+      "created_at": "2026-10-06T15:41:45.614768+00:00",
+      "fail_count": 1,
+      "gate_status": "flagged",
+      "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+      "pass_count": 2,
+      "supported_count": 0,
+      "total_assertions": 3
+    }
+  ]
+}

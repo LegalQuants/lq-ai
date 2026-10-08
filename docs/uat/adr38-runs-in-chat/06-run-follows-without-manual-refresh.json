@@ -1,0 +1,66 @@
+{
+  "what": "One run driven in the browser with the Refresh link never pressed by the script. The script only looked at the page every 0.4 s and pressed Approve once. Each line is the first time the run message showed that status. Pressing Approve makes the page read the run once straight away; every other read was the page's own.",
+  "refresh_link_presses_by_the_script": 0,
+  "timeline": [
+    {
+      "seconds_since_propose": 0.0,
+      "status": "planning",
+      "headline": "Proposing a plan…"
+    },
+    {
+      "seconds_since_propose": 6.6,
+      "status": "awaiting_approval",
+      "headline": "Waiting for your approval"
+    },
+    {
+      "seconds_since_propose": 6.6,
+      "status": "(Approve pressed)",
+      "headline": "Waiting for your approval"
+    },
+    {
+      "seconds_since_propose": 7.0,
+      "status": "queued",
+      "headline": "Plan approved. Waiting for the tasks to start"
+    },
+    {
+      "seconds_since_propose": 9.0,
+      "status": "running",
+      "headline": "2 tasks running"
+    },
+    {
+      "seconds_since_propose": 16.7,
+      "status": "waiting_children",
+      "headline": "2 tasks running"
+    },
+    {
+      "seconds_since_propose": 29.7,
+      "status": "running",
+      "headline": "Combining the answers"
+    },
+    {
+      "seconds_since_propose": 34.2,
+      "status": "completed",
+      "headline": "Answer delivered"
+    }
+  ],
+  "reads_of_the_run_by_the_page": 17,
+  "seconds_between_those_reads": [
+    2.0,
+    2.0,
+    2.5,
+    0.5,
+    2.0,
+    2.0,
+    2.5,
+    3.1,
+    2.0,
+    2.5,
+    2.0,
+    2.0,
+    2.5,
+    2.1,
+    2.0,
+    2.6
+  ],
+  "reached_completed": true
+}

@@ -1,0 +1,31 @@
+{
+  "ordinary_reply_in_the_same_chat_fields": null,
+  "ordinary_reply_note": "The first ordinary reply in the same chat, for comparison (null when the chat has none). It had no skill attached, so its applied_skills is empty; its cost_estimate is null where the run message's is 0.0.",
+  "tool_call_log_rows_for_the_run_message": 0,
+  "tool_call_log_note": "tool_call_log records calls to external tool providers; neither profile grants one, so 0 is expected (UAT-30).",
+  "what": "The document profile, one quotation in no document run's thread: the user's request and the kind 'run' assistant message. The fields below are copied from the message; every one must be filled (not null).",
+  "user_message": {
+    "id": "26cbf14e-6451-427a-83af-f30e475c67b0",
+    "kind": "user",
+    "role": "user",
+    "content": "Compare the payment terms and the personal data breach notice duty across these two documents."
+  },
+  "run_message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+  "run_message_fields": {
+    "kind": "run",
+    "role": "assistant",
+    "autonomous_session_id": "421f78ce-8105-47d3-b4b2-8e7da69ad1bd",
+    "routed_provider": "controlled",
+    "routed_model": "scripted-1",
+    "routed_inference_tier": 1,
+    "prompt_tokens": 107655,
+    "completion_tokens": 1137,
+    "cost_estimate": 0.3152,
+    "applied_skills": [
+      "contract-questions-orchestrator",
+      "contract-qa"
+    ]
+  },
+  "all_filled": true,
+  "empty_fields": []
+}

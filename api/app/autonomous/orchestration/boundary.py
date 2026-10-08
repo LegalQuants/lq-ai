@@ -84,12 +84,24 @@ async def constrain_call(
         }
     if intent == ToolIntent.retrieve_chunks:
         # Do not silently reinterpret a KB-wide search as a selected-file read.
-        if set(params) != {"file_id"}:
+        # A read is the whole file's chunks, or one bounded span of its text.
+        if set(params) not in ({"file_id"}, {"file_id", "offset", "max_chars"}):
             raise ToolNotGranted("orchestration retrieval requires one selected file")
         try:
             file_id = UUID(str(params["file_id"]))
         except (TypeError, ValueError, AttributeError):
             raise ToolNotGranted("orchestration retrieval requires one selected file") from None
+        span: dict[str, Any] = {}
+        if "max_chars" in params:
+            offset, max_chars = params["offset"], params["max_chars"]
+            if (
+                type(offset) is not int
+                or type(max_chars) is not int
+                or not 0 <= offset <= 50_000_000
+                or not 1 <= max_chars <= 65_536
+            ):
+                raise ToolNotGranted("orchestration document read is out of bounds")
+            span = {"offset": offset, "max_chars": max_chars}
         visible = await db.scalar(
             select(Document.id)
             .join(File, File.id == Document.file_id)
@@ -105,5 +117,5 @@ async def constrain_call(
         )
         if visible is None:
             raise ToolNotGranted("document is outside the current selected project scope")
-        return {"file_id": str(file_id)}
+        return {"file_id": str(file_id), **span}
     return dict(params)

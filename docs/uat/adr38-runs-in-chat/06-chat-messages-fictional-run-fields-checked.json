@@ -1,0 +1,42 @@
+{
+  "ordinary_reply_in_the_same_chat_fields": {
+    "kind": "ai",
+    "role": "assistant",
+    "autonomous_session_id": null,
+    "routed_provider": "controlled",
+    "routed_model": "scripted-1",
+    "routed_inference_tier": 1,
+    "prompt_tokens": 368,
+    "completion_tokens": 37,
+    "cost_estimate": null,
+    "applied_skills": []
+  },
+  "ordinary_reply_note": "The first ordinary reply in the same chat, for comparison (null when the chat has none). It had no skill attached, so its applied_skills is empty; its cost_estimate is null where the run message's is 0.0.",
+  "tool_call_log_rows_for_the_run_message": 0,
+  "tool_call_log_note": "tool_call_log records calls to external tool providers; neither profile grants one, so 0 is expected (UAT-30).",
+  "what": "The fictional profile run's thread: the user's request and the kind 'run' assistant message. The fields below are copied from the message; every one must be filled (not null).",
+  "user_message": {
+    "id": "226bd6ce-be01-4f1d-8e7c-cdbc7c8e1f5a",
+    "kind": "user",
+    "role": "user",
+    "content": "Explain the payment terms, the renewal and the termination rights in the fictional services agreement. Treat each question independently."
+  },
+  "run_message_id": "d11c34f4-b098-49c6-bb33-f981099840b4",
+  "run_message_fields": {
+    "kind": "run",
+    "role": "assistant",
+    "autonomous_session_id": "abdd9146-63ee-4a3c-a135-04983613a9ed",
+    "routed_provider": "controlled",
+    "routed_model": "scripted-1",
+    "routed_inference_tier": 1,
+    "prompt_tokens": 108154,
+    "completion_tokens": 1007,
+    "cost_estimate": 0.3143,
+    "applied_skills": [
+      "orchestration-chat-demo",
+      "contract-qa"
+    ]
+  },
+  "all_filled": true,
+  "empty_fields": []
+}

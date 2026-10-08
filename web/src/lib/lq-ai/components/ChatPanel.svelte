@@ -162,6 +162,29 @@
 		resolveSkillInputsForSend,
 		skillInputsUnavailableMessage
 	} from '$lib/lq-ai/chat/skillInputs';
+	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
+	import type {
+		OrchestrationChatRun,
+		RunDocumentsRead,
+		RunProfilesRead
+	} from '$lib/lq-ai/api/orchestration';
+	import {
+		ACTIVE_RUN_POLL_MS,
+		buildStartBody,
+		candidateFileIds,
+		candidatesSignature,
+		newRequestId,
+		proposeBlocker,
+		pruneSelection,
+		requestFor,
+		requestSignature,
+		syncActiveRun,
+		toggleDocument,
+		unavailableReason,
+		type PendingRequest
+	} from '$lib/lq-ai/run/composer';
+	import { chatHref } from '$lib/lq-ai/run/links';
+	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -179,6 +202,10 @@
 		readPersistedOpen as readReceiptsDrawerOpen
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
+	import RunActiveNotice from '$lib/lq-ai/components/run/RunActiveNotice.svelte';
+	import RunDocumentPicker from '$lib/lq-ai/components/run/RunDocumentPicker.svelte';
+	import RunModePanel from '$lib/lq-ai/components/run/RunModePanel.svelte';
+	import RunProfileMenu from '$lib/lq-ai/components/run/RunProfileMenu.svelte';
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
@@ -403,6 +430,253 @@
 			messagesStore.update(($m) => $m.map((m) => (m.id === replacing.id ? newAiMessage : m)));
 		}
 		closeOverrideModal();
+	}
+
+	// ---- governed runs (ADR 0038 D1) ----
+	// A run is a governed task: a model proposes a plan, the owner approves that exact
+	// plan, and tasks run under it. The thread shows it as a message (RunMessage); the
+	// composer starts it. With no profile chosen, nothing below changes how a message
+	// is sent.
+	let runProfiles: RunProfilesRead | null = null;
+	let runProfilesChatId: string | null = null;
+	let runProfilesLoading = false;
+	let runProfilesError: string | null = null;
+	let selectedRunProfileId: string | null = null;
+	let runDocuments: RunDocumentsRead | null = null;
+	let runDocumentsLoading = false;
+	let runDocumentsError: string | null = null;
+	// What the document list was last read for; null until it is read (and again after
+	// leaving run mode). A change in the chat's attached files makes it stale.
+	let runDocumentsSignature: string | null = null;
+	let runDocumentsTicket = 0;
+	let selectedDocumentIds: string[] = [];
+	// The request being proposed. Kept until it succeeds, so a retry after a lost
+	// response returns the same run instead of starting a second one.
+	let runRequest: PendingRequest | null = null;
+	let proposing = false;
+	let closingActiveRun = false;
+	let activeRunError: string | null = null;
+
+	/**
+	 * Read which profiles this chat can start, and which run holds the owner's
+	 * allowance. A quiet read is the background refresh while a run is active: it
+	 * shows no loading state, and a failure leaves what is shown as it is.
+	 */
+	async function loadRunProfiles(chatId: string, options: { quiet?: boolean } = {}): Promise<void> {
+		const quiet = options.quiet === true;
+		if (!quiet) runProfilesLoading = true;
+		try {
+			const value = await orchestrationChatApi.runProfiles(chatId);
+			if (chatId !== runProfilesChatId) return;
+			runProfiles = value;
+			runProfilesError = null;
+		} catch (e) {
+			if (chatId !== runProfilesChatId || quiet) return;
+			if ((e as { status?: number } | null)?.status === 404) {
+				// An API without the route has no runs to offer: no control, not a dead one.
+				runProfiles = null;
+				runProfilesError = null;
+			} else {
+				runProfilesError = e instanceof Error ? e.message : String(e);
+			}
+		} finally {
+			if (!quiet && chatId === runProfilesChatId) runProfilesLoading = false;
+		}
+	}
+
+	// While a run holds the owner's allowance, the notice about it is kept current:
+	// at once from the run's own message when that is in this thread, and by a slow
+	// read otherwise, so a run in another chat is seen to move on and to end.
+	let activeRunTimer: ReturnType<typeof setInterval> | undefined;
+
+	function stopActiveRunPoll(): void {
+		clearInterval(activeRunTimer);
+		activeRunTimer = undefined;
+	}
+
+	function startActiveRunPoll(): void {
+		if (activeRunTimer !== undefined) return;
+		activeRunTimer = setInterval(() => {
+			if (typeof document !== 'undefined' && document.hidden) return;
+			if (runProfilesChatId && !runProfilesLoading) {
+				void loadRunProfiles(runProfilesChatId, { quiet: true });
+			}
+		}, ACTIVE_RUN_POLL_MS);
+	}
+
+	onDestroy(stopActiveRunPoll);
+
+	/** Every read of a run shown in this thread: keep the composer's notice in step. */
+	function handleRunUpdate(_message: Message, run: OrchestrationChatRun): void {
+		if (runProfiles) runProfiles = syncActiveRun(runProfiles, run);
+	}
+
+	function leaveRunMode(): void {
+		selectedRunProfileId = null;
+		selectedDocumentIds = [];
+		runDocuments = null;
+		runDocumentsError = null;
+		runDocumentsSignature = null;
+		runDocumentsTicket += 1;
+		runDocumentsLoading = false;
+	}
+
+	function chooseRunProfile(profileId: string): void {
+		const profile = runProfiles?.profiles.find((p) => p.profile === profileId);
+		if (!profile || unavailableReason(profile)) return;
+		selectedRunProfileId = profileId;
+		selectedDocumentIds = [];
+		runDocuments = null;
+		runDocumentsError = null;
+		runDocumentsSignature = null;
+		sendError = null;
+	}
+
+	async function loadRunDocuments(): Promise<void> {
+		const chat = $activeChatStore;
+		if (!chat) return;
+		// Recorded before the read, so a failed read is not retried in a loop; the
+		// picker's refresh button reads again on demand.
+		runDocumentsSignature = candidatesSignature(chatFiles);
+		const ticket = ++runDocumentsTicket;
+		runDocumentsLoading = true;
+		runDocumentsError = null;
+		try {
+			const value = await orchestrationChatApi.runDocuments(chat.id, candidateFileIds(chatFiles));
+			if (ticket !== runDocumentsTicket) return;
+			runDocuments = value;
+			selectedDocumentIds = pruneSelection(selectedDocumentIds, value.documents);
+		} catch (e) {
+			if (ticket !== runDocumentsTicket) return;
+			runDocumentsError = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (ticket === runDocumentsTicket) runDocumentsLoading = false;
+		}
+	}
+
+	function toggleRunDocument(fileId: string): void {
+		selectedDocumentIds = toggleDocument(
+			selectedDocumentIds,
+			fileId,
+			runDocuments?.max_documents ?? selectedRunProfile?.max_documents ?? 8
+		);
+	}
+
+	/** Read the chat's thread again, so the user's request and the run's message appear. */
+	async function reloadThread(chatId: string): Promise<boolean> {
+		try {
+			const items = await fetchMessages((cursor) =>
+				messagesApi.listMessages(chatId, { limit: 100, cursor })
+			);
+			if ($activeChatStore?.id === chatId && !streamingMessageId) messagesStore.set(items);
+			return true;
+		} catch (e) {
+			console.error('lq-ai: failed to reload messages', e);
+			return false;
+		}
+	}
+
+	async function proposeRun(): Promise<void> {
+		const chat = $activeChatStore;
+		const profile = selectedRunProfile;
+		if (!chat || !profile || proposing) return;
+		const goal = composerText.trim();
+		const blocked = proposeBlocker({
+			profile,
+			goal,
+			selectedCount: selectedDocumentIds.length
+		});
+		if (blocked) {
+			sendError = blocked;
+			return;
+		}
+		const fileIds = profile.documents === 'selected' ? [...selectedDocumentIds] : [];
+		// The same request keeps its id; a changed one gets a new id (the server refuses
+		// an id reused with different input).
+		const request = requestFor(
+			runRequest,
+			requestSignature({ chatId: chat.id, profile: profile.profile, goal, fileIds }),
+			newRequestId
+		);
+		runRequest = request;
+		sendError = null;
+		proposing = true;
+		try {
+			await orchestrationChatApi.startRun(
+				chat.id,
+				buildStartBody({ requestId: request.id, profile, goal, fileIds })
+			);
+			runRequest = null;
+			if ($activeChatStore?.id === chat.id) {
+				composerText = '';
+				leaveRunMode();
+			}
+			const refreshed = await reloadThread(chat.id);
+			if (!refreshed && $activeChatStore?.id === chat.id) {
+				sendError =
+					'The run was started, but this thread could not be refreshed. Reload the chat to see it.';
+			}
+			await loadRunProfiles(chat.id);
+		} catch (e) {
+			// The request id is kept, so pressing Propose plan again is a retry of this request.
+			sendError = e instanceof Error ? e.message : 'Could not propose the plan.';
+			void loadRunProfiles(chat.id);
+		} finally {
+			proposing = false;
+		}
+	}
+
+	/** A run in this thread reached a finished state: read its row again, then the profiles. */
+	async function handleRunSettled(message: Message, _run: OrchestrationChatRun): Promise<void> {
+		const chatId = message.chat_id;
+		try {
+			const items = await fetchMessages(
+				(cursor) => messagesApi.listMessages(chatId, { limit: 100, cursor }),
+				{ stopAtId: message.id }
+			);
+			const fresh = items.find((m) => m.id === message.id);
+			if (fresh && $activeChatStore?.id === chatId) {
+				messagesStore.update(($m) => replaceMessage($m, fresh));
+			}
+		} catch (e) {
+			console.error('lq-ai: failed to refresh a run message', e);
+		}
+		if ($activeChatStore?.id === chatId) await loadRunProfiles(chatId);
+	}
+
+	async function closeActiveRun(): Promise<void> {
+		const active = runProfiles?.active_run;
+		const chat = $activeChatStore;
+		if (!active || !chat || closingActiveRun) return;
+		closingActiveRun = true;
+		activeRunError = null;
+		try {
+			await orchestrationChatApi.close(active.root_id);
+		} catch (e) {
+			activeRunError = e instanceof Error ? e.message : 'Could not close the run.';
+		} finally {
+			closingActiveRun = false;
+		}
+		await loadRunProfiles(chat.id);
+	}
+
+	async function openActiveRunChat(): Promise<void> {
+		const chatId = runProfiles?.active_run?.chat_id;
+		if (!chatId) return;
+		const known = get(chatsStore).find((c) => c.id === chatId);
+		if (known && (!projectIdFilter || known.project_id === projectIdFilter)) {
+			await selectChat(known);
+			return;
+		}
+		if (!projectIdFilter) {
+			try {
+				await selectChat(await chatsApi.getChat(chatId));
+				return;
+			} catch (e) {
+				console.error('lq-ai: failed to open the chat holding the active run', e);
+			}
+		}
+		await goto(chatHref(chatId));
 	}
 
 	// ---- bootstrap ----
@@ -1034,7 +1308,9 @@
 		// handler fires; we read from the textarea directly anyway so the
 		// caret position and value are guaranteed consistent.
 		const detection = detectSlashAt(ta.value, ta.selectionStart);
-		if (detection.open) {
+		// A run does not use the chat's attached skills (its profile pins them), so the
+		// slash popover stays closed in run mode rather than attach one out of sight.
+		if (detection.open && !runMode) {
 			slashOpen = true;
 			slashQuery = detection.query;
 			slashStartIndex = detection.slashIndex;
@@ -1129,6 +1405,40 @@
 	// state across reloads + chat switches.
 	$: if (activeChat?.id) {
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
+	}
+
+	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
+	// active chat changes (and again after a run ends or a run is proposed). Switching
+	// chats leaves run mode: the choice, the selected documents and the request id
+	// belong to one chat.
+	$: selectedRunProfile =
+		runProfiles?.profiles.find((profile) => profile.profile === selectedRunProfileId) ?? null;
+	$: runMode = selectedRunProfile !== null;
+	$: activeRun = runProfiles?.active_run ?? null;
+	$: if (activeRun) startActiveRunPoll();
+	else stopActiveRunPoll();
+	$: proposeBlock = proposeBlocker({
+		profile: selectedRunProfile,
+		goal: composerText,
+		selectedCount: selectedDocumentIds.length
+	});
+	$: if ((activeChat?.id ?? null) !== runProfilesChatId) {
+		runProfilesChatId = activeChat?.id ?? null;
+		runProfiles = null;
+		runProfilesError = null;
+		activeRunError = null;
+		runRequest = null;
+		leaveRunMode();
+		if (runProfilesChatId) void loadRunProfiles(runProfilesChatId);
+	}
+	// A profile that reads documents the owner selects: read the list when run mode
+	// starts, and again when the chat's attached files change.
+	$: if (
+		runMode &&
+		selectedRunProfile?.documents === 'selected' &&
+		candidatesSignature(chatFiles) !== runDocumentsSignature
+	) {
+		void loadRunDocuments();
 	}
 
 	// D0 — current selection for the active chat. Falls back to the
@@ -1236,6 +1546,8 @@
 			onGateApprove={() => decideToolCall('approve')}
 			onGateDeny={() => decideToolCall('deny')}
 			onGateConnect={connectMcp}
+			onRunSettled={handleRunSettled}
+			onRunUpdate={handleRunUpdate}
 		/>
 
 		{#if activeChat}
@@ -1244,11 +1556,23 @@
 				data-testid="lq-ai-composer"
 			>
 				<div class="flex items-center justify-between">
-					<ModelPicker
-						models={availableModels}
-						selectedId={currentModelId}
-						onSelect={selectModel}
-					/>
+					<div class="flex items-center gap-2 flex-wrap">
+						<ModelPicker
+							models={availableModels}
+							selectedId={currentModelId}
+							onSelect={selectModel}
+						/>
+						<!-- ADR 0038 D1 — the governed-run control, beside the model picker. -->
+						{#if runProfiles || runProfilesError}
+							<RunProfileMenu
+								profiles={runProfiles?.profiles ?? []}
+								selectedId={selectedRunProfileId}
+								loading={runProfilesLoading}
+								error={runProfilesError}
+								onSelect={chooseRunProfile}
+							/>
+						{/if}
+					</div>
 					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
@@ -1272,20 +1596,54 @@
 					</button>
 				</div>
 
-				<SkillPicker
-					availableSkills={$skillsStore}
-					selectedSkillNames={attachedSkillNames}
-					{projectAttachedSkills}
-					{skillDetails}
-					{skillInputs}
-					readyFileNames={attachedReadyNames}
-					processingFileNames={attachedProcessingNames}
-					{failedSkillNames}
-					onAttach={attachSkill}
-					onDetach={detachSkill}
-					onRetry={loadSkillDetail}
-					onUpdateInputs={updateSkillInputs}
-				/>
+				<!-- ADR 0038 D1 — names the run that is blocking a new one, in any chat. -->
+				{#if activeRun}
+					<RunActiveNotice
+						active={activeRun}
+						currentChatId={activeChat.id}
+						busy={closingActiveRun}
+						error={activeRunError}
+						onOpen={openActiveRunChat}
+						onClose={closeActiveRun}
+					/>
+				{/if}
+
+				{#if selectedRunProfile}
+					<RunModePanel
+						profile={selectedRunProfile}
+						onClear={() => {
+							leaveRunMode();
+							sendError = null;
+						}}
+					>
+						{#if selectedRunProfile.documents === 'selected'}
+							<RunDocumentPicker
+								documents={runDocuments?.documents ?? []}
+								selected={selectedDocumentIds}
+								max={runDocuments?.max_documents ?? selectedRunProfile.max_documents ?? 8}
+								loading={runDocumentsLoading}
+								error={runDocumentsError}
+								onToggle={toggleRunDocument}
+								onRefresh={() => void loadRunDocuments()}
+							/>
+						{/if}
+					</RunModePanel>
+				{:else}
+					<SkillPicker
+						availableSkills={$skillsStore}
+						selectedSkillNames={attachedSkillNames}
+						{projectAttachedSkills}
+						{skillDetails}
+						{skillInputs}
+						readyFileNames={attachedReadyNames}
+						processingFileNames={attachedProcessingNames}
+						{failedSkillNames}
+						onAttach={attachSkill}
+						onDetach={detachSkill}
+						onRetry={loadSkillDetail}
+						onUpdateInputs={updateSkillInputs}
+					/>
+				{/if}
 
 				<SavedPromptsPanel
 					onInsert={(text) => {
@@ -1316,7 +1674,7 @@
 						<textarea
 							class="lq-composer w-full text-sm resize-none"
 							rows="3"
-							placeholder="Type a message…"
+							placeholder={runMode ? 'Describe what the run should examine…' : 'Type a message…'}
 							bind:value={composerText}
 							data-testid="lq-ai-composer-input"
 							on:keydown={handleComposerKeydown}
@@ -1376,17 +1734,33 @@
 						>
 							📜
 						</button>
-						<button
-							type="button"
-							class="lq-btn-send text-sm font-medium disabled:opacity-50"
-							on:click={sendMessage}
-							disabled={!composerText.trim()}
-							data-testid="lq-ai-send-btn"
-						>
-							Send
-						</button>
+						{#if runMode}
+							<button
+								type="button"
+								class="lq-btn-send text-sm font-medium disabled:opacity-50"
+								on:click={proposeRun}
+								disabled={proposeBlock !== null || proposing}
+								title={proposeBlock ?? 'Ask the model to propose a plan for your approval'}
+								data-testid="lq-ai-run-propose-btn"
+							>
+								{proposing ? 'Proposing…' : 'Propose plan'}
+							</button>
+						{:else}
+							<button
+								type="button"
+								class="lq-btn-send text-sm font-medium disabled:opacity-50"
+								on:click={sendMessage}
+								disabled={!composerText.trim()}
+								data-testid="lq-ai-send-btn"
+							>
+								Send
+							</button>
+						{/if}
 					{/if}
 				</div>
+				{#if runMode && proposeBlock && composerText.trim()}
+					<p class="text-xs lq-run-hint" data-testid="lq-ai-run-propose-hint">{proposeBlock}</p>
+				{/if}
 
 				<EnhancePromptExpansion
 					bind:this={expansionPanel}
@@ -1459,6 +1833,11 @@
 		bottom: calc(100% + 4px);
 		left: 0;
 		z-index: 50;
+	}
+
+	/* ADR 0038 D1 — why "Propose plan" is disabled, shown under the composer. */
+	.lq-run-hint {
+		color: var(--lq-text-secondary);
 	}
 
 	.lq-composer {

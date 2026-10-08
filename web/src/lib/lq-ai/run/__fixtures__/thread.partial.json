@@ -1,0 +1,45 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "df94cfc6-ae8f-4523-88ea-c451eca96e26",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "A request with refused calls <i>and markup</i>.",
+    "cost_estimate": null,
+    "created_at": "2026-10-06T15:41:41.713974Z",
+    "error_code": null,
+    "id": "f303853b-633e-4b6d-b6fe-e4f75aae17e7",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [
+      "orchestration-chat-demo",
+      "contract-qa"
+    ],
+    "autonomous_session_id": "c8e2c2f1-319b-4d3a-a249-d87df5a0d42a",
+    "chat_id": "df94cfc6-ae8f-4523-88ea-c451eca96e26",
+    "citations": [],
+    "completion_tokens": 180,
+    "content": "Model-generated from fictional inputs; unverified.\nRenewal requires 30 days' notice [\u00a75].",
+    "cost_estimate": 0.8763,
+    "created_at": "2026-10-06T15:41:41.713975Z",
+    "error_code": null,
+    "id": "2a11d781-df66-4c5c-9717-aa825853e082",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": 120,
+    "requested_model": "selected/native",
+    "role": "assistant",
+    "routed_inference_tier": 1,
+    "routed_model": "native",
+    "routed_provider": "selected"
+  }
+]

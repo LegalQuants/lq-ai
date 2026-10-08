@@ -5,14 +5,18 @@ commit before returning. A required current-policy checker must validate pinned
 skills, selected resources and current operator grants with database/local policy
 reads only. No permissive production checker or dispatch endpoint is supplied.
 
-Lock order: owner -> project -> root -> account -> effect. The owner/project
-share locks also serialize revocation with admission. Every worker operation
-locks the root; root halt and effect admission therefore have one ordering.
+Lock order: owner -> project -> chat -> root -> account -> effect -> message.
+The owner/project share locks also serialize revocation with admission. Every
+worker operation locks the root; root halt and effect admission therefore have
+one ordering. The chat is locked only at intake, before its run's root exists,
+and the bound message only at delivery, after everything else (ADR 0038 D1).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -42,6 +46,8 @@ from app.autonomous.orchestration.outcomes import (
 from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
+from app.models.chat import Chat, Message
+from app.models.file import File
 from app.models.orchestration import (
     OrchestrationAccount as Account,
     OrchestrationAdmission as Admission,
@@ -49,11 +55,16 @@ from app.models.orchestration import (
     OrchestrationPlan as PlanRow,
     OrchestrationRoot as Root,
 )
-from app.models.project import Project
+from app.models.project import Project, ProjectFile
 from app.models.user import User
+from app.models.work_product import WorkProductAttribution
 from app.schemas.autonomous import Phase
+from app.schemas.chats import derive_chat_title
+
+log = logging.getLogger(__name__)
 
 _ACTIVE = frozenset({"queued", "running", "waiting_children"})
+_TERMINAL = frozenset({"halted", "completed", "failed", "rejected", "expired", "closed"})
 _MONEY: TypeAdapter[Decimal] = TypeAdapter(Money)
 _EVENTS = frozenset(
     {
@@ -77,8 +88,26 @@ _EVENTS = frozenset(
         "phase_changed",
         "topic_delivered",
         "root_delivered",
+        "tool_refused",
+        "run_closed",
     }
 )
+
+
+class BudgetExhausted(Conflict):
+    """An effect the run's allocation cannot fund. No call was admitted."""
+
+
+class DeliveryHook(Protocol):
+    async def __call__(
+        self, db: AsyncSession, root: Root, plan: PreparedPlan, message: Message
+    ) -> dict[str, Any]:
+        """Local checks on a delivered answer, inside the delivery transaction.
+
+        No remote I/O and no commit. Returns counts and labels for the audit
+        row; never text. Raising rolls delivery back.
+        """
+        ...
 
 
 class CurrentPolicyCheck(Protocol):
@@ -169,6 +198,7 @@ class OrchestrationStore:
         *,
         check_policy: CurrentPolicyCheck,
         deployment_children: int | None = None,
+        on_delivered: DeliveryHook | None = None,
     ) -> None:
         if deployment_children is not None and (
             type(deployment_children) is not int or not 1 <= deployment_children <= 32
@@ -177,6 +207,7 @@ class OrchestrationStore:
         self.sessions = sessions
         self.check_policy = check_policy
         self.deployment_children = deployment_children
+        self.on_delivered = on_delivered
 
     async def _owner_project(
         self, db: AsyncSession, owner_id: UUID, project_id: UUID, *, creating: bool = False
@@ -430,27 +461,102 @@ class OrchestrationStore:
         else:
             await self._approved(db, root, plan, now)
 
-    async def start_planning(self, snapshot: PlanningSnapshot, *, actor_id: UUID) -> UUID:
-        """Persist a bounded root before queue dispatch; request UUID is idempotent."""
+    async def start_planning(
+        self,
+        snapshot: PlanningSnapshot,
+        *,
+        actor_id: UUID,
+        profile: str = "model_demo_v1",
+        chat_id: UUID | None = None,
+        attach_file_ids: tuple[UUID, ...] = (),
+    ) -> UUID:
+        """Persist a bounded root before queue dispatch; request UUID is idempotent.
+
+        With ``chat_id`` the run is hosted in that chat (ADR 0038 D1): the
+        request becomes an ordinary user message and the reply is one assistant
+        message of kind ``run`` linked to the new root session. Both are written
+        in this transaction, so a run never exists without its turn or a turn
+        without its run. ``attach_file_ids`` are the owner's own files selected
+        for the run that were not yet attached to the project (D5); they are
+        attached here, each with an audit row, before policy checks the selection.
+        """
         snapshot = PlanningSnapshot.model_validate(snapshot)
         if actor_id != snapshot.owner_id:
             raise Forbidden(message="Only the owner may request planning")
+        if re.fullmatch(r"[a-z][a-z0-9_]{0,63}", profile) is None or snapshot.profile not in (
+            None,
+            profile,
+        ):
+            raise ValidationError(message="Planning profile is invalid")
+        selected = {document.file_id for document in snapshot.documents}
+        if not set(attach_file_ids) <= selected:
+            raise ValidationError(message="Only selected documents can be attached for a run")
         try:
             async with self.sessions.begin() as db:
                 project = await self._owner_project(
                     db, actor_id, snapshot.project_id, creating=True
                 )
                 _project_scope(project, snapshot)
+                chat: Chat | None = None
+                if chat_id is not None:
+                    chat = await db.scalar(select(Chat).where(Chat.id == chat_id).with_for_update())
+                    if (
+                        chat is None
+                        or chat.owner_id != actor_id
+                        or chat.archived_at is not None
+                        or chat.autonomous_session_id is not None
+                        or chat.project_id != snapshot.project_id
+                    ):
+                        raise Forbidden(message="A run needs an active chat in the run's project")
                 existing = await db.get(Root, snapshot.root_id)
                 if existing is not None:
-                    if existing.owner_id != actor_id or existing.profile != "model_demo_v1":
+                    if existing.owner_id != actor_id or existing.profile != profile:
                         raise Conflict(message="Request identity is unavailable")
                     old = PlanningSnapshot.model_validate_json(
                         json.dumps(existing.planning_snapshot)
                     )
-                    if (old.project_id, old.goal) != (snapshot.project_id, snapshot.goal):
+                    bound = await db.scalar(
+                        select(Message.chat_id).where(
+                            Message.autonomous_session_id == existing.session_id
+                        )
+                    )
+                    if (
+                        (old.project_id, old.goal) != (snapshot.project_id, snapshot.goal)
+                        or [d.file_id for d in old.documents]
+                        != [d.file_id for d in snapshot.documents]
+                        or bound != chat_id
+                    ):
                         raise Conflict(message="Request identity was reused with different input")
                     return existing.session_id
+                for file_id in attach_file_ids:
+                    # Attaching to the project keeps one rule at the read
+                    # boundary. Ownership is rechecked here under the owner lock.
+                    owned = await db.scalar(
+                        select(File.id).where(
+                            File.id == file_id,
+                            File.owner_id == actor_id,
+                            File.deleted_at.is_(None),
+                        )
+                    )
+                    if owned is None:
+                        raise Forbidden(message="Selected file is unavailable")
+                    if await db.get(ProjectFile, (snapshot.project_id, file_id)) is None:
+                        db.add(ProjectFile(project_id=snapshot.project_id, file_id=file_id))
+                        await db.flush()
+                        await audit_action(
+                            db,
+                            user_id=actor_id,
+                            project=project,
+                            action="project.file_attached",
+                            resource_type="project",
+                            resource_id=str(snapshot.project_id),
+                            details={
+                                "file_id": str(file_id),
+                                "source": "run_selection",
+                                "root_id": str(snapshot.root_id),
+                            },
+                            timestamp=func.clock_timestamp(),
+                        )
                 db.add(
                     AutonomousSession(
                         id=snapshot.root_id,
@@ -460,7 +566,7 @@ class OrchestrationStore:
                         current_phase="analysis",
                         max_cost_usd=snapshot.root_allowance_usd,
                         params={
-                            "orchestration_profile": "model_demo_v1",
+                            "orchestration_profile": profile,
                             "query": snapshot.goal,
                             "skill_ref": snapshot.root.skill.name,
                         },
@@ -474,7 +580,7 @@ class OrchestrationStore:
                     plan_id=snapshot.plan_id,
                     current_revision=None,
                     status="planning",
-                    profile="model_demo_v1",
+                    profile=profile,
                     planning_snapshot=snapshot.model_dump(mode="json"),
                 )
                 await self._live(db, root, snapshot, await _now(db))
@@ -487,7 +593,32 @@ class OrchestrationStore:
                         allocation_usd=snapshot.root_allowance_usd,
                     )
                 )
-                await _audit(db, root, "planning_started")
+                details: dict[str, Any] = {}
+                if chat is not None:
+                    now = await _now(db)
+                    request = Message(
+                        chat_id=chat.id,
+                        role="user",
+                        kind="user",
+                        content=snapshot.goal,
+                        created_at=now,
+                    )
+                    reply = Message(
+                        chat_id=chat.id,
+                        role="assistant",
+                        kind="run",
+                        content="",
+                        autonomous_session_id=root.session_id,
+                        # Listed oldest first by time, then by a random id.
+                        created_at=now + timedelta(microseconds=1),
+                    )
+                    db.add_all([request, reply])
+                    if chat.title == "New chat":
+                        chat.title = derive_chat_title(snapshot.goal)
+                    chat.updated_at = now
+                    await db.flush()
+                    details = {"chat_id": str(chat.id), "message_id": str(reply.id)}
+                await _audit(db, root, "planning_started", profile=profile, **details)
         except IntegrityError:
             raise Conflict(message="An active run or conflicting request already exists") from None
         return snapshot.root_id
@@ -537,9 +668,13 @@ class OrchestrationStore:
                     "max_active_children",
                     "attempt_timeout_seconds",
                     "delegation_grants",
+                    "profile",
+                    "documents",
                 ):
                     if getattr(plan, key) != getattr(snapshot, key):
                         raise Forbidden(message="Prepared plan differs from planning authority")
+                if len(plan.children) > snapshot.max_children:
+                    raise Forbidden(message="Prepared plan exceeds the funded task count")
                 if (
                     plan.revision != 1
                     or plan.root.model_copy(update={"grants": snapshot.root.grants})
@@ -1147,8 +1282,180 @@ class OrchestrationStore:
                 raise Conflict(message="Root delivery is not ready")
             root.status = session.status = "failed" if result.coverage == "failed" else "completed"
             session.completed_at = session.last_activity_at = root.updated_at = await _now(db)
+            details: dict[str, Any] = {"verification": "unverified"}
+            # ADR 0038 D1: the answer is written into the bound chat message in
+            # this transaction, with its audit row. A run that produced no
+            # answer leaves the message empty, so later turns do not replay it.
+            message = await db.scalar(
+                select(Message)
+                .where(Message.autonomous_session_id == claim.root_id)
+                .with_for_update()
+            )
+            if message is not None and root.status == "completed":
+                assert isinstance(plan, PreparedPlan)
+                await self._write_answer(db, root, plan, message, result.summary)
+                details.update(chat_id=str(message.chat_id), message_id=str(message.id))
+                if self.on_delivered is not None:
+                    # The answer is delivered whether or not it could be
+                    # checked. A check that fails is rolled back to its
+                    # savepoint and the answer stays labelled unverified.
+                    try:
+                        async with db.begin_nested():
+                            details.update(await self.on_delivered(db, root, plan, message))
+                    except Exception:
+                        # No exception text: it can carry quoted document content.
+                        log.warning("Run answer checks failed; delivered unverified")
+                        details.update(verification="unverified", checks="failed")
+            await _audit(db, root, "root_delivered", coverage=result.coverage, **details)
+
+    async def _write_answer(
+        self, db: AsyncSession, root: Root, plan: PreparedPlan, message: Message, answer: str
+    ) -> None:
+        """Fill the message fields an ordinary assistant turn carries (D2).
+
+        Skills are the plan's pinned skills. Provider, model and tier come from
+        the run's settled inference receipts. Tokens are summed across the
+        tree, and cost is the tree's accounted spend.
+        """
+        receipts = (
+            await db.scalars(
+                select(Effect)
+                .join(Account, Account.session_id == Effect.session_id)
+                .where(Account.root_id == root.session_id, Effect.status == "completed")
+                .order_by(Effect.completed_at)
+            )
+        ).all()
+        prompt = completion = 0
+        provider = model = tier = None
+        for receipt in receipts:
+            data = (receipt.result or {}).get("data")
+            counts = data.get("token_counts") if isinstance(data, dict) else None
+            accounting = data.get("accounting") if isinstance(data, dict) else None
+            if not isinstance(counts, dict) or not isinstance(accounting, dict):
+                continue
+            prompt += int(counts.get("prompt_tokens") or 0)
+            completion += int(counts.get("completion_tokens") or 0)
+            provider, model = accounting.get("provider"), accounting.get("model")
+            tier = accounting.get("tier", tier)
+        spent = await db.scalar(
+            select(func.coalesce(func.sum(Account.spent_usd), 0)).where(
+                Account.root_id == root.session_id
+            )
+        )
+        skills: list[str] = []
+        for name in (plan.root.skill.name, *(c.execution.skill.name for c in plan.children)):
+            if name not in skills:
+                skills.append(name)
+        message.content = answer
+        message.applied_skills = skills
+        message.routed_provider = provider if isinstance(provider, str) else None
+        message.routed_model = model if isinstance(model, str) else None
+        message.routed_inference_tier = tier if type(tier) is int and 1 <= tier <= 5 else None
+        requested = (root.planning_snapshot or {}).get("model")
+        message.requested_model = requested if isinstance(requested, str) else None
+        message.prompt_tokens, message.completion_tokens = prompt, completion
+        message.cost_estimate_micros = int((spent or Decimal("0")) * 1_000_000)
+        # The chain-of-custody row every answered turn gets (PRD §3.3), so a
+        # run's answer is attested to, and exported, like any other.
+        db.add(
+            WorkProductAttribution(
+                message_id=message.id,
+                user_id=root.owner_id,
+                chat_id=message.chat_id,
+                project_id=root.project_id,
+                routed_inference_tier=message.routed_inference_tier,
+                provider=message.routed_provider,
+                model=message.routed_model,
+                model_version=message.routed_model,
+                skill_ids=skills,
+                playbook_id=None,
+                content_hash=hashlib.sha256(answer.encode("utf-8")).hexdigest(),
+            )
+        )
+        await db.flush()
+
+    async def close_uncertain(self, root_id: UUID, *, actor_id: UUID) -> None:
+        """End an uncertain run without a retry (ADR 0038 D6).
+
+        ADR 0035 D5 stands: nothing is repeated. Each unresolved effect is
+        closed without an outcome and its reservation becomes a charge, as does
+        any reservation left without an effect. Retained work stays readable.
+        Leaving the ``uncertain`` state releases the owner's active-run
+        allowance. Reachable after opt-out, archival or revocation, like halt:
+        it only narrows authority. Takes the same lock order.
+        """
+        async with self.sessions.begin() as db:
+            initial = await db.get(Root, root_id)
+            if initial is None or initial.owner_id != actor_id:
+                raise NotFound(message="Orchestration root not found")
+            await db.execute(select(User.id).where(User.id == actor_id).with_for_update(read=True))
+            await db.execute(
+                select(Project.id)
+                .where(Project.id == initial.project_id)
+                .with_for_update(read=True)
+            )
+            root = (
+                await db.execute(
+                    select(Root)
+                    .where(Root.session_id == root_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).scalar_one()
+            if root.status == "closed":
+                return
+            if root.status != "uncertain":
+                raise Conflict(message="Only an uncertain run can be closed")
+            now = await _now(db)
+            accounts = (
+                await db.scalars(
+                    select(Account)
+                    .where(Account.root_id == root_id)
+                    .order_by(Account.session_id)
+                    .with_for_update()
+                )
+            ).all()
+            charged, closed = Decimal("0"), 0
+            for account in accounts:
+                pending = (
+                    await db.scalars(
+                        select(Effect)
+                        .where(
+                            Effect.session_id == account.session_id,
+                            Effect.status.in_(["admitted", "uncertain"]),
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+                amount = Decimal("0")
+                for effect in pending:
+                    effect.status, effect.charged_usd = "closed", effect.reserved_usd
+                    effect.completed_at = now
+                    amount += effect.reserved_usd
+                    closed += 1
+                # A reservation with no effect left to explain it is charged too.
+                amount = max(amount, account.reserved_usd)
+                account.spent_usd += amount
+                account.reserved_usd = Decimal("0")
+                # Fence any worker that still believes it owns this account.
+                account.generation += 1
+                account.worker_id = account.lease_until = account.attempt_deadline = None
+                if amount:
+                    session = await db.get(AutonomousSession, account.session_id)
+                    assert session is not None
+                    session.cost_total_usd += amount
+                charged += amount
+            root.status, root.stop_reason, root.updated_at = "closed", "owner_closed", now
+            await db.execute(
+                update(AutonomousSession)
+                .where(
+                    AutonomousSession.root_session_id == root_id,
+                    AutonomousSession.status == "running",
+                )
+                .values(status="halted", halt_state="halted", completed_at=now)
+            )
             await _audit(
-                db, root, "root_delivered", coverage=result.coverage, verification="unverified"
+                db, root, "run_closed", effects_closed=closed, charged_usd=format(charged, ".4f")
             )
 
     async def halt(self, root_id: UUID, *, actor_id: UUID) -> None:
@@ -1172,7 +1479,7 @@ class OrchestrationStore:
                     .execution_options(populate_existing=True)
                 )
             ).scalar_one()
-            if root.status in {"halted", "completed", "failed", "rejected", "expired"}:
+            if root.status in _TERMINAL:
                 return
             if root.status != "uncertain":
                 root.status = "halted"
@@ -1248,10 +1555,7 @@ class OrchestrationStore:
             root.updated_at = await _now(db)
             await _audit(db, root, "root_expired", revision=plan.revision)
             session = await db.get(AutonomousSession, root_id)
-            if session and session.params.get("orchestration_profile") in {
-                "demonstration",
-                "model_demo_v1",
-            }:
+            if session and isinstance(session.params.get("orchestration_profile"), str):
                 await db.execute(
                     update(AutonomousSession)
                     .where(
@@ -1423,7 +1727,7 @@ class OrchestrationStore:
                 else account.allocation_usd
             )
             if account.spent_usd + account.reserved_usd + reservation > limit:
-                raise Conflict(message="Effect exceeds the run's allocated budget")
+                raise BudgetExhausted(message="Effect exceeds the run's allocated budget")
             account.reserved_usd += reservation
             effect = Effect(
                 session_id=claim.session_id,
@@ -1445,6 +1749,78 @@ class OrchestrationStore:
                 generation=claim.generation,
                 intent=intent.value,
                 reserved_usd=str(reservation),
+            )
+            return _receipt(effect)
+
+    async def record_refusal(
+        self,
+        claim: WorkerClaim,
+        *,
+        effect_key: str,
+        request_hash: str,
+        phase: Phase,
+        tool: str | None,
+        code: str,
+        step: dict[str, Any],
+    ) -> EffectReceipt:
+        """Record a tool call the application refused (ADR 0038 D4).
+
+        A refusal is a completed, zero-cost observation. It admits nothing: no
+        grant is consulted because nothing runs. The same identity is returned
+        unchanged on replay, so a restart neither repeats nor loses it.
+        ``tool`` is a registry name or None; the audit row never carries the
+        model's own text. ``step`` is the bounded record shown to the owner.
+        """
+        if (
+            re.fullmatch(r"[a-z][a-z0-9_.:-]{0,127}", effect_key) is None
+            or re.fullmatch(r"[0-9a-f]{64}", request_hash) is None
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,47}", code) is None
+            or (tool is not None and re.fullmatch(r"[a-z][a-z0-9_]{0,47}", tool) is None)
+        ):
+            raise ValidationError(message="Refusal identity is invalid")
+        async with self.sessions.begin() as db:
+            root, plan, now = await self._root(db, claim.root_id)
+            await self._approved(db, root, plan, now)
+            account = await self._account(db, claim.root_id, claim.session_id)
+            self._fence(account, claim, await _now(db))
+            existing = await db.get(Effect, (claim.session_id, effect_key))
+            if existing is not None:
+                if existing.request_hash != request_hash or existing.intent != "refused":
+                    raise Conflict(message="Effect identity was reused with different input")
+                return _receipt(existing)
+            session = await db.get(AutonomousSession, claim.session_id)
+            if (
+                claim.session_id == claim.root_id
+                or session is None
+                or session.status != "running"
+                or session.halt_state != "running"
+                or session.current_phase != phase.value
+            ):
+                raise Forbidden(message="Refusal is outside the current run's phase")
+            completed = await _now(db)
+            effect = Effect(
+                session_id=claim.session_id,
+                effect_key=effect_key,
+                request_hash=request_hash,
+                phase=phase.value,
+                intent="refused",
+                generation=claim.generation,
+                status="completed",
+                reserved_usd=Decimal("0"),
+                charged_usd=Decimal("0"),
+                result={"data": {"error": code}, "outcome": "tool_refused", "step": step},
+                completed_at=completed,
+            )
+            db.add(effect)
+            await db.flush()
+            await _audit(
+                db,
+                root,
+                "tool_refused",
+                session_id=str(claim.session_id),
+                generation=claim.generation,
+                tool=tool or "unregistered",
+                code=code,
             )
             return _receipt(effect)
 

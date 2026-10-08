@@ -1,0 +1,159 @@
+{
+  "what": "inference_routing_log: one row per model call. purpose must be orchestration_run; chat_id and message_id are the chat and the run message.",
+  "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+  "run_message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+  "rows": [
+    {
+      "id": "a90a211f-5251-45e0-8c35-9c5402fb7ab9",
+      "timestamp": "2026-10-06T15:25:48.35293+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 778,
+      "tokens_out": 220,
+      "cost_estimate": 0.0007,
+      "latency_ms": 3005
+    },
+    {
+      "id": "e50212ae-51d6-4070-a806-2adb29ba3549",
+      "timestamp": "2026-10-06T15:25:55.684289+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 16945,
+      "tokens_out": 86,
+      "cost_estimate": 0.0086,
+      "latency_ms": 3010
+    },
+    {
+      "id": "99a0ce45-7323-45ac-bbc7-8681a02323cf",
+      "timestamp": "2026-10-06T15:25:57.43931+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 16941,
+      "tokens_out": 86,
+      "cost_estimate": 0.0086,
+      "latency_ms": 3245
+    },
+    {
+      "id": "1505b662-2707-4503-82c5-9918c41898ce",
+      "timestamp": "2026-10-06T15:26:00.450193+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 17850,
+      "tokens_out": 91,
+      "cost_estimate": 0.0091,
+      "latency_ms": 3011
+    },
+    {
+      "id": "407b1f87-4950-40d2-ab45-6d0f5285e8a5",
+      "timestamp": "2026-10-06T15:26:02.183443+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 17846,
+      "tokens_out": 98,
+      "cost_estimate": 0.0091,
+      "latency_ms": 3063
+    },
+    {
+      "id": "f98ef99c-b07c-4cc1-b17d-77221bc41944",
+      "timestamp": "2026-10-06T15:26:05.187685+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 17992,
+      "tokens_out": 120,
+      "cost_estimate": 0.0092,
+      "latency_ms": 3005
+    },
+    {
+      "id": "353ecf60-8430-4837-931d-fd7d4240a80a",
+      "timestamp": "2026-10-06T15:26:06.845652+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 17998,
+      "tokens_out": 111,
+      "cost_estimate": 0.0092,
+      "latency_ms": 3011
+    },
+    {
+      "id": "dec942b5-a655-4204-944e-84fd5d9600e8",
+      "timestamp": "2026-10-06T15:26:11.160518+00:00",
+      "chat_id": "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40",
+      "message_id": "62666dce-68ec-441b-b815-079f70e424f1",
+      "purpose": "orchestration_run",
+      "routed_provider": "controlled",
+      "routed_model": "scripted-1",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 1305,
+      "tokens_out": 325,
+      "cost_estimate": 0.0011,
+      "latency_ms": 3008
+    }
+  ],
+  "summary": {
+    "rows": 8,
+    "purposes": [
+      "orchestration_run"
+    ],
+    "distinct_chat_ids": [
+      "b4fcd6ee-c3ed-45cc-a1d7-f6ec780aab40"
+    ],
+    "distinct_message_ids": [
+      "62666dce-68ec-441b-b815-079f70e424f1"
+    ],
+    "providers_models_tiers": [
+      [
+        "controlled",
+        "scripted-1",
+        1
+      ]
+    ],
+    "anonymization_applied_on_every_row": true,
+    "any_refused": false,
+    "receipts_inference_events_in_the_chat": 8,
+    "receipts_inference_events_for_the_run_message": 8,
+    "note": "The chat also holds ordinary turns (the follow-up in the fictional chat), which have their own inference events and routing-log rows under another message id."
+  }
+}

@@ -1,0 +1,1316 @@
+{
+  "what": "One governed run on a real local model, driven in the browser. Nothing scripted the model.",
+  "note": "",
+  "timeline": [
+    {
+      "ts": "2026-10-06T14:57:51Z",
+      "seconds": 0,
+      "status": "planning",
+      "headline": "Proposing a plan…"
+    },
+    {
+      "ts": "2026-10-06T14:58:18Z",
+      "seconds": 28,
+      "status": "awaiting_approval",
+      "headline": "Waiting for your approval"
+    },
+    {
+      "ts": "2026-10-06T14:58:20Z",
+      "seconds": 0,
+      "status": "awaiting_approval",
+      "headline": "Waiting for your approval"
+    },
+    {
+      "ts": "2026-10-06T14:58:22Z",
+      "seconds": 3,
+      "status": "running",
+      "headline": "2 tasks running"
+    },
+    {
+      "ts": "2026-10-06T14:59:01Z",
+      "seconds": 42,
+      "status": "waiting_children",
+      "headline": "1 task running"
+    },
+    {
+      "ts": "2026-10-06T14:59:07Z",
+      "seconds": 47,
+      "status": "running",
+      "headline": "Combining the answers"
+    },
+    {
+      "ts": "2026-10-06T14:59:20Z",
+      "seconds": 61,
+      "status": "completed",
+      "headline": "Answer delivered"
+    }
+  ],
+  "run": {
+    "root_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+    "status": "completed",
+    "stop_reason": null,
+    "profile": "model_demo_v1",
+    "profile_title": "Contract Questions Orchestrator",
+    "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+    "evidence": "unverified",
+    "evidence_result": null,
+    "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+    "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+    "planning": {
+      "contract_version": 2,
+      "plan_id": "07b6dcce-8728-4036-9b96-125b7a802cdf",
+      "root_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+      "owner_id": "05e59fb7-d4ab-4bd0-b9dc-35f3ccc9e06c",
+      "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+      "goal": "What must the customer pay and when, and how can either side end the agreement?",
+      "policy_version": "17e37dda60ddd770b1d1954e9285134787123fb2cb4efd32601139ebfc28258e",
+      "root": {
+        "resources": {
+          "document_ids": [
+            "eee18abd-8013-436f-a8e2-cfb6d52be298"
+          ],
+          "source_names": []
+        },
+        "grants": {
+          "intake": [],
+          "analysis": [
+            "plan"
+          ],
+          "drafting": [],
+          "ethics_review": [],
+          "delivery": []
+        },
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+        },
+        "minimum_inference_tier": 1,
+        "maximum_egress_tier": 0,
+        "privileged": false,
+        "anonymize": true
+      },
+      "delegation_grants": {
+        "intake": [],
+        "analysis": [
+          "plan",
+          "retrieve_chunks",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "budget_usd": "2.0000",
+      "root_allowance_usd": "0.0000",
+      "planning_allowance_usd": "0.0000",
+      "max_active_children": 2,
+      "deadline": "2026-10-06T15:57:51.075839Z",
+      "attempt_timeout_seconds": 600,
+      "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+      "gateway_revision": "c881da7f6e627f808261a254d1b9bb3b81e3b02b94ab186b74261408dca78633",
+      "model": "ollama-local/gemma4:26b-mlx-64k",
+      "child_skill_version": "1.0.0",
+      "root_skill_version": "1.0.0",
+      "profile": "model_demo_v1",
+      "documents": [
+        {
+          "number": 1,
+          "document_id": "eee18abd-8013-436f-a8e2-cfb6d52be298",
+          "file_id": "28e3953b-8fdf-484b-8ef6-dfcee90b38e5",
+          "filename": "fictional-vendor-agreement.md",
+          "attached_for_run": false
+        }
+      ],
+      "max_children": 4
+    },
+    "packet": "# Fictional vendor agreement — demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## §1 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## §2 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## §3 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## §4 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00–17:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## §5 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## §6 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## §7 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in §8 survive\ntermination. There is no survival period stated for confidentiality.\n\n## §8 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
+    "effects": [
+      {
+        "effect_key": "chat:plan:v1",
+        "status": "completed",
+        "reserved_usd": "0.0000",
+        "charged_usd": "0.0000",
+        "intent": "plan",
+        "created_at": "2026-10-06T14:57:51.459838Z",
+        "completed_at": "2026-10-06T14:58:17.740542Z",
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+          "version": "1.0.0"
+        },
+        "accounting": {
+          "tier": 1,
+          "basis": "conservative-estimate-or-reported-usage-v1",
+          "model": "gemma4:26b-mlx-64k",
+          "provider": "ollama-local",
+          "charged_usd": "0.0000",
+          "reserved_usd": "0.0000",
+          "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+          "anonymization_applied": true,
+          "estimated_prompt_tokens": 7830,
+          "reported_usage_cost_usd": "0.0000"
+        },
+        "outcome": "success",
+        "step": {
+          "kind": "planning",
+          "tool": null,
+          "label": null,
+          "reason": null,
+          "summary": null
+        }
+      },
+      {
+        "effect_key": "demo:collect:9e97229c-6038-4a4f-8ba9-d1f76b164e65:v1",
+        "status": "completed",
+        "reserved_usd": "0.0000",
+        "charged_usd": "0.0000",
+        "intent": "workspace_read",
+        "created_at": "2026-10-06T14:59:05.715625Z",
+        "completed_at": "2026-10-06T14:59:05.746545Z",
+        "skill": null,
+        "accounting": null,
+        "outcome": "success",
+        "step": {
+          "kind": "findings_collected",
+          "tool": null,
+          "label": null,
+          "reason": null,
+          "summary": null
+        }
+      },
+      {
+        "effect_key": "demo:collect:dbe3525f-e6b3-4263-9fbd-385f7357a960:v1",
+        "status": "completed",
+        "reserved_usd": "0.0000",
+        "charged_usd": "0.0000",
+        "intent": "workspace_read",
+        "created_at": "2026-10-06T14:59:05.767659Z",
+        "completed_at": "2026-10-06T14:59:05.799066Z",
+        "skill": null,
+        "accounting": null,
+        "outcome": "success",
+        "step": {
+          "kind": "findings_collected",
+          "tool": null,
+          "label": null,
+          "reason": null,
+          "summary": null
+        }
+      },
+      {
+        "effect_key": "demo:synthesis:v1",
+        "status": "completed",
+        "reserved_usd": "0.0000",
+        "charged_usd": "0.0000",
+        "intent": "run_skill",
+        "created_at": "2026-10-06T14:59:05.843572Z",
+        "completed_at": "2026-10-06T14:59:19.006813Z",
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+          "version": "1.0.0"
+        },
+        "accounting": {
+          "tier": 1,
+          "basis": "conservative-estimate-or-reported-usage-v1",
+          "model": "gemma4:26b-mlx-64k",
+          "provider": "ollama-local",
+          "charged_usd": "0.0000",
+          "reserved_usd": "0.0000",
+          "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+          "anonymization_applied": true,
+          "estimated_prompt_tokens": 8021,
+          "reported_usage_cost_usd": "0.0000"
+        },
+        "outcome": "success",
+        "step": {
+          "kind": "synthesis",
+          "tool": null,
+          "label": null,
+          "reason": null,
+          "summary": null
+        }
+      }
+    ],
+    "spent_usd": "0.0000",
+    "reserved_usd": "0.0000",
+    "tree": {
+      "root_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+      "status": "completed",
+      "stop_reason": null,
+      "plan": {
+        "contract_version": 3,
+        "planning_digest": "681a5c90025976f04d6bbe2b6b4869d1c899dfbe605b9da4b865978b06836232",
+        "profile": "model_demo_v1",
+        "documents": [
+          {
+            "number": 1,
+            "document_id": "eee18abd-8013-436f-a8e2-cfb6d52be298",
+            "file_id": "28e3953b-8fdf-484b-8ef6-dfcee90b38e5",
+            "filename": "fictional-vendor-agreement.md",
+            "attached_for_run": false
+          }
+        ],
+        "plan_id": "07b6dcce-8728-4036-9b96-125b7a802cdf",
+        "revision": 1,
+        "root_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+        "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+        "owner_id": "05e59fb7-d4ab-4bd0-b9dc-35f3ccc9e06c",
+        "goal": "What must the customer pay and when, and how can either side end the agreement?",
+        "policy_version": "17e37dda60ddd770b1d1954e9285134787123fb2cb4efd32601139ebfc28258e",
+        "root": {
+          "resources": {
+            "document_ids": [
+              "eee18abd-8013-436f-a8e2-cfb6d52be298"
+            ],
+            "source_names": []
+          },
+          "grants": {
+            "intake": [],
+            "analysis": [
+              "plan",
+              "retrieve_chunks",
+              "run_skill",
+              "workspace_read",
+              "workspace_write"
+            ],
+            "drafting": [
+              "run_skill",
+              "workspace_read",
+              "workspace_share",
+              "workspace_write"
+            ],
+            "ethics_review": [],
+            "delivery": []
+          },
+          "skill": {
+            "name": "orchestration-chat-demo",
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+          },
+          "minimum_inference_tier": 1,
+          "maximum_egress_tier": 0,
+          "privileged": false,
+          "anonymize": true
+        },
+        "delegation_grants": {
+          "intake": [],
+          "analysis": [
+            "plan",
+            "retrieve_chunks",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "delivery": []
+        },
+        "children": [
+          {
+            "dispatch_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+            "profile": "research",
+            "task": {
+              "topic": "Payment obligations",
+              "question": "What are the payment amounts, invoicing timing, and payment deadlines specified in the agreement?",
+              "boundaries": "Provisions from §2 regarding payment amounts, invoicing terms, and deadlines for undisputed invoices.",
+              "output_contract": "Payment terms and timing.",
+              "stopping_condition": "One answer."
+            },
+            "execution": {
+              "resources": {
+                "document_ids": [
+                  "eee18abd-8013-436f-a8e2-cfb6d52be298"
+                ],
+                "source_names": []
+              },
+              "grants": {
+                "intake": [],
+                "analysis": [
+                  "plan",
+                  "retrieve_chunks",
+                  "run_skill",
+                  "workspace_read",
+                  "workspace_write"
+                ],
+                "drafting": [
+                  "run_skill",
+                  "workspace_read",
+                  "workspace_share",
+                  "workspace_write"
+                ],
+                "ethics_review": [],
+                "delivery": []
+              },
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+              },
+              "minimum_inference_tier": 1,
+              "maximum_egress_tier": 0,
+              "privileged": false,
+              "anonymize": true
+            },
+            "budget_usd": "0.0000",
+            "tools": {
+              "intake": [],
+              "analysis": [
+                "read_document",
+                "read_note",
+                "save_note"
+              ],
+              "drafting": [],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "turn_limit": 2
+          },
+          {
+            "dispatch_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+            "profile": "research",
+            "task": {
+              "topic": "Termination and renewal",
+              "question": "What are the procedures and notice requirements for terminating the agreement for material breach, for convenience, or to prevent renewal?",
+              "boundaries": "Provisions from §5 and §6 regarding termination for material breach, termination for convenience, and notice requirements for non-renewal.",
+              "output_contract": "Termination and renewal provisions.",
+              "stopping_condition": "One answer."
+            },
+            "execution": {
+              "resources": {
+                "document_ids": [
+                  "eee18abd-8013-436f-a8e2-cfb6d52be298"
+                ],
+                "source_names": []
+              },
+              "grants": {
+                "intake": [],
+                "analysis": [
+                  "plan",
+                  "retrieve_chunks",
+                  "run_skill",
+                  "workspace_read",
+                  "workspace_write"
+                ],
+                "drafting": [
+                  "run_skill",
+                  "workspace_read",
+                  "workspace_share",
+                  "workspace_write"
+                ],
+                "ethics_review": [],
+                "delivery": []
+              },
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+              },
+              "minimum_inference_tier": 1,
+              "maximum_egress_tier": 0,
+              "privileged": false,
+              "anonymize": true
+            },
+            "budget_usd": "0.0000",
+            "tools": {
+              "intake": [],
+              "analysis": [
+                "read_document",
+                "read_note",
+                "save_note"
+              ],
+              "drafting": [],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "turn_limit": 2
+          }
+        ],
+        "budget_usd": "2.0000",
+        "root_allowance_usd": "0.0000",
+        "max_active_children": 2,
+        "deadline": "2026-10-06T15:57:51.075839Z",
+        "attempt_timeout_seconds": 600
+      },
+      "plan_hash": "ca7fe1fb568ed684099840662c0b6063c481890c77fce38d8b98b55b1c1e5f18",
+      "approved": true,
+      "mode": "model_demo_v1",
+      "verification": "unverified",
+      "root": {
+        "session_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+        "status": "completed",
+        "phase": "delivery",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-10-06T14:59:19.107902Z",
+        "outcome": null,
+        "effects": [
+          {
+            "effect_key": "chat:plan:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "plan",
+            "created_at": "2026-10-06T14:57:51.459838Z",
+            "completed_at": "2026-10-06T14:58:17.740542Z",
+            "skill": {
+              "name": "orchestration-chat-demo",
+              "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+              "version": "1.0.0"
+            },
+            "accounting": {
+              "tier": 1,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "model": "gemma4:26b-mlx-64k",
+              "provider": "ollama-local",
+              "charged_usd": "0.0000",
+              "reserved_usd": "0.0000",
+              "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+              "anonymization_applied": true,
+              "estimated_prompt_tokens": 7830,
+              "reported_usage_cost_usd": "0.0000"
+            },
+            "outcome": "success",
+            "step": {
+              "kind": "planning",
+              "tool": null,
+              "label": null,
+              "reason": null,
+              "summary": null
+            }
+          },
+          {
+            "effect_key": "demo:collect:9e97229c-6038-4a4f-8ba9-d1f76b164e65:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-10-06T14:59:05.715625Z",
+            "completed_at": "2026-10-06T14:59:05.746545Z",
+            "skill": null,
+            "accounting": null,
+            "outcome": "success",
+            "step": {
+              "kind": "findings_collected",
+              "tool": null,
+              "label": null,
+              "reason": null,
+              "summary": null
+            }
+          },
+          {
+            "effect_key": "demo:collect:dbe3525f-e6b3-4263-9fbd-385f7357a960:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-10-06T14:59:05.767659Z",
+            "completed_at": "2026-10-06T14:59:05.799066Z",
+            "skill": null,
+            "accounting": null,
+            "outcome": "success",
+            "step": {
+              "kind": "findings_collected",
+              "tool": null,
+              "label": null,
+              "reason": null,
+              "summary": null
+            }
+          },
+          {
+            "effect_key": "demo:synthesis:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "run_skill",
+            "created_at": "2026-10-06T14:59:05.843572Z",
+            "completed_at": "2026-10-06T14:59:19.006813Z",
+            "skill": {
+              "name": "orchestration-chat-demo",
+              "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+              "version": "1.0.0"
+            },
+            "accounting": {
+              "tier": 1,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "model": "gemma4:26b-mlx-64k",
+              "provider": "ollama-local",
+              "charged_usd": "0.0000",
+              "reserved_usd": "0.0000",
+              "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+              "anonymization_applied": true,
+              "estimated_prompt_tokens": 8021,
+              "reported_usage_cost_usd": "0.0000"
+            },
+            "outcome": "success",
+            "step": {
+              "kind": "synthesis",
+              "tool": null,
+              "label": null,
+              "reason": null,
+              "summary": null
+            }
+          }
+        ],
+        "files": [],
+        "tools": [],
+        "turn_limit": 0
+      },
+      "children": [
+        {
+          "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+          "status": "completed",
+          "phase": "delivery",
+          "allocation_usd": "0.0000",
+          "spent_usd": "0.0000",
+          "reserved_usd": "0.0000",
+          "updated_at": "2026-10-06T14:58:56.954621Z",
+          "outcome": {
+            "status": "completed",
+            "summary": "The agreement specifies the following regarding payments, invoicing, and deadlines:",
+            "findings": [
+              "The agreement specifies the following regarding payments, invoicing, and deadlines:\n\n### Payment Amount\nThe subscription fee is USD 200 per month.\n\n> \"Customer shall pay USD 200 per month\"\n\n[§2]\n\n### Invoicing Timing\nInvoices are to be issued monthly and in advance of the service period.\n\n> \"invoiced monthly in advance\"\n\n[§2]\n\n### Payment Deadlines\nUndisputed invoices must be paid within 30 days of receipt.\n\n> \"Undisputed invoices are payable within 30 days of receipt.\"\n\n[§2]\n\nThe agreement also notes that if an undisputed invoice remains unpaid for 15 days after the Supplier provides written notice, the Supplier may suspend the service [§2]."
+            ],
+            "verification": "unverified",
+            "failure_code": null,
+            "artifact": {
+              "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "317615a1ed7400df9b3513360d2d14466f4e7cb17013ec6c412bd7eaa52be148"
+            }
+          },
+          "effects": [
+            {
+              "effect_key": "demo:notes:create:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:58:21.098589Z",
+              "completed_at": "2026-10-06T14:58:21.160515Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_started",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:notes:read:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_read",
+              "created_at": "2026-10-06T14:58:21.224416Z",
+              "completed_at": "2026-10-06T14:58:21.269257Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_read",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "topic:t1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "run_skill",
+              "created_at": "2026-10-06T14:58:21.387046Z",
+              "completed_at": "2026-10-06T14:58:39.294396Z",
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+                "version": "1.0.0"
+              },
+              "accounting": {
+                "tier": 1,
+                "basis": "conservative-estimate-or-reported-usage-v1",
+                "model": "gemma4:26b-mlx-64k",
+                "provider": "ollama-local",
+                "charged_usd": "0.0000",
+                "reserved_usd": "0.0000",
+                "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+                "anonymization_applied": true,
+                "estimated_prompt_tokens": 67701,
+                "reported_usage_cost_usd": "0.0000"
+              },
+              "outcome": "success",
+              "step": {
+                "kind": "model_turn",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": {
+                  "turn": 1,
+                  "tool_calls": 1,
+                  "finish_reason": "tool_calls"
+                }
+              }
+            },
+            {
+              "effect_key": "topic:t1:c0",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "retrieve_chunks",
+              "created_at": "2026-10-06T14:58:39.337434Z",
+              "completed_at": "2026-10-06T14:58:39.371572Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "document_read",
+                "tool": "read_document",
+                "label": "Read a selected document",
+                "reason": "Read the agreement to find payment amounts, invoicing timing, and payment deadlines.",
+                "summary": {
+                  "end": 2542,
+                  "start": 0,
+                  "document": 1,
+                  "filename": "fictional-vendor-agreement.md",
+                  "truncated": false,
+                  "total_chars": 2542
+                }
+              }
+            },
+            {
+              "effect_key": "topic:t2",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "run_skill",
+              "created_at": "2026-10-06T14:58:39.435928Z",
+              "completed_at": "2026-10-06T14:58:56.586629Z",
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+                "version": "1.0.0"
+              },
+              "accounting": {
+                "tier": 1,
+                "basis": "conservative-estimate-or-reported-usage-v1",
+                "model": "gemma4:26b-mlx-64k",
+                "provider": "ollama-local",
+                "charged_usd": "0.0000",
+                "reserved_usd": "0.0000",
+                "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+                "anonymization_applied": true,
+                "estimated_prompt_tokens": 70762,
+                "reported_usage_cost_usd": "0.0000"
+              },
+              "outcome": "success",
+              "step": {
+                "kind": "model_turn",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": {
+                  "turn": 2,
+                  "tool_calls": 0,
+                  "finish_reason": "stop"
+                }
+              }
+            },
+            {
+              "effect_key": "demo:findings:write:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:58:56.627367Z",
+              "completed_at": "2026-10-06T14:58:56.675318Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_saved",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:notes:update:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:58:56.706068Z",
+              "completed_at": "2026-10-06T14:58:56.748126Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_updated",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:findings:read:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_read",
+              "created_at": "2026-10-06T14:58:56.793557Z",
+              "completed_at": "2026-10-06T14:58:56.827949Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_read",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:findings:share:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_share",
+              "created_at": "2026-10-06T14:58:56.850588Z",
+              "completed_at": "2026-10-06T14:58:56.884709Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_shared",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            }
+          ],
+          "files": [
+            {
+              "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "317615a1ed7400df9b3513360d2d14466f4e7cb17013ec6c412bd7eaa52be148",
+              "size_bytes": 881,
+              "shared": true,
+              "updated_at": "2026-10-06T14:58:56.879544Z"
+            },
+            {
+              "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+              "name": "notes.md",
+              "revision": 2,
+              "digest": "1bb061c0cbafcab1ac1299dba7742c5c1000a2e9f73afb73c74dcdc68dc03dea",
+              "size_bytes": 116,
+              "shared": false,
+              "updated_at": "2026-10-06T14:58:56.741667Z"
+            }
+          ],
+          "tools": [
+            {
+              "name": "read_document",
+              "label": "Read a selected document",
+              "phase": "analysis",
+              "registered": true
+            },
+            {
+              "name": "read_note",
+              "label": "Read back a working note",
+              "phase": "analysis",
+              "registered": true
+            },
+            {
+              "name": "save_note",
+              "label": "Save a working note",
+              "phase": "analysis",
+              "registered": true
+            }
+          ],
+          "turn_limit": 2
+        },
+        {
+          "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+          "status": "completed",
+          "phase": "delivery",
+          "allocation_usd": "0.0000",
+          "spent_usd": "0.0000",
+          "reserved_usd": "0.0000",
+          "updated_at": "2026-10-06T14:59:05.240382Z",
+          "outcome": {
+            "status": "completed",
+            "summary": "The agreement contains specific procedures and notice periods for termination and non-renewal, which are broken down into three distinct categories:",
+            "findings": [
+              "The agreement contains specific procedures and notice periods for termination and non-renewal, which are broken down into three distinct categories:\n\n### Termination for Material Breach\nEither party may terminate the agreement if a material breach is not corrected within 30 days of receiving a formal notice.\n\nThe controlling provision is [§6]:\n> \"Either party may terminate for material breach if the breach remains uncured 30 days after written notice describing the breach.\"\n\n### Termination for Convenience\nThe right to terminate for convenience is held exclusively by the Customer. To exercise this right, the Customer must provide 60 days' written notice and will remain responsible for all subscription fees through the end of the then-current term.\n\nThe relevant clause is [§6]:\n> \"Customer may terminate for convenience on 60 days' written notice but remains liable for subscription fees through the end of the current term.\"\n\n### Prevention of Renewal\nTo prevent the agreement from automatically renewing for another 12-month period, either party must provide written notice of non-renewal at least 30 days before the current term expires.\n\nThe controlling provision is [§5]:\n> \"The agreement renews for successive 12-month periods unless either party gives written notice of non-renewal at least 30 days before the current term ends.\""
+            ],
+            "verification": "unverified",
+            "failure_code": null,
+            "artifact": {
+              "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "cdc31ce2a1eda7f034d115c0e460d377b04f587beb90fcad71600e9acedd6b7c"
+            }
+          },
+          "effects": [
+            {
+              "effect_key": "demo:notes:create:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:58:21.116474Z",
+              "completed_at": "2026-10-06T14:58:21.179102Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_started",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:notes:read:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_read",
+              "created_at": "2026-10-06T14:58:21.227108Z",
+              "completed_at": "2026-10-06T14:58:21.286549Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_read",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "topic:t1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "run_skill",
+              "created_at": "2026-10-06T14:58:21.390713Z",
+              "completed_at": "2026-10-06T14:58:48.789693Z",
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+                "version": "1.0.0"
+              },
+              "accounting": {
+                "tier": 1,
+                "basis": "conservative-estimate-or-reported-usage-v1",
+                "model": "gemma4:26b-mlx-64k",
+                "provider": "ollama-local",
+                "charged_usd": "0.0000",
+                "reserved_usd": "0.0000",
+                "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+                "anonymization_applied": true,
+                "estimated_prompt_tokens": 67843,
+                "reported_usage_cost_usd": "0.0000"
+              },
+              "outcome": "success",
+              "step": {
+                "kind": "model_turn",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": {
+                  "turn": 1,
+                  "tool_calls": 1,
+                  "finish_reason": "tool_calls"
+                }
+              }
+            },
+            {
+              "effect_key": "topic:t1:c0",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "retrieve_chunks",
+              "created_at": "2026-10-06T14:58:48.837750Z",
+              "completed_at": "2026-10-06T14:58:48.870282Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "document_read",
+                "tool": "read_document",
+                "label": "Read a selected document",
+                "reason": "To locate the sections regarding termination for material breach, termination for convenience, and non-renewal/renewal procedures.",
+                "summary": {
+                  "end": 2542,
+                  "start": 0,
+                  "document": 1,
+                  "filename": "fictional-vendor-agreement.md",
+                  "truncated": false,
+                  "total_chars": 2542
+                }
+              }
+            },
+            {
+              "effect_key": "topic:t2",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "run_skill",
+              "created_at": "2026-10-06T14:58:48.934888Z",
+              "completed_at": "2026-10-06T14:59:04.893226Z",
+              "skill": {
+                "name": "contract-qa",
+                "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+                "version": "1.0.0"
+              },
+              "accounting": {
+                "tier": 1,
+                "basis": "conservative-estimate-or-reported-usage-v1",
+                "model": "gemma4:26b-mlx-64k",
+                "provider": "ollama-local",
+                "charged_usd": "0.0000",
+                "reserved_usd": "0.0000",
+                "config_digest": "a7cd046e7263146172e4e572cb1e54fc43634de5208637411d1dbdbc8c05c332",
+                "anonymization_applied": true,
+                "estimated_prompt_tokens": 70950,
+                "reported_usage_cost_usd": "0.0000"
+              },
+              "outcome": "success",
+              "step": {
+                "kind": "model_turn",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": {
+                  "turn": 2,
+                  "tool_calls": 0,
+                  "finish_reason": "stop"
+                }
+              }
+            },
+            {
+              "effect_key": "demo:findings:write:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:59:04.935953Z",
+              "completed_at": "2026-10-06T14:59:04.993935Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_saved",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:notes:update:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_write",
+              "created_at": "2026-10-06T14:59:05.015740Z",
+              "completed_at": "2026-10-06T14:59:05.050683Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "notes_updated",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:findings:read:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_read",
+              "created_at": "2026-10-06T14:59:05.090504Z",
+              "completed_at": "2026-10-06T14:59:05.122402Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_read",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            },
+            {
+              "effect_key": "demo:findings:share:v1",
+              "status": "completed",
+              "reserved_usd": "0.0000",
+              "charged_usd": "0.0000",
+              "intent": "workspace_share",
+              "created_at": "2026-10-06T14:59:05.142856Z",
+              "completed_at": "2026-10-06T14:59:05.172822Z",
+              "skill": null,
+              "accounting": null,
+              "outcome": "success",
+              "step": {
+                "kind": "findings_shared",
+                "tool": null,
+                "label": null,
+                "reason": null,
+                "summary": null
+              }
+            }
+          ],
+          "files": [
+            {
+              "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "cdc31ce2a1eda7f034d115c0e460d377b04f587beb90fcad71600e9acedd6b7c",
+              "size_bytes": 1636,
+              "shared": true,
+              "updated_at": "2026-10-06T14:59:05.168904Z"
+            },
+            {
+              "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+              "name": "notes.md",
+              "revision": 2,
+              "digest": "789936888a1604c3d0e9876cbea66fc9e8886b2518fb27316a8eb9fed19f6f6e",
+              "size_bytes": 181,
+              "shared": false,
+              "updated_at": "2026-10-06T14:59:05.045574Z"
+            }
+          ],
+          "tools": [
+            {
+              "name": "read_document",
+              "label": "Read a selected document",
+              "phase": "analysis",
+              "registered": true
+            },
+            {
+              "name": "read_note",
+              "label": "Read back a working note",
+              "phase": "analysis",
+              "registered": true
+            },
+            {
+              "name": "save_note",
+              "label": "Save a working note",
+              "phase": "analysis",
+              "registered": true
+            }
+          ],
+          "turn_limit": 2
+        }
+      ],
+      "spent_usd": "0.0000",
+      "reserved_usd": "0.0000",
+      "result": {
+        "kind": "orchestration_demonstration",
+        "verification": "unverified",
+        "coverage": "complete",
+        "summary": "Model-generated from fictional inputs; unverified.\n\nPayment obligations:\nThe subscription fee is USD 200 per month, invoiced monthly in advance [§2]. Undisputed invoices are payable within 30 days of receipt [§2]. The Supplier may suspend service for an undisputed invoice remaining unpaid 15 days after written notice [§2].\n\nTermination and renewal:\nEither party may terminate for material breach if the breach remains uncured 30 days after written notice [§6]. The Customer may terminate for convenience on 60 days' written notice, but remains liable for subscription fees through the end of the current term [§6]. To prevent the agreement from renewing for successive 12-month periods, either party must provide written notice of non-renewal at least 30 days before the current term ends [§5].",
+        "topics": [
+          {
+            "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+            "topic": "Payment obligations",
+            "outcome": {
+              "status": "completed",
+              "summary": "The agreement specifies the following regarding payments, invoicing, and deadlines:",
+              "findings": [
+                "The agreement specifies the following regarding payments, invoicing, and deadlines:\n\n### Payment Amount\nThe subscription fee is USD 200 per month.\n\n> \"Customer shall pay USD 200 per month\"\n\n[§2]\n\n### Invoicing Timing\nInvoices are to be issued monthly and in advance of the service period.\n\n> \"invoiced monthly in advance\"\n\n[§2]\n\n### Payment Deadlines\nUndisputed invoices must be paid within 30 days of receipt.\n\n> \"Undisputed invoices are payable within 30 days of receipt.\"\n\n[§2]\n\nThe agreement also notes that if an undisputed invoice remains unpaid for 15 days after the Supplier provides written notice, the Supplier may suspend the service [§2]."
+              ],
+              "verification": "unverified",
+              "failure_code": null,
+              "artifact": {
+                "session_id": "9e97229c-6038-4a4f-8ba9-d1f76b164e65",
+                "name": "findings.json",
+                "revision": 1,
+                "digest": "317615a1ed7400df9b3513360d2d14466f4e7cb17013ec6c412bd7eaa52be148"
+              }
+            }
+          },
+          {
+            "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+            "topic": "Termination and renewal",
+            "outcome": {
+              "status": "completed",
+              "summary": "The agreement contains specific procedures and notice periods for termination and non-renewal, which are broken down into three distinct categories:",
+              "findings": [
+                "The agreement contains specific procedures and notice periods for termination and non-renewal, which are broken down into three distinct categories:\n\n### Termination for Material Breach\nEither party may terminate the agreement if a material breach is not corrected within 30 days of receiving a formal notice.\n\nThe controlling provision is [§6]:\n> \"Either party may terminate for material breach if the breach remains uncured 30 days after written notice describing the breach.\"\n\n### Termination for Convenience\nThe right to terminate for convenience is held exclusively by the Customer. To exercise this right, the Customer must provide 60 days' written notice and will remain responsible for all subscription fees through the end of the then-current term.\n\nThe relevant clause is [§6]:\n> \"Customer may terminate for convenience on 60 days' written notice but remains liable for subscription fees through the end of the current term.\"\n\n### Prevention of Renewal\nTo prevent the agreement from automatically renewing for another 12-month period, either party must provide written notice of non-renewal at least 30 days before the current term expires.\n\nThe controlling provision is [§5]:\n> \"The agreement renews for successive 12-month periods unless either party gives written notice of non-renewal at least 30 days before the current term ends.\""
+              ],
+              "verification": "unverified",
+              "failure_code": null,
+              "artifact": {
+                "session_id": "dbe3525f-e6b3-4263-9fbd-385f7357a960",
+                "name": "findings.json",
+                "revision": 1,
+                "digest": "cdc31ce2a1eda7f034d115c0e460d377b04f587beb90fcad71600e9acedd6b7c"
+              }
+            }
+          }
+        ]
+      },
+      "partial_summary": null
+    }
+  },
+  "run_message": {
+    "id": "acbed503-036b-4b26-858f-94f3611311c3",
+    "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+    "role": "assistant",
+    "kind": "run",
+    "autonomous_session_id": "6e5f0352-2b98-4800-9605-03db1700998d",
+    "content": "Model-generated from fictional inputs; unverified.\n\nPayment obligations:\nThe subscription fee is USD 200 per month, invoiced monthly in advance [§2]. Undisputed invoices are payable within 30 days of receipt [§2]. The Supplier may suspend service for an undisputed invoice remaining unpaid 15 days after written notice [§2].\n\nTermination and renewal:\nEither party may terminate for material breach if the breach remains uncured 30 days after written notice [§6]. The Customer may terminate for convenience on 60 days' written notice, but remains liable for subscription fees through the end of the current term [§6]. To prevent the agreement from renewing for successive 12-month periods, either party must provide written notice of non-renewal at least 30 days before the current term ends [§5].",
+    "applied_skills": [
+      "orchestration-chat-demo",
+      "contract-qa"
+    ],
+    "routed_inference_tier": 1,
+    "routed_provider": "ollama-local",
+    "routed_model": "gemma4:26b-mlx-64k",
+    "requested_model": "ollama-local/gemma4:26b-mlx-64k",
+    "prompt_tokens": 67087,
+    "completion_tokens": 4643,
+    "cost_estimate": 0.0,
+    "error_code": null,
+    "citations": [],
+    "created_at": "2026-10-06T14:57:51.106958Z",
+    "is_enhanced": false
+  },
+  "routing_log_rows": [
+    {
+      "id": "69949675-ef30-4a68-9f73-6bc1ae4a4b7f",
+      "timestamp": "2026-10-06T14:58:17.690968+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 1837,
+      "tokens_out": 2068,
+      "cost_estimate": 0.0,
+      "latency_ms": 25562
+    },
+    {
+      "id": "fa43a05d-0773-4e43-b6e6-c8e361454958",
+      "timestamp": "2026-10-06T14:58:39.279817+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 15443,
+      "tokens_out": 174,
+      "cost_estimate": 0.0,
+      "latency_ms": 16255
+    },
+    {
+      "id": "f70d77ba-bf6a-47c8-9f59-3450330e93f8",
+      "timestamp": "2026-10-06T14:58:48.77453+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 15469,
+      "tokens_out": 187,
+      "cost_estimate": 0.0,
+      "latency_ms": 24209
+    },
+    {
+      "id": "5060d720-556f-46ff-8883-3c987e1f4019",
+      "timestamp": "2026-10-06T14:58:56.570989+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 16121,
+      "tokens_out": 583,
+      "cost_estimate": 0.0,
+      "latency_ms": 15253
+    },
+    {
+      "id": "ded53149-deef-45a1-bfb7-4f4b25cd22e3",
+      "timestamp": "2026-10-06T14:59:04.876287+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 16154,
+      "tokens_out": 607,
+      "cost_estimate": 0.0,
+      "latency_ms": 13854
+    },
+    {
+      "id": "03136b8c-371c-4b85-8aa8-de26e3ba9976",
+      "timestamp": "2026-10-06T14:59:18.989357+00:00",
+      "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+      "message_id": "acbed503-036b-4b26-858f-94f3611311c3",
+      "purpose": "orchestration_run",
+      "routed_provider": "ollama-local",
+      "routed_model": "gemma4:26b-mlx-64k",
+      "routed_inference_tier": 1,
+      "anonymization_applied": true,
+      "refused": false,
+      "tokens_in": 2063,
+      "tokens_out": 1024,
+      "cost_estimate": 0.0,
+      "latency_ms": 12935
+    }
+  ],
+  "evidence_line": "Model-generated; unverified.",
+  "citations": [],
+  "ledger": {
+    "chat_id": "58940729-1d61-42b6-aeb4-493705408dea",
+    "entries": [],
+    "gates": []
+  }
+}

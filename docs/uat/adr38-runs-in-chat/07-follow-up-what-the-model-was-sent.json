@@ -1,0 +1,24 @@
+{
+  "what": "The request the scripted provider received for the follow-up turn in 07 (its own log of the request, after the gateway had pseudonymized it). One row per message: role, length, start of the text, and whether it holds the run's combined answer. The run's answer is in the history the model was given.",
+  "stub_request_file": "00131-chat-request.json",
+  "messages": [
+    {
+      "role": "user",
+      "characters": 137,
+      "starts": "Explain the payment terms, the renewal and the termination rights in the fictional services agreement. Treat each question independently.",
+      "holds_the_runs_combined_answer": false
+    },
+    {
+      "role": "assistant",
+      "characters": 1157,
+      "starts": "Combined answer from the controlled provider (scripted-1; unverified).\n\n## Payment terms\n\nFindings on payment terms (scripted answer from th",
+      "holds_the_runs_combined_answer": true
+    },
+    {
+      "role": "user",
+      "characters": 43,
+      "starts": "Summarize your last answer in one sentence.",
+      "holds_the_runs_combined_answer": false
+    }
+  ]
+}

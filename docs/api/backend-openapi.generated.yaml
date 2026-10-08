@@ -1,5 +1,41 @@
 components:
   schemas:
+    ActiveRun:
+      description: The owner's run that holds the single active-run allowance.
+      properties:
+        chat_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Chat Id
+        chat_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Chat Title
+        message_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Message Id
+        profile:
+          title: Profile
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+      - root_id
+      - status
+      - profile
+      title: ActiveRun
+      type: object
     AdminUserListResponse:
       description: Paginated user list for ``GET /api/v1/admin/users``.
       properties:
@@ -1733,11 +1769,34 @@ components:
       type: object
     ChatRunRead:
       properties:
+        chat_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Chat Id
         effects:
           items:
             $ref: '#/components/schemas/EffectRead'
           title: Effects
           type: array
+        evidence:
+          default: unverified
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        evidence_result:
+          anyOf:
+          - $ref: '#/components/schemas/EvidenceRead'
+          - type: 'null'
+        message_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Message Id
         packet:
           anyOf:
           - type: string
@@ -1745,6 +1804,20 @@ components:
           title: Packet
         planning:
           $ref: '#/components/schemas/PlanningSnapshot'
+        profile:
+          default: model_demo_v1
+          title: Profile
+          type: string
+        profile_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Profile Title
+        reads:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reads
         reserved_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
@@ -1779,6 +1852,33 @@ components:
       - reserved_usd
       - tree
       title: ChatRunRead
+      type: object
+    ChatRunRequest:
+      additionalProperties: false
+      properties:
+        file_ids:
+          default: []
+          items:
+            format: uuid
+            type: string
+          maxItems: 8
+          title: File Ids
+          type: array
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        profile:
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          title: Profile
+          type: string
+        request_id:
+          format: uuid
+          title: Request Id
+          type: string
+      required:
+      - request_id
+      - profile
+      - goal
+      title: ChatRunRequest
       type: object
     ChatSearchHit:
       description: 'One row in the chat-search response.
@@ -1883,6 +1983,20 @@ components:
           type: string
         task:
           $ref: '#/components/schemas/ResearchTask'
+        tools:
+          $ref: '#/components/schemas/PhaseTools'
+          default:
+            analysis: []
+            delivery: []
+            drafting: []
+            ethics_review: []
+            intake: []
+        turn_limit:
+          default: 0
+          maximum: 16.0
+          minimum: 0.0
+          title: Turn Limit
+          type: integer
       required:
       - dispatch_id
       - profile
@@ -2378,6 +2492,44 @@ components:
     Digest:
       pattern: ^[0-9a-f]{64}$
       type: string
+    DocumentRef:
+      additionalProperties: false
+      description: 'One owner-selected document, numbered in selection order (ADR
+        0038 D5).
+
+
+        The number is what a child cites and what the read tool accepts. The file
+
+        name is display data from the owner''s own record. Neither grants a read:
+
+        the boundary rechecks selection, ownership and project attachment.'
+      properties:
+        attached_for_run:
+          default: false
+          title: Attached For Run
+          type: boolean
+        document_id:
+          format: uuid
+          title: Document Id
+          type: string
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          $ref: '#/components/schemas/ShortText'
+        number:
+          maximum: 128.0
+          minimum: 1.0
+          title: Number
+          type: integer
+      required:
+      - number
+      - document_id
+      - file_id
+      - filename
+      title: DocumentRef
+      type: object
     EasyPlaybookGeneration:
       description: 'One Easy Playbook generation row.
 
@@ -2549,6 +2701,11 @@ components:
           default: ''
           title: Intent
           type: string
+        outcome:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Outcome
         reserved_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
@@ -2563,6 +2720,10 @@ components:
         status:
           title: Status
           type: string
+        step:
+          anyOf:
+          - $ref: '#/components/schemas/StepRead'
+          - type: 'null'
       required:
       - effect_key
       - status
@@ -2740,6 +2901,46 @@ components:
       - expansion_applied
       - expanded_prompt
       title: EnhancePromptResponse
+      type: object
+    EvidenceRead:
+      description: 'The result of the citation checks on a delivered answer (ADR 0038
+        D5).
+
+
+        Counts from the answer''s fiduciary gate. ``flagged`` means at least one
+
+        quotation could not be matched to the document it cites. Absent when the
+
+        answer carried no quotation that named a selected document: nothing was
+
+        checked, and the answer is unverified.'
+      properties:
+        checked:
+          title: Checked
+          type: integer
+        gate_status:
+          title: Gate Status
+          type: string
+        matched:
+          title: Matched
+          type: integer
+        unmarked:
+          default: 0
+          title: Unmarked
+          type: integer
+        unmatched:
+          title: Unmatched
+          type: integer
+        unresolved:
+          default: 0
+          title: Unresolved
+          type: integer
+      required:
+      - gate_status
+      - checked
+      - matched
+      - unmatched
+      title: EvidenceRead
       type: object
     ExecutionScope:
       additionalProperties: false
@@ -3665,6 +3866,12 @@ components:
             type: string
           title: Applied Skills
           type: array
+        autonomous_session_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Autonomous Session Id
         chat_id:
           format: uuid
           title: Chat Id
@@ -3712,6 +3919,7 @@ components:
           - ai
           - refusal
           - system
+          - run
           title: Kind
           type: string
         prompt_tokens:
@@ -4073,91 +4281,52 @@ components:
       - delivery
       title: PhaseGrants
       type: object
-    PlanningSnapshot:
+    PhaseTools:
       additionalProperties: false
-      description: Server-owned intake; deliberately cannot be used as an approved
-        plan.
+      description: 'Registry tool names a model may be offered in each phase (ADR
+        0038 D3, D4).
+
+
+        Names, not authority. Every call still needs the matching intent in
+
+        ``PhaseGrants``, current operator policy and durable effect admission. The
+
+        plan carries this list so approval of the exact plan is consent for it.'
       properties:
-        attempt_timeout_seconds:
-          default: 120
-          maximum: 900.0
-          minimum: 1.0
-          title: Attempt Timeout Seconds
-          type: integer
-        budget_usd:
-          type: string
-        child_skill_version:
-          $ref: '#/components/schemas/ShortText'
-        contract_version:
-          const: 1
-          default: 1
-          title: Contract Version
-          type: integer
-        deadline:
-          format: date-time
-          title: Deadline
-          type: string
-        delegation_grants:
-          $ref: '#/components/schemas/PhaseGrants'
-        gateway_revision:
-          $ref: '#/components/schemas/Digest'
-        goal:
-          $ref: '#/components/schemas/TaskText'
-        max_active_children:
-          default: 2
-          maximum: 4.0
-          minimum: 1.0
-          title: Max Active Children
-          type: integer
-        model:
-          $ref: '#/components/schemas/ShortText'
-        owner_id:
-          format: uuid
-          title: Owner Id
-          type: string
-        packet_digest:
-          $ref: '#/components/schemas/Digest'
-        plan_id:
-          format: uuid
-          title: Plan Id
-          type: string
-        planning_allowance_usd:
-          type: string
-        policy_version:
-          $ref: '#/components/schemas/ShortText'
-        project_id:
-          format: uuid
-          title: Project Id
-          type: string
-        root:
-          $ref: '#/components/schemas/ExecutionScope'
-        root_allowance_usd:
-          type: string
-        root_id:
-          format: uuid
-          title: Root Id
-          type: string
-        root_skill_version:
-          $ref: '#/components/schemas/ShortText'
-      required:
-      - plan_id
-      - root_id
-      - owner_id
-      - project_id
-      - goal
-      - policy_version
-      - root
-      - delegation_grants
-      - budget_usd
-      - root_allowance_usd
-      - planning_allowance_usd
-      - deadline
-      - packet_digest
-      - gateway_revision
-      - model
-      - child_skill_version
-      - root_skill_version
-      title: PlanningSnapshot
+        analysis:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Analysis
+          type: array
+        delivery:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Delivery
+          type: array
+        drafting:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Drafting
+          type: array
+        ethics_review:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Ethics Review
+          type: array
+        intake:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Intake
+          type: array
+      title: PhaseTools
+      type: object
+    PlanningSnapshot:
+      additionalProperties: true
       type: object
     Playbook:
       description: 'Full playbook — header plus ordered positions.
@@ -4605,6 +4774,244 @@ components:
       type: object
     PreparedPlan:
       additionalProperties: true
+      type: object
+    ProfileAvailability:
+      description: One registry profile, as the composer shows it for this chat.
+      properties:
+        attempt_timeout_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt Timeout Seconds
+        available:
+          title: Available
+          type: boolean
+        budget_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Budget Usd
+        child_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Child Allowance Usd
+        child_turn_limit:
+          title: Child Turn Limit
+          type: integer
+        documents:
+          enum:
+          - packet
+          - selected
+          title: Documents
+          type: string
+        evidence:
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        max_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Children
+        max_documents:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Documents
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        planning_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Planning Allowance Usd
+        planning_notice:
+          title: Planning Notice
+          type: string
+        profile:
+          title: Profile
+          type: string
+        reads:
+          title: Reads
+          type: string
+        reason:
+          anyOf:
+          - enum:
+            - operator_disabled
+            - not_configured
+            - autonomous_opt_in_required
+            - project_required
+            - project_not_permitted
+            - route_unavailable
+            - active_run
+            type: string
+          - type: 'null'
+          title: Reason
+        reason_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason Text
+        root_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Root Allowance Usd
+        summary:
+          title: Summary
+          type: string
+        title:
+          title: Title
+          type: string
+        tools:
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+      required:
+      - profile
+      - title
+      - summary
+      - reads
+      - documents
+      - evidence
+      - available
+      - planning_notice
+      - child_turn_limit
+      - tools
+      title: ProfileAvailability
+      type: object
+    ProfileRegistryRead:
+      properties:
+        deployment_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployment Children
+        profiles:
+          items:
+            $ref: '#/components/schemas/ProfileState'
+          title: Profiles
+          type: array
+      required:
+      - profiles
+      - deployment_children
+      title: ProfileRegistryRead
+      type: object
+    ProfileState:
+      description: One registry profile as the operator has configured it.
+      properties:
+        attempt_timeout_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt Timeout Seconds
+        budget_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Budget Usd
+        child_skill:
+          title: Child Skill
+          type: string
+        composer:
+          default: false
+          title: Composer
+          type: boolean
+        documents:
+          enum:
+          - packet
+          - selected
+          title: Documents
+          type: string
+        enabled:
+          title: Enabled
+          type: boolean
+        evidence:
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        limits:
+          additionalProperties: true
+          title: Limits
+          type: object
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        problem:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Problem
+        profile:
+          title: Profile
+          type: string
+        project_scope:
+          enum:
+          - dedicated
+          - owned
+          title: Project Scope
+          type: string
+        provider:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider
+        reads:
+          title: Reads
+          type: string
+        root_skill:
+          title: Root Skill
+          type: string
+        summary:
+          title: Summary
+          type: string
+        switch:
+          title: Switch
+          type: string
+        title:
+          title: Title
+          type: string
+        tools:
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+      required:
+      - profile
+      - title
+      - summary
+      - reads
+      - enabled
+      - switch
+      - documents
+      - project_scope
+      - evidence
+      - root_skill
+      - child_skill
+      - tools
+      - limits
+      title: ProfileState
       type: object
     ProjectContextProposalListResponse:
       description: 'Paginated list of :class:`ProjectContextProposalRead` items (M4-B2).
@@ -5129,6 +5536,102 @@ components:
       - source_names
       title: ResourceScope
       type: object
+    RunDocument:
+      properties:
+        attached_to_project:
+          title: Attached To Project
+          type: boolean
+        characters:
+          title: Characters
+          type: integer
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          title: Filename
+          type: string
+        mime_type:
+          title: Mime Type
+          type: string
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        selectable:
+          title: Selectable
+          type: boolean
+        size_bytes:
+          title: Size Bytes
+          type: integer
+      required:
+      - file_id
+      - filename
+      - mime_type
+      - size_bytes
+      - characters
+      - attached_to_project
+      - selectable
+      title: RunDocument
+      type: object
+    RunDocumentsRead:
+      properties:
+        chat_id:
+          format: uuid
+          title: Chat Id
+          type: string
+        documents:
+          items:
+            $ref: '#/components/schemas/RunDocument'
+          title: Documents
+          type: array
+        max_documents:
+          title: Max Documents
+          type: integer
+        project_id:
+          format: uuid
+          title: Project Id
+          type: string
+      required:
+      - chat_id
+      - project_id
+      - max_documents
+      - documents
+      title: RunDocumentsRead
+      type: object
+    RunProfilesRead:
+      properties:
+        active_run:
+          anyOf:
+          - $ref: '#/components/schemas/ActiveRun'
+          - type: 'null'
+        chat_id:
+          format: uuid
+          title: Chat Id
+          type: string
+        composer_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Composer Profile
+        profiles:
+          items:
+            $ref: '#/components/schemas/ProfileAvailability'
+          title: Profiles
+          type: array
+        project_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Project Id
+      required:
+      - chat_id
+      - project_id
+      - profiles
+      title: RunProfilesRead
+      type: object
     RunRead:
       properties:
         allocation_usd:
@@ -5167,6 +5670,16 @@ components:
         status:
           title: Status
           type: string
+        tools:
+          default: []
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+        turn_limit:
+          default: 0
+          title: Turn Limit
+          type: integer
         updated_at:
           anyOf:
           - format: date-time
@@ -5860,6 +6373,50 @@ components:
       required:
       - sources
       title: SourcesResponse
+      type: object
+    StepRead:
+      description: 'What one step did, in registry terms (ADR 0038 D3).
+
+
+        ``kind`` selects a renderer in the client; an unknown kind falls back to a
+
+        generic presentation of ``label`` and ``summary``. ``label`` comes from the
+
+        tool registry, so a tool the client has never seen is still described.
+
+        ``reason`` is the model''s own stated reason: text to display, never markup
+
+        and never an instruction. ``summary`` holds counts, numbers and the owner''s
+
+        own file names; it carries no document text.'
+      properties:
+        kind:
+          title: Kind
+          type: string
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+        tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool
+      required:
+      - kind
+      title: StepRead
       type: object
     TabularBulkOpItem:
       description: 'One item in a bulk op''s results.
@@ -7085,6 +7642,28 @@ components:
       - type
       title: ToolProviderSetRequest
       type: object
+    ToolRead:
+      description: A tool a child's approved plan grants, as the plan card lists it.
+      properties:
+        label:
+          title: Label
+          type: string
+        name:
+          title: Name
+          type: string
+        phase:
+          title: Phase
+          type: string
+        registered:
+          default: true
+          title: Registered
+          type: boolean
+      required:
+      - name
+      - label
+      - phase
+      title: ToolRead
+      type: object
     TopicOutcome:
       additionalProperties: false
       properties:
@@ -7137,7 +7716,6 @@ components:
           title: Children
           type: array
         mode:
-          const: model_demo_v1
           default: model_demo_v1
           title: Mode
           type: string
@@ -8751,6 +9329,27 @@ paths:
       summary: Set Mcp Tool Enabled
       tags:
       - admin
+  /api/v1/admin/orchestration/profiles:
+    get:
+      description: 'The closed set of run profiles and each one''s operator state.
+
+
+        Read-only. Profiles are switched on and routed through deployment
+
+        configuration; this route reports what that configuration yields.'
+      operationId: list_profiles_api_v1_admin_orchestration_profiles_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileRegistryRead'
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Profiles
+      tags:
+      - admin
   /api/v1/admin/provider-keys:
     get:
       description: List provider-key status via the gateway. No secret is returned.
@@ -10194,6 +10793,13 @@ paths:
       tags:
       - autonomous
     post:
+      description: 'Start a fictional-profile run with no chat. Retained for existing
+        clients.
+
+
+        New runs start from a chat (``POST /chats/{chat_id}/runs``). A run started
+
+        here has no message; its page remains its receipt view (ADR 0038 D1).'
       operationId: start_chat_api_v1_autonomous_orchestration_chat_runs_post
       requestBody:
         content:
@@ -10246,6 +10852,46 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Chat Run
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/close:
+    post:
+      description: 'Close an uncertain run without a retry (ADR 0038 D6).
+
+
+        Owner-only. Nothing is repeated: each unresolved effect is closed without
+        an
+
+        outcome and its reservation is charged. Retained work stays readable, and
+
+        the owner''s single active-run allowance is released. Like halt, this stays
+
+        reachable after opt-out or a switched-off profile: it only narrows authority.'
+      operationId: close_chat_api_v1_autonomous_orchestration_chat_runs__root_id__close_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Close Chat
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
@@ -12238,6 +12884,150 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Export receipts as JSONL (one event per line)
+      tags:
+      - chats
+  /api/v1/chats/{chat_id}/run-documents:
+    get:
+      description: 'The matter''s files, plus named candidates, with whether each
+        can be read.
+
+
+        A file that cannot be read is listed with its reason and is not selectable;
+
+        it is never silently omitted (ADR 0038 D5). Selecting a candidate attaches
+
+        it to the matter when the run is accepted.'
+      operationId: run_documents_api_v1_chats__chat_id__run_documents_get
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      - description: The owner's own files that are not attached to the matter, typically
+          this chat's attachments, to list as candidates.
+        in: query
+        name: file_id
+        required: false
+        schema:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            maxItems: 16
+            type: array
+          - type: 'null'
+          description: The owner's own files that are not attached to the matter,
+            typically this chat's attachments, to list as candidates.
+          title: File Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDocumentsRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Files a run started from this chat could read
+      tags:
+      - chats
+  /api/v1/chats/{chat_id}/run-profiles:
+    get:
+      description: 'Each registry profile''s availability here, and why when it is
+        not.
+
+
+        Reports the allowances a run would be quoted before any planning is paid
+
+        for. Makes no model call. ``active_run`` names the owner''s run that is
+
+        holding the single active-run allowance, in any chat, so the composer can
+
+        say which one is blocking and offer to close it when it is uncertain.'
+      operationId: run_profiles_api_v1_chats__chat_id__run_profiles_get
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunProfilesRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Run profiles available to this chat's composer
+      tags:
+      - chats
+  /api/v1/chats/{chat_id}/runs:
+    post:
+      description: 'Accept one planning request and write its two messages.
+
+
+        The request becomes an ordinary user message. The reply is one assistant
+
+        message of kind ``run`` linked to the run''s root session; it carries the
+
+        answer once the root delivers one, and stays empty otherwise. Accepting the
+
+        request authorizes one planning call within the disclosed allowance. Child
+
+        work needs the owner''s approval of the exact plan on the existing route.
+
+
+        The planning call receives ``goal`` only, never earlier messages.'
+      operationId: start_run_api_v1_chats__chat_id__runs_post
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRunRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Start a governed run as a turn in this chat
       tags:
       - chats
   /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}:

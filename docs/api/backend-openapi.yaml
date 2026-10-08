@@ -3929,6 +3929,15 @@ paths:
         Owner-of-chat or admin only. Replay-at-read for M1 — chats are
         bounded (<100 events typical). A materialized ``chat_receipts``
         projection is a v1.1+ candidate if latency degrades.
+
+        ADR 0038 (proposed): a governed run hosted in the chat comes through the
+        same feed. Its message and pinned skills appear as ``message`` and
+        ``skill`` events (the ``message`` detail carries ``autonomous_session_id``)
+        and its model calls as ``inference`` events. The audit rows of the run's
+        root session and children appear as ``audit`` events, read through the run
+        message's link to its root session; each carries ``run_root_id`` and
+        ``message_id`` in ``detail``. Implemented on an unmerged branch and not
+        ratified.
       parameters:
         - name: chat_id
           in: path
@@ -5305,6 +5314,30 @@ paths:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
         '404': {description: Model run absent or owned by another user}
+  # ADR 0038 (proposed): see also the block after the files path below.
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/close:
+    parameters:
+      - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [autonomous]
+      summary: "ADR 0038 (proposed): close an uncertain run without a retry"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Owner-only. Nothing is repeated: each unresolved effect is closed without
+        an outcome and its reservation is charged. The run ends as ``closed`` with
+        stop reason ``owner_closed``, its running sessions are halted, retained
+        work stays readable, and the owner's single active-run allowance is
+        released. Like halt, it stays reachable after opt-out or a switched-off
+        profile. Closing a run that is already closed returns it unchanged.
+      responses:
+        '200':
+          description: The closed run; unresolved effects show as closed and charged
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '404': {description: Run absent or owned by another user}
+        '409': {description: Only an uncertain run can be closed}
   /api/v1/autonomous/orchestration/{root_id}/tree:
     parameters:
       - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -5390,6 +5423,156 @@ paths:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/WorkspaceContent'
         '404': {description: File absent, belongs to another run or owner}
+
+  # ADR 0038 (proposed): governed runs as turns in a chat thread. Implemented on an
+  # unmerged branch; the ADR is not ratified, so none of these paths is in a release.
+  # The run read shapes above are generated and gain these fields under ADR 0038:
+  # ChatRunRead gains profile, profile_title, reads, evidence, evidence_result, chat_id
+  # and message_id; EffectRead gains outcome and step; RunRead gains tools and
+  # turn_limit; the plan snapshot gains profile and documents; run and effect status
+  # gain ``closed``. evidence_result is {gate_status, checked, matched, unmatched,
+  # unresolved, unmarked} or null. unresolved counts quotations whose marker names no
+  # selected document; unmarked counts quoted passages with no source marker. Neither
+  # was checked. It is set only for a delivered answer on a profile whose evidence is
+  # ``citations`` and whose answer had at least one quotation naming a selected
+  # document; gate_status is the answer's fiduciary-gate status (fiduciary_grade,
+  # supported_only or flagged). Null means nothing was checked and the answer is
+  # unverified. USD amounts are strings. backend-openapi.generated.yaml holds the
+  # exact shapes.
+  /api/v1/chats/{chat_id}/runs:
+    parameters:
+      - {name: chat_id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [chats]
+      summary: "ADR 0038 (proposed): start a governed run as a turn in this chat"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Requires the owner's Autonomous opt-in, a chat inside an active owned
+        project and an operator-enabled profile. Accepts one planning request.
+        The request becomes an ordinary user message and the reply is one
+        assistant message of ``kind: run`` linked to the run's root session by
+        ``autonomous_session_id``. Both are written with the run, so a run never
+        exists without its turn. When the root delivers an answer, one transaction
+        writes it into the reply together with the reply's skill, tier, provider,
+        model, token and cost fields, its work-product attribution row (the
+        chain-of-custody row an answered chat turn gets) and the delivery audit
+        row. A run that ends without an answer leaves the reply empty. Accepting
+        the request authorizes one planning call within the disclosed allowance;
+        child work needs the owner's approval of the exact plan on the existing
+        approve route. The planning call receives ``goal`` only, never earlier
+        messages.
+
+        ``request_id`` is idempotent: a repeated send returns the same run, and
+        the same id with different input is a 409. A profile that reads selected
+        documents needs one to eight ``file_ids`` and refuses the whole selection
+        if any file is missing, another owner's or unreadable; a profile that
+        reads a fixed document refuses ``file_ids``. A selected file that is not
+        yet attached to the project is attached when the run is accepted, with an
+        audit row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRequest'
+      responses:
+        '202':
+          description: Durable planning state; no children until separate approval
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
+        '400': {description: "Selection refused (none, duplicates, more than eight, or a file that cannot be read), or file_ids sent to a profile that reads a fixed document"}
+        '403': {description: "Unknown or switched-off profile, Autonomous opt-in absent, chat has no project, project not permitted for the profile, route or pricing unavailable, or the cap cannot fund planning, one task and synthesis"}
+        '404': {description: "Chat absent, archived or owned by another user, or project not found"}
+        '409': {description: "Another run of the owner is active, or the request identity was reused with different input"}
+        '422': {description: "Request body does not match the schema, for example more than eight file_ids"}
+
+  /api/v1/chats/{chat_id}/run-profiles:
+    parameters:
+      - {name: chat_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [chats]
+      summary: "ADR 0038 (proposed): run profiles available to this chat's composer"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Each registry profile's availability for this chat, and the reason when
+        it is unavailable (``operator_disabled``, ``not_configured``,
+        ``autonomous_opt_in_required``, ``project_required``,
+        ``project_not_permitted``, ``route_unavailable`` or ``active_run``).
+        Reports what the composer shows before any planning is paid for: the
+        pinned model, the total cap, the planning, root and per-task allowances,
+        the number of tasks the cap can fund, the attempt limit, the tool-turn
+        limit, the document limit and the tools the profile grants. Makes no
+        model call. ``active_run`` names the owner's run that holds the single
+        active-run allowance, in any chat.
+      responses:
+        '200':
+          description: One entry per registry profile, and the owner's active run if any
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/RunProfilesRead'
+        '404': {description: Chat absent, archived or owned by another user}
+
+  /api/v1/chats/{chat_id}/run-documents:
+    parameters:
+      - {name: chat_id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [chats]
+      summary: "ADR 0038 (proposed): files a run started from this chat could read"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        The project's files, plus any named candidates, each with whether a run
+        can read it. A file that cannot be read is listed with its reason
+        (``unsupported_type``, ``not_ingested``, ``ingestion_failed`` or
+        ``no_text``) and is not selectable; it is never silently omitted. Only
+        PDF with text, plain text and Markdown are selectable. Another owner's
+        file is never listed. Choosing a candidate attaches it to the project
+        when the run is accepted.
+      parameters:
+        - name: file_id
+          in: query
+          required: false
+          schema:
+            type: array
+            maxItems: 16
+            items: {type: string, format: uuid}
+          description: |
+            The owner's own files that are not attached to the project, typically
+            this chat's attachments, to list as candidates.
+      responses:
+        '200':
+          description: The listed files and the per-run document limit
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/RunDocumentsRead'
+        '403': {description: Chat has no project}
+        '404': {description: Chat or project absent, or the chat is owned by another user}
+
+  /api/v1/admin/orchestration/profiles:
+    get:
+      tags: [admin]
+      summary: "ADR 0038 (proposed): the closed set of run profiles and each one's operator state"
+      description: |
+        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Administrator-only and read-only. Profiles are switched on and routed
+        through deployment configuration; this route reports what that
+        configuration yields. Each entry names the switch, what the profile reads,
+        its project scope and evidence mode, its pinned skills and route, the
+        total cap, the tier floor, the attempt timeout, the granted tools and the
+        limits. ``problem`` is set when a profile's switch is on but its
+        configuration is incomplete, and ``enabled`` is then false.
+        ``deployment_children`` is the shared child capacity.
+      responses:
+        '200':
+          description: Every registered profile with its state
+          content:
+            application/json:
+              schema:
+                $ref: './backend-openapi.generated.yaml#/components/schemas/ProfileRegistryRead'
+        '403': {description: Caller is not an administrator}
 
   /api/v1/autonomous/run-now:
     post:
@@ -8036,6 +8219,24 @@ components:
         id: {type: string, format: uuid}
         chat_id: {type: string, format: uuid}
         role: {type: string, enum: [user, assistant, system, tool]}
+        kind:
+          type: string
+          enum: [user, ai, refusal, system, run]
+          description: |
+            LQ.AI message classification (migration 0020), distinct from ``role``.
+            ``run`` is ADR 0038 (proposed): the one assistant message that hosts a
+            governed run in the thread. It is implemented on an unmerged branch and
+            not ratified. A ``run`` message has empty ``content`` until its run
+            delivers an answer, and stays empty for a run that ends without one.
+        autonomous_session_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            ADR 0038 (proposed). Set only on a ``kind: run`` assistant message: the
+            root autonomous session of the run the message presents. Read the run's
+            plan, progress, files and receipts from the owner-only orchestration
+            routes with this id. Null on every other message.
         content: {type: string}
         applied_skills:
           type: array

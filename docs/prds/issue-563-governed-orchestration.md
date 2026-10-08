@@ -1,6 +1,6 @@
 # PRD: Governed orchestration and optional skill capabilities
 
-**Status:** Accepted design; bounded implementation merged on main, release pending.
+**Status:** Accepted design; bounded implementation released in 0.8.0 (2026-09-30).
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563).
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md) records the architecture;
 the [research note](../research/issue-563-harness-research.md) explains its evidence.
@@ -70,8 +70,41 @@ production-provider or legal-quality claim.
   propagation, including DE-294, before enabling real sources and inference.
 
 Capabilities remain disabled by default. The bounded model-backed chat
-demonstration is targeted for 0.8.0; production enablement remains a separate
-decision.
+demonstration shipped in 0.8.0 (2026-09-30) behind an operator switch;
+production enablement remains a separate decision.
+
+## Proposed: governed runs in chat (ADR 0038 pending)
+
+[ADR 0038](../adr/0038-skill-backed-orchestration-profile.md) proposes moving the
+bounded run into the main chat, letting approved children call tools, and adding
+a first profile that reads real documents. It is not ratified. The requirements
+below are implemented on an unmerged implementation branch, pending ratification
+and review; they are in no release, and both profile switches default to off.
+The accepted scope above stands for released software.
+
+| Proposed requirement | Acceptance criterion |
+|---|---|
+| R8 — Runs in chat | The owner starts a run from the chat composer with an operator-enabled profile, approves or rejects the plan, follows progress, halts, and reopens the run after a refresh, all in one thread. Later turns see the delivered answer. |
+| R9 — Visibility parity | Everything an ordinary chat turn shows (message fields, receipts, routing and tool-call correlation, audit rows, traces) is available for a run through the same channel. |
+| R10 — Capability surface | A profile and a tool that the product does not ship can be added, and are offered, granted, recorded and presented with no other change. |
+| R11 — Tools for children | An approved child calls only the tools its profile grants. Refused and failed calls are returned to the model and recorded. Completed calls are not repeated after a restart. |
+| R12 — Real documents | With its own operator switch on, a run reads only the documents the owner selected for it, including a chat attachment once it is attached to the project. The answer carries citation results, and the owner's data export includes run data. |
+| R13 — Closing an uncertain run | The owner can close an uncertain run without a retry. The unresolved reservation is charged, and a new run can start. |
+
+**Evidence so far.** The plan's
+[Implementation status](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status)
+records what was built and how it was checked. Each of R8–R13 has
+controlled-provider test coverage on the implementation branch, and the browser
+behavior behind R8 was exercised in one recorded walkthrough, driven by an agent,
+with a controlled provider. None of the six has human acceptance or a run on a
+configured provider, and the changes have had no maintainer or security review.
+R12 rests on controlled-provider tests: its limits are placeholders not measured
+on real documents, and its quotation checks use only the Citation Engine's exact
+and tolerant stages. The plan lists the remaining gaps under "Not done, or not
+verified".
+
+Build order and design: [plan](../plans/issue-662-c1-governed-runs-in-chat.md).
+Script for human acceptance: [UAT runbook](../runbooks/adr38-runs-in-chat-uat.md).
 
 Behavior details: [demonstration](../plans/issue-563-demonstration.md),
 [run files](../plans/issue-563-workspace.md),

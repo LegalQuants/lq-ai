@@ -1,0 +1,96 @@
+{
+  "active_run": {
+    "chat_id": "152e0050-01e8-4fb3-bfba-f14df2336e34",
+    "chat_title": "A request whose planning call times out.",
+    "message_id": "52101d0a-2f3a-4b9f-93a6-16716e739ebf",
+    "profile": "model_demo_v1",
+    "root_id": "12a1985b-afa8-4383-bb74-21b2c1dfd0a0",
+    "status": "uncertain"
+  },
+  "chat_id": "152e0050-01e8-4fb3-bfba-f14df2336e34",
+  "profiles": [
+    {
+      "attempt_timeout_seconds": null,
+      "available": false,
+      "budget_usd": null,
+      "child_allowance_usd": null,
+      "child_turn_limit": 5,
+      "documents": "selected",
+      "evidence": "citations",
+      "max_children": null,
+      "max_documents": 8,
+      "model": null,
+      "planning_allowance_usd": null,
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "profile": "contract_qa_documents_v1",
+      "reads": "Only the documents you select for this run. No other matter files or live sources.",
+      "reason": "operator_disabled",
+      "reason_text": "The operator has not enabled this profile.",
+      "root_allowance_usd": null,
+      "summary": "Splits a request into Contract QA tasks on documents you select from this matter.",
+      "title": "Contract Questions on your documents",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    },
+    {
+      "attempt_timeout_seconds": 120,
+      "available": false,
+      "budget_usd": "2.0000",
+      "child_allowance_usd": "0.7434",
+      "child_turn_limit": 2,
+      "documents": "packet",
+      "evidence": "unverified",
+      "max_children": 2,
+      "max_documents": null,
+      "model": "selected/native",
+      "planning_allowance_usd": "0.2478",
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "profile": "model_demo_v1",
+      "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+      "reason": "active_run",
+      "reason_text": "Another run of yours is still active. One run can be active at a time.",
+      "root_allowance_usd": "0.4956",
+      "summary": "Splits a request into Contract QA tasks on a fictional vendor agreement.",
+      "title": "Contract Questions Orchestrator",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    }
+  ],
+  "project_id": "dbc02634-08d3-4f7d-95d6-2c15a283263a"
+}

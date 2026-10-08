@@ -1,0 +1,96 @@
+{
+  "chat_id": "f4035ab1-0447-4ce3-be66-35b3d6266119",
+  "project_id": "ffcb7015-8763-4196-b2b3-ee94e3a80376",
+  "profiles": [
+    {
+      "profile": "contract_qa_documents_v1",
+      "title": "Contract Questions on your documents",
+      "summary": "Splits a request into Contract QA tasks on documents you select from this matter.",
+      "reads": "Only the documents you select for this run. No other matter files or live sources.",
+      "documents": "selected",
+      "evidence": "citations",
+      "available": false,
+      "reason": "active_run",
+      "reason_text": "Another run of yours is still active. One run can be active at a time.",
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "model": "controlled/scripted-1",
+      "budget_usd": "5.0000",
+      "planning_allowance_usd": "0.1446",
+      "root_allowance_usd": "0.2892",
+      "child_allowance_usd": "0.8676",
+      "max_children": 4,
+      "attempt_timeout_seconds": 60,
+      "child_turn_limit": 5,
+      "max_documents": 8,
+      "tools": [
+        {
+          "name": "read_document",
+          "label": "Read a selected document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "name": "read_note",
+          "label": "Read back a working note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "name": "save_note",
+          "label": "Save a working note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    },
+    {
+      "profile": "model_demo_v1",
+      "title": "Contract Questions Orchestrator",
+      "summary": "Splits a request into Contract QA tasks on a fictional vendor agreement.",
+      "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+      "documents": "packet",
+      "evidence": "unverified",
+      "available": false,
+      "reason": "active_run",
+      "reason_text": "Another run of yours is still active. One run can be active at a time.",
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "model": "controlled/scripted-1",
+      "budget_usd": "2.0000",
+      "planning_allowance_usd": "0.0620",
+      "root_allowance_usd": "0.1240",
+      "child_allowance_usd": "0.1860",
+      "max_children": 4,
+      "attempt_timeout_seconds": 60,
+      "child_turn_limit": 2,
+      "max_documents": null,
+      "tools": [
+        {
+          "name": "read_document",
+          "label": "Read a selected document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "name": "read_note",
+          "label": "Read back a working note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "name": "save_note",
+          "label": "Save a working note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    }
+  ],
+  "active_run": {
+    "root_id": "65fc710a-70df-4d92-ada3-c5fdaeaf150d",
+    "status": "uncertain",
+    "profile": "model_demo_v1",
+    "chat_id": "60c551f4-8ee1-4be1-8c50-81a144c0c72b",
+    "chat_title": "Uncertain run: the provider never answers",
+    "message_id": "c196a275-3acd-4369-86eb-bb78b78183ae"
+  }
+}

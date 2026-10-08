@@ -1,0 +1,23 @@
+{
+  "what": "With both switches off and the API and arq worker restarted: starting a run and approving the retained run's plan.",
+  "start_run": {
+    "status": 403,
+    "body": {
+      "detail": {
+        "code": "forbidden",
+        "message": "This run profile is disabled by the operator",
+        "details": {}
+      }
+    }
+  },
+  "approve_retained_run": {
+    "status": 403,
+    "body": {
+      "detail": {
+        "code": "forbidden",
+        "message": "This run profile is disabled by the operator",
+        "details": {}
+      }
+    }
+  }
+}

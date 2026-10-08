@@ -1,0 +1,1217 @@
+{
+  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0552",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 2987,
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0552",
+        "tier": 1
+      },
+      "charged_usd": "0.0552",
+      "completed_at": "2026-10-06T15:41:43.896357Z",
+      "created_at": "2026-10-06T15:41:43.882862Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0552",
+      "skill": {
+        "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+        "name": "contract-questions-orchestrator",
+        "version": "1.0.0"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": null,
+      "charged_usd": "0.0000",
+      "completed_at": "2026-10-06T15:41:45.477513Z",
+      "created_at": "2026-10-06T15:41:45.450130Z",
+      "effect_key": "demo:collect:9a149f0e-3acc-4ef2-b777-971c3f3be1df:v1",
+      "intent": "workspace_read",
+      "outcome": "success",
+      "reserved_usd": "0.0000",
+      "skill": null,
+      "status": "completed",
+      "step": {
+        "kind": "findings_collected",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": null,
+      "charged_usd": "0.0000",
+      "completed_at": "2026-10-06T15:41:45.521568Z",
+      "created_at": "2026-10-06T15:41:45.494143Z",
+      "effect_key": "demo:collect:3f50ae5a-7a05-4546-a527-20a58b3096b3:v1",
+      "intent": "workspace_read",
+      "outcome": "success",
+      "reserved_usd": "0.0000",
+      "skill": null,
+      "status": "completed",
+      "step": {
+        "kind": "findings_collected",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0585",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 4625,
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0585",
+        "tier": 1
+      },
+      "charged_usd": "0.0585",
+      "completed_at": "2026-10-06T15:41:45.571396Z",
+      "created_at": "2026-10-06T15:41:45.554496Z",
+      "effect_key": "demo:synthesis:v1",
+      "intent": "run_skill",
+      "outcome": "success",
+      "reserved_usd": "0.0585",
+      "skill": {
+        "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+        "name": "contract-questions-orchestrator",
+        "version": "1.0.0"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "synthesis",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "citations",
+  "evidence_result": {
+    "checked": 3,
+    "gate_status": "flagged",
+    "matched": 2,
+    "unmarked": 0,
+    "unmatched": 1,
+    "unresolved": 0
+  },
+  "message_id": "2aabffbf-be62-4471-a74f-10bce6c185b7",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "1.0.0",
+    "contract_version": 2,
+    "deadline": "2026-10-06T17:41:43.813464Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [
+      {
+        "attached_for_run": false,
+        "document_id": "71a16d78-61f3-49a3-888b-dce8a8eb87fe",
+        "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+        "filename": "msa.txt",
+        "number": 1
+      },
+      {
+        "attached_for_run": true,
+        "document_id": "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+        "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+        "filename": "dpa.md",
+        "number": 2
+      }
+    ],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Explain payment, renewal and termination questions independently.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "9b785cbf-7ea3-4058-85b0-13d909648e79",
+    "packet_digest": null,
+    "plan_id": "25484912-3d0c-47a9-a773-71f2518659ce",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "ded1f0223bd15b73d32dc85ae2591e833edbf9291a197787ef3a711d9501ee18",
+    "profile": "contract_qa_documents_v1",
+    "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [
+          "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+          "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+        "name": "contract-questions-orchestrator"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+    "root_skill_version": "1.0.0"
+  },
+  "profile": "contract_qa_documents_v1",
+  "profile_title": "Contract Questions on your documents",
+  "reads": "Only the documents you select for this run. No other matter files or live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+  "spent_usd": "0.8583",
+  "status": "completed",
+  "stop_reason": null,
+  "tree": {
+    "approved": true,
+    "children": [
+      {
+        "allocation_usd": "3.4686",
+        "effects": [
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.164832Z",
+            "created_at": "2026-10-06T15:41:44.137681Z",
+            "effect_key": "demo:notes:create:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_started",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.218541Z",
+            "created_at": "2026-10-06T15:41:44.192742Z",
+            "effect_key": "demo:notes:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1850",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 67901,
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1850",
+              "tier": 1
+            },
+            "charged_usd": "0.1850",
+            "completed_at": "2026-10-06T15:41:44.292278Z",
+            "created_at": "2026-10-06T15:41:44.275435Z",
+            "effect_key": "topic:t1",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1850",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 2,
+                "turn": 1
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.325057Z",
+            "created_at": "2026-10-06T15:41:44.308301Z",
+            "effect_key": "topic:t1:c0",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "Read the MSA.",
+              "summary": {
+                "document": 1,
+                "end": 244,
+                "filename": "msa.txt",
+                "start": 0,
+                "total_chars": 244,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.356896Z",
+            "created_at": "2026-10-06T15:41:44.340854Z",
+            "effect_key": "topic:t1:c1",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "Read the DPA.",
+              "summary": {
+                "document": 2,
+                "end": 190,
+                "filename": "dpa.md",
+                "start": 0,
+                "total_chars": 190,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1872",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 69001,
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1872",
+              "tier": 1
+            },
+            "charged_usd": "0.1872",
+            "completed_at": "2026-10-06T15:41:44.407709Z",
+            "created_at": "2026-10-06T15:41:44.390907Z",
+            "effect_key": "topic:t2",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1872",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "stop",
+                "tool_calls": 0,
+                "turn": 2
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.451093Z",
+            "created_at": "2026-10-06T15:41:44.423306Z",
+            "effect_key": "demo:findings:write:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_saved",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.493951Z",
+            "created_at": "2026-10-06T15:41:44.466952Z",
+            "effect_key": "demo:notes:update:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_updated",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.554339Z",
+            "created_at": "2026-10-06T15:41:44.527457Z",
+            "effect_key": "demo:findings:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.598151Z",
+            "created_at": "2026-10-06T15:41:44.570549Z",
+            "effect_key": "demo:findings:share:v1",
+            "intent": "workspace_share",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_shared",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          }
+        ],
+        "files": [
+          {
+            "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df",
+            "shared": true,
+            "size_bytes": 493,
+            "updated_at": "2026-10-06T15:41:44.594278Z"
+          },
+          {
+            "digest": "342b8ab051f69c7b21a228c435ede0a5f2e2e09fa681ead52fbd3b56fca17869",
+            "name": "notes.md",
+            "revision": 2,
+            "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df",
+            "shared": false,
+            "size_bytes": 218,
+            "updated_at": "2026-10-06T15:41:44.489629Z"
+          }
+        ],
+        "outcome": {
+          "artifact": {
+            "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df"
+          },
+          "failure_code": null,
+          "findings": [
+            "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2])."
+          ],
+          "status": "completed",
+          "summary": "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]).",
+          "verification": "unverified"
+        },
+        "phase": "delivery",
+        "reserved_usd": "0.0000",
+        "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df",
+        "spent_usd": "0.3722",
+        "status": "completed",
+        "tools": [
+          {
+            "label": "Read a selected document",
+            "name": "read_document",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 5,
+        "updated_at": "2026-10-06T15:41:44.656319Z"
+      },
+      {
+        "allocation_usd": "3.4686",
+        "effects": [
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.789068Z",
+            "created_at": "2026-10-06T15:41:44.755037Z",
+            "effect_key": "demo:notes:create:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_started",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.849450Z",
+            "created_at": "2026-10-06T15:41:44.820544Z",
+            "effect_key": "demo:notes:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1851",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 67959,
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1851",
+              "tier": 1
+            },
+            "charged_usd": "0.1851",
+            "completed_at": "2026-10-06T15:41:44.928581Z",
+            "created_at": "2026-10-06T15:41:44.910794Z",
+            "effect_key": "topic:t1",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1851",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 2,
+                "turn": 1
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.962749Z",
+            "created_at": "2026-10-06T15:41:44.945308Z",
+            "effect_key": "topic:t1:c0",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "Read the MSA.",
+              "summary": {
+                "document": 1,
+                "end": 244,
+                "filename": "msa.txt",
+                "start": 0,
+                "total_chars": 244,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:44.997878Z",
+            "created_at": "2026-10-06T15:41:44.979871Z",
+            "effect_key": "topic:t1:c1",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "Read the DPA.",
+              "summary": {
+                "document": 2,
+                "end": 190,
+                "filename": "dpa.md",
+                "start": 0,
+                "total_chars": 190,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1873",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 69059,
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1873",
+              "tier": 1
+            },
+            "charged_usd": "0.1873",
+            "completed_at": "2026-10-06T15:41:45.052064Z",
+            "created_at": "2026-10-06T15:41:45.034428Z",
+            "effect_key": "topic:t2",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1873",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "stop",
+                "tool_calls": 0,
+                "turn": 2
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:45.099414Z",
+            "created_at": "2026-10-06T15:41:45.068735Z",
+            "effect_key": "demo:findings:write:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_saved",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:45.145337Z",
+            "created_at": "2026-10-06T15:41:45.117392Z",
+            "effect_key": "demo:notes:update:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_updated",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:45.202590Z",
+            "created_at": "2026-10-06T15:41:45.176502Z",
+            "effect_key": "demo:findings:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-06T15:41:45.246228Z",
+            "created_at": "2026-10-06T15:41:45.219280Z",
+            "effect_key": "demo:findings:share:v1",
+            "intent": "workspace_share",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_shared",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          }
+        ],
+        "files": [
+          {
+            "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3",
+            "shared": true,
+            "size_bytes": 493,
+            "updated_at": "2026-10-06T15:41:45.242462Z"
+          },
+          {
+            "digest": "342b8ab051f69c7b21a228c435ede0a5f2e2e09fa681ead52fbd3b56fca17869",
+            "name": "notes.md",
+            "revision": 2,
+            "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3",
+            "shared": false,
+            "size_bytes": 218,
+            "updated_at": "2026-10-06T15:41:45.141135Z"
+          }
+        ],
+        "outcome": {
+          "artifact": {
+            "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3"
+          },
+          "failure_code": null,
+          "findings": [
+            "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2])."
+          ],
+          "status": "completed",
+          "summary": "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]).",
+          "verification": "unverified"
+        },
+        "phase": "delivery",
+        "reserved_usd": "0.0000",
+        "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3",
+        "spent_usd": "0.3724",
+        "status": "completed",
+        "tools": [
+          {
+            "label": "Read a selected document",
+            "name": "read_document",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 5,
+        "updated_at": "2026-10-06T15:41:45.302876Z"
+      }
+    ],
+    "mode": "contract_qa_documents_v1",
+    "partial_summary": null,
+    "plan": {
+      "attempt_timeout_seconds": 300,
+      "budget_usd": "10.0000",
+      "children": [
+        {
+          "budget_usd": "3.4686",
+          "dispatch_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [
+                "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+                "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "What must Customer pay and when?",
+            "stopping_condition": "One answer",
+            "topic": "Payments"
+          },
+          "tools": {
+            "analysis": [
+              "read_document",
+              "read_note",
+              "save_note"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 5
+        },
+        {
+          "budget_usd": "3.4686",
+          "dispatch_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [
+                "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+                "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "How can Customer prevent renewal or terminate?",
+            "stopping_condition": "One answer",
+            "topic": "Renewal and termination"
+          },
+          "tools": {
+            "analysis": [
+              "read_document",
+              "read_note",
+              "save_note"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 5
+        }
+      ],
+      "contract_version": 3,
+      "deadline": "2026-10-06T17:41:43.813464Z",
+      "delegation_grants": {
+        "analysis": [
+          "plan",
+          "retrieve_chunks",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "delivery": [],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "intake": []
+      },
+      "documents": [
+        {
+          "attached_for_run": false,
+          "document_id": "71a16d78-61f3-49a3-888b-dce8a8eb87fe",
+          "file_id": "62803688-7e2f-45eb-8916-3f31285da37b",
+          "filename": "msa.txt",
+          "number": 1
+        },
+        {
+          "attached_for_run": true,
+          "document_id": "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+          "file_id": "01829cfd-51e4-4c99-a342-78551f7fe56e",
+          "filename": "dpa.md",
+          "number": 2
+        }
+      ],
+      "goal": "Explain payment, renewal and termination questions independently.",
+      "max_active_children": 2,
+      "owner_id": "9b785cbf-7ea3-4058-85b0-13d909648e79",
+      "plan_id": "25484912-3d0c-47a9-a773-71f2518659ce",
+      "planning_digest": "0cc4bd4b799a6bcb3f15d9b0cfa7abc2cc9c41cc88d24cfc700eb59429c8f2d4",
+      "policy_version": "ded1f0223bd15b73d32dc85ae2591e833edbf9291a197787ef3a711d9501ee18",
+      "profile": "contract_qa_documents_v1",
+      "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3",
+      "revision": 1,
+      "root": {
+        "anonymize": true,
+        "grants": {
+          "analysis": [
+            "plan",
+            "retrieve_chunks",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "delivery": [],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "intake": []
+        },
+        "maximum_egress_tier": 0,
+        "minimum_inference_tier": 1,
+        "privileged": false,
+        "resources": {
+          "document_ids": [
+            "69e6ff81-8f5a-4aeb-8e5d-c82b221fae43",
+            "71a16d78-61f3-49a3-888b-dce8a8eb87fe"
+          ],
+          "source_names": []
+        },
+        "skill": {
+          "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+          "name": "contract-questions-orchestrator"
+        }
+      },
+      "root_allowance_usd": "1.1562",
+      "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa"
+    },
+    "plan_hash": "d91fbca85be44809757608e76787e759041d037542084bcc18e573c6a957beee",
+    "reserved_usd": "0.0000",
+    "result": {
+      "coverage": "complete",
+      "kind": "orchestration_demonstration",
+      "summary": "## Payment and breach notice\n\nFees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]). The liability cap is \"twelve months of fees\" (Source: [1]).",
+      "topics": [
+        {
+          "outcome": {
+            "artifact": {
+              "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+              "name": "findings.json",
+              "revision": 1,
+              "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df"
+            },
+            "failure_code": null,
+            "findings": [
+              "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2])."
+            ],
+            "status": "completed",
+            "summary": "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]).",
+            "verification": "unverified"
+          },
+          "session_id": "9a149f0e-3acc-4ef2-b777-971c3f3be1df",
+          "topic": "Payments"
+        },
+        {
+          "outcome": {
+            "artifact": {
+              "digest": "c150fa6183ff3af73bc65976c18fe23ae76f5dba29e6d08e54435154f5fa5636",
+              "name": "findings.json",
+              "revision": 1,
+              "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3"
+            },
+            "failure_code": null,
+            "findings": [
+              "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2])."
+            ],
+            "status": "completed",
+            "summary": "Fees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]).",
+            "verification": "unverified"
+          },
+          "session_id": "3f50ae5a-7a05-4546-a527-20a58b3096b3",
+          "topic": "Renewal and termination"
+        }
+      ],
+      "verification": "unverified"
+    },
+    "root": {
+      "allocation_usd": "1.1562",
+      "effects": [
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0552",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 2987,
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0552",
+            "tier": 1
+          },
+          "charged_usd": "0.0552",
+          "completed_at": "2026-10-06T15:41:43.896357Z",
+          "created_at": "2026-10-06T15:41:43.882862Z",
+          "effect_key": "chat:plan:v1",
+          "intent": "plan",
+          "outcome": "success",
+          "reserved_usd": "0.0552",
+          "skill": {
+            "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+            "name": "contract-questions-orchestrator",
+            "version": "1.0.0"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "planning",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": null,
+          "charged_usd": "0.0000",
+          "completed_at": "2026-10-06T15:41:45.477513Z",
+          "created_at": "2026-10-06T15:41:45.450130Z",
+          "effect_key": "demo:collect:9a149f0e-3acc-4ef2-b777-971c3f3be1df:v1",
+          "intent": "workspace_read",
+          "outcome": "success",
+          "reserved_usd": "0.0000",
+          "skill": null,
+          "status": "completed",
+          "step": {
+            "kind": "findings_collected",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": null,
+          "charged_usd": "0.0000",
+          "completed_at": "2026-10-06T15:41:45.521568Z",
+          "created_at": "2026-10-06T15:41:45.494143Z",
+          "effect_key": "demo:collect:3f50ae5a-7a05-4546-a527-20a58b3096b3:v1",
+          "intent": "workspace_read",
+          "outcome": "success",
+          "reserved_usd": "0.0000",
+          "skill": null,
+          "status": "completed",
+          "step": {
+            "kind": "findings_collected",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0585",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 4625,
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0585",
+            "tier": 1
+          },
+          "charged_usd": "0.0585",
+          "completed_at": "2026-10-06T15:41:45.571396Z",
+          "created_at": "2026-10-06T15:41:45.554496Z",
+          "effect_key": "demo:synthesis:v1",
+          "intent": "run_skill",
+          "outcome": "success",
+          "reserved_usd": "0.0585",
+          "skill": {
+            "digest": "e69ed6b299051ad349c84ef823a420b34a52d26428a66c563c697cedb46b3d99",
+            "name": "contract-questions-orchestrator",
+            "version": "1.0.0"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "synthesis",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        }
+      ],
+      "files": [],
+      "outcome": null,
+      "phase": "delivery",
+      "reserved_usd": "0.0000",
+      "session_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+      "spent_usd": "0.1137",
+      "status": "completed",
+      "tools": [],
+      "turn_limit": 0,
+      "updated_at": "2026-10-06T15:41:45.627920Z"
+    },
+    "root_id": "0af72083-9da6-43f5-ac02-0e4aa4486ffa",
+    "spent_usd": "0.8583",
+    "status": "completed",
+    "stop_reason": null,
+    "verification": "unverified"
+  }
+}

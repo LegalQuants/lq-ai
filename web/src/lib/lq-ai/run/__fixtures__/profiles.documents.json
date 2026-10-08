@@ -1,0 +1,89 @@
+{
+  "active_run": null,
+  "chat_id": "95f75653-3b51-4aba-a9b0-7614eddb8429",
+  "profiles": [
+    {
+      "attempt_timeout_seconds": 300,
+      "available": true,
+      "budget_usd": "10.0000",
+      "child_allowance_usd": "3.4686",
+      "child_turn_limit": 5,
+      "documents": "selected",
+      "evidence": "citations",
+      "max_children": 2,
+      "max_documents": 8,
+      "model": "selected/native",
+      "planning_allowance_usd": "0.5781",
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "profile": "contract_qa_documents_v1",
+      "reads": "Only the documents you select for this run. No other matter files or live sources.",
+      "reason": null,
+      "reason_text": null,
+      "root_allowance_usd": "1.1562",
+      "summary": "Splits a request into Contract QA tasks on documents you select from this matter.",
+      "title": "Contract Questions on your documents",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    },
+    {
+      "attempt_timeout_seconds": 120,
+      "available": true,
+      "budget_usd": "2.0000",
+      "child_allowance_usd": "0.7434",
+      "child_turn_limit": 2,
+      "documents": "packet",
+      "evidence": "unverified",
+      "max_children": 2,
+      "max_documents": null,
+      "model": "selected/native",
+      "planning_allowance_usd": "0.2478",
+      "planning_notice": "Propose plan authorizes one model call within the displayed total cap. The planning call receives your request only, not earlier messages. Child work requires separate approval.",
+      "profile": "model_demo_v1",
+      "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+      "reason": null,
+      "reason_text": null,
+      "root_allowance_usd": "0.4956",
+      "summary": "Splits a request into Contract QA tasks on a fictional vendor agreement.",
+      "title": "Contract Questions Orchestrator",
+      "tools": [
+        {
+          "label": "Read a selected document",
+          "name": "read_document",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Read back a working note",
+          "name": "read_note",
+          "phase": "analysis",
+          "registered": true
+        },
+        {
+          "label": "Save a working note",
+          "name": "save_note",
+          "phase": "analysis",
+          "registered": true
+        }
+      ]
+    }
+  ],
+  "project_id": "79cacec3-76ab-477d-8677-16cdfb90bcc3"
+}

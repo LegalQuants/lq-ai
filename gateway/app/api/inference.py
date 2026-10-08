@@ -1416,24 +1416,42 @@ def _correlation_ids(
     return chat_id, message_id
 
 
-# Known values for the ``inference_routing_log.purpose`` column. Values
-# outside this set fall back to ``'chat'`` in :func:`_purpose_from_request`
-# so an arbitrary caller can't pollute the column with free-form strings.
-_KNOWN_PURPOSES = frozenset({"chat", "judge_paraphrase", "embedding", "tabular_bulk_op"})
+# Known values for the ``inference_routing_log.purpose`` column: a closed
+# set, so an arbitrary caller can't pollute the column with free-form
+# strings. Every label the backend sends is listed, so each kind of traffic
+# is recorded as what it is and not as ``'chat'`` (ADR 0038 D2). The column
+# is ``varchar(32)``; a label must fit it.
+_KNOWN_PURPOSES = frozenset(
+    {
+        "chat",
+        "embedding",
+        # Citation Engine judges, each calibrated on its own rows.
+        "judge_paraphrase",
+        "judge_case_content",
+        "judge_authority_content",
+        "judge_treatment",
+        # Batch executors.
+        "tabular_extraction",
+        "tabular_bulk_op",
+        "playbook_executor",
+        "playbook_easy_extract",
+        # The autonomous layer: a legacy single session, and a governed run.
+        "autonomous_executor",
+        "orchestration_run",
+    }
+)
 
 
 def _purpose_from_request(chat_request: ChatCompletionRequest) -> str:
     """Resolve the routing-log ``purpose`` tag from the chat request envelope.
 
-    M2-E2 added ``lq_ai_purpose`` to :class:`ChatCompletionRequest`. The
-    Citation Engine sets it to ``'judge_paraphrase'`` on every Stage 3
-    / Stage 4 judge call so the api/ cost-calibration query can filter
-    routing-log rows down to judge traffic only. Other callers leave
-    it unset and the row records ``'chat'``.
+    M2-E2 added ``lq_ai_purpose`` to :class:`ChatCompletionRequest` so the
+    backend's cost-calibration queries can filter routing-log rows down to
+    one kind of traffic. Callers that leave it unset record ``'chat'``.
 
-    Unknown values fall back to ``'chat'`` defensively — the column is
-    ``varchar(32)`` and downstream code expects one of the known
-    values.
+    A known label is recorded as sent. An unknown value still falls back to
+    ``'chat'`` defensively: the set is closed, and a caller cannot add to it
+    by sending a string.
     """
 
     raw = chat_request.lq_ai_purpose
