@@ -14,6 +14,10 @@ on:
       tag:
         description: 'Release tag for the .dmg (e.g. desktop-v0.4.0)'
         required: true
+      diagnostics:
+        description: 'Expose notarization errors without publishing a release'
+        type: boolean
+        default: false
   push:
     tags: ['desktop-v*']
 
@@ -37,6 +41,33 @@ jobs:
         run: npx vitest run
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Expose the underlying Apple notarization error
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostics }}
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const builder = path.dirname(require.resolve('app-builder-lib/package.json'));
+          const file = require.resolve('@electron/notarize/lib/notarytool', { paths: [builder] });
+          const source = fs.readFileSync(file, 'utf8');
+          const needle = 'const parsed = JSON.parse(result.output.trim());';
+          if (source.split(needle).length !== 2) {
+            throw new Error('Unexpected notarization dependency source; diagnostic patch not applied');
+          }
+          const replacement = `let parsed;
+          try {
+            parsed = JSON.parse(result.output.trim());
+          } catch {
+            let detail = result.output.trim();
+            for (const key of ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID', 'CSC_LINK', 'CSC_KEY_PASSWORD']) {
+              const secret = process.env[key];
+              if (secret) detail = detail.split(secret).join('[redacted]');
+            }
+            throw new Error('Apple notarytool exited with code ' + result.code + '\\n' + detail);
+          }`;
+          fs.writeFileSync(file, source.replace(needle, replacement));
+          console.log('Notarization error diagnostics enabled');
+          JS
       - name: Resolve the image tag pinned into this launcher
         id: image-tag
         env:
@@ -64,8 +95,16 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           LQ_AI_RELEASE_IMAGE_TAG: ${{ steps.image-tag.outputs.value }}
-        run: npm run dist
+        run: |
+          if [[ "${{ inputs.diagnostics }}" == "true" ]]; then
+            npm run prepack:compose
+            npm run build
+            npx electron-builder --mac --publish never
+          else
+            npm run dist
+          fi
       - name: Publish .dmg to the release
+        if: ${{ !inputs.diagnostics }}
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: desktop/dist/*.dmg
