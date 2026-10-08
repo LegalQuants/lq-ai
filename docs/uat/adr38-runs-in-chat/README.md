@@ -1,5 +1,12 @@
 # ADR 0038 governed runs in chat: recorded walkthrough
 
+> **This walkthrough records the first build, of 2026-10-06.** The design was changed on
+> 2026-10-07 and 2026-10-08: the orchestrator is now a model, "New harness", chosen in the
+> model picker, and [ADR 0038](../../adr/0038-skill-backed-orchestration-profile.md) was
+> rewritten for it. The screenshots and records in this folder show the earlier composer,
+> run message and profiles, so they are not of the present build. A new recorded
+> walkthrough has not been made.
+
 **Date:** 2026-10-06. **Base commit:** `5e128d5ba`. The feature is uncommitted
 working-tree changes on top of that commit.
 **What this is:** screenshots and API records of governed runs in chat, taken by an

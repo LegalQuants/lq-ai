@@ -243,7 +243,7 @@ each `orchestration.effect`.
 |---|---|---|
 | `orchestration.job` | `api/app/workers/orchestration_worker.py` | One arq job for one session of a run. It continues the trace carried in the job (below). |
 | `orchestration.run` | `api/app/autonomous/orchestration/executor.py` | One claimed execution of one session: the planning call, one task, or the combined answer. A child of `orchestration.job`. |
-| `orchestration.effect` | `api/app/autonomous/orchestration/effects.py` | One durable effect: a model call, a document read, or a working-note read or write, each sent through the chokepoint. A tool call the application refuses is a step too: it has an effect span with `orchestration.intent` `refused` and `orchestration.step_kind` `tool_refused`, and no `autonomous.tool_call` beneath it, because nothing runs. It also leaves a zero-cost effect row, a step shown to the owner and an `orchestration.tool_refused` audit row. |
+| `orchestration.effect` | `api/app/autonomous/orchestration/effects.py` | One durable effect: a model call, a document read, a knowledge-base search, or a working-note read or write, each sent through the chokepoint. A tool call the application refuses is a step too: it has an effect span with `orchestration.intent` `refused` and `orchestration.step_kind` `tool_refused`, and no `autonomous.tool_call` beneath it, because nothing runs. It also leaves a zero-cost effect row, a step shown to the owner and an `orchestration.tool_refused` audit row. |
 
 | Attribute | On | Description |
 |---|---|---|
@@ -251,12 +251,12 @@ each `orchestration.effect`.
 | `orchestration.session_id` | all three | UUID of the session the span acts for (the root, or one task) |
 | `orchestration.outcome` | job, run | What the invocation ended as. On `orchestration.run`: `completed`, `waiting_children`, `busy` or `stopped`; not set when the run span fails. On `orchestration.job`: one of those, or `disabled` (the run's profile is switched off) or `interrupted` (an error ended the invocation; the recovery sweep resumes from stored state). Every job that opens a span records one. A job that arrives when no profile is enabled at all returns `disabled` before any span opens. |
 | `error.type` | all three, and `autonomous.tool_call` | Set only when the span failed: the exception's class name, which is also the status description. These spans record no exception event and no exception message, because a message can quote SQL parameters, a provider's reply or document text (`quiet_span` in `api/app/observability_helpers.py`). |
-| `orchestration.profile` | run | Registry profile identifier, for example `model_demo_v1` |
+| `orchestration.profile` | run | Registry profile identifier: `model_demo_v1` (the 0.8.0 fictional profile) or `new_harness_v1` (New harness) |
 | `orchestration.role` | run | `root` or `child` |
 | `orchestration.stage` | run | `planning` before a plan exists, `execution` after |
 | `orchestration.phase` | effect | Autonomous phase the effect ran in |
 | `orchestration.intent` | effect | The tool intent label, never its parameters |
-| `orchestration.skill` | effect | Name of the pinned skill the session applies |
+| `orchestration.skill` | effect | Name of what the session is pinned to: an installed skill, or for a profile that pins engine prompt files the prompt's name, such as `new_harness/orchestrator.v2`. A prompt file is not a skill, and the name is the file's name. |
 | `orchestration.step_kind` | effect | The step label shown to the owner, such as `model_turn` or `document_read`; empty when the effect has none |
 
 **How a run's trace is connected.**
@@ -283,6 +283,16 @@ each `orchestration.effect`.
    `LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME`) to `arq-worker`. Both recipes under
    `deploy/observability/` set `arq-worker` to `http://otel-collector:4318` with service
    name `lq-ai-arq-worker` and the same sampler default as the API.
+
+**What a span does not carry.** A span holds identifiers and labels. It holds no
+prompt, no opening message, no model reply, no tool-call argument, no document text and
+no search query or passage. How a run's calls were set up and what its model wrote back
+are read from the run's own records through an owner-only route,
+`GET /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace`, described in the
+[backend OpenAPI sketch](api/backend-openapi.yaml). That read is not a span, a log or an
+export to a Collector. It rebuilds each call's opening from the records and returns each
+turn's text and tool calls to the run's owner only. It does not hold document text a read
+returned or passages a search returned, nor a later turn's full request.
 
 **What was checked.** The plan's
 [Implementation status](plans/issue-662-c1-governed-runs-in-chat.md#implementation-status)
@@ -355,9 +365,14 @@ rows through the run store (`api/app/autonomous/orchestration/store.py`), with
 text. The ADR 0038 branch (proposed, unmerged) adds `orchestration.tool_refused` (a call
 the application refused: the registry tool name or `unregistered`, and a code, never the
 model's own text) and `orchestration.run_closed` (an owner closed an uncertain run: the
-number of effects closed and the amount charged). For a run hosted in a chat,
-`orchestration.root_delivered` carries the chat and message identifiers. For a profile
-whose answers are checked against documents it also records `verification`
+number of effects closed and the amount charged). A run the orchestrator answered by
+itself, with no plan, writes `orchestration.answered_directly` in place of
+`orchestration.root_delivered`, with `verification: unverified` and the chat and message
+identifiers; a plan that fails writes `orchestration.planning_failed` with the stop reason
+as a label (`invalid_proposal`, `unfunded_plan`, `plan_not_handed_over` or
+`plan_has_placeholders`). For a run hosted in a chat, `orchestration.root_delivered`
+carries the chat and message identifiers. For a profile
+whose answers are checked against the run's sources (the documents selected for it, and files a knowledge-base search found) it also records `verification`
 (`citations_checked` or `unverified`), the counts of quotations verified, unverified and
 unresolved, the number of quoted passages that carry no source marker and so were not
 checked (`citations_unmarked`), and the fiduciary-gate status. If the checks themselves fail, the answer is
@@ -391,7 +406,7 @@ does a label outside the set. The column is `varchar(32)`, so a label must fit i
 | `playbook_executor` | Playbook executor |
 | `playbook_easy_extract` | Easy Playbook extraction |
 | `autonomous_executor` | A legacy single autonomous session's model calls |
-| `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
+| `orchestration_run` | A governed run's model calls: planning (which may be the orchestrator's own answer), tasks and the combined answer |
 
 **Proposed, unmerged (ADR 0038 D2).** Only `chat`, `embedding` and `judge_paraphrase` were
 in the set before. The other labels were already sent by the backend and recorded as
@@ -522,7 +537,11 @@ or `gateway/` implements it. The `telemetry:` block in `gateway.yaml.example`, w
 and read by no code. The `LANGFUSE_*` variables in `.env.example` and the Compose files
 are read by no code either, so setting them has no effect. Trace export is controlled only
 by the `OTEL_*` variables in [§1](#1-environment-variable-matrix). Spans, audit rows and
-routing-log rows carry identifiers, counts and labels, not prompt or document text.
+routing-log rows carry identifiers, counts and labels, not prompt or document text. On the
+ADR 0038 branch (proposed, unmerged), a run's owner can read how each call was set up and
+what the model wrote back through the trace read described under
+[the governed-run spans](#orchestrationjob--orchestrationrun--orchestrationeffect); that read draws on the run's own records and is
+not this sink.
 
 **SLO + RUM catalog (from [`docs/proposals/opentelemetry-deepening.md`](proposals/opentelemetry-deepening.md)):**
 DE-E (Browser RUM, same as DE-303 above), DE-F (Published SLO catalog), and DE-G
