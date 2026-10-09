@@ -606,8 +606,9 @@ security review.
   Under ADR 0034, accepted on 2026-10-04, security review means maintainer review
   with the security-path checklist applied; the project has no separate security team.
   The DE-294 handoff rules are implemented as tests, not reviewed.
-- **No ratification.** ADR 0038 is Proposed. The direct answer amends ADR 0035 D1, which is
-  Accepted, and that amendment is a separate draft awaiting its own ratification.
+- **No ratification.** ADR 0038 is Proposed. The direct answer, and a run in a chat that
+  is in no matter, amend ADR 0035 D1 and D2, which are Accepted. ADR 0038 D1 gives the
+  words, and they are ratified with it.
 - **Open rulings.** The ADR's nine open questions are unanswered, among them the two prompt
   texts, the quotation pattern, the file rules and the placeholder limit.
 - **No full Docker stack smoke** of the revised design is recorded here.

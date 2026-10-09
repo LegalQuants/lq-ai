@@ -20,8 +20,9 @@ live, a person must accept it on a configured provider; see
 **Status.** [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md) is Proposed,
 not ratified. The implementation is on an unmerged branch, has had no maintainer or
 security review, and does not merge before ratification. Both profile switches default to
-off. The direct answer amends ADR 0035 D1, which is Accepted; that amendment is a separate
-draft awaiting its own ratification. Design, and what was and was not verified:
+off. The direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and
+D2, which are Accepted; ADR 0038 D1 gives the words, and they are ratified with it.
+Design, and what was and was not verified:
 [plan](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). This runbook
 replaces the one written for the first build, which had a profile control beside the model
 picker. That build's recorded walkthrough was removed from the branch on 2026-10-10,
@@ -364,6 +365,6 @@ live. Record the provider and model used for UAT-06 to UAT-29.
   (UAT-48 to UAT-51): **pending**.
 - Configured-provider run for New harness: **pending**. Provider/model: ______
 - Branch commit: ______ Accepted cases: ______ Defects / deferred cases: ______
-- Maintainer review: **pending**. Security review: **pending**. ADR 0038 ratification:
-  **pending**. ADR 0035 D1 amendment ratification: **pending**.
+- Maintainer review: **pending**. Security review: **pending**. ADR 0038 ratification,
+  which carries the amendment to ADR 0035 D1 and D2: **pending**.
 - Production enablement: **not approved by this UAT**.

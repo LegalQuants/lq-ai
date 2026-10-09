@@ -7,9 +7,9 @@ rulings on the open questions recorded 2026-10-09; rulings 2, 4, 6 and 10 built
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
 **Amends:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md) for run
-sub-agents only, as stated in D4. D1 also proposes an amendment to ADR 0035 D1 (a direct
-answer). ADR 0035 stays Accepted and its text is unchanged; the amendment is a separate
-draft and needs its own ratification.
+sub-agents only, as stated in D4. Amends ADR 0035 D1 and D2, in the words given in D1
+below: a root may answer without a batch, and a root may belong to no project. ADR 0035
+stays Accepted and its text is unchanged until this ADR is ratified.
 **Touches:** [ADR 0011](0011-transparency-first-model-selection.md): its model picker now
 holds one entry that is not a provider model (D1).
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563) and track C1 of
@@ -116,7 +116,7 @@ Either it calls the tool, and the arguments are a plan of one to four tasks that
 approves, as that exact plan, before any sub-agent runs; or it replies without calling the
 tool, and the reply is the orchestrator's own answer.
 
-**The direct answer (amends ADR 0035 D1; needs its own ratification).** A complete reply
+**The direct answer (amends ADR 0035 D1 and D2; the words are below).** A complete reply
 with no call is the orchestrator's own answer, or one question back. It is delivered at
 once and the run ends `completed`, with no plan, no task and no approval: sending the
 request authorized the one planning call, and nothing beyond it ran. Nothing was read or
@@ -137,20 +137,42 @@ delivered whatever the planning call cost within the root's whole allocation; a 
 that halts the run when the call settles, as for any effect. Migration 0073 lets a run end
 `completed` with no plan revision.
 
-ADR 0035 D1 permits one immutable batch of one to four children. The proposed amendment
-changes it to *at most* one batch, and adds that a root whose profile allows it may
-instead deliver the reply of its one planning call as its answer and end with no batch;
-such a root makes no other model call, admits no child, reads no document and calls no
-tool. A sentence added to ADR 0035 D2 says that where a root answers without a batch there
-is nothing to approve, and that the owner is shown that the answer came from the planning
-call alone. The barrier D2 protects is the admission of work (children, tools, document
+**The amendment to ADR 0035, in its words.** Ratifying this ADR makes the three changes
+below to ADR 0035 and no other. Until then ADR 0035 stands as written, and it carries a
+note that points here.
+
+In ADR 0035 D1, "Permit one immutable batch of one to four children, one delegation
+level and no child delegation." becomes:
+
+> Permit **at most** one immutable batch of one to four children, one delegation level
+> and no child delegation. A root whose profile allows it may instead deliver the reply
+> of its one planning call as its answer and end with no batch. Such a root makes no
+> other model call, admits no child, reads no document and calls no tool.
+
+In ADR 0035 D2, after "Planning uses a disclosed root allowance.", this is added:
+
+> Where a root answers without a batch, there is nothing to approve: sending the
+> request authorized the one planning call, and nothing beyond that call runs. The
+> owner is shown that the answer came from that call alone.
+
+In ADR 0035 D1, "Each manual root belongs to an owner and active project." becomes:
+
+> Each manual root belongs to an owner, and to an active project unless its profile
+> allows a root with none. A root with no project has no project's terms of its own;
+> ADR 0038 D5 states the terms it runs under.
+
+The barrier ADR 0035 D2 protects is the admission of work (children, tools, document
 reads, spend past the planning allowance), and a direct answer admits none of it. What
-changes is that a model's text reaches the owner without a plan approved first, as it does
-in an ordinary chat turn. Only New harness answers this way; the fictional profile plans
-in text, and a reply of its that is not a plan fails as before.
+changes is that a model's text reaches the owner without a plan approved first, as it
+does in an ordinary chat turn. Only New harness answers this way; the fictional profile
+plans in text, and a reply of its that is not a plan fails as before. The third change
+is what "A chat outside a matter" below needs; the rule for such a root's terms is in
+D5.
 
 **A chat outside a matter.** *Authorization path; needs security review.* A chat need not
-be in a matter (the API calls a matter a project). Migration 0072 lets
+be in a matter (the API calls a matter a project). ADR 0035 D1 gives every root an
+active project, so this amends it; the words are with the amendment above. Migration
+0072 lets
 `orchestration_roots.project_id` be null. Such a run has no terms of its own. With no
 document from a matter it is not privileged and its inference-tier floor is the profile's.
 It may read the owner's files wherever they are filed, and it then takes on the terms of
@@ -910,7 +932,8 @@ branch as it is, and the item is marked **not built**.
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.
 - ADR 0011's model picker now holds one entry that is not a provider model (D1).
-- ADR 0035 is unchanged. Its D1 amendment is a separate draft awaiting ratification.
+- ADR 0035's text is unchanged until this ADR is ratified. D1 gives the words that then
+  change in its D1 and D2, and ADR 0035 carries a note that points here.
 - PRD §3.1 and §3.10, the feature PRD, the OpenAPI sketches, the schema document,
   HONEST-STATE and the observability guide change with the code.
 - Not decided here: sources and connectors in runs; helpers and persistent workspaces on
