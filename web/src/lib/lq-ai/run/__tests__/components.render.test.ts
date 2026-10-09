@@ -2315,9 +2315,8 @@ describe('while the first call of a run is being answered', () => {
 			shown.shows('<span class="label">Reading your request…</span>');
 			shown.hides('Proposing a plan');
 			shown.hides('The model is proposing');
-			shown.shows(
-				'<p class="detail">One model call is reading your request. It will answer, or propose a plan. No task runs until you approve a plan.</p>'
-			);
+			// The headline is the whole status: no sentence under it.
+			shown.hides('<p class="detail">');
 			// Nothing to approve yet, so nothing to open: a plan line that is not a fold.
 			shown.hides('lq-ai-run-plan-card');
 			shown.hides('lq-ai-run-approve');

@@ -299,8 +299,9 @@ function statusDetail(run: RunLike): string | null {
 	switch (run.status) {
 		case 'planning':
 			// Under a tool call the model may answer instead, so it is not said that a plan will come.
+			// The headline says it is reading the request, and nothing is added to that.
 			return plansByTool(run)
-				? 'One model call is reading your request. It will answer, or propose a plan. No task runs until you approve a plan.'
+				? null
 				: 'The model is proposing bounded tasks. Nothing has been approved, and nothing else runs until you approve a plan.';
 		case 'awaiting_approval':
 			return 'Review the plan below. Nothing runs until you approve it.';

@@ -1,12 +1,12 @@
 <script lang="ts">
 	/**
 	 * The strip above the composer while New harness is the chat's model (ADR 0038
-	 * D1): what a request will read and what it may spend, shown before anything is
-	 * sent. Send authorizes one planning call within the displayed total cap; the
-	 * tasks need approval of the exact plan afterwards. The profile's own notice says
-	 * what the planning call receives.
+	 * D1): one line, what a request may spend, shown before anything is sent. Send
+	 * authorizes one planning call within the displayed total cap; the tasks need
+	 * approval of the exact plan afterwards.
 	 *
-	 * The limits and tools are one fold away, and in it: the route (the model and the
+	 * Everything else is one fold away, and in it: what a request reads, what Send
+	 * does (the profile's own notice of what the planning call receives), the route (the model and the
 	 * inference tier), whether text is pseudonymized on its way there, the system
 	 * prompts that instruct the run, each of which is read from the server only when it is
 	 * opened, and, where the orchestrator may answer a request by itself, that such an answer
@@ -64,19 +64,24 @@
 </script>
 
 <section class="strip" data-testid="lq-ai-run-mode-panel" aria-label="New harness">
-	<p class="line">
-		<span class="reads" data-testid="lq-ai-run-mode-reads">{profile.reads}</span>
-		{#if spend.length > 0}
-			<span class="spend" data-testid="lq-ai-run-mode-spend">{spend.join(' · ')}</span>
-		{/if}
-	</p>
-	<p class="notice" data-testid="lq-ai-run-planning-notice">{profile.planning_notice}</p>
-
 	{#if unavailable}<p class="unavailable" role="alert">{unavailable}</p>{/if}
 
 	<details class="limits" data-testid="lq-ai-run-mode-limits">
-		<summary>Limits and tools</summary>
+		<summary>
+			Limits and tools
+			{#if spend.length > 0}
+				<span class="spend" data-testid="lq-ai-run-mode-spend">{spend.join(' · ')}</span>
+			{/if}
+		</summary>
 		<dl class="facts">
+			<div class="wide">
+				<dt>What a request reads</dt>
+				<dd data-testid="lq-ai-run-mode-reads">{profile.reads}</dd>
+			</div>
+			<div class="wide">
+				<dt>What Send does</dt>
+				<dd data-testid="lq-ai-run-planning-notice">{profile.planning_notice}</dd>
+			</div>
 			{#each facts as fact}
 				<div>
 					<dt>{fact.label}</dt>
@@ -147,24 +152,9 @@
 	p {
 		margin: 0;
 	}
-	.line {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.15rem 0.75rem;
-		justify-content: space-between;
-	}
-	.reads {
-		overflow-wrap: anywhere;
-	}
 	.spend {
-		color: var(--lq-text-secondary);
+		margin-left: 0.75rem;
 		font-variant-numeric: tabular-nums;
-		white-space: nowrap;
-	}
-	.notice {
-		margin-top: 0.15rem;
-		font-size: 0.75rem;
-		color: var(--lq-text-secondary);
 	}
 	.unavailable {
 		margin: 0.35rem 0;
@@ -174,14 +164,10 @@
 		border: 1px solid var(--lq-warn-border);
 		border-radius: var(--lq-radius);
 	}
-	.limits {
-		margin-top: 0.25rem;
-	}
 	summary {
 		cursor: pointer;
 		font-size: 0.75rem;
 		color: var(--lq-text-secondary);
-		width: fit-content;
 	}
 	summary:focus-visible {
 		outline: 2px solid var(--lq-accent);

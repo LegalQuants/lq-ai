@@ -5,7 +5,7 @@
 	 *
 	 * A run in another chat can be opened from here. An uncertain run in another chat
 	 * can be closed from here. A run in this chat already has its own controls in the
-	 * thread, so the notice points there instead of repeating them.
+	 * thread, so the notice is one line and repeats none of them.
 	 *
 	 * The chat title is the owner's own text and is rendered as text only.
 	 */
@@ -39,11 +39,9 @@
 >
 	<p class="line"><strong>{label}</strong> · {statusText}</p>
 	{#if here}
-		<p class="hint">
-			{uncertain
-				? 'Close it from its message in this thread to start another run.'
-				: 'Its progress and controls are in its message in this thread.'}
-		</p>
+		{#if uncertain}
+			<p class="hint">Close it from its message in this thread to start another run.</p>
+		{/if}
 	{:else}
 		<div class="actions">
 			{#if active.chat_id}

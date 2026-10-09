@@ -241,16 +241,11 @@ describe('runDetail', () => {
 		expect(detail).not.toMatch(/(?<!un)verified|\bconfirmed\b|\bchecked\b/i);
 	});
 
-	it('explains a run that is reading the request without saying a plan is coming', () => {
+	it('adds nothing under the headline of a run that is reading the request', () => {
 		const planning = run('direct.planning');
 		expect(plansByTool(planning)).toBe(true);
-		const detail = runDetail(planning)!;
-		expect(detail).toBe(
-			'One model call is reading your request. It will answer, or propose a plan. No task runs until you approve a plan.'
-		);
-		expect(detail).not.toMatch(/proposing|bounded tasks/i);
-		// It no longer says "nothing has been approved" as if a plan were waiting to be.
-		expect(detail).not.toMatch(/nothing has been approved/i);
+		// The headline is the whole status; the explanation is in the documentation.
+		expect(runDetail(planning)).toBeNull();
 		// Where the plan is written in text the model is proposing tasks, and that is said as before.
 		expect(runDetail(run('planning'))).toBe(
 			'The model is proposing bounded tasks. Nothing has been approved, and nothing else runs until you approve a plan.'
