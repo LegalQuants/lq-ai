@@ -1,7 +1,8 @@
 # ADR 0030 — Pacing 1.0: date preconditions, the January checkpoint, and named trains
 
-**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
-**Date:** 2026-09-09
+**Status:** Accepted (2026-10-04) — committee-ratified at the weekly call. The milestone
+consequence was amended on 2026-10-10, after the call.
+**Date:** 2026-09-09 (amended 2026-10-10)
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0029 — definition of 1.0](0029-definition-of-1.0.md),
 [ADR 0025 — release versioning and pipeline ordering](0025-release-versioning-and-pipeline-ordering.md),
@@ -116,9 +117,12 @@ adjusting the other.
 - **PRD §7.8** gains a note that release *planning* uses named trains while release *numbering*
   stays computed per ADR 0025 — the two are not in tension, they are different objects.
 - **ROADMAP.md** gains the "Path to 1.0" section with the four trains and their contents.
-- A GitHub milestone is created for each train, and a `road-to-1.0` label attaches to gate
-  items. Numbered release milestones are kept as release buckets and are **not** trains — a
-  release ships as whatever number ADR 0025 computes.
+- Gate items carry the `road-to-1.0` label and sit in one GitHub milestone, `v1.0.0`, which has
+  no due date because the tag has none (decision 5). The trains are **not** GitHub milestones:
+  an issue can be in only one, so the trains' names and dates live in ROADMAP.md. `v1.0.0` is
+  the one version the project may name ahead of time — ADR 0025 reserves `major` for it and
+  ADR 0029 defines it by criteria. The other numbered release milestones are kept as release
+  buckets and are **not** trains; a release ships as whatever number ADR 0025 computes.
 - The capacity arithmetic is published with the trains rather than held privately: ROADMAP.md
   states the gate's build + review estimate against observed throughput, so when a train ships
   thin, the reason is already on the page.
