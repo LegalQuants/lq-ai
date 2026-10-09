@@ -191,8 +191,13 @@ session's trace (the pinned prompts, the opening messages, what each model wrote
 answer). This follows the existing rule for receipts and ledgers (`is_privileged_reader`),
 and each such read writes one audit row naming the reader and the owner
 (`auditor.run_viewed`, `auditor.run_trace_viewed`). It is wider than that rule was: until
-now a privileged reader saw records about a chat, not its text. They are not given a run's
-working files, and cannot approve, reject, halt or close it. Anyone else gets the 404 that
+now a privileged reader saw records about a chat, not its text. They cannot approve,
+reject, halt or close it, and the route that serves a working file refuses them. That
+route protects less than it sounds: a task's findings are its outcome in the tree, and the
+text of a note a task saved is the arguments of its `save_note` call, which the trace
+shows. A privileged reader therefore reads both. An independent review found this, and a
+test pins it. Keeping a note's text from them would mean leaving tool-call arguments out
+of the trace they are given, which is not built. Anyone else gets the 404 that
 a missing run gets. The receipt page will open for them with its controls drawn; each
 control then fails.
 
@@ -692,7 +697,8 @@ the originals. The arguments are parsed as JSON, the placeholders are replaced i
 values only, in one pass, and the document is written out again. Only a placeholder that
 request assigned is replaced, and only where it stands as a whole token. The arguments are
 returned exactly as the model wrote them when they are not a JSON object or array, when an
-object names a member twice, when they exceed the gateway's own size or depth bound, and
+object names a member twice, when they exceed the gateway's own size or depth bound, when
+the result could not be sent as UTF-8 or written as JSON, and
 when nothing in them is a placeholder of that request, so the application's strict plan
 parser still sees what the model wrote. The field changes only what the gateway returns to
 its caller. It is stripped from the outbound body, and it does nothing on a request that
@@ -705,13 +711,19 @@ call is different: it is echoed back to the model on the next turn inside an ass
 message, which the request path does not pseudonymize, so a restored name would then leave
 as written. The run boundary refuses the field on any call that is not a bound planning
 call, and the field is part of the route binding and so of the call's identity. It is
-absent from every other call, which keeps the identity it had.
+absent from every other call, in its identity and in the request sent, so a gateway that
+does not know the field is sent nothing new by them.
 
 The refusal stays as a second line. A plan from a pseudonymized call that still carries
 something shaped like a placeholder (one the model altered or invented, which is in no
 mapping) fails with its own stop reason, `plan_has_placeholders`, and nothing runs. The
-test looks for a token of that shape in every key and string value of the arguments,
-including one spelled with a JSON escape. A call counts as pseudonymized unless its receipt
+test looks for that shape anywhere in every key and string value of the arguments,
+including one spelled with a JSON escape and one inside a longer run of characters such
+as `PERSON_0001s`. The gateway restores a placeholder only as a whole token, and a later
+call's reply text is restored by plain replacement, which would hit one inside a longer
+run and put a name of that later request there. So whatever the gateway left that a
+later replacement could hit is refused; an independent review found that this had fallen
+between the two rules. A call counts as pseudonymized unless its receipt
 records that none was applied. A name that is itself shaped like a placeholder is refused
 too. The orchestrator's own answer is reply text and is restored as before.
 
@@ -833,8 +845,10 @@ branch as it is, and the item is marked **not built**.
     has not ruled on: an auditor cannot start, approve or reject either, because the
     role is read-only by definition; the cross-owner read is given to an admin as well
     as an auditor, as the existing rule for receipts does; that read includes the
-    answer's text, which the trace cannot leave out; and a run's working files stay
-    owner-only. Not built: stopping a running run when its owner's role changes.
+    answer's text, which the trace cannot leave out; and the working-file route stays
+    owner-only, although the tree and the trace already show a task's findings and the
+    notes it saved (D1). Whether a privileged reader should see those is the open part
+    of this ruling. Not built: stopping a running run when its owner's role changes.
 11. **The order of D8.** The run engine moves onto the access module first. The resource
     routes and the chat path may follow later and do not hold back a C2 to C7 run tool;
     that move is deferred as DE-406.

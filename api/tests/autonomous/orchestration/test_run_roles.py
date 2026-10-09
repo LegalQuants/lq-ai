@@ -5,8 +5,11 @@
 * A viewer still reads their own run and can halt it: halting only narrows
   authority.
 * An admin or an auditor may read another owner's run, its plan and how its
-  sessions were set up. Each such read writes one audit row. They are not
-  given its working files and cannot act on it.
+  sessions were set up. Each such read writes one audit row. They cannot act
+  on it, and the route that serves a working file refuses them. That route
+  protects less than it sounds: a task's findings are in the tree, and a note
+  a task saved is in its trace, so both are read without it. The last test
+  pins that, so the documents cannot claim otherwise.
 * Anyone else gets the 404 a missing run gets, and no audit row is written.
 """
 
@@ -29,6 +32,7 @@ from tests.autonomous.orchestration.model_harness import (
     read,
     run_to_completion,
     start_in_chat,
+    tool_call,
 )
 
 from app.api.dependencies import get_active_user
@@ -271,7 +275,7 @@ async def test_a_privileged_reader_reads_another_owners_run_and_each_read_is_aud
         ("auditor.run_trace_viewed", root, viewed),
     ]
 
-    # Reads only. The working files stay with the owner, and nothing can be done to the run.
+    # Reads only. The working-file route refuses them, and nothing can be done to the run.
     assert (await api.client.get(f"{BASE}/{root}/files/{child}/findings.json")).status_code == 404
     assert (await api.client.post(f"{BASE}/chat-runs/{root}/halt")).status_code == 404
     assert (await api.client.post(f"{BASE}/chat-runs/{root}/close")).status_code == 404
@@ -322,7 +326,7 @@ async def test_anyone_else_gets_the_404_of_a_missing_run_and_no_audit_row(
         ]
         assert [r.status_code for r in responses] == [404, 404, 404]
     # The same body for a run that exists and one that does not.
-    for path in ("chat-runs/{}", "{}/tree"):
+    for path in ("chat-runs/{}", "{}/tree", "{0}/sessions/{0}/trace"):
         there = await api.client.get(f"{BASE}/{path.format(root)}")
         absent = await api.client.get(f"{BASE}/{path.format(missing)}")
         assert there.json() == absent.json()
@@ -341,3 +345,45 @@ async def test_a_privileged_reader_asking_for_a_run_that_does_not_exist_writes_n
     assert (await api.client.get(f"{BASE}/{missing}/tree")).status_code == 404
     assert (await api.client.get(f"{BASE}/{missing}/sessions/{missing}/trace")).status_code == 404
     assert await auditor_rows(api, auditor) == []
+
+
+async def test_what_a_privileged_reader_sees_of_a_tasks_work_without_the_file_route(
+    roles: SimpleNamespace,
+) -> None:
+    """Found in review. The working-file route is owner-only; the content is not.
+
+    A task's findings are its outcome in the tree, and the text of a note is
+    the arguments of the call that saved it, which the trace shows. A privileged
+    reader is given the tree and the trace, so they read both. This test states
+    that as it is. If a note's text should not reach them, the trace has to
+    leave it out; refusing the file route does not do it.
+    """
+    api = roles
+    api.gateway.child_script = [
+        [
+            tool_call(
+                "save_note",
+                {"name": "note-fees.md", "content": "NOTE-TEXT: fees are due.", "reason": "Keep."},
+            )
+        ],
+        None,
+    ]
+    api.gateway.child_answer = "FINDINGS-TEXT: fees are due in thirty days."
+    value = await start_in_chat(api, await new_chat(api), profile=PROFILE)
+    done = await run_to_completion(api, value)
+    root = value["root_id"]
+    child = done["tree"]["plan"]["children"][0]["dispatch_id"]
+    # The owner's own files hold exactly these two texts.
+    note = await api.client.get(f"{BASE}/{root}/files/{child}/note-fees.md")
+    findings = await api.client.get(f"{BASE}/{root}/files/{child}/findings.json")
+    assert note.status_code == 200 and note.json()["content"] == "NOTE-TEXT: fees are due."
+    assert findings.status_code == 200 and "FINDINGS-TEXT" in findings.json()["content"]
+
+    api.act_as(await api.someone("auditor"))
+    for name in ("note-fees.md", "findings.json"):
+        assert (await api.client.get(f"{BASE}/{root}/files/{child}/{name}")).status_code == 404
+    tree = await api.client.get(f"{BASE}/{root}/tree")
+    trace = await api.client.get(f"{BASE}/{root}/sessions/{child}/trace")
+    assert tree.status_code == 200 and trace.status_code == 200
+    assert "FINDINGS-TEXT" in tree.text
+    assert "NOTE-TEXT: fees are due." in trace.text

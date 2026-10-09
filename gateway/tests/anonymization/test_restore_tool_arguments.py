@@ -222,6 +222,12 @@ def test_of_two_pseudonyms_where_one_begins_the_other_each_gets_its_own_original
         '{"tasks": "PERSON_0001", "n": NaN}',
         '{"tasks": "PERSON_0001", "n": Infinity}',
         '{"tasks": "PERSON_0001", "n": -Infinity}',
+        # A number too large to write back as JSON.
+        '{"tasks": "PERSON_0001", "n": 1e999}',
+        # A lone surrogate, spelled as an escape. Written as itself it could not
+        # be sent as UTF-8, and the whole response would fail.
+        '{"tasks": "PERSON_0001 \\ud83d"}',
+        '{"tasks": ["\\udc00", "PERSON_0001"]}',
         # Nothing of ours in it: never re-serialised, spacing and escapes kept.
         '{ "tasks" : [ {"topic":"caf\\u00e9", "n": 1.50} ] }',
     ],
@@ -242,9 +248,29 @@ def test_arguments_past_the_size_or_depth_bound_come_back_exactly_as_sent() -> N
     nested = json.dumps(deep)
     assert _restored(nested, mapper) == nested
 
-    # Far past what the parser itself will follow.
-    bottomless = "[" * 100_000 + "]" * 100_000
+    # Within the size bound, and far past what the parser itself will follow.
+    bottomless = "[" * 30_000 + '"PERSON_0001"' + "]" * 30_000
+    assert len(bottomless) < 65_536
+    with pytest.raises(RecursionError):
+        json.loads(bottomless)
     assert _restored(bottomless, mapper) == bottomless
+
+
+@pytest.mark.unit
+def test_whatever_is_returned_can_be_sent_as_utf_8() -> None:
+    """A reply the gateway cannot encode fails a call the provider has already answered."""
+    mapper = _mapper(JOHN)
+    lone = '{"tasks": "PERSON_0001 \\ud83d"}'
+    pair = '{"tasks": "PERSON_0001 \\ud83d\\ude00"}'
+    # A lone surrogate: returned as sent, which is plain ASCII.
+    assert _restored(lone, mapper) == lone
+    # A pair is one character: restored, and written as itself.
+    restored = _restored(pair, mapper)
+    assert isinstance(restored, str)
+    assert json.loads(restored) == {"tasks": "John Smith \U0001f600"}
+    for arguments in (_restored(lone, mapper), restored):
+        assert isinstance(arguments, str)
+        arguments.encode("utf-8")
 
 
 @pytest.mark.unit

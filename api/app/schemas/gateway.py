@@ -204,8 +204,12 @@ class ChatCompletionRequest(BaseModel):
     filesystem-canonical built-in. Omitted means "registry-only",
     which is the right behavior for non-user-bearing callers."""
 
-    lq_ai_restore_tool_arguments: bool = False
+    lq_ai_restore_tool_arguments: bool | None = None
     """Ask the gateway to restore pseudonyms in the reply's tool-call arguments.
+
+    ``None`` (the default) leaves the field out of the request body, so every
+    call that does not ask is sent exactly as it was before the field existed,
+    also to a gateway that does not know it.
 
     The gateway restores a reply's text and, by default, returns a tool
     call's arguments as the model wrote them. Set only for a call whose

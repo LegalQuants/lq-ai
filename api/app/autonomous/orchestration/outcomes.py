@@ -152,7 +152,15 @@ class PlanCarriesPlaceholders(ValueError):
 
 # The gateway's placeholder for a value it pseudonymized: an entity type in
 # capitals, an underscore and a four-digit counter, for example PERSON_0001.
-_PLACEHOLDER = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z_]{1,40}_[0-9]{4}(?![A-Za-z0-9_])")
+#
+# Looked for anywhere, also inside a longer run of characters (PERSON_0001s,
+# XPERSON_0001, PERSON_00011). The gateway restores a plan's placeholders only
+# where one stands as a whole token, and it restores a later reply's text by
+# plain replacement, which would also hit one inside a longer run and put a
+# name of that later request in its place. So whatever the gateway left in a
+# plan, and a later replacement could hit, is refused here: nothing falls
+# between the two rules.
+_PLACEHOLDER = re.compile(r"[A-Z][A-Z_]{1,40}_[0-9]{4}")
 
 
 def carries_placeholder(text: str) -> bool:
@@ -164,8 +172,9 @@ def carries_placeholder(text: str) -> bool:
     own mappings: they cannot restore it, and may give the same placeholder to
     a different value. Such a plan is refused rather than run.
 
-    The test is on shape, so text that only looks like a placeholder is
-    refused too, and only where the planning call was in fact pseudonymized.
+    The test is on shape, anywhere in the text, so text that only looks like
+    a placeholder is refused too, and only where the planning call was in fact
+    pseudonymized.
     """
     return _PLACEHOLDER.search(text) is not None
 

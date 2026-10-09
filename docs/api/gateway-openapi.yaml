@@ -1225,8 +1225,9 @@ components:
             Arguments are returned exactly as sent when they are not a
             JSON object or array, when an object names a member twice,
             when they are longer than 65,536 characters or nested more
-            than 16 levels deep, and when nothing in them is a pseudonym
-            of this request.
+            than 16 levels deep, when the restored document could not be
+            written as JSON or sent as UTF-8, and when nothing in them is
+            a pseudonym of this request.
 
             The field changes only what the gateway returns to its
             caller. It is stripped from the outbound provider body, and

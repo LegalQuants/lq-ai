@@ -326,9 +326,14 @@ async def test_only_a_pseudonymized_planning_call_asks_the_gateway_to_restore_it
     assert {operation for operation, flag in asked if flag} == (
         {"propose_plan"} if pseudonymized else set()
     )
-    # The request says so in the field the gateway reads, as the literal True.
-    planning = next(r for r in api.gateway.requests if operation_of(r) == "propose_plan")
-    assert planning.lq_ai_restore_tool_arguments is pseudonymized
+    # The request says so in the field the gateway reads, as the literal True. Every
+    # other call leaves the field out of its body, as before the field existed, so a
+    # gateway that does not know it is sent nothing new.
+    for request in api.gateway.requests:
+        asks = operation_of(request) == "propose_plan" and pseudonymized
+        assert request.lq_ai_restore_tool_arguments is (True if asks else None)
+        body = request.model_dump(mode="json", exclude_none=True)
+        assert ("lq_ai_restore_tool_arguments" in body) is asks
 
 
 async def test_a_plan_whose_placeholders_the_gateway_restored_is_planned_with_the_names(
@@ -374,6 +379,40 @@ async def test_a_placeholder_the_gateway_did_not_restore_still_fails_the_plan(
     assert [m["content"] for m in await messages(api, chat_id)] == [GOAL, ""]
 
 
+@pytest.mark.parametrize(
+    "written",
+    [
+        "PERSON_0002s",  # a plural
+        "PERSON_0002_A",
+        "XPERSON_0002",
+        "PERSON_00021",
+    ],
+)
+async def test_a_placeholder_inside_a_longer_run_of_characters_fails_the_plan(
+    harness: SimpleNamespace, written: str
+) -> None:
+    """Found in review. The gateway restores a placeholder only as a whole token.
+
+    One that is glued to other characters is left in the plan. A later call's
+    reply text is restored by plain replacement, which would hit it and put a
+    name of that later request there. So the plan check refuses it: nothing
+    falls between what the gateway restores and what the application refuses.
+    """
+    api = harness
+    api.gateway.restorations = {"PERSON_0002": "Jane Roe"}
+    task = {
+        **json.loads(api.gateway.proposal)["tasks"][0],
+        "question": f"What notice must the {written} give to end the agreement early?",
+    }
+    api.gateway.plan_reply = ("", [tool_call("propose_plan", {"tasks": [task]})])
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE)
+    assert await job(api, value["root_id"]) == "completed"
+    after = await read(api, value["root_id"])
+    assert (after["status"], after["stop_reason"]) == ("failed", "plan_has_placeholders")
+    assert after["tree"] is None
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     ("text", "found"),
@@ -382,12 +421,16 @@ async def test_a_placeholder_the_gateway_did_not_restore_still_fails_the_plan(
         ("EMAIL_ADDRESS_0012", True),
         ("(PHONE_NUMBER_0003)", True),
         ("PERSON_0001's notice", True),
-        # Not the gateway's shape: three digits, five digits, lower case, no type.
+        # Inside a longer run of characters, where a later plain replacement would hit it.
+        ("PERSON_00011", True),
+        ("XPERSON_0001X", True),
+        ("PERSON_0001s", True),
+        ("aPERSON_0001", True),
+        ("the_PERSON_0001_file", True),
+        # Not the gateway's shape: three digits, lower case, no type.
         ("ISO_900", False),
-        ("PERSON_00011", False),
         ("person_0001", False),
         ("_0001", False),
-        ("XPERSON_0001X", False),
         ("Clause 12.1 and section 2024", False),
     ],
 )

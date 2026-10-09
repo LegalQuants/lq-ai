@@ -311,14 +311,18 @@ class ModelGateway:
             and request.anonymize
             and not request.lq_ai_privileged
         )
-        asked = request.lq_ai_restore_tool_arguments
+        # Left out of the request (None) unless the call asks.
+        asked = request.lq_ai_restore_tool_arguments is True
         self.restore_asked.append((operation, asked))
         if asked and applied and tool_calls:
             tool_calls = deepcopy(tool_calls)
             for call in tool_calls:
                 for placeholder, original in self.restorations.items():
-                    call["function"]["arguments"] = call["function"]["arguments"].replace(
-                        placeholder, original
+                    # Whole tokens only, as the real gateway restores them.
+                    call["function"]["arguments"] = re.sub(
+                        rf"(?<![A-Za-z0-9_]){re.escape(placeholder)}(?![A-Za-z0-9_])",
+                        lambda _match, original=original: original,
+                        call["function"]["arguments"],
                     )
         return SimpleNamespace(
             routed_provider="selected",

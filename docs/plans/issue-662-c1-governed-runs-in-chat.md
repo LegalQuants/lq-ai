@@ -483,7 +483,13 @@ that it can be reviewed apart, and none has had maintainer or security review.
   still carries a placeholder is kept. Tests: the restore step alone, the gateway against
   a mocked provider with and without the opt-in and for a request that was not
   pseudonymized, the adapter's stripped fields, the binding's form and match, the
-  boundary's refusal, and controlled-provider runs. Run once on the development stack with
+  boundary's refusal, and controlled-provider runs. An independent review found three
+  things, each fixed with a test: a placeholder glued to other characters was neither
+  restored nor refused, so the plan check now looks for the shape anywhere; an escape for
+  a lone surrogate could make the gateway fail to send its reply, so such arguments are
+  returned as sent; and the application sent the field as false on every call, which a
+  gateway that does not know it would pass to an OpenAI-type provider, so it is now left
+  out unless asked for. Run once on the development stack with
   the gateway pseudonymizing at the local route's tier: sent straight to the gateway, the
   same request came back with `PERSON_0001` in the plan arguments three times of three
   without the field and with the name three times of three with it; through the
@@ -499,8 +505,12 @@ that it can be reviewed apart, and none has had maintainer or security review.
   halt and closing stay with the owner. Tests: a viewer and an auditor refused at the
   routes and in the store, a viewer reading and halting their own run, an auditor and an
   admin reading another owner's run with the audit rows counted, and the 404 for anyone
-  else. No new route. Not done: the web shows a privileged reader the owner's controls on
-  the receipt page, and each fails; a run is not stopped when its owner's role changes.
+  else. No new route. An independent review found that the owner-only file route does not
+  keep a task's work from a privileged reader: the findings are in the tree and a saved
+  note's text is in the trace. A test now states that, and the documents say it. Not done:
+  leaving tool-call arguments out of the trace a privileged reader is given; the web shows
+  such a reader the owner's controls on the receipt page, and each fails; a run is not
+  stopped when its owner's role changes.
 
 - **Ruling 4, a matter's file in a chat that is in no matter.** `reading.readable_documents`
   no longer excludes a matter's file for a run with no matter. `reading.selection_terms`
@@ -528,13 +538,19 @@ that it can be reviewed apart, and none has had maintainer or security review.
   not quoted again when such a file is picked.
 
 The guards these four changes add were probed by breaking each one in a copy of the tree
-and running the tests that should notice: 41 breaks (14 for ruling 4, 8 for ruling 10, 17
-for ruling 6, 2 for ruling 2). Forty were caught by a failing test. The one that was not
-removes the owner check a halt route makes before calling the store, and the store makes
-the same check itself, so the route still refused. The probes show that a test holds each
-guard that was probed. They do not show that the guards are the right ones or that none
-is missing; an independent review of rulings 4, 6 and 10 was also made, by an agent, and
-is not a maintainer or security review.
+and running the tests that should notice: 49 breaks (19 for ruling 4, 8 for ruling 10, 20
+for ruling 6, 2 for ruling 2). Forty-eight were caught by a failing test. The one that was
+not removes the owner check a halt route makes before calling the store, and the store
+makes the same check itself, so the route still refused. The probes show that a test holds
+each guard that was probed. They do not show that the guards are the right ones or that
+none is missing.
+
+An independent review of rulings 4, 6 and 10 was made by an agent that was given the code
+and not the author's view of it. It found two things of substance: an answer written
+under a matter's terms reached a later run through the thread, and a task's findings and
+notes reach a privileged reader through the tree and the trace. It found three smaller
+ones in the gateway change. Each is fixed or stated above. It is not a maintainer or
+security review.
 
 ### Not done, or not verified
 

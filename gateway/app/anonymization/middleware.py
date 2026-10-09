@@ -350,8 +350,9 @@ def _restore_arguments(arguments: str, originals: dict[str, str]) -> str:
     or invented is left as it is; the caller decides what to do with it.
 
     The string is returned exactly as it was sent when it is not a JSON object
-    or array, when an object names a member twice, when it holds ``NaN`` or
-    ``Infinity``, when it is longer or more deeply nested than the bounds
+    or array, when an object names a member twice, when it holds ``NaN``,
+    ``Infinity`` or a number too large to write back, when it holds a lone
+    surrogate, when it is longer or more deeply nested than the bounds
     above, and when no value in it holds a pseudonym of this request. So a
     call with nothing to restore is never re-serialised, and a caller's strict
     parser sees what the model wrote.
@@ -376,7 +377,13 @@ def _restore_arguments(arguments: str, originals: dict[str, str]) -> str:
         restored = _restore_strings(parsed, _whole_pseudonyms(originals), originals)
         if restored == parsed:
             return arguments
-        return json.dumps(restored, ensure_ascii=False, allow_nan=False)
+        written = json.dumps(restored, ensure_ascii=False, allow_nan=False)
+        # An escape such as ``\ud83d`` parses to a lone surrogate, which
+        # cannot be written as UTF-8. Written as itself it would fail the whole
+        # response when it is sent; sent as it arrived it is six plain
+        # characters. So such arguments are returned as sent.
+        written.encode("utf-8")
+        return written
     except (ValueError, TypeError, RecursionError):
         # ``_NotRestorable`` and ``json.JSONDecodeError`` are both ``ValueError``.
         return arguments

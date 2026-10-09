@@ -2656,7 +2656,12 @@ DECODED = {
         json.dumps({"q": "PERSON\\u005f0002"}),
         False,
     ),
-    "a_counter_too_wide": (spelled({"q": "PERSON_00021"}), False),
+    # A digit glued on. It is not a placeholder the gateway assigned, but a later reply's
+    # text is restored by plain replacement, which would hit its first eleven characters
+    # and put a name of that later request there. So it is refused (found in review).
+    "a_counter_with_a_digit_glued_on": (spelled({"q": "PERSON_00021"}), True),
+    "a_letter_glued_on": (spelled({"q": "PERSON_0002s"}), True),
+    "inside_a_longer_name": (spelled({"q": "the_PERSON_0002_file"}), True),
     "lower_case": (json.dumps({"q": "person_0002"}), False),
     "numbers_booleans_and_null": (json.dumps({"a": 1, "b": True, "c": None, "d": [0.5]}), False),
     "nothing": ("", False),
@@ -2746,8 +2751,12 @@ async def test_a_planning_receipt_that_does_not_say_it_was_not_pseudonymized_cou
 #
 # A multi-line field that starts a line with a party's name is what a model writes for a
 # contract task. In the arguments as they arrive the line break is the two characters
-# backslash and n, so the character before the token is a letter, and a scan of the raw text
-# does not see the token. The same holds for a tab and for any escape that ends in a hex digit.
+# backslash and n, so the character before the token is a letter. When the pattern asked
+# for a token to stand alone, a scan of the raw text did not see it, and the same held for
+# a tab and for any escape that ends in a hex digit. The pattern now finds the shape inside
+# a longer run of characters as well, so the raw scan sees these too. What it still cannot
+# see is a token whose own characters are spelled as escapes, which is why the arguments
+# are read as decoded too.
 
 LEAD_INS = {
     "a_new_line": "Parties:\nPERSON_0001 (employee)\nORGANIZATION_0001 (employer)",
@@ -2764,14 +2773,25 @@ LEAD_INS = {
 
 @pytest.mark.unit
 @pytest.mark.parametrize("lead_in", list(LEAD_INS))
-def test_a_scan_of_the_raw_arguments_alone_would_miss_a_token_after_an_escape(
+def test_a_token_after_an_escape_is_found_as_written_and_once_decoded(
     lead_in: str,
 ) -> None:
     from app.autonomous.orchestration.outcomes import carries_placeholder
 
     arguments = json.dumps({"tasks": [{"question": LEAD_INS[lead_in]}]})
+    # The letter that ends the escape no longer hides the token from the raw scan.
+    assert carries_placeholder(arguments) is True
+    assert arguments_carry_placeholder(arguments) is True
+
+
+@pytest.mark.unit
+def test_a_scan_of_the_raw_arguments_alone_would_miss_a_token_spelled_with_an_escape() -> None:
+    from app.autonomous.orchestration.outcomes import carries_placeholder
+
+    arguments = spelled({"tasks": [{"question": f"What notice must {PLACEHOLDER} give?"}]})
+    assert PLACEHOLDER not in arguments and "\\u005f" in arguments
     # Why the arguments are read as decoded too: the raw text has no token to find.
-    assert carries_placeholder(arguments) is (lead_in == "the_review_example")
+    assert carries_placeholder(arguments) is False
     assert arguments_carry_placeholder(arguments) is True
 
 
