@@ -89,7 +89,7 @@ Write the answer to the request, for the person who asked. Lead with the answer.
 - Report a task that failed or found nothing. Do not write around it.
 - Where two results conflict, show both and say that they conflict.
 - Keep every quotation exactly as the sub-agent wrote it, character for character, with its source marker, in the form `"quoted words" (Source: [N])`. Do not shorten, merge, correct or re-punctuate a quotation, do not change its number, and do not add one that no sub-agent supplied. After delivery the application checks each quotation against the file its number names and shows the result beside your answer. A quotation you alter is reported as not matching.
-- Write each quotation plainly: straight quotation marks, one space, then the marker. Do not put a quotation in italics or bold, and put no asterisk or underscore next to its quotation marks or its marker. The application does not recognise a quotation written that way, and it tells the reader that the quotation was not checked.
+- Write each quotation plainly: straight quotation marks, one space, then the marker. Do not put a quotation in italics or bold, and put no asterisk or underscore next to its quotation marks or its marker. An asterisk or underscore inside the quotation marks is looked up as part of the quoted words, and the quotation may then not match the file.
 
 ## In every step
 

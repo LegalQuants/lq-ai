@@ -1,10 +1,10 @@
 {
-  "chat_id": "ed9565f3-a0ee-46e3-917c-97b2f5f5b279",
+  "chat_id": "6b6da6b6-feba-4676-a844-d5871f918ffe",
   "documents": [
     {
       "attached_to_project": false,
       "characters": 68,
-      "file_id": "738597be-3578-4171-a23b-9c762bb87de7",
+      "file_id": "e276e463-32f6-48ee-92e0-2aeb78fa3d3e",
       "filename": "msa.txt",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -19,7 +19,7 @@
     {
       "attached_to_project": false,
       "characters": 20,
-      "file_id": "96516dee-1c72-44ee-a270-fc08567bfad8",
+      "file_id": "63436f9f-01b6-4c1c-bb32-bd4cabd0b8c9",
       "filename": "loose-note.txt",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,

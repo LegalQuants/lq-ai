@@ -1,6 +1,6 @@
 {
   "answered_directly": true,
-  "chat_id": "586fcb10-2c24-4fee-82c7-ebc4c56fd56a",
+  "chat_id": "80a5b4a4-ebe9-4523-b63f-2c3105f60379",
   "direct_answer": "You're welcome.\n\nNothing was read or searched for this reply: it rests on this conversation only.",
   "effects": [
     {
@@ -9,8 +9,8 @@
         "basis": "conservative-estimate-or-reported-usage-v1",
         "charged_usd": "0.0713",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-        "estimated_prompt_tokens": 11037,
-        "messages_digest": "68c43364420d0f6ed2c7b16026cdbf4408ebabfb2f1e278a2a1c31d6ba72e61b",
+        "estimated_prompt_tokens": 11054,
+        "messages_digest": "938eaab71017e0d50aa855886e02d8164f9f7d3c58255855ff8956416e91645f",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
@@ -18,14 +18,14 @@
         "tier": 1
       },
       "charged_usd": "0.0713",
-      "completed_at": "2026-10-08T19:28:59.911008Z",
-      "created_at": "2026-10-08T19:28:59.902102Z",
+      "completed_at": "2026-10-09T22:49:27.530389Z",
+      "created_at": "2026-10-09T22:49:27.520621Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
       "reserved_usd": "0.0713",
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2",
         "version": "2"
@@ -42,14 +42,14 @@
   ],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "a062fc87-1322-417b-a876-faf5d81d55f8",
+  "message_id": "6489be5d-bab4-4608-97d0-92e86f329da9",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-08T21:28:59.865902Z",
+    "deadline": "2026-10-10T00:49:27.483204Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -74,13 +74,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "owner_id": "01bbab73-50b4-4b64-926d-6bf01a8ed098",
     "packet_digest": null,
-    "plan_id": "da12ee51-5dd2-48af-9246-36207b9cdc55",
+    "plan_id": "8724497d-eb40-4f29-865d-1ed17d044b1f",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
     "profile": "new_harness_v1",
-    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
     "root": {
       "anonymize": true,
       "grants": {
@@ -100,13 +100,13 @@
         "source_names": []
       },
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "68196301-c5b3-4066-9775-0e56e2e18355",
+    "root_id": "d79f6061-e7b1-49cc-9606-1833a391dfd1",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -116,13 +116,13 @@
       "task_turns": 5
     },
     "thread": [],
-    "today": "2026-10-08"
+    "today": "2026-10-09"
   },
   "profile": "new_harness_v1",
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "68196301-c5b3-4066-9775-0e56e2e18355",
+  "root_id": "d79f6061-e7b1-49cc-9606-1833a391dfd1",
   "sources": [],
   "spent_usd": "0.0713",
   "status": "completed",

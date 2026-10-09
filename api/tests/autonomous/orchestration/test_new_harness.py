@@ -323,6 +323,28 @@ def test_a_prompt_name_outside_the_rule_or_the_files_is_refused(name: str) -> No
         load_prompt(name)
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("name", [ORCHESTRATOR, SUBAGENT])
+def test_a_prompt_does_not_say_an_emphasised_quotation_goes_unchecked(name: str) -> None:
+    """The prompts ask for plain quotations and give a reason that is true.
+
+    The shared pattern accepts emphasis after the closing quotation mark (ADR 0038, ruling
+    2). Both prompts went on saying the application does not recognise such a quotation,
+    and on a model run the orchestrator repeated that to the reader.
+    """
+    from app.citation.extraction import _CITATION_RE
+
+    prompt = load_prompt(name).text
+    assert "does not recognise a quotation" not in prompt
+    assert "Do not put a quotation in italics or bold" in prompt
+    # What the prompt says instead, held to the pattern.
+    assert "inside the quotation marks is looked up as part of the quoted words" in prompt
+    wrapped = _CITATION_RE.search('**"quoted words"** (Source: [1])')
+    assert wrapped is not None and wrapped.group("sq") == "quoted words"
+    inside = _CITATION_RE.search('"**quoted words**" (Source: [1])')
+    assert inside is not None and inside.group("sq") == "**quoted words**"
+
+
 # --- 2. The opening messages carry facts, in sections -----------------------
 
 

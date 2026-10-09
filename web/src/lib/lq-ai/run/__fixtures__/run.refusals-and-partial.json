@@ -1,6 +1,6 @@
 {
   "answered_directly": false,
-  "chat_id": "1f38ca56-a9ee-4878-bdda-a1a497a768a8",
+  "chat_id": "1a7f0a4a-b971-43dd-bd88-95f199e78c0b",
   "direct_answer": null,
   "effects": [
     {
@@ -18,8 +18,8 @@
         "tier": 1
       },
       "charged_usd": "0.0647",
-      "completed_at": "2026-10-08T19:28:54.384030Z",
-      "created_at": "2026-10-08T19:28:54.370781Z",
+      "completed_at": "2026-10-09T22:49:21.233142Z",
+      "created_at": "2026-10-09T22:49:21.218162Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
@@ -41,9 +41,9 @@
     {
       "accounting": null,
       "charged_usd": "0.0000",
-      "completed_at": "2026-10-08T19:28:56.297659Z",
-      "created_at": "2026-10-08T19:28:56.269805Z",
-      "effect_key": "demo:collect:7cf724cb-a82e-4a95-95eb-17cbf87b31a3:v1",
+      "completed_at": "2026-10-09T22:49:23.350300Z",
+      "created_at": "2026-10-09T22:49:23.318831Z",
+      "effect_key": "demo:collect:6f6ee0cf-a4ec-4229-aff2-b552bb94a261:v1",
       "intent": "workspace_read",
       "outcome": "success",
       "reserved_usd": "0.0000",
@@ -60,9 +60,9 @@
     {
       "accounting": null,
       "charged_usd": "0.0000",
-      "completed_at": "2026-10-08T19:28:56.341879Z",
-      "created_at": "2026-10-08T19:28:56.314719Z",
-      "effect_key": "demo:collect:5f34a5eb-789b-4656-9fc5-3f4a3c1688b2:v1",
+      "completed_at": "2026-10-09T22:49:23.400761Z",
+      "created_at": "2026-10-09T22:49:23.369063Z",
+      "effect_key": "demo:collect:a90f4e03-5178-4fc1-981c-a4f5bcdafb54:v1",
       "intent": "workspace_read",
       "outcome": "success",
       "reserved_usd": "0.0000",
@@ -83,7 +83,7 @@
         "charged_usd": "0.0610",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
         "estimated_prompt_tokens": 5880,
-        "messages_digest": "293f6526c9ad81b2bed340d1d191b8f3d292fa7dfa3161a44b85472c637e7731",
+        "messages_digest": "c808fbc3575e366675670d00685c1544b466649c2d46a5fc09864970165570fa",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
@@ -91,8 +91,8 @@
         "tier": 1
       },
       "charged_usd": "0.0610",
-      "completed_at": "2026-10-08T19:28:56.393233Z",
-      "created_at": "2026-10-08T19:28:56.376032Z",
+      "completed_at": "2026-10-09T22:49:23.459279Z",
+      "created_at": "2026-10-09T22:49:23.439626Z",
       "effect_key": "demo:synthesis:v1",
       "intent": "run_skill",
       "outcome": "success",
@@ -114,14 +114,14 @@
   ],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "06dfd3d3-0519-4375-8649-5de39e3e9f09",
+  "message_id": "bc253ac4-4365-412a-8ee6-aeb37ad26d26",
   "packet": "# Fictional vendor agreement \u2014 demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## \u00a71 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## \u00a72 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## \u00a73 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## \u00a74 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00\u201317:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## \u00a75 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## \u00a76 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## \u00a77 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in \u00a78 survive\ntermination. There is no survival period stated for confidentiality.\n\n## \u00a78 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
   "planning": {
     "attempt_timeout_seconds": 120,
     "budget_usd": "2.0000",
     "child_skill_version": "1.0.0",
     "contract_version": 2,
-    "deadline": "2026-10-08T20:28:54.301170Z",
+    "deadline": "2026-10-09T23:49:21.139413Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -143,8 +143,8 @@
     "documents": [
       {
         "attached_for_run": false,
-        "document_id": "cd1e86ec-c0b0-45b6-90da-6e26c112b08e",
-        "file_id": "e5b0dc00-b802-48e4-befe-374ebd0e1110",
+        "document_id": "520d3f47-feee-4999-913a-14a36b4385a4",
+        "file_id": "347c865e-ed8d-42ce-b07b-0277e98f687e",
         "filename": "fictional-vendor-agreement.md",
         "number": 1
       }
@@ -154,13 +154,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "417284ed-d3d0-4756-9abc-08d305419019",
+    "owner_id": "4691bc99-4d36-460a-9c37-6fd58caeed19",
     "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
-    "plan_id": "209bc33d-8f90-413a-9d64-7b6601a80d7b",
+    "plan_id": "dd3ab780-4ab2-4432-94be-ab9756492071",
     "planning_allowance_usd": "0.2478",
-    "policy_version": "caa3833565ce5e9f7429efc86ec04100bcae9ed8effa8c34ef0436eb0d4535b4",
+    "policy_version": "1fcefd72488198cd87b4c4c69eb542e219a6383bbce422259869018d3f14616b",
     "profile": "model_demo_v1",
-    "project_id": "c0ed82db-6d58-495e-b32e-b37c040f2fe8",
+    "project_id": "2e1c4da8-c59f-48d4-8645-c6b2f92c66e2",
     "root": {
       "anonymize": true,
       "grants": {
@@ -177,7 +177,7 @@
       "privileged": false,
       "resources": {
         "document_ids": [
-          "cd1e86ec-c0b0-45b6-90da-6e26c112b08e"
+          "520d3f47-feee-4999-913a-14a36b4385a4"
         ],
         "source_names": []
       },
@@ -187,14 +187,14 @@
       }
     },
     "root_allowance_usd": "0.4956",
-    "root_id": "60295384-7145-4001-8e42-5bbf236fafe2",
+    "root_id": "13885166-6f9a-473e-9fcf-8c088b29e6e3",
     "root_skill_version": "1.0.0"
   },
   "profile": "model_demo_v1",
   "profile_title": "Contract Questions Orchestrator",
   "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "60295384-7145-4001-8e42-5bbf236fafe2",
+  "root_id": "13885166-6f9a-473e-9fcf-8c088b29e6e3",
   "sources": [],
   "spent_usd": "0.8763",
   "status": "completed",
@@ -208,8 +208,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.645751Z",
-            "created_at": "2026-10-08T19:28:54.618711Z",
+            "completed_at": "2026-10-09T22:49:21.562730Z",
+            "created_at": "2026-10-09T22:49:21.530653Z",
             "effect_key": "demo:notes:create:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -227,8 +227,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.704213Z",
-            "created_at": "2026-10-08T19:28:54.675447Z",
+            "completed_at": "2026-10-09T22:49:21.623846Z",
+            "created_at": "2026-10-09T22:49:21.593667Z",
             "effect_key": "demo:notes:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -258,8 +258,8 @@
               "tier": 1
             },
             "charged_usd": "0.1841",
-            "completed_at": "2026-10-08T19:28:54.794718Z",
-            "created_at": "2026-10-08T19:28:54.777046Z",
+            "completed_at": "2026-10-09T22:49:21.722329Z",
+            "created_at": "2026-10-09T22:49:21.702994Z",
             "effect_key": "topic:t1",
             "intent": "run_skill",
             "outcome": "success",
@@ -285,8 +285,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.820631Z",
-            "created_at": "2026-10-08T19:28:54.809588Z",
+            "completed_at": "2026-10-09T22:49:21.751649Z",
+            "created_at": "2026-10-09T22:49:21.739127Z",
             "effect_key": "topic:t1:c0",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -306,8 +306,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.846357Z",
-            "created_at": "2026-10-08T19:28:54.834855Z",
+            "completed_at": "2026-10-09T22:49:21.780872Z",
+            "created_at": "2026-10-09T22:49:21.767577Z",
             "effect_key": "topic:t1:c1",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -327,8 +327,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.874257Z",
-            "created_at": "2026-10-08T19:28:54.860259Z",
+            "completed_at": "2026-10-09T22:49:21.808937Z",
+            "created_at": "2026-10-09T22:49:21.796221Z",
             "effect_key": "topic:t1:c2",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -348,8 +348,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.919258Z",
-            "created_at": "2026-10-08T19:28:54.889924Z",
+            "completed_at": "2026-10-09T22:49:21.855559Z",
+            "created_at": "2026-10-09T22:49:21.825161Z",
             "effect_key": "topic:t1:c3",
             "intent": "workspace_write",
             "outcome": "success",
@@ -371,8 +371,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:54.955001Z",
-            "created_at": "2026-10-08T19:28:54.936763Z",
+            "completed_at": "2026-10-09T22:49:21.893950Z",
+            "created_at": "2026-10-09T22:49:21.873685Z",
             "effect_key": "topic:t1:c4",
             "intent": "retrieve_chunks",
             "outcome": "success",
@@ -409,8 +409,8 @@
               "tier": 1
             },
             "charged_usd": "0.1925",
-            "completed_at": "2026-10-08T19:28:55.011429Z",
-            "created_at": "2026-10-08T19:28:54.992751Z",
+            "completed_at": "2026-10-09T22:49:21.951177Z",
+            "created_at": "2026-10-09T22:49:21.933318Z",
             "effect_key": "topic:t2",
             "intent": "run_skill",
             "outcome": "success",
@@ -436,8 +436,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.059844Z",
-            "created_at": "2026-10-08T19:28:55.031433Z",
+            "completed_at": "2026-10-09T22:49:22.000044Z",
+            "created_at": "2026-10-09T22:49:21.969483Z",
             "effect_key": "topic:t2:c0",
             "intent": "workspace_read",
             "outcome": "success",
@@ -471,8 +471,8 @@
               "tier": 1
             },
             "charged_usd": "0.1898",
-            "completed_at": "2026-10-08T19:28:55.128237Z",
-            "created_at": "2026-10-08T19:28:55.103568Z",
+            "completed_at": "2026-10-09T22:49:22.062886Z",
+            "created_at": "2026-10-09T22:49:22.040474Z",
             "effect_key": "topic:t3",
             "intent": "run_skill",
             "outcome": "success",
@@ -498,8 +498,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.186496Z",
-            "created_at": "2026-10-08T19:28:55.149314Z",
+            "completed_at": "2026-10-09T22:49:22.112600Z",
+            "created_at": "2026-10-09T22:49:22.081031Z",
             "effect_key": "demo:findings:write:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -517,8 +517,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.232326Z",
-            "created_at": "2026-10-08T19:28:55.203441Z",
+            "completed_at": "2026-10-09T22:49:22.162796Z",
+            "created_at": "2026-10-09T22:49:22.131160Z",
             "effect_key": "demo:notes:update:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -536,8 +536,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.292028Z",
-            "created_at": "2026-10-08T19:28:55.264306Z",
+            "completed_at": "2026-10-09T22:49:22.227996Z",
+            "created_at": "2026-10-09T22:49:22.197063Z",
             "effect_key": "demo:findings:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -555,8 +555,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.336473Z",
-            "created_at": "2026-10-08T19:28:55.308649Z",
+            "completed_at": "2026-10-09T22:49:22.277141Z",
+            "created_at": "2026-10-09T22:49:22.246638Z",
             "effect_key": "demo:findings:share:v1",
             "intent": "workspace_share",
             "outcome": "success",
@@ -577,28 +577,28 @@
             "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+            "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
             "shared": true,
             "size_bytes": 263,
-            "updated_at": "2026-10-08T19:28:55.332586Z"
+            "updated_at": "2026-10-09T22:49:22.273404Z"
           },
           {
             "digest": "6b0e737c635dc1c2c937ec62e4d178529bc8e3a8a17097bf756b1429d92c6c37",
             "name": "notes.md",
             "revision": 2,
-            "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+            "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
             "shared": false,
             "size_bytes": 76,
-            "updated_at": "2026-10-08T19:28:55.227853Z"
+            "updated_at": "2026-10-09T22:49:22.158297Z"
           },
           {
             "digest": "ca7e4cf46088b0e8786ae0fead187d29590552cc212bcbdd33a2905789ad3fda",
             "name": "note-terms.md",
             "revision": 1,
-            "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+            "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
             "shared": false,
             "size_bytes": 14,
-            "updated_at": "2026-10-08T19:28:54.915012Z"
+            "updated_at": "2026-10-09T22:49:21.851271Z"
           }
         ],
         "outcome": {
@@ -606,7 +606,7 @@
             "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3"
+            "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261"
           },
           "failure_code": null,
           "findings": [
@@ -618,7 +618,7 @@
         },
         "phase": "delivery",
         "reserved_usd": "0.0000",
-        "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+        "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
         "spent_usd": "0.5664",
         "status": "completed",
         "tools": [
@@ -642,7 +642,7 @@
           }
         ],
         "turn_limit": 2,
-        "updated_at": "2026-10-08T19:28:55.392299Z"
+        "updated_at": "2026-10-09T22:49:22.338932Z"
       },
       {
         "allocation_usd": "0.7434",
@@ -650,8 +650,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.518930Z",
-            "created_at": "2026-10-08T19:28:55.490761Z",
+            "completed_at": "2026-10-09T22:49:22.479139Z",
+            "created_at": "2026-10-09T22:49:22.447338Z",
             "effect_key": "demo:notes:create:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -669,8 +669,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.573292Z",
-            "created_at": "2026-10-08T19:28:55.546670Z",
+            "completed_at": "2026-10-09T22:49:22.555526Z",
+            "created_at": "2026-10-09T22:49:22.516807Z",
             "effect_key": "demo:notes:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -700,8 +700,8 @@
               "tier": 1
             },
             "charged_usd": "0.1842",
-            "completed_at": "2026-10-08T19:28:55.658785Z",
-            "created_at": "2026-10-08T19:28:55.641546Z",
+            "completed_at": "2026-10-09T22:49:22.668856Z",
+            "created_at": "2026-10-09T22:49:22.650077Z",
             "effect_key": "topic:t1",
             "intent": "run_skill",
             "outcome": "success",
@@ -727,8 +727,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.691486Z",
-            "created_at": "2026-10-08T19:28:55.677097Z",
+            "completed_at": "2026-10-09T22:49:22.701405Z",
+            "created_at": "2026-10-09T22:49:22.687391Z",
             "effect_key": "topic:t1:c0",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -748,8 +748,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.723948Z",
-            "created_at": "2026-10-08T19:28:55.709548Z",
+            "completed_at": "2026-10-09T22:49:22.731091Z",
+            "created_at": "2026-10-09T22:49:22.717632Z",
             "effect_key": "topic:t1:c1",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -769,8 +769,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.761755Z",
-            "created_at": "2026-10-08T19:28:55.749076Z",
+            "completed_at": "2026-10-09T22:49:22.760102Z",
+            "created_at": "2026-10-09T22:49:22.747256Z",
             "effect_key": "topic:t1:c2",
             "intent": "refused",
             "outcome": "tool_refused",
@@ -790,8 +790,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.807608Z",
-            "created_at": "2026-10-08T19:28:55.778179Z",
+            "completed_at": "2026-10-09T22:49:22.810150Z",
+            "created_at": "2026-10-09T22:49:22.778091Z",
             "effect_key": "topic:t1:c3",
             "intent": "workspace_write",
             "outcome": "success",
@@ -813,8 +813,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.842636Z",
-            "created_at": "2026-10-08T19:28:55.824963Z",
+            "completed_at": "2026-10-09T22:49:22.849444Z",
+            "created_at": "2026-10-09T22:49:22.828942Z",
             "effect_key": "topic:t1:c4",
             "intent": "retrieve_chunks",
             "outcome": "success",
@@ -839,8 +839,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.932579Z",
-            "created_at": "2026-10-08T19:28:55.903331Z",
+            "completed_at": "2026-10-09T22:49:22.948135Z",
+            "created_at": "2026-10-09T22:49:22.918234Z",
             "effect_key": "demo:findings:write:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -858,8 +858,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:55.977885Z",
-            "created_at": "2026-10-08T19:28:55.949486Z",
+            "completed_at": "2026-10-09T22:49:22.994980Z",
+            "created_at": "2026-10-09T22:49:22.965367Z",
             "effect_key": "demo:notes:update:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -877,8 +877,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:56.034031Z",
-            "created_at": "2026-10-08T19:28:56.007727Z",
+            "completed_at": "2026-10-09T22:49:23.058500Z",
+            "created_at": "2026-10-09T22:49:23.027609Z",
             "effect_key": "demo:findings:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -896,8 +896,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:28:56.077809Z",
-            "created_at": "2026-10-08T19:28:56.050405Z",
+            "completed_at": "2026-10-09T22:49:23.110006Z",
+            "created_at": "2026-10-09T22:49:23.077063Z",
             "effect_key": "demo:findings:share:v1",
             "intent": "workspace_share",
             "outcome": "success",
@@ -918,28 +918,28 @@
             "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+            "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
             "shared": true,
             "size_bytes": 184,
-            "updated_at": "2026-10-08T19:28:56.073987Z"
+            "updated_at": "2026-10-09T22:49:23.106235Z"
           },
           {
             "digest": "4edd6cde0d87989b22c97d019b8ceefd655b8b693b120484b93fd83b7425417b",
             "name": "notes.md",
             "revision": 2,
-            "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+            "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
             "shared": false,
             "size_bytes": 93,
-            "updated_at": "2026-10-08T19:28:55.973509Z"
+            "updated_at": "2026-10-09T22:49:22.991025Z"
           },
           {
             "digest": "ca7e4cf46088b0e8786ae0fead187d29590552cc212bcbdd33a2905789ad3fda",
             "name": "note-terms.md",
             "revision": 1,
-            "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+            "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
             "shared": false,
             "size_bytes": 14,
-            "updated_at": "2026-10-08T19:28:55.803061Z"
+            "updated_at": "2026-10-09T22:49:22.805617Z"
           }
         ],
         "outcome": {
@@ -947,7 +947,7 @@
             "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2"
+            "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54"
           },
           "failure_code": "execution_failed",
           "findings": [],
@@ -957,7 +957,7 @@
         },
         "phase": "delivery",
         "reserved_usd": "0.0000",
-        "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+        "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
         "spent_usd": "0.1842",
         "status": "failed",
         "tools": [
@@ -981,7 +981,7 @@
           }
         ],
         "turn_limit": 2,
-        "updated_at": "2026-10-08T19:28:56.134167Z"
+        "updated_at": "2026-10-09T22:49:23.171744Z"
       }
     ],
     "mode": "model_demo_v1",
@@ -992,7 +992,7 @@
       "children": [
         {
           "budget_usd": "0.7434",
-          "dispatch_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+          "dispatch_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
           "execution": {
             "anonymize": true,
             "grants": {
@@ -1018,7 +1018,7 @@
             "privileged": false,
             "resources": {
               "document_ids": [
-                "cd1e86ec-c0b0-45b6-90da-6e26c112b08e"
+                "520d3f47-feee-4999-913a-14a36b4385a4"
               ],
               "source_names": []
             },
@@ -1050,7 +1050,7 @@
         },
         {
           "budget_usd": "0.7434",
-          "dispatch_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+          "dispatch_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
           "execution": {
             "anonymize": true,
             "grants": {
@@ -1076,7 +1076,7 @@
             "privileged": false,
             "resources": {
               "document_ids": [
-                "cd1e86ec-c0b0-45b6-90da-6e26c112b08e"
+                "520d3f47-feee-4999-913a-14a36b4385a4"
               ],
               "source_names": []
             },
@@ -1108,7 +1108,7 @@
         }
       ],
       "contract_version": 3,
-      "deadline": "2026-10-08T20:28:54.301170Z",
+      "deadline": "2026-10-09T23:49:21.139413Z",
       "delegation_grants": {
         "analysis": [
           "plan",
@@ -1130,20 +1130,20 @@
       "documents": [
         {
           "attached_for_run": false,
-          "document_id": "cd1e86ec-c0b0-45b6-90da-6e26c112b08e",
-          "file_id": "e5b0dc00-b802-48e4-befe-374ebd0e1110",
+          "document_id": "520d3f47-feee-4999-913a-14a36b4385a4",
+          "file_id": "347c865e-ed8d-42ce-b07b-0277e98f687e",
           "filename": "fictional-vendor-agreement.md",
           "number": 1
         }
       ],
       "goal": "A request with refused calls <i>and markup</i>.",
       "max_active_children": 2,
-      "owner_id": "417284ed-d3d0-4756-9abc-08d305419019",
-      "plan_id": "209bc33d-8f90-413a-9d64-7b6601a80d7b",
-      "planning_digest": "d3c016a4740e7506c74ddd1122a12157187861b4e065976b98eaffb02e3dfc9f",
-      "policy_version": "caa3833565ce5e9f7429efc86ec04100bcae9ed8effa8c34ef0436eb0d4535b4",
+      "owner_id": "4691bc99-4d36-460a-9c37-6fd58caeed19",
+      "plan_id": "dd3ab780-4ab2-4432-94be-ab9756492071",
+      "planning_digest": "7e3defc2e7517c41700ca5225164372646790a20c42cb6455c045706eb64dfac",
+      "policy_version": "1fcefd72488198cd87b4c4c69eb542e219a6383bbce422259869018d3f14616b",
       "profile": "model_demo_v1",
-      "project_id": "c0ed82db-6d58-495e-b32e-b37c040f2fe8",
+      "project_id": "2e1c4da8-c59f-48d4-8645-c6b2f92c66e2",
       "revision": 1,
       "root": {
         "anonymize": true,
@@ -1170,7 +1170,7 @@
         "privileged": false,
         "resources": {
           "document_ids": [
-            "cd1e86ec-c0b0-45b6-90da-6e26c112b08e"
+            "520d3f47-feee-4999-913a-14a36b4385a4"
           ],
           "source_names": []
         },
@@ -1180,9 +1180,9 @@
         }
       },
       "root_allowance_usd": "0.4956",
-      "root_id": "60295384-7145-4001-8e42-5bbf236fafe2"
+      "root_id": "13885166-6f9a-473e-9fcf-8c088b29e6e3"
     },
-    "plan_hash": "34da54a7f58927565aa1d11ed8c648aeb52a291c750e97a44f02e56a9ec72322",
+    "plan_hash": "ca5436af02f1b8f224dd5ec08d623eec0b0c7747fc695420189337cfab3a093e",
     "reserved_usd": "0.0000",
     "result": {
       "coverage": "partial",
@@ -1195,7 +1195,7 @@
               "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
               "name": "findings.json",
               "revision": 1,
-              "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3"
+              "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261"
             },
             "failure_code": null,
             "findings": [
@@ -1205,7 +1205,7 @@
             "summary": "<b>Renewal</b> needs 30 days' notice. [\u00a75]",
             "verification": "unverified"
           },
-          "session_id": "7cf724cb-a82e-4a95-95eb-17cbf87b31a3",
+          "session_id": "6f6ee0cf-a4ec-4229-aff2-b552bb94a261",
           "topic": "Payments"
         },
         {
@@ -1214,7 +1214,7 @@
               "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
               "name": "findings.json",
               "revision": 1,
-              "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2"
+              "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54"
             },
             "failure_code": "execution_failed",
             "findings": [],
@@ -1222,7 +1222,7 @@
             "summary": "The topic could not be completed within its approved limits.",
             "verification": "unverified"
           },
-          "session_id": "5f34a5eb-789b-4656-9fc5-3f4a3c1688b2",
+          "session_id": "a90f4e03-5178-4fc1-981c-a4f5bcdafb54",
           "topic": "Renewal and termination"
         }
       ],
@@ -1246,8 +1246,8 @@
             "tier": 1
           },
           "charged_usd": "0.0647",
-          "completed_at": "2026-10-08T19:28:54.384030Z",
-          "created_at": "2026-10-08T19:28:54.370781Z",
+          "completed_at": "2026-10-09T22:49:21.233142Z",
+          "created_at": "2026-10-09T22:49:21.218162Z",
           "effect_key": "chat:plan:v1",
           "intent": "plan",
           "outcome": "success",
@@ -1269,9 +1269,9 @@
         {
           "accounting": null,
           "charged_usd": "0.0000",
-          "completed_at": "2026-10-08T19:28:56.297659Z",
-          "created_at": "2026-10-08T19:28:56.269805Z",
-          "effect_key": "demo:collect:7cf724cb-a82e-4a95-95eb-17cbf87b31a3:v1",
+          "completed_at": "2026-10-09T22:49:23.350300Z",
+          "created_at": "2026-10-09T22:49:23.318831Z",
+          "effect_key": "demo:collect:6f6ee0cf-a4ec-4229-aff2-b552bb94a261:v1",
           "intent": "workspace_read",
           "outcome": "success",
           "reserved_usd": "0.0000",
@@ -1288,9 +1288,9 @@
         {
           "accounting": null,
           "charged_usd": "0.0000",
-          "completed_at": "2026-10-08T19:28:56.341879Z",
-          "created_at": "2026-10-08T19:28:56.314719Z",
-          "effect_key": "demo:collect:5f34a5eb-789b-4656-9fc5-3f4a3c1688b2:v1",
+          "completed_at": "2026-10-09T22:49:23.400761Z",
+          "created_at": "2026-10-09T22:49:23.369063Z",
+          "effect_key": "demo:collect:a90f4e03-5178-4fc1-981c-a4f5bcdafb54:v1",
           "intent": "workspace_read",
           "outcome": "success",
           "reserved_usd": "0.0000",
@@ -1311,7 +1311,7 @@
             "charged_usd": "0.0610",
             "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
             "estimated_prompt_tokens": 5880,
-            "messages_digest": "293f6526c9ad81b2bed340d1d191b8f3d292fa7dfa3161a44b85472c637e7731",
+            "messages_digest": "c808fbc3575e366675670d00685c1544b466649c2d46a5fc09864970165570fa",
             "model": "native",
             "provider": "selected",
             "reported_usage_cost_usd": "0.0003",
@@ -1319,8 +1319,8 @@
             "tier": 1
           },
           "charged_usd": "0.0610",
-          "completed_at": "2026-10-08T19:28:56.393233Z",
-          "created_at": "2026-10-08T19:28:56.376032Z",
+          "completed_at": "2026-10-09T22:49:23.459279Z",
+          "created_at": "2026-10-09T22:49:23.439626Z",
           "effect_key": "demo:synthesis:v1",
           "intent": "run_skill",
           "outcome": "success",
@@ -1344,14 +1344,14 @@
       "outcome": null,
       "phase": "delivery",
       "reserved_usd": "0.0000",
-      "session_id": "60295384-7145-4001-8e42-5bbf236fafe2",
+      "session_id": "13885166-6f9a-473e-9fcf-8c088b29e6e3",
       "spent_usd": "0.1257",
       "status": "completed",
       "tools": [],
       "turn_limit": 0,
-      "updated_at": "2026-10-08T19:28:56.448859Z"
+      "updated_at": "2026-10-09T22:49:23.527411Z"
     },
-    "root_id": "60295384-7145-4001-8e42-5bbf236fafe2",
+    "root_id": "13885166-6f9a-473e-9fcf-8c088b29e6e3",
     "spent_usd": "0.8763",
     "status": "completed",
     "stop_reason": null,

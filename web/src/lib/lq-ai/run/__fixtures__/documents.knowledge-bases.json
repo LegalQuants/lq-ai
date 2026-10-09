@@ -1,18 +1,18 @@
 {
-  "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+  "chat_id": "b39793b1-ec33-4d64-ba3c-4d3e1b6bf238",
   "documents": [],
   "knowledge_bases": [
     {
-      "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+      "knowledge_base_id": "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
       "name": "People policies"
     },
     {
-      "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+      "knowledge_base_id": "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa",
       "name": "Travel"
     }
   ],
   "knowledge_bases_omitted": 0,
   "max_documents": 8,
-  "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+  "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
   "suggested_file_ids": []
 }

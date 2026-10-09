@@ -1,31 +1,31 @@
 {
   "answered_directly": false,
-  "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+  "chat_id": "b39793b1-ec33-4d64-ba3c-4d3e1b6bf238",
   "direct_answer": null,
   "effects": [
     {
       "accounting": {
         "anonymization_applied": true,
         "basis": "conservative-estimate-or-reported-usage-v1",
-        "charged_usd": "0.0715",
+        "charged_usd": "0.0716",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-        "estimated_prompt_tokens": 11161,
-        "messages_digest": "22891eabc53c92f827fb5e5d983bb197a45e93ea3a09b0e22fffc1701a728620",
+        "estimated_prompt_tokens": 11178,
+        "messages_digest": "c6b96e6f6f290c2e4c59f22a04aa79025bcfb6529a440c5706a1cd5ac2f8d32f",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
-        "reserved_usd": "0.0715",
+        "reserved_usd": "0.0716",
         "tier": 1
       },
-      "charged_usd": "0.0715",
-      "completed_at": "2026-10-08T19:29:00.230939Z",
-      "created_at": "2026-10-08T19:29:00.218620Z",
+      "charged_usd": "0.0716",
+      "completed_at": "2026-10-09T22:49:27.845043Z",
+      "created_at": "2026-10-09T22:49:27.834122Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
-      "reserved_usd": "0.0715",
+      "reserved_usd": "0.0716",
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2",
         "version": "2"
@@ -42,9 +42,9 @@
     {
       "accounting": null,
       "charged_usd": "0.0000",
-      "completed_at": "2026-10-08T19:29:00.854135Z",
-      "created_at": "2026-10-08T19:29:00.840268Z",
-      "effect_key": "demo:collect:118d44db-4e57-4efc-8c4a-3e4890ec24c1:v1",
+      "completed_at": "2026-10-09T22:49:28.543084Z",
+      "created_at": "2026-10-09T22:49:28.520725Z",
+      "effect_key": "demo:collect:eefb0b66-f611-4a0a-bc85-0cdd805aefb5:v1",
       "intent": "workspace_read",
       "outcome": "success",
       "reserved_usd": "0.0000",
@@ -64,8 +64,8 @@
         "basis": "conservative-estimate-or-reported-usage-v1",
         "charged_usd": "0.0686",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-        "estimated_prompt_tokens": 9691,
-        "messages_digest": "799d37e9749db8f1c6b8e0e3f1debeba539cd931df1b7bd4e5ab42c20ce1f272",
+        "estimated_prompt_tokens": 9708,
+        "messages_digest": "7e1a89c6a67d2691633b006ad5be00cce6038e3d2aa01f71304d371be32683d5",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
@@ -73,14 +73,14 @@
         "tier": 1
       },
       "charged_usd": "0.0686",
-      "completed_at": "2026-10-08T19:29:00.878990Z",
-      "created_at": "2026-10-08T19:29:00.868962Z",
+      "completed_at": "2026-10-09T22:49:28.580508Z",
+      "created_at": "2026-10-09T22:49:28.565667Z",
       "effect_key": "demo:synthesis:v1",
       "intent": "run_skill",
       "outcome": "success",
       "reserved_usd": "0.0686",
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2",
         "version": "2"
@@ -104,14 +104,14 @@
     "unmatched": 0,
     "unresolved": 0
   },
-  "message_id": "82ae5f98-fe34-4444-a4fd-4f3ce900014c",
+  "message_id": "6e44cec8-5685-4234-ab64-080e5869e51c",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-08T21:29:00.174089Z",
+    "deadline": "2026-10-10T00:49:27.787143Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -135,24 +135,24 @@
     "goal": "How much annual leave do staff get?",
     "knowledge_bases": [
       {
-        "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+        "knowledge_base_id": "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
         "name": "People policies"
       },
       {
-        "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+        "knowledge_base_id": "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa",
         "name": "Travel"
       }
     ],
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "owner_id": "01bbab73-50b4-4b64-926d-6bf01a8ed098",
     "packet_digest": null,
-    "plan_id": "8abfb7ba-4ae5-4bea-8526-14606ce705fc",
+    "plan_id": "4a09de63-bf76-4493-a998-43fdbda4b2e3",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
     "profile": "new_harness_v1",
-    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
     "root": {
       "anonymize": true,
       "grants": {
@@ -170,19 +170,19 @@
       "resources": {
         "document_ids": [],
         "knowledge_base_ids": [
-          "0934c89d-7f94-466b-8956-8acc2ebadcfe",
-          "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+          "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
+          "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa"
         ],
         "source_names": []
       },
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+    "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -192,22 +192,22 @@
       "task_turns": 5
     },
     "thread": [],
-    "today": "2026-10-08"
+    "today": "2026-10-09"
   },
   "profile": "new_harness_v1",
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+  "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
   "sources": [
     {
-      "file_id": "a32dff72-95e6-477c-a026-e4b457601c2a",
+      "file_id": "55eaa79a-6a9d-4095-9df8-3a0a065da4d8",
       "filename": "leave-policy.txt",
       "number": 1,
-      "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+      "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5"
     }
   ],
-  "spent_usd": "0.2754",
+  "spent_usd": "0.2759",
   "status": "completed",
   "stop_reason": null,
   "tree": {
@@ -219,8 +219,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.427902Z",
-            "created_at": "2026-10-08T19:29:00.410221Z",
+            "completed_at": "2026-10-09T22:49:28.050320Z",
+            "created_at": "2026-10-09T22:49:28.030886Z",
             "effect_key": "demo:notes:create:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -238,8 +238,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.467090Z",
-            "created_at": "2026-10-08T19:29:00.446808Z",
+            "completed_at": "2026-10-09T22:49:28.088942Z",
+            "created_at": "2026-10-09T22:49:28.071792Z",
             "effect_key": "demo:notes:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -258,25 +258,25 @@
             "accounting": {
               "anonymization_applied": true,
               "basis": "conservative-estimate-or-reported-usage-v1",
-              "charged_usd": "0.0667",
+              "charged_usd": "0.0669",
               "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-              "estimated_prompt_tokens": 8772,
-              "messages_digest": "713a537a282ab0e4c5b72608d9cec8e46bbd5ef2ae03801073a6e8059516a528",
+              "estimated_prompt_tokens": 8849,
+              "messages_digest": "e3a4edc7d2e15b42d238967015c8922f2882fbf236676f5e4017deb2fd8f38a0",
               "model": "native",
               "provider": "selected",
               "reported_usage_cost_usd": "0.0003",
-              "reserved_usd": "0.0667",
+              "reserved_usd": "0.0669",
               "tier": 1
             },
-            "charged_usd": "0.0667",
-            "completed_at": "2026-10-08T19:29:00.524417Z",
-            "created_at": "2026-10-08T19:29:00.512339Z",
+            "charged_usd": "0.0669",
+            "completed_at": "2026-10-09T22:49:28.144026Z",
+            "created_at": "2026-10-09T22:49:28.128960Z",
             "effect_key": "topic:t1",
             "intent": "run_skill",
             "outcome": "success",
-            "reserved_usd": "0.0667",
+            "reserved_usd": "0.0669",
             "skill": {
-              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
               "kind": "prompt",
               "name": "new_harness/subagent.v2",
               "version": "2"
@@ -297,8 +297,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.555947Z",
-            "created_at": "2026-10-08T19:29:00.535138Z",
+            "completed_at": "2026-10-09T22:49:28.180619Z",
+            "created_at": "2026-10-09T22:49:28.156994Z",
             "effect_key": "topic:t1:c0",
             "intent": "retrieve_chunks",
             "outcome": "success",
@@ -316,8 +316,8 @@
                 "searched": 2,
                 "sources": [
                   {
-                    "document_id": "0dbdfd9c-0a0b-49d8-92a7-6dcb0d59aaab",
-                    "file_id": "a32dff72-95e6-477c-a026-e4b457601c2a",
+                    "document_id": "05488ab4-5a44-423a-b053-b10eb5a9ea27",
+                    "file_id": "55eaa79a-6a9d-4095-9df8-3a0a065da4d8",
                     "filename": "leave-policy.txt",
                     "number": 1
                   }
@@ -330,8 +330,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.579657Z",
-            "created_at": "2026-10-08T19:29:00.567175Z",
+            "completed_at": "2026-10-09T22:49:28.209906Z",
+            "created_at": "2026-10-09T22:49:28.193830Z",
             "effect_key": "topic:t1:c1",
             "intent": "retrieve_chunks",
             "outcome": "success",
@@ -357,25 +357,25 @@
             "accounting": {
               "anonymization_applied": true,
               "basis": "conservative-estimate-or-reported-usage-v1",
-              "charged_usd": "0.0686",
+              "charged_usd": "0.0688",
               "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-              "estimated_prompt_tokens": 9707,
-              "messages_digest": "f7f657280c2d488d7a8fd58af79d6e4c0e3742c298d94aed1c71329c301e950f",
+              "estimated_prompt_tokens": 9784,
+              "messages_digest": "26bf596eff567d60c095f151b754abb589d248b657c769d85cf382a83b870513",
               "model": "native",
               "provider": "selected",
               "reported_usage_cost_usd": "0.0003",
-              "reserved_usd": "0.0686",
+              "reserved_usd": "0.0688",
               "tier": 1
             },
-            "charged_usd": "0.0686",
-            "completed_at": "2026-10-08T19:29:00.605624Z",
-            "created_at": "2026-10-08T19:29:00.595216Z",
+            "charged_usd": "0.0688",
+            "completed_at": "2026-10-09T22:49:28.243371Z",
+            "created_at": "2026-10-09T22:49:28.229455Z",
             "effect_key": "topic:t2",
             "intent": "run_skill",
             "outcome": "success",
-            "reserved_usd": "0.0686",
+            "reserved_usd": "0.0688",
             "skill": {
-              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
               "kind": "prompt",
               "name": "new_harness/subagent.v2",
               "version": "2"
@@ -396,8 +396,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.632046Z",
-            "created_at": "2026-10-08T19:29:00.616435Z",
+            "completed_at": "2026-10-09T22:49:28.275476Z",
+            "created_at": "2026-10-09T22:49:28.255721Z",
             "effect_key": "demo:findings:write:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -415,8 +415,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.656734Z",
-            "created_at": "2026-10-08T19:29:00.641496Z",
+            "completed_at": "2026-10-09T22:49:28.308327Z",
+            "created_at": "2026-10-09T22:49:28.288134Z",
             "effect_key": "demo:notes:update:v1",
             "intent": "workspace_write",
             "outcome": "success",
@@ -434,8 +434,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.694589Z",
-            "created_at": "2026-10-08T19:29:00.676736Z",
+            "completed_at": "2026-10-09T22:49:28.349692Z",
+            "created_at": "2026-10-09T22:49:28.330744Z",
             "effect_key": "demo:findings:read:v1",
             "intent": "workspace_read",
             "outcome": "success",
@@ -453,8 +453,8 @@
           {
             "accounting": null,
             "charged_usd": "0.0000",
-            "completed_at": "2026-10-08T19:29:00.725954Z",
-            "created_at": "2026-10-08T19:29:00.707935Z",
+            "completed_at": "2026-10-09T22:49:28.380621Z",
+            "created_at": "2026-10-09T22:49:28.362300Z",
             "effect_key": "demo:findings:share:v1",
             "intent": "workspace_share",
             "outcome": "success",
@@ -475,19 +475,19 @@
             "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+            "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
             "shared": true,
             "size_bytes": 351,
-            "updated_at": "2026-10-08T19:29:00.722220Z"
+            "updated_at": "2026-10-09T22:49:28.376682Z"
           },
           {
             "digest": "994618400903d94dde27513f2fcf04b77f561f0483a6761e47c8958c1d8367af",
             "name": "notes.md",
             "revision": 2,
-            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+            "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
             "shared": false,
             "size_bytes": 149,
-            "updated_at": "2026-10-08T19:29:00.652950Z"
+            "updated_at": "2026-10-09T22:49:28.303756Z"
           }
         ],
         "outcome": {
@@ -495,7 +495,7 @@
             "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
             "name": "findings.json",
             "revision": 1,
-            "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+            "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5"
           },
           "failure_code": null,
           "findings": [
@@ -507,8 +507,8 @@
         },
         "phase": "delivery",
         "reserved_usd": "0.0000",
-        "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
-        "spent_usd": "0.1353",
+        "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
+        "spent_usd": "0.1357",
         "status": "completed",
         "tools": [
           {
@@ -531,7 +531,7 @@
           }
         ],
         "turn_limit": 5,
-        "updated_at": "2026-10-08T19:29:00.765436Z"
+        "updated_at": "2026-10-09T22:49:28.422875Z"
       }
     ],
     "mode": "new_harness_v1",
@@ -542,7 +542,7 @@
       "children": [
         {
           "budget_usd": "3.4686",
-          "dispatch_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+          "dispatch_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
           "execution": {
             "anonymize": true,
             "grants": {
@@ -569,13 +569,13 @@
             "resources": {
               "document_ids": [],
               "knowledge_base_ids": [
-                "0934c89d-7f94-466b-8956-8acc2ebadcfe",
-                "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+                "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
+                "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa"
               ],
               "source_names": []
             },
             "skill": {
-              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
               "kind": "prompt",
               "name": "new_harness/subagent.v2"
             }
@@ -603,7 +603,7 @@
         }
       ],
       "contract_version": 3,
-      "deadline": "2026-10-08T21:29:00.174089Z",
+      "deadline": "2026-10-10T00:49:27.787143Z",
       "delegation_grants": {
         "analysis": [
           "plan",
@@ -626,21 +626,21 @@
       "goal": "How much annual leave do staff get?",
       "knowledge_bases": [
         {
-          "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+          "knowledge_base_id": "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
           "name": "People policies"
         },
         {
-          "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+          "knowledge_base_id": "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa",
           "name": "Travel"
         }
       ],
       "max_active_children": 2,
-      "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
-      "plan_id": "8abfb7ba-4ae5-4bea-8526-14606ce705fc",
-      "planning_digest": "3e758ac3794f8e286848315ea3497894bd04f1655cec804e2f6f7b9e993bc470",
-      "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+      "owner_id": "01bbab73-50b4-4b64-926d-6bf01a8ed098",
+      "plan_id": "4a09de63-bf76-4493-a998-43fdbda4b2e3",
+      "planning_digest": "712c8fd4c265fad6a203a9417bfe27e9f8f557c4a71ad1583a4720b0c33f00b4",
+      "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
       "profile": "new_harness_v1",
-      "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+      "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
       "revision": 1,
       "root": {
         "anonymize": true,
@@ -668,21 +668,21 @@
         "resources": {
           "document_ids": [],
           "knowledge_base_ids": [
-            "0934c89d-7f94-466b-8956-8acc2ebadcfe",
-            "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+            "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
+            "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa"
           ],
           "source_names": []
         },
         "skill": {
-          "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+          "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
           "kind": "prompt",
           "name": "new_harness/orchestrator.v2"
         }
       },
       "root_allowance_usd": "1.1562",
-      "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb"
+      "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4"
     },
-    "plan_hash": "9e786dbffc872aa9e22410b3ce2a9a73befc9d47338ed49a95a56f331cd74299",
+    "plan_hash": "f5d1e2f3b64d118a9d46053fda4d7a3056e1891baf78b9a8d7bf1bbbfc329dc5",
     "reserved_usd": "0.0000",
     "result": {
       "coverage": "complete",
@@ -695,7 +695,7 @@
               "digest": "e6ddafeb8a9bccd68c6b75fd7d0cf3aa3ad4c087a19b8b256553e96ec489131c",
               "name": "findings.json",
               "revision": 1,
-              "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1"
+              "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5"
             },
             "failure_code": null,
             "findings": [
@@ -705,7 +705,7 @@
             "summary": "Each employee gets \"eighteen (18) days of annual leave\" (Source: [1]). A search for a sabbatical rule found nothing.",
             "verification": "unverified"
           },
-          "session_id": "118d44db-4e57-4efc-8c4a-3e4890ec24c1",
+          "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
           "topic": "Payments"
         }
       ],
@@ -718,25 +718,25 @@
           "accounting": {
             "anonymization_applied": true,
             "basis": "conservative-estimate-or-reported-usage-v1",
-            "charged_usd": "0.0715",
+            "charged_usd": "0.0716",
             "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-            "estimated_prompt_tokens": 11161,
-            "messages_digest": "22891eabc53c92f827fb5e5d983bb197a45e93ea3a09b0e22fffc1701a728620",
+            "estimated_prompt_tokens": 11178,
+            "messages_digest": "c6b96e6f6f290c2e4c59f22a04aa79025bcfb6529a440c5706a1cd5ac2f8d32f",
             "model": "native",
             "provider": "selected",
             "reported_usage_cost_usd": "0.0003",
-            "reserved_usd": "0.0715",
+            "reserved_usd": "0.0716",
             "tier": 1
           },
-          "charged_usd": "0.0715",
-          "completed_at": "2026-10-08T19:29:00.230939Z",
-          "created_at": "2026-10-08T19:29:00.218620Z",
+          "charged_usd": "0.0716",
+          "completed_at": "2026-10-09T22:49:27.845043Z",
+          "created_at": "2026-10-09T22:49:27.834122Z",
           "effect_key": "chat:plan:v1",
           "intent": "plan",
           "outcome": "success",
-          "reserved_usd": "0.0715",
+          "reserved_usd": "0.0716",
           "skill": {
-            "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+            "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
             "kind": "prompt",
             "name": "new_harness/orchestrator.v2",
             "version": "2"
@@ -753,9 +753,9 @@
         {
           "accounting": null,
           "charged_usd": "0.0000",
-          "completed_at": "2026-10-08T19:29:00.854135Z",
-          "created_at": "2026-10-08T19:29:00.840268Z",
-          "effect_key": "demo:collect:118d44db-4e57-4efc-8c4a-3e4890ec24c1:v1",
+          "completed_at": "2026-10-09T22:49:28.543084Z",
+          "created_at": "2026-10-09T22:49:28.520725Z",
+          "effect_key": "demo:collect:eefb0b66-f611-4a0a-bc85-0cdd805aefb5:v1",
           "intent": "workspace_read",
           "outcome": "success",
           "reserved_usd": "0.0000",
@@ -775,8 +775,8 @@
             "basis": "conservative-estimate-or-reported-usage-v1",
             "charged_usd": "0.0686",
             "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-            "estimated_prompt_tokens": 9691,
-            "messages_digest": "799d37e9749db8f1c6b8e0e3f1debeba539cd931df1b7bd4e5ab42c20ce1f272",
+            "estimated_prompt_tokens": 9708,
+            "messages_digest": "7e1a89c6a67d2691633b006ad5be00cce6038e3d2aa01f71304d371be32683d5",
             "model": "native",
             "provider": "selected",
             "reported_usage_cost_usd": "0.0003",
@@ -784,14 +784,14 @@
             "tier": 1
           },
           "charged_usd": "0.0686",
-          "completed_at": "2026-10-08T19:29:00.878990Z",
-          "created_at": "2026-10-08T19:29:00.868962Z",
+          "completed_at": "2026-10-09T22:49:28.580508Z",
+          "created_at": "2026-10-09T22:49:28.565667Z",
           "effect_key": "demo:synthesis:v1",
           "intent": "run_skill",
           "outcome": "success",
           "reserved_usd": "0.0686",
           "skill": {
-            "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+            "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
             "kind": "prompt",
             "name": "new_harness/orchestrator.v2",
             "version": "2"
@@ -810,15 +810,15 @@
       "outcome": null,
       "phase": "delivery",
       "reserved_usd": "0.0000",
-      "session_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
-      "spent_usd": "0.1401",
+      "session_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
+      "spent_usd": "0.1402",
       "status": "completed",
       "tools": [],
       "turn_limit": 0,
-      "updated_at": "2026-10-08T19:29:00.909632Z"
+      "updated_at": "2026-10-09T22:49:28.625145Z"
     },
-    "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
-    "spent_usd": "0.2754",
+    "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
+    "spent_usd": "0.2759",
     "status": "completed",
     "stop_reason": null,
     "verification": "unverified"

@@ -1,18 +1,18 @@
 {
   "answered_directly": false,
-  "chat_id": "9a1fa3b9-71e4-4151-8766-66c469ecbd2c",
+  "chat_id": "b39793b1-ec33-4d64-ba3c-4d3e1b6bf238",
   "direct_answer": null,
   "effects": [],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "82ae5f98-fe34-4444-a4fd-4f3ce900014c",
+  "message_id": "6e44cec8-5685-4234-ab64-080e5869e51c",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-08T21:29:00.174089Z",
+    "deadline": "2026-10-10T00:49:27.787143Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -36,24 +36,24 @@
     "goal": "How much annual leave do staff get?",
     "knowledge_bases": [
       {
-        "knowledge_base_id": "6b0f3c05-5e2f-4672-ae09-2cda771d530c",
+        "knowledge_base_id": "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
         "name": "People policies"
       },
       {
-        "knowledge_base_id": "0934c89d-7f94-466b-8956-8acc2ebadcfe",
+        "knowledge_base_id": "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa",
         "name": "Travel"
       }
     ],
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "cd2d5dcb-3c7e-41bf-957e-82d2342daa62",
+    "owner_id": "01bbab73-50b4-4b64-926d-6bf01a8ed098",
     "packet_digest": null,
-    "plan_id": "8abfb7ba-4ae5-4bea-8526-14606ce705fc",
+    "plan_id": "4a09de63-bf76-4493-a998-43fdbda4b2e3",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
     "profile": "new_harness_v1",
-    "project_id": "5b838029-645e-48c4-9c84-72bb6496607c",
+    "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
     "root": {
       "anonymize": true,
       "grants": {
@@ -71,19 +71,19 @@
       "resources": {
         "document_ids": [],
         "knowledge_base_ids": [
-          "0934c89d-7f94-466b-8956-8acc2ebadcfe",
-          "6b0f3c05-5e2f-4672-ae09-2cda771d530c"
+          "3c1c248d-0fd9-4a3b-8abb-eadf9eef2489",
+          "d2abbcb1-e116-45ed-8b84-1b4ae26f0eaa"
         ],
         "source_names": []
       },
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+    "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -93,13 +93,13 @@
       "task_turns": 5
     },
     "thread": [],
-    "today": "2026-10-08"
+    "today": "2026-10-09"
   },
   "profile": "new_harness_v1",
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "56181ee6-4a05-41dc-84fa-79e61fbc7acb",
+  "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
   "sources": [],
   "spent_usd": "0.0000",
   "status": "planning",

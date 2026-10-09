@@ -1,6 +1,6 @@
 {
   "answered_directly": false,
-  "chat_id": "89cf9b67-e953-46e6-bc99-553b43252ecb",
+  "chat_id": "1ada2352-ed91-41c3-99b7-46649ace0379",
   "direct_answer": null,
   "effects": [
     {
@@ -9,8 +9,8 @@
         "basis": "conservative-estimate-or-reported-usage-v1",
         "charged_usd": "0.0715",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-        "estimated_prompt_tokens": 11151,
-        "messages_digest": "080366582d9dfff701b4552624040e9bb42fac4be5d8c0d2301b9194c009bb3b",
+        "estimated_prompt_tokens": 11168,
+        "messages_digest": "06e84d9756aa286510f7d85927c354faf6b4467258f55273bc865b9d5b44ce7f",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
@@ -18,14 +18,14 @@
         "tier": 1
       },
       "charged_usd": "0.0715",
-      "completed_at": "2026-10-08T19:28:56.612909Z",
-      "created_at": "2026-10-08T19:28:56.603384Z",
+      "completed_at": "2026-10-09T22:49:23.717882Z",
+      "created_at": "2026-10-09T22:49:23.706011Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
       "reserved_usd": "0.0715",
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2",
         "version": "2"
@@ -42,14 +42,14 @@
   ],
   "evidence": "citations",
   "evidence_result": null,
-  "message_id": "739f42f7-08cc-4e4e-8610-fbcf0b483a39",
+  "message_id": "bc04667f-e2e8-4f5f-9b03-a9812d1a0eab",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-08T21:28:56.563232Z",
+    "deadline": "2026-10-10T00:49:23.659445Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -71,15 +71,15 @@
     "documents": [
       {
         "attached_for_run": false,
-        "document_id": "9a0806dd-b739-4428-bcdd-44112a494ef7",
-        "file_id": "16bf4111-5c73-4389-b26f-749a074cec32",
+        "document_id": "f20c763d-9981-4891-a64f-b2d26ec5fff7",
+        "file_id": "d7a5b73c-835a-4c97-95f1-b1791dd29dc8",
         "filename": "msa.txt",
         "number": 1
       },
       {
         "attached_for_run": true,
-        "document_id": "b6a1b3fc-b086-4a92-a189-51b7e248d1c1",
-        "file_id": "081c4430-f88a-473d-968f-edaf07d06c65",
+        "document_id": "2f904e08-ea47-4d17-889e-519ac87019a6",
+        "file_id": "2b885a94-5aac-45df-ab7e-042d5616dde5",
         "filename": "dpa.md",
         "number": 2
       }
@@ -89,13 +89,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "93fbb15a-0ce7-4f86-9692-d4c81cc147e8",
+    "owner_id": "7e36b2c2-bc47-49a4-be65-166b02969aec",
     "packet_digest": null,
-    "plan_id": "c2a4d6c6-cb3d-41bb-becc-62612c809f07",
+    "plan_id": "4af02d3c-25a2-47db-9a20-c83d63e631e2",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
     "profile": "new_harness_v1",
-    "project_id": "33f58c70-de9e-47d8-98e9-cad3921234d9",
+    "project_id": "ee1fabb8-0b44-4ab6-bcef-d6a788997f3a",
     "root": {
       "anonymize": true,
       "grants": {
@@ -112,19 +112,19 @@
       "privileged": false,
       "resources": {
         "document_ids": [
-          "9a0806dd-b739-4428-bcdd-44112a494ef7",
-          "b6a1b3fc-b086-4a92-a189-51b7e248d1c1"
+          "2f904e08-ea47-4d17-889e-519ac87019a6",
+          "f20c763d-9981-4891-a64f-b2d26ec5fff7"
         ],
         "source_names": []
       },
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+    "root_id": "8e93bd68-945a-4c6e-8a91-a25355626993",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -134,13 +134,13 @@
       "task_turns": 5
     },
     "thread": [],
-    "today": "2026-10-08"
+    "today": "2026-10-09"
   },
   "profile": "new_harness_v1",
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+  "root_id": "8e93bd68-945a-4c6e-8a91-a25355626993",
   "sources": [],
   "spent_usd": "0.0715",
   "status": "awaiting_approval",
@@ -155,7 +155,7 @@
         "outcome": null,
         "phase": "intake",
         "reserved_usd": "0",
-        "session_id": "9feb78cd-b464-4c69-8042-0fbb632a24b1",
+        "session_id": "b139116b-984c-44a7-821e-35fc5363ecc2",
         "spent_usd": "0",
         "status": "pending",
         "tools": [
@@ -188,7 +188,7 @@
         "outcome": null,
         "phase": "intake",
         "reserved_usd": "0",
-        "session_id": "1d5e953d-e5af-412f-9c11-e9469aad4838",
+        "session_id": "b1edc2dd-87a4-4194-8ad1-ef34ea17f9c5",
         "spent_usd": "0",
         "status": "pending",
         "tools": [
@@ -223,7 +223,7 @@
       "children": [
         {
           "budget_usd": "3.4686",
-          "dispatch_id": "9feb78cd-b464-4c69-8042-0fbb632a24b1",
+          "dispatch_id": "b139116b-984c-44a7-821e-35fc5363ecc2",
           "execution": {
             "anonymize": true,
             "grants": {
@@ -249,13 +249,13 @@
             "privileged": false,
             "resources": {
               "document_ids": [
-                "9a0806dd-b739-4428-bcdd-44112a494ef7",
-                "b6a1b3fc-b086-4a92-a189-51b7e248d1c1"
+                "2f904e08-ea47-4d17-889e-519ac87019a6",
+                "f20c763d-9981-4891-a64f-b2d26ec5fff7"
               ],
               "source_names": []
             },
             "skill": {
-              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
               "kind": "prompt",
               "name": "new_harness/subagent.v2"
             }
@@ -283,7 +283,7 @@
         },
         {
           "budget_usd": "3.4686",
-          "dispatch_id": "1d5e953d-e5af-412f-9c11-e9469aad4838",
+          "dispatch_id": "b1edc2dd-87a4-4194-8ad1-ef34ea17f9c5",
           "execution": {
             "anonymize": true,
             "grants": {
@@ -309,13 +309,13 @@
             "privileged": false,
             "resources": {
               "document_ids": [
-                "9a0806dd-b739-4428-bcdd-44112a494ef7",
-                "b6a1b3fc-b086-4a92-a189-51b7e248d1c1"
+                "2f904e08-ea47-4d17-889e-519ac87019a6",
+                "f20c763d-9981-4891-a64f-b2d26ec5fff7"
               ],
               "source_names": []
             },
             "skill": {
-              "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
               "kind": "prompt",
               "name": "new_harness/subagent.v2"
             }
@@ -343,7 +343,7 @@
         }
       ],
       "contract_version": 3,
-      "deadline": "2026-10-08T21:28:56.563232Z",
+      "deadline": "2026-10-10T00:49:23.659445Z",
       "delegation_grants": {
         "analysis": [
           "plan",
@@ -365,27 +365,27 @@
       "documents": [
         {
           "attached_for_run": false,
-          "document_id": "9a0806dd-b739-4428-bcdd-44112a494ef7",
-          "file_id": "16bf4111-5c73-4389-b26f-749a074cec32",
+          "document_id": "f20c763d-9981-4891-a64f-b2d26ec5fff7",
+          "file_id": "d7a5b73c-835a-4c97-95f1-b1791dd29dc8",
           "filename": "msa.txt",
           "number": 1
         },
         {
           "attached_for_run": true,
-          "document_id": "b6a1b3fc-b086-4a92-a189-51b7e248d1c1",
-          "file_id": "081c4430-f88a-473d-968f-edaf07d06c65",
+          "document_id": "2f904e08-ea47-4d17-889e-519ac87019a6",
+          "file_id": "2b885a94-5aac-45df-ab7e-042d5616dde5",
           "filename": "dpa.md",
           "number": 2
         }
       ],
       "goal": "Explain payment, renewal and termination questions independently.",
       "max_active_children": 2,
-      "owner_id": "93fbb15a-0ce7-4f86-9692-d4c81cc147e8",
-      "plan_id": "c2a4d6c6-cb3d-41bb-becc-62612c809f07",
-      "planning_digest": "f41f2acfbe79273d9058e1b611051e6b42dac3e68df08d6165f6e85d0946fd10",
-      "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+      "owner_id": "7e36b2c2-bc47-49a4-be65-166b02969aec",
+      "plan_id": "4af02d3c-25a2-47db-9a20-c83d63e631e2",
+      "planning_digest": "aaa312e1142a9204eacfd2e282f5b4829c1158792cf942df14b583a1e6b8e29c",
+      "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
       "profile": "new_harness_v1",
-      "project_id": "33f58c70-de9e-47d8-98e9-cad3921234d9",
+      "project_id": "ee1fabb8-0b44-4ab6-bcef-d6a788997f3a",
       "revision": 1,
       "root": {
         "anonymize": true,
@@ -412,21 +412,21 @@
         "privileged": false,
         "resources": {
           "document_ids": [
-            "9a0806dd-b739-4428-bcdd-44112a494ef7",
-            "b6a1b3fc-b086-4a92-a189-51b7e248d1c1"
+            "2f904e08-ea47-4d17-889e-519ac87019a6",
+            "f20c763d-9981-4891-a64f-b2d26ec5fff7"
           ],
           "source_names": []
         },
         "skill": {
-          "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+          "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
           "kind": "prompt",
           "name": "new_harness/orchestrator.v2"
         }
       },
       "root_allowance_usd": "1.1562",
-      "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0"
+      "root_id": "8e93bd68-945a-4c6e-8a91-a25355626993"
     },
-    "plan_hash": "4ec332805dec9d3a537e64bb1d22c63a54491d19925b1cc1489db24b73d85596",
+    "plan_hash": "d510b7a160584793264d254b7581eb0b0f77ca8e5df8ff7d4c91a3d18b2216bc",
     "reserved_usd": "0.0000",
     "result": null,
     "root": {
@@ -438,8 +438,8 @@
             "basis": "conservative-estimate-or-reported-usage-v1",
             "charged_usd": "0.0715",
             "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-            "estimated_prompt_tokens": 11151,
-            "messages_digest": "080366582d9dfff701b4552624040e9bb42fac4be5d8c0d2301b9194c009bb3b",
+            "estimated_prompt_tokens": 11168,
+            "messages_digest": "06e84d9756aa286510f7d85927c354faf6b4467258f55273bc865b9d5b44ce7f",
             "model": "native",
             "provider": "selected",
             "reported_usage_cost_usd": "0.0003",
@@ -447,14 +447,14 @@
             "tier": 1
           },
           "charged_usd": "0.0715",
-          "completed_at": "2026-10-08T19:28:56.612909Z",
-          "created_at": "2026-10-08T19:28:56.603384Z",
+          "completed_at": "2026-10-09T22:49:23.717882Z",
+          "created_at": "2026-10-09T22:49:23.706011Z",
           "effect_key": "chat:plan:v1",
           "intent": "plan",
           "outcome": "success",
           "reserved_usd": "0.0715",
           "skill": {
-            "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+            "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
             "kind": "prompt",
             "name": "new_harness/orchestrator.v2",
             "version": "2"
@@ -473,14 +473,14 @@
       "outcome": null,
       "phase": "analysis",
       "reserved_usd": "0.0000",
-      "session_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+      "session_id": "8e93bd68-945a-4c6e-8a91-a25355626993",
       "spent_usd": "0.0715",
       "status": "queued",
       "tools": [],
       "turn_limit": 0,
-      "updated_at": "2026-10-08T19:28:56.615104Z"
+      "updated_at": "2026-10-09T22:49:23.720162Z"
     },
-    "root_id": "59cb66bd-3795-4b84-86ee-868d38da51b0",
+    "root_id": "8e93bd68-945a-4c6e-8a91-a25355626993",
     "spent_usd": "0.0715",
     "status": "awaiting_approval",
     "stop_reason": null,

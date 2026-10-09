@@ -1,6 +1,6 @@
 {
   "active_run": null,
-  "chat_id": "89cf9b67-e953-46e6-bc99-553b43252ecb",
+  "chat_id": "1ada2352-ed91-41c3-99b7-46649ace0379",
   "composer_profile": "new_harness_v1",
   "profiles": [
     {
@@ -76,14 +76,14 @@
       "evidence": "citations",
       "instructions": [
         {
-          "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+          "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
           "kind": "prompt",
           "name": "new_harness/orchestrator.v2",
           "role": "orchestrator",
           "version": "2"
         },
         {
-          "digest": "9a68b501e6b552f254f7f5127b291c1deef60e81f7d682bc23e265e3da7179aa",
+          "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
           "kind": "prompt",
           "name": "new_harness/subagent.v2",
           "role": "sub-agent",
@@ -134,5 +134,5 @@
       ]
     }
   ],
-  "project_id": "33f58c70-de9e-47d8-98e9-cad3921234d9"
+  "project_id": "ee1fabb8-0b44-4ab6-bcef-d6a788997f3a"
 }

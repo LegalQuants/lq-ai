@@ -1,18 +1,18 @@
 {
   "answered_directly": false,
-  "chat_id": "d9e762e6-ebf1-411a-88c0-d126b57151fb",
+  "chat_id": "619593c8-4879-4b6b-a081-e9a5fb93a3d5",
   "direct_answer": null,
   "effects": [],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "3899234c-4aac-4650-b6ad-d04ce0f8c62b",
+  "message_id": "ad8e65b1-6cd4-495b-85fc-473a489124c8",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-08T21:28:58.899918Z",
+    "deadline": "2026-10-10T00:49:26.324797Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -37,13 +37,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "11525fad-80b7-4239-8667-9fec578413ad",
+    "owner_id": "2a1a6f3b-3fe2-4e86-a9ef-52349cb7c196",
     "packet_digest": null,
-    "plan_id": "d8e0e2b2-2433-43f5-b1e9-21ce4bd0b120",
+    "plan_id": "c0b6bd66-004a-4b21-9778-bc1c9ce48bd8",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "f7d6f1a73467a9a44e6592e24b980c4bc0d1f6e8be5084b7f9803ce59f0864ca",
+    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
     "profile": "new_harness_v1",
-    "project_id": "4273a16d-af0a-426c-8a43-c0c068ad5017",
+    "project_id": "b9e4561d-845f-4f45-95f8-eea4784e01e4",
     "root": {
       "anonymize": true,
       "grants": {
@@ -63,13 +63,13 @@
         "source_names": []
       },
       "skill": {
-        "digest": "1d8d930a38d4f5501160a6d9021e0078e8db881a7ca842bbd5034c96dbe6a32e",
+        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "eeebcae1-10df-4216-8404-ad1542bb89cf",
+    "root_id": "1fd5ae21-cd4f-4026-b7a1-dffc498649e0",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -90,13 +90,13 @@
         "role": "assistant"
       }
     ],
-    "today": "2026-10-08"
+    "today": "2026-10-09"
   },
   "profile": "new_harness_v1",
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "eeebcae1-10df-4216-8404-ad1542bb89cf",
+  "root_id": "1fd5ae21-cd4f-4026-b7a1-dffc498649e0",
   "sources": [],
   "spent_usd": "0.0000",
   "status": "planning",
