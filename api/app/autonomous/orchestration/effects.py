@@ -364,7 +364,13 @@ class GuardedEffects:
         if self.inference is not None:
             async with asyncio.timeout(view.lease_seconds):
                 binding = await self.inference.bind(
-                    view.plan, view.scope, params["messages"], offered or None
+                    view.plan,
+                    view.scope,
+                    params["messages"],
+                    offered or None,
+                    # The plan tool is terminal: its arguments are read here
+                    # and never sent back to a model, so they may be restored.
+                    plan_tool=intent == ToolIntent.plan and bool(plan_tools),
                 )
             if view.planning and binding.gateway_revision != view.planning.gateway_revision:
                 raise Forbidden(message="Gateway configuration changed; start a new approved run")
@@ -374,6 +380,10 @@ class GuardedEffects:
                 # Part of the bound policy, so of the call's identity. Absent
                 # when the route sets none, as before the field existed.
                 params["reasoning_effort"] = binding.policy.reasoning_effort
+            if binding.restore_tool_arguments:
+                # Part of the binding, so of the call's identity. Absent
+                # for every call that is not a pseudonymized plan call.
+                params["lq_ai_restore_tool_arguments"] = True
             view = await self.store.execution_view(claim)
         return await self._call(
             claim, view, effect_key, phase, intent, params, inference_binding=binding, step=step

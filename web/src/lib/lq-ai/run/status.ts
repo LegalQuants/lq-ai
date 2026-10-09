@@ -342,9 +342,9 @@ function statusDetail(run: RunLike): string | null {
 					return `${stopReasonText(run.stop_reason)} Nothing ran. Send the request again.`;
 				case 'plan_has_placeholders':
 					return (
-						`${stopReasonText(run.stop_reason)} This route is pseudonymized, and a placeholder in a plan ` +
-						'cannot be turned back into the real value, so the plan was refused. Nothing ran. ' +
-						'Try the request again without the name or identifier.'
+						`${stopReasonText(run.stop_reason)} This route is pseudonymized. The gateway puts back the ` +
+						'placeholders it assigned, and this one was not among them, so the plan was refused. ' +
+						'Nothing ran. Send the request again.'
 					);
 				case 'unfunded_plan':
 					return 'The model proposed more tasks than the total cap can fund at the per-task allowance. No task ran. A narrower request needs fewer tasks.';

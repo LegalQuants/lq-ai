@@ -28,7 +28,7 @@ const READING = 'Reading your request…';
 const NOT_HANDED_OVER =
 	'The model wrote its plan out as text instead of handing it over, so there is no plan to approve.';
 const HAS_PLACEHOLDERS =
-	'The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized, and a placeholder in a plan cannot be turned back into the real value, so the plan was refused. Nothing ran. Try the request again without the name or identifier.';
+	'The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized. The gateway puts back the placeholders it assigned, and this one was not among them, so the plan was refused. Nothing ran. Send the request again.';
 
 describe('runHeadline on recorded runs', () => {
 	const expected: [string, string][] = [
@@ -228,7 +228,7 @@ describe('runDetail', () => {
 		expect(failed.tree).toBeNull();
 		const detail = runDetail(failed)!;
 		expect(detail).toBe(
-			'The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized, and a placeholder in a plan cannot be turned back into the real value, so the plan was refused. Nothing ran. Try the request again without the name or identifier.'
+			'The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized. The gateway puts back the placeholders it assigned, and this one was not among them, so the plan was refused. Nothing ran. Send the request again.'
 		);
 		// It begins with the sentence the stop reason is worded with, as the other plan failures do.
 		expect(stopReasonText('plan_has_placeholders')).toBe(

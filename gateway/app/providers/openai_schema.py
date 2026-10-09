@@ -307,6 +307,28 @@ class ChatCompletionRequest(BaseModel):
     ``'chat'``; a value outside the set also falls back to ``'chat'``.
     Stripped from the outbound provider body."""
 
+    lq_ai_restore_tool_arguments: bool = False
+    """Ask the response path to restore pseudonyms in tool-call arguments.
+
+    By default the anonymization middleware restores a reply's text and
+    leaves ``tool_calls[].function.arguments`` as the model wrote them.
+    When this is true and the request was pseudonymized, a non-streaming
+    response also has the pseudonyms in each call's arguments replaced by
+    the originals (see
+    :func:`app.anonymization.middleware.post_anonymize_response`).
+
+    It changes only what the gateway returns to its caller. Nothing more is
+    sent to a provider, and the field itself is stripped from the outbound
+    body. It has no effect on a request that was not pseudonymized, and
+    none on the streaming path.
+
+    A caller sets it only for a call whose tool arguments it will read and
+    never send back to a model as a tool call. The request path does not
+    pseudonymize ``tool_calls`` in an assistant message, so restored
+    arguments that were echoed back on a later turn would leave with the
+    original names in them. The backend sets it on one call: a governed
+    run's planning call, whose one tool is terminal (ADR 0038 D7)."""
+
 
 # --- Chat completion response -------------------------------------------------
 

@@ -218,7 +218,7 @@ def test_the_conversation_shape_is_closed() -> None:
         message_identity([system, user, final])
 
 
-def _binding(*, tools: bool) -> InferenceBinding:
+def _binding(*, tools: bool, restore: bool = False) -> InferenceBinding:
     return InferenceBinding(
         policy_version="p",
         policy=InferencePolicy(
@@ -233,6 +233,7 @@ def _binding(*, tools: bool) -> InferenceBinding:
         gateway_revision="c" * 64,
         anonymization_expected=True,
         tools_offered=tools,
+        restore_tool_arguments=restore,
     )
 
 
@@ -255,6 +256,97 @@ def _response(*, content: Any, tool_calls: Any = None, finish: str = "stop") -> 
 def test_a_binding_without_tools_keeps_its_0_8_0_form() -> None:
     assert "tools_offered" not in _binding(tools=False).model_dump(mode="json")
     assert _binding(tools=True).model_dump(mode="json")["tools_offered"] is True
+
+
+def test_a_binding_that_does_not_ask_for_restored_arguments_keeps_its_form() -> None:
+    # ADR 0038 D7: only a pseudonymized planning call asks the gateway to
+    # restore its tool-call arguments. Every other binding's dump, which is
+    # part of its effect's identity, is as it was before the field existed.
+    plain = _binding(tools=True).model_dump(mode="json")
+    assert "restore_tool_arguments" not in plain
+    asking = _binding(tools=True, restore=True).model_dump(mode="json")
+    assert asking == {**plain, "restore_tool_arguments": True}
+
+
+def test_a_binding_matches_a_request_only_with_the_restore_flag_it_was_bound_with() -> None:
+    messages = [{"role": "system", "content": "pinned"}, {"role": "user", "content": "request"}]
+    tools = [{"type": "function", "function": {"name": "propose_plan", "parameters": {}}}]
+    digest, _ = conversation_identity(messages, tools)
+
+    def bound(restore: bool) -> InferenceBinding:
+        return _binding(tools=True, restore=restore).model_copy(update={"messages_digest": digest})
+
+    request = {
+        "model": bound(False).policy.model_key,
+        "max_tokens": 64,
+        "messages": messages,
+        "tools": tools,
+    }
+    asking = {**request, "lq_ai_restore_tool_arguments": True}
+    assert bound(False).matches(request) is True
+    assert bound(True).matches(asking) is True
+    # A request cannot add the flag to a call that was not bound with it, nor drop it.
+    assert bound(False).matches(asking) is False
+    assert bound(True).matches(request) is False
+    # Only the engine's own literal asks.
+    for other in ("true", 1, "yes"):
+        assert bound(True).matches({**request, "lq_ai_restore_tool_arguments": other}) is False
+
+
+async def test_only_a_bound_planning_call_may_ask_for_restored_arguments() -> None:
+    """A task's reply is echoed back to its model, so its arguments are never restored."""
+    from app.autonomous.enums import ToolIntent
+    from app.autonomous.orchestration.boundary import constrain_call
+    from app.autonomous.orchestration.contracts import (
+        ExecutionScope,
+        PhaseGrants,
+        ResourceScope,
+        SkillPin,
+    )
+    from app.errors import ToolNotGranted
+
+    messages = [{"role": "system", "content": "pinned"}, {"role": "user", "content": "request"}]
+    tools = [{"type": "function", "function": {"name": "propose_plan", "parameters": {}}}]
+    digest, _ = conversation_identity(messages, tools)
+    binding = _binding(tools=True, restore=True).model_copy(update={"messages_digest": digest})
+    scope = ExecutionScope(
+        resources=ResourceScope(document_ids=(), source_names=()),
+        grants=PhaseGrants(
+            intake=(),
+            analysis=(ToolIntent.plan, ToolIntent.run_skill),
+            drafting=(),
+            ethics_review=(),
+            delivery=(),
+        ),
+        skill=SkillPin(name="fixture", digest="a" * 64),
+        minimum_inference_tier=5,
+        maximum_egress_tier=0,
+        privileged=False,
+        anonymize=True,
+    )
+    session: Any = SimpleNamespace(current_phase="analysis", project_id=None, user_id=uuid4())
+    db: Any = None  # an inference call reads nothing from the database here
+    request = {
+        "model": binding.policy.model_key,
+        "max_tokens": 64,
+        "messages": messages,
+        "tools": tools,
+        "lq_ai_restore_tool_arguments": True,
+    }
+
+    narrowed = await constrain_call(db, session, ToolIntent.plan, request, scope, None, binding)
+    assert narrowed["lq_ai_restore_tool_arguments"] is True
+
+    # A task's call, with or without a binding that asks.
+    with pytest.raises(ToolNotGranted, match="only a planning call"):
+        await constrain_call(db, session, ToolIntent.run_skill, request, scope, None, binding)
+    # A planning call with no route binding: a legacy session never asks.
+    with pytest.raises(ToolNotGranted, match="only a planning call"):
+        await constrain_call(db, session, ToolIntent.plan, request, scope, None, None)
+    # A planning call that asks although its binding does not.
+    plain = binding.model_copy(update={"restore_tool_arguments": False})
+    with pytest.raises(ToolNotGranted, match="differs from approved route binding"):
+        await constrain_call(db, session, ToolIntent.plan, request, scope, None, plain)
 
 
 def test_tool_calls_are_normalized_into_bounded_data() -> None:

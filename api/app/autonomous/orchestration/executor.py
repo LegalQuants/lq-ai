@@ -569,8 +569,10 @@ class OrchestrationExecutor:
                 # result without the flag fails closed.
                 pseudonymized = accounting.get("anonymization_applied") is not False
                 if pseudonymized and arguments_carry_placeholder(arguments):
-                    # The gateway restores placeholders in a reply's text, not
-                    # in a tool call's arguments, and no later call could.
+                    # The gateway was asked to restore this call's arguments.
+                    # What is still shaped like a placeholder is one it did not
+                    # assign (the model altered or invented it), and no later
+                    # call could restore it.
                     raise PlanCarriesPlaceholders("the plan carries a placeholder")
                 plan = prepare_model_plan(profile, snapshot, arguments, policy, arguments=True)
             elif offered:

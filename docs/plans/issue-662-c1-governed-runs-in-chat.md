@@ -310,7 +310,7 @@ Tests: `test_new_harness.py`, `test_new_harness_guards.py`, `test_document_runs.
 | Knowledge-base search | The registry tool `search_knowledge_base`. A run in a matter lists the matter's knowledge bases (at most 16), named in the intake and the plan. Keyword only. Passages are shown subject to the file rule. Files a search finds get source numbers in the task's own block, and quotations from them are checked. `ChatRunRead.sources`, a step of kind `knowledge_search`, and the composer's knowledge-base line. |
 | Terms | The run's limits and how its plan is handed over are frozen in its version 3 intake (`terms`). |
 | Prompts | `orchestrator.v2.md` and `subagent.v2.md`. Version 1 of each stays beside them. |
-| Placeholders | A plan from a pseudonymized call that carries a placeholder fails (`plan_has_placeholders`). The gateway change that would make this unnecessary is written up for security review and not made. |
+| Placeholders | The gateway restores the placeholders in a pseudonymized planning call's plan arguments (ruling 6, built on 2026-10-10). A plan that still carries one fails (`plan_has_placeholders`). |
 | Skill list | The skill list and autocomplete leave out any skill that instructs a run profile's orchestrator (the 0.8.0 demonstration skill). The skill `contract-questions-orchestrator`, added in the first build, was removed. |
 
 Tests: `test_new_harness_turn.py`, `test_new_harness_turn_guards.py` and the files named
@@ -470,6 +470,22 @@ that it can be reviewed apart, and none has had maintainer or security review.
   one they do not, and the web's marker iterator. Not changed: emphasis inside the
   quotation marks, and the underline in an ordinary message's prose, which is not drawn
   for an emphasised quotation. Not checked in a browser.
+
+- **Ruling 6, the plan's placeholders.** The gateway's chat-completion request takes an
+  opt-in, `lq_ai_restore_tool_arguments`. With it, and where the request was
+  pseudonymized, the non-streaming response path restores this request's placeholders in
+  the string values of each tool call's JSON arguments, whole tokens only, in one pass,
+  and returns anything it will not rewrite exactly as sent
+  (`gateway/app/anonymization/middleware.py`). The field is stripped from the outbound
+  body. The application sets it on a planning call that is offered the plan tool where the
+  route binding expects pseudonymization; it is part of that binding and of the call's
+  identity, and the run boundary refuses it on any other call. The refusal of a plan that
+  still carries a placeholder is kept. Tests: the restore step alone, the gateway against
+  a mocked provider with and without the opt-in and for a request that was not
+  pseudonymized, the adapter's stripped fields, the binding's form and match, the
+  boundary's refusal, and controlled-provider runs. Not done: a run on a route that
+  pseudonymizes, and a test of the streaming path with the field set (that path does not
+  read it).
 
 ### Not done, or not verified
 

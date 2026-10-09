@@ -2212,6 +2212,11 @@ async def _handle_gateway_inference(
         minimum_inference_tier=params.get("minimum_inference_tier"),
         lq_ai_project_minimum_inference_tier=params.get("lq_ai_project_minimum_inference_tier"),
         lq_ai_privileged=params.get("lq_ai_privileged", False),
+        # Only a bound run's planning call carries it; the boundary has
+        # matched it against the route binding. A legacy session never does.
+        lq_ai_restore_tool_arguments=(
+            params.get("lq_ai_restore_tool_arguments") is True if bound else False
+        ),
     )
 
     try:

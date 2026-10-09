@@ -13,7 +13,8 @@ Three callables form the public API:
   caller treats ``None`` as "skip the post-middleware too").
 * :func:`post_anonymize_response` — response-path substitution for
   non-streaming responses. Walks each choice's message content and
-  replaces pseudonyms with originals.
+  replaces pseudonyms with originals. On the caller's opt-in it also
+  restores the pseudonyms in each tool call's arguments.
 * :class:`StreamingRehydrator` — incremental tail-buffer rehydrator
   for streaming responses. Solves Decision B (pseudonyms can straddle
   SSE chunk boundaries): we hold an unresolved tail until a complete
@@ -37,6 +38,7 @@ audit log clean.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -231,6 +233,7 @@ def post_anonymize_response(
     response: ChatCompletionResponse,
     mapper: PseudonymMapper,
     anonymizer: Anonymizer,
+    restore_tool_arguments: bool = False,
 ) -> None:
     """Rehydrate each choice's message content in place.
 
@@ -243,12 +246,140 @@ def post_anonymize_response(
     Per Decision D: the gateway rehydrates response *content* only.
     Citation rehydration happens downstream in the api/'s citation
     extraction, which operates on the already-rehydrated content.
+
+    ``restore_tool_arguments`` is the caller's opt-in
+    (``ChatCompletionRequest.lq_ai_restore_tool_arguments``). When it is
+    set, the pseudonyms in each tool call's arguments are restored as
+    well; see :func:`_restore_arguments`. Without it a tool call's
+    arguments are returned as the model wrote them, as before.
     """
 
+    originals = mapper.reverse() if restore_tool_arguments else {}
     for choice in response.choices:
-        if choice.message.content is None:
+        if choice.message.content is not None:
+            choice.message.content = anonymizer.rehydrate(choice.message.content, mapper)
+        if not originals or not choice.message.tool_calls:
             continue
-        choice.message.content = anonymizer.rehydrate(choice.message.content, mapper)
+        for call in choice.message.tool_calls:
+            function = call.get("function") if isinstance(call, dict) else None
+            if not isinstance(function, dict):
+                continue
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                function["arguments"] = _restore_arguments(arguments, originals)
+
+
+# One call's arguments, in characters, above which nothing is restored. The
+# backend bounds a call's arguments at 49,152 bytes; this is the gateway's own
+# limit and does not depend on that one.
+_MAX_RESTORED_ARGUMENT_CHARS = 65_536
+# How deep the restored value may nest. A plan is three levels.
+_MAX_RESTORED_ARGUMENT_DEPTH = 16
+
+
+class _NotRestorable(ValueError):
+    """The arguments are not a value this path will rewrite; return them as sent."""
+
+
+def _unique_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Refuse an object that names a member twice.
+
+    Parsing would keep the last and drop the others, so writing the value back
+    would repair it. The caller reads these arguments with a strict parser
+    that refuses a duplicate; it must be given what the model wrote.
+    """
+
+    members: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in members:
+            raise _NotRestorable("duplicate member")
+        members[key] = value
+    return members
+
+
+def _not_a_number(_: str) -> Any:
+    raise _NotRestorable("NaN or Infinity is not JSON")
+
+
+def _whole_pseudonyms(originals: dict[str, str]) -> re.Pattern[str]:
+    """Match one of this request's pseudonyms where it stands as a whole token.
+
+    A pseudonym inside a longer run of letters, digits or underscores is not
+    one of ours as written: ``PERSON_00010`` is not ``PERSON_0001`` followed
+    by a zero, and ``XPERSON_0001`` is not ``PERSON_0001``. Both are left as
+    they are. Longest first, so that of two pseudonyms where one begins the
+    other the longer is tried first.
+    """
+
+    names = sorted(originals, key=len, reverse=True)
+    return re.compile(
+        r"(?<![A-Za-z0-9_])(?:" + "|".join(re.escape(n) for n in names) + r")(?![A-Za-z0-9_])"
+    )
+
+
+def _restore_strings(
+    value: Any, pattern: re.Pattern[str], originals: dict[str, str], depth: int = 0
+) -> Any:
+    """Restore pseudonyms in string values; leave member names and other types alone."""
+
+    if depth > _MAX_RESTORED_ARGUMENT_DEPTH:
+        raise _NotRestorable("nested too deeply")
+    if isinstance(value, str):
+        # One pass over the text as the model wrote it. What is put back is not
+        # looked at again, so an original that happens to read like a pseudonym
+        # is never replaced a second time.
+        return pattern.sub(lambda match: originals[match.group(0)], value)
+    if isinstance(value, dict):
+        return {k: _restore_strings(v, pattern, originals, depth + 1) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_restore_strings(v, pattern, originals, depth + 1) for v in value]
+    return value
+
+
+def _restore_arguments(arguments: str, originals: dict[str, str]) -> str:
+    """Restore pseudonyms in one tool call's JSON arguments, or return them as sent.
+
+    ``originals`` is this request's own ``pseudonym -> original`` table. The
+    arguments are a JSON document in a string. A pseudonym is replaced inside
+    the parsed string values and the document is written out again: replacing
+    inside the raw string would break it whenever an original holds a
+    quotation mark or a backslash. Member names are not rewritten.
+
+    Only a pseudonym this request assigned is restored, and only where it
+    stands as a whole token (:func:`_whole_pseudonyms`). One the model altered
+    or invented is left as it is; the caller decides what to do with it.
+
+    The string is returned exactly as it was sent when it is not a JSON object
+    or array, when an object names a member twice, when it holds ``NaN`` or
+    ``Infinity``, when it is longer or more deeply nested than the bounds
+    above, and when no value in it holds a pseudonym of this request. So a
+    call with nothing to restore is never re-serialised, and a caller's strict
+    parser sees what the model wrote.
+
+    When something is restored the document is written with characters as
+    themselves (no ``\\uXXXX`` escapes for non-ASCII text) and with members in
+    the order they were sent. A number is written as Python writes it, which
+    keeps its value and may not keep its spelling (``1.50`` becomes ``1.5``).
+
+    This changes only what is returned to the gateway's caller. Nothing is
+    sent to a provider from here.
+    """
+
+    if not originals or not arguments or len(arguments) > _MAX_RESTORED_ARGUMENT_CHARS:
+        return arguments
+    try:
+        parsed = json.loads(
+            arguments, object_pairs_hook=_unique_members, parse_constant=_not_a_number
+        )
+        if not isinstance(parsed, dict | list):
+            return arguments
+        restored = _restore_strings(parsed, _whole_pseudonyms(originals), originals)
+        if restored == parsed:
+            return arguments
+        return json.dumps(restored, ensure_ascii=False, allow_nan=False)
+    except (ValueError, TypeError, RecursionError):
+        # ``_NotRestorable`` and ``json.JSONDecodeError`` are both ``ValueError``.
+        return arguments
 
 
 def _pseudonymize_strings(value: Any, *, anonymizer: Anonymizer, mapper: PseudonymMapper) -> Any:

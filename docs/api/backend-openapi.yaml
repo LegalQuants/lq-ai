@@ -5463,8 +5463,8 @@ paths:
   # carries; a step of kind ``knowledge_search`` whose summary is {passages, sources,
   # listed, searched, failed, withheld} and holds no passage text; and the stop reasons
   # ``plan_not_handed_over``, for a planning reply that wrote the plan out as text, and
-  # ``plan_has_placeholders``, for a plan from a pseudonymized call that carries a
-  # gateway placeholder.
+  # ``plan_has_placeholders``, for a plan from a pseudonymized call that still carries
+  # something shaped like a gateway placeholder after the gateway restored its own.
   # ``terms`` and ``knowledge_bases`` are left out of a snapshot that has none, so a
   # retained plan keeps the hash its approval is bound to.
   /api/v1/chats/{chat_id}/runs:
@@ -5505,11 +5505,12 @@ paths:
         (``plan_not_handed_over``). This amends ADR 0035 D1 and is not ratified.
 
         On a route that pseudonymizes, the gateway replaces a name in message
-        text with a placeholder and puts it back in a reply's text. It does not
-        touch tool-call arguments. A plan handed over as a tool call would keep
-        its placeholders, and no later call could restore them, so a plan from a
-        pseudonymized call that carries one fails with ``plan_has_placeholders``
-        and nothing runs. The orchestrator's own answer is reply text and is
+        text with a placeholder and puts it back in a reply's text. For the
+        planning call it is also asked to put its placeholders back in the
+        plan tool's arguments. A placeholder it did not assign cannot be
+        restored by it or by any later call, so a plan from a pseudonymized
+        call that still carries one fails with ``plan_has_placeholders`` and
+        nothing runs. The orchestrator's own answer is reply text and is
         restored as usual.
 
         In a project, the run lists the knowledge bases attached to that project
@@ -5580,8 +5581,8 @@ paths:
         ``routed_tier``, the inference tier the pinned route resolves to for this
         chat, ``pseudonymized``, whether the gateway pseudonymizes message text
         on that route (document text a task reads is returned to the model as
-        a tool result, which the gateway does not rewrite, and tool-call
-        arguments are not rewritten either), ``reasoning_effort`` when the
+        a tool result, which the gateway does not rewrite, and a task's
+        tool-call arguments are not rewritten either), ``reasoning_effort`` when the
         operator set one, ``answers_directly`` (true where the orchestrator may
         answer a request that needs nothing read by itself, with no plan and no
         approval), and

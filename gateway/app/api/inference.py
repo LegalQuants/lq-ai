@@ -768,7 +768,12 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
         # then dropped on function exit — never persisted, never logged.
         if anon_mapper is not None:
             post_anonymize_response(
-                response=result.response, mapper=anon_mapper, anonymizer=anonymizer
+                response=result.response,
+                mapper=anon_mapper,
+                anonymizer=anonymizer,
+                # Opt-in, for a call whose tool arguments the caller reads and
+                # never sends back to a model (a governed run's plan).
+                restore_tool_arguments=chat_request.lq_ai_restore_tool_arguments,
             )
 
         # --- Success: stamp tier on body, write log, return --------------------

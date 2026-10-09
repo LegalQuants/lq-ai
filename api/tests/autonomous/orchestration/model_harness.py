@@ -198,6 +198,13 @@ class ModelGateway:
         self.plan_finish_reason: str | None = None
         # The tool schemas each planning call was offered.
         self.plan_tools: list[list[dict[str, Any]]] = []
+        # What the gateway's own mapping for a request would restore, as
+        # placeholder -> original. Applied to a reply's tool-call arguments
+        # only when the request asks for it and was pseudonymized, as the
+        # real gateway does (ADR 0038 D7).
+        self.restorations: dict[str, str] = {}
+        # Each call's operation, with whether it asked for that.
+        self.restore_asked: list[tuple[str, bool]] = []
 
     async def get_admin_config(self) -> dict[str, Any]:
         return deepcopy(self.config)
@@ -304,6 +311,15 @@ class ModelGateway:
             and request.anonymize
             and not request.lq_ai_privileged
         )
+        asked = request.lq_ai_restore_tool_arguments
+        self.restore_asked.append((operation, asked))
+        if asked and applied and tool_calls:
+            tool_calls = deepcopy(tool_calls)
+            for call in tool_calls:
+                for placeholder, original in self.restorations.items():
+                    call["function"]["arguments"] = call["function"]["arguments"].replace(
+                        placeholder, original
+                    )
         return SimpleNamespace(
             routed_provider="selected",
             routed_model="native",

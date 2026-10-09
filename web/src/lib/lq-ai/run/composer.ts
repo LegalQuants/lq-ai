@@ -290,14 +290,16 @@ export function routeText(profile: ProfileAvailability): string | null {
 //   text of a document a task reads, and of a passage a search of the knowledge bases
 //   returns, goes out as written (PRD Decision M2-1: quotations are checked against the
 //   source), and tool-call arguments are not rewritten either;
-// - the plan arrives as the arguments of a tool call, where nothing is put back: a plan that
-//   carries a placeholder is refused (`plan_has_placeholders`) and nothing runs.
+// - the plan arrives as the arguments of a tool call. The gateway is asked to put the
+//   placeholders it assigned back in those arguments (ADR 0038 D7). A plan that still
+//   carries one, which the model altered or invented, is refused
+//   (`plan_has_placeholders`) and nothing runs.
 export const PSEUDONYMIZED_TEXT =
 	'On the way to the model, the gateway replaces what it recognises as a personal name or ' +
 	'an identifier in your request, this chat’s messages and the plan with a placeholder, and ' +
-	'puts it back in what the model writes. It cannot put one back in a plan, so a plan that ' +
-	'carries a placeholder is refused and nothing runs. It does not recognise everything, and a ' +
-	'miss is not reported. Organisation names are not replaced. The text of a document that a task ' +
+	'puts it back in what the model writes. That includes the plan. A plan that still carries ' +
+	'a placeholder, one the gateway did not assign, is refused and nothing runs. ' +
+	'It does not recognise everything, and a miss is not reported. Organisation names are not replaced. The text of a document that a task ' +
 	'reads, and of a passage that a search returns, is sent as written, so that quotations ' +
 	'can be checked. A task’s notes and stated reasons may show a placeholder.';
 export const NOT_PSEUDONYMIZED_TEXT =

@@ -181,6 +181,10 @@ class InferenceBinding(Snapshot):
     # ADR 0038 D4: whether function schemas were offered on this request. A
     # response may carry tool calls only when they were.
     tools_offered: bool = False
+    # ADR 0038 D7: whether the gateway is asked to restore pseudonyms in the
+    # reply's tool-call arguments. True only for a pseudonymized planning
+    # call that is offered the plan tool.
+    restore_tool_arguments: bool = False
 
     @field_serializer("reservation_usd")
     def serialize_reservation(self, value: Decimal) -> str:
@@ -193,6 +197,10 @@ class InferenceBinding(Snapshot):
             # Keep the 0.8.0 form for a request without tools: this dump is
             # part of the effect's identity.
             value.pop("tools_offered", None)
+        if not self.restore_tool_arguments:
+            # Absent unless asked for, so every other call keeps the
+            # identity it had before the field existed.
+            value.pop("restore_tool_arguments", None)
         return value
 
     def matches(self, params: dict[str, Any]) -> bool:
@@ -206,6 +214,8 @@ class InferenceBinding(Snapshot):
             and params.get("reasoning_effort") == self.policy.reasoning_effort
             and digest == self.messages_digest
             and bool(tools) is self.tools_offered
+            and (params.get("lq_ai_restore_tool_arguments", False) is True)
+            is self.restore_tool_arguments
         )
 
 
@@ -219,7 +229,16 @@ class InferenceRoutes:
         scope: ExecutionScope,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        plan_tool: bool = False,
     ) -> InferenceBinding:
+        """Bind one request to the pinned route as the gateway is configured now.
+
+        ``plan_tool`` says this is a planning call offered its one terminal
+        tool. Where such a call will be pseudonymized, the binding asks the
+        gateway to restore the pseudonyms in that tool's arguments, which
+        the application reads and never sends back to a model.
+        """
         operator = self.operator()
         if (
             operator is None
@@ -309,6 +328,7 @@ class InferenceRoutes:
                 gateway_revision=config["configuration_revision"],
                 anonymization_expected=expected,
                 tools_offered=bool(tools),
+                restore_tool_arguments=plan_tool and bool(tools) and expected,
             )
         except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError):
             raise Forbidden(

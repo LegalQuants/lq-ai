@@ -715,10 +715,10 @@ describe('what the route does to the text', () => {
 		expect(text).toContain(
 			'the gateway replaces what it recognises as a personal name or an identifier'
 		);
-		// A placeholder in the plan cannot be turned back, so the plan is refused: said before the run,
+		// A placeholder the gateway did not assign cannot be turned back, so the plan is refused: said before the run,
 		// right after the sentence that says placeholders are put back, where it qualifies it.
 		expect(text).toContain(
-			'and puts it back in what the model writes. It cannot put one back in a plan, so a plan that carries a placeholder is refused and nothing runs. It does not recognise everything'
+			'and puts it back in what the model writes. That includes the plan. A plan that still carries a placeholder, one the gateway did not assign, is refused and nothing runs. It does not recognise everything'
 		);
 		// It must not read as a guarantee (docs/security/anonymization.md): the layer misses
 		// things silently, and organisation names are never replaced (PRD DE-397).

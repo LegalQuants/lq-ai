@@ -374,8 +374,8 @@ the topic to 256, and the application caps one call's arguments at 49,152 bytes.
 one call, a call to another name, and arguments that are not a valid plan fail the plan
 (`invalid_proposal`). A plan with more tasks than the total cap can fund fails as
 `unfunded_plan`. A plan written out as text fails as `plan_not_handed_over` (D1). A plan
-from a pseudonymized call that carries a placeholder fails as `plan_has_placeholders`
-(D7). The fictional profile keeps its text plan. The orchestrator has no other tool: it
+from a pseudonymized call that still carries a placeholder after the gateway restored its
+own fails as `plan_has_placeholders` (D7). The fictional profile keeps its text plan. The orchestrator has no other tool: it
 cannot read a document or search, so a question about a document always goes through a
 plan.
 
@@ -519,10 +519,12 @@ What is pseudonymized is message text: the request, the thread, the task text a 
 receives, and the model's own earlier text. Document text that a task reads, and passages
 that a search returns, return to the model as a tool result, which the gateway does not
 rewrite (PRD Decision M2-1, so that quotations can be checked against the source).
-Tool-call arguments are not rewritten in either direction, so a note, a stated reason or a
-search query can carry a placeholder. A call's `anonymization_applied` flag covers message
-text only. The composer states this where it says a route is pseudonymized. The case of a
-plan that carries a placeholder is in D7.
+Tool-call arguments are not rewritten on the way to the model, and a sub-agent's are not
+restored on the way back, so a note, a stated reason or a search query can carry a
+placeholder. The one exception is the plan: the gateway restores the placeholders in the
+arguments of the planning call's `propose_plan` call (D7). A call's
+`anonymization_applied` flag covers message text only. The composer states this where it
+says a route is pseudonymized.
 
 **Handoff.** Document text, search results, task results, the thread and the request are
 data. None of them can change a task, its tools or its limits. Those are enforced in code
@@ -578,8 +580,9 @@ turns. These limits of the branch must close first.
 - **A plan is strict.** A plan with any member beyond `tasks`, or a task with any extra
   field, fails as `invalid_proposal`. On one local model, one plan call in six added a
   `request` member before the tool's description told the model to add nothing else.
-- **Pseudonymization covers message text only** (D5). On a route that pseudonymizes, a
-  note, a stated reason or a search query can carry a placeholder, and the model sees the
+- **Pseudonymization covers message text, and the plan's arguments on the way back** (D5).
+  On a route that pseudonymizes, a sub-agent's
+  note, stated reason or search query can carry a placeholder, and the model sees the
   request with names replaced and a document with names as written, so the two can fail
   to match and a search on a name finds little.
 - **The wording of the assembled messages is not frozen with the run's terms.** A run's
@@ -599,32 +602,58 @@ turns. These limits of the branch must close first.
   one person's judgment of the build and not a measurement. No run has used a hosted
   provider. The requirement below names a configured provider and does not say hosted.
 
-**A plan that carries a placeholder is refused, until the gateway restores it (ruling 6).** On a route that
-pseudonymizes, the gateway replaces a name in message text with a placeholder such as
-`PERSON_0001` and puts it back in a reply's text, with a mapping that lasts for one
-request. It does not touch tool-call arguments. A plan handed over as a tool call (D4)
-therefore keeps any placeholder it carries. The calls that follow have their own mappings:
-they cannot restore it, and can give the same placeholder to a different name, so a wrong
-name could be put into the delivered answer and nothing would report it. A plan from a
-pseudonymized call that carries a placeholder fails with its own stop reason,
-`plan_has_placeholders`, and nothing runs. The test looks for a token of that shape in
-every key and string value of the arguments, including one spelled with a JSON escape. A
-call counts as pseudonymized unless its receipt records that none was applied. The
-orchestrator's own answer is reply text and is restored as usual.
+**The gateway restores the plan's placeholders, and a plan that still carries one is
+refused (ruling 6).** *Gateway; security boundary; needs security review.* On a route
+that pseudonymizes, the gateway replaces a name in message text with a placeholder such
+as `PERSON_0001` and puts it back in a reply's text, with a mapping that lasts for one
+request. By default it does not touch tool-call arguments, so a plan handed over as a
+tool call (D4) would keep any placeholder it carries. The calls that follow have their
+own mappings: they cannot restore it, and can give the same placeholder to a different
+name, so a wrong name could be put into the delivered answer and nothing would report it.
 
-The cost is that, on a route that pseudonymizes, a request that names a person usually
-cannot be planned. With the gateway's example setting `apply_at_tiers: [3, 4, 5]` that is
-every route that resolves to tier 3, 4 or 5. The fix is for the gateway to restore the plan
-tool's arguments on request. That is a change to the security boundary. It is not made here, and a note for the
-security reviewers has been drafted. The alternatives are to plan in text on a route that
-pseudonymizes, which makes the orchestrator behave in two ways depending on the route, or to
-keep refusing; the maintainer chose the gateway fix. In one development run on a pseudonymizing route, made before the refusal
-existed, the plan call's arguments held a placeholder. In two runs made after it, the model
-carried none. The refusal itself has been exercised in tests only.
+The gateway's chat-completion request therefore accepts an opt-in,
+`lq_ai_restore_tool_arguments`. When it is set and the request was pseudonymized, a
+non-streaming response also has the placeholders in each tool call's arguments replaced by
+the originals. The arguments are parsed as JSON, the placeholders are replaced in string
+values only, in one pass, and the document is written out again. Only a placeholder that
+request assigned is replaced, and only where it stands as a whole token. The arguments are
+returned exactly as the model wrote them when they are not a JSON object or array, when an
+object names a member twice, when they exceed the gateway's own size or depth bound, and
+when nothing in them is a placeholder of that request, so the application's strict plan
+parser still sees what the model wrote. The field changes only what the gateway returns to
+its caller. It is stripped from the outbound body, and it does nothing on a request that
+was not pseudonymized or on the streaming path.
+
+The application sets the field on one call: a planning call that is offered the plan tool,
+where the route binding expects pseudonymization. `propose_plan` is terminal, so its
+arguments are read by the application and never sent back to a model. A sub-agent's tool
+call is different: it is echoed back to the model on the next turn inside an assistant
+message, which the request path does not pseudonymize, so a restored name would then leave
+as written. The run boundary refuses the field on any call that is not a bound planning
+call, and the field is part of the route binding and so of the call's identity. It is
+absent from every other call, which keeps the identity it had.
+
+The refusal stays as a second line. A plan from a pseudonymized call that still carries
+something shaped like a placeholder (one the model altered or invented, which is in no
+mapping) fails with its own stop reason, `plan_has_placeholders`, and nothing runs. The
+test looks for a token of that shape in every key and string value of the arguments,
+including one spelled with a JSON escape. A call counts as pseudonymized unless its receipt
+records that none was applied. A name that is itself shaped like a placeholder is refused
+too. The orchestrator's own answer is reply text and is restored as before.
+
+Limits of this: a number in restored arguments keeps its value and may not keep its
+spelling; an upgrade in the middle of a pseudonymized planning call changes that call's
+identity; and the change is exercised by unit tests, a gateway test against a mocked
+provider and controlled-provider run tests. No run on a route that pseudonymizes has been
+made since it was built. In one development run on such a route, made before the refusal
+existed, the plan call's arguments held a placeholder; in two made after it, the model
+carried none. The alternatives were to plan in text on a route that pseudonymizes, which
+makes the orchestrator behave in two ways depending on the route, or to keep refusing; the
+maintainer chose the gateway change.
 
 **Not built:** a query embedding for the search (it would be a priced, tier-bound model
-call with its own binding); restoring placeholders in the plan tool's arguments at the
-gateway; case-law, authority and MCP tools for a run; and the orchestrator reading or
+call with its own binding); restoring placeholders in a sub-agent's tool-call arguments;
+case-law, authority and MCP tools for a run; and the orchestrator reading or
 searching by itself.
 
 ### D8 — Who may read what is decided in one place, and a run tool cannot read around it
@@ -705,9 +734,10 @@ branch as it is, and the item is marked **not built**.
    path; needs security review. **Not built.**
 5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
 6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
-   restores reply text. It is a change to the security boundary and goes to security
-   review with the drafted note. The refusal (`plan_has_placeholders`) stays until that
-   change lands. **Not built.**
+   restores reply text. **Built** as its own change (D7): an opt-in request field, set by
+   the application on a pseudonymized planning call only. It is a change to the security
+   boundary and has had no security review. The refusal (`plan_has_placeholders`) is kept
+   as a second line, for a placeholder the gateway did not assign.
 7. **Knowledge-base search** stays keyword only for C1, as a stated limit. Looser matching
    and a query embedding are deferred as DE-405.
 8. **A direct answer when documents are selected** is allowed, as built.
@@ -764,8 +794,9 @@ branch as it is, and the item is marked **not built**.
 - The changes touch authorization, audit and the gateway, and are routed to security
   review. The items that need it are the gateway changes (the truthful purpose label, the
   reasoning-effort request field and its mapping to Ollama's `think`, naming a tool result
-  after the call it answers, and sending non-ASCII characters in tool-call arguments as
-  themselves), the rule for a run outside a matter (D1, D5), pseudonymization following the
+  after the call it answers, sending non-ASCII characters in tool-call arguments as
+  themselves, and restoring placeholders in tool-call arguments on request), the rule for a
+  run outside a matter (D1, D5), pseudonymization following the
   operator's setting (D5), and the knowledge-base search (D5).
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.

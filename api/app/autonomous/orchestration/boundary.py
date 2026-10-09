@@ -67,6 +67,13 @@ async def constrain_call(
             raise ToolNotGranted("authority call differs from supported source binding")
         return dict(params)
     if intent in {ToolIntent.run_skill, ToolIntent.plan}:
+        if "lq_ai_restore_tool_arguments" in params and (
+            intent != ToolIntent.plan or inference_binding is None
+        ):
+            # Only a bound planning call may ask the gateway to restore its
+            # tool-call arguments. A task's call is echoed back to the model
+            # on its next turn, where restored names would leave as written.
+            raise ToolNotGranted("only a planning call may have its arguments restored")
         if inference_binding is not None and (
             not inference_binding.matches(params)
             or inference_binding.routed_tier > scope.minimum_inference_tier

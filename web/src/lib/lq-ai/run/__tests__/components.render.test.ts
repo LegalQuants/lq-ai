@@ -1542,9 +1542,9 @@ describe('the strip above the composer, in its fold of limits and tools', () => 
 		page(html, 'pseudonymized').shows(
 			'the gateway replaces what it recognises as a personal name or an identifier'
 		);
-		// A plan cannot have a placeholder put back, so the strip says such a plan is refused.
+		// A placeholder the gateway did not assign cannot be put back, so the strip says such a plan is refused.
 		page(html, 'pseudonymized').shows(
-			'It cannot put one back in a plan, so a plan that carries a placeholder is refused and nothing runs.'
+			'That includes the plan. A plan that still carries a placeholder, one the gateway did not assign, is refused and nothing runs.'
 		);
 		// Not a guarantee: it says what is missed, and what is never replaced.
 		page(html, 'pseudonymized').shows(
@@ -2356,7 +2356,7 @@ describe('a plan the model wrote out as text, and one that carried a placeholder
 		const html = thread(run('plan-has-placeholders'));
 		const shown = page(html, 'placeholders');
 		shown.shows(
-			'<p class="detail">The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized, and a placeholder in a plan cannot be turned back into the real value, so the plan was refused. Nothing ran. Try the request again without the name or identifier.</p>'
+			'<p class="detail">The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized. The gateway puts back the placeholders it assigned, and this one was not among them, so the plan was refused. Nothing ran. Send the request again.</p>'
 		);
 		shown.shows('data-status="failed">The run failed</p>');
 		// The plan line says it in one sentence, as it does for the other plan failures.

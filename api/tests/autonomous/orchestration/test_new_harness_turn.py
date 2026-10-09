@@ -30,6 +30,7 @@ from tests.autonomous.orchestration.model_harness import (
     job,
     messages,
     new_chat,
+    operation_of,
     read,
     run_to_completion,
     sections,
@@ -294,6 +295,83 @@ async def test_a_plan_that_carries_a_placeholder_is_refused_where_the_call_was_p
     else:
         assert after["status"] == "awaiting_approval"
         assert [c["task"] for c in after["tree"]["plan"]["children"]] == [task]
+
+
+@pytest.mark.parametrize("pseudonymized", [True, False])
+async def test_only_a_pseudonymized_planning_call_asks_the_gateway_to_restore_its_arguments(
+    harness: SimpleNamespace, pseudonymized: bool
+) -> None:
+    """ADR 0038 D7, ruling 6. The plan tool is terminal, so its arguments may be restored.
+
+    A task's call is echoed back to its model on the next turn, and the
+    combining call is offered no tool: neither ever asks. Where nothing is
+    pseudonymized there is nothing to restore, and no call asks.
+    """
+    api = harness
+    if not pseudonymized:
+        api.gateway.config["anonymization"] = {"enabled": True, "apply_at_tiers": []}
+    api.gateway.child_script = [
+        [tool_call("save_note", {"name": "note.md", "content": "x", "reason": "Keep it."})],
+        None,
+    ]
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE)
+    await run_to_completion(api, value)
+    asked = api.gateway.restore_asked
+    assert {operation for operation, _ in asked} == {
+        "propose_plan",
+        "work_on_task",
+        "synthesize_answers",
+    }
+    assert {operation for operation, flag in asked if flag} == (
+        {"propose_plan"} if pseudonymized else set()
+    )
+    # The request says so in the field the gateway reads, as the literal True.
+    planning = next(r for r in api.gateway.requests if operation_of(r) == "propose_plan")
+    assert planning.lq_ai_restore_tool_arguments is pseudonymized
+
+
+async def test_a_plan_whose_placeholders_the_gateway_restored_is_planned_with_the_names(
+    harness: SimpleNamespace,
+) -> None:
+    """Before ruling 6 a request that named a person could not be planned on such a route."""
+    api = harness
+    api.gateway.restorations = {"PERSON_0002": "Jane Roe"}
+    task = {
+        **json.loads(api.gateway.proposal)["tasks"][0],
+        "question": "What notice must PERSON_0002 give to end the agreement early?",
+    }
+    api.gateway.plan_reply = ("", [tool_call("propose_plan", {"tasks": [task]})])
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE)
+    assert await job(api, value["root_id"]) == "completed"
+    after = await read(api, value["root_id"])
+    (planning,) = after["effects"]
+    assert planning["accounting"]["anonymization_applied"] is True
+    assert after["status"] == "awaiting_approval"
+    assert [c["task"]["question"] for c in after["tree"]["plan"]["children"]] == [
+        "What notice must Jane Roe give to end the agreement early?"
+    ]
+
+
+async def test_a_placeholder_the_gateway_did_not_restore_still_fails_the_plan(
+    harness: SimpleNamespace,
+) -> None:
+    """The second line: one the model altered or invented is in nobody's mapping."""
+    api = harness
+    api.gateway.restorations = {"PERSON_0002": "Jane Roe"}
+    task = {
+        **json.loads(api.gateway.proposal)["tasks"][0],
+        "question": "What notice must PERSON_0002 give PERSON_0007 to end it early?",
+    }
+    api.gateway.plan_reply = ("", [tool_call("propose_plan", {"tasks": [task]})])
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE)
+    assert await job(api, value["root_id"]) == "completed"
+    after = await read(api, value["root_id"])
+    assert (after["status"], after["stop_reason"]) == ("failed", "plan_has_placeholders")
+    assert after["tree"] is None
+    assert [m["content"] for m in await messages(api, chat_id)] == [GOAL, ""]
 
 
 @pytest.mark.unit

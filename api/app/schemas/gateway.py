@@ -204,6 +204,16 @@ class ChatCompletionRequest(BaseModel):
     filesystem-canonical built-in. Omitted means "registry-only",
     which is the right behavior for non-user-bearing callers."""
 
+    lq_ai_restore_tool_arguments: bool = False
+    """Ask the gateway to restore pseudonyms in the reply's tool-call arguments.
+
+    The gateway restores a reply's text and, by default, returns a tool
+    call's arguments as the model wrote them. Set only for a call whose
+    arguments this application reads and never sends back to a model: a
+    governed run's planning call, whose one tool is terminal (ADR 0038 D7).
+    Mirrors
+    :attr:`gateway.app.providers.openai_schema.ChatCompletionRequest.lq_ai_restore_tool_arguments`."""
+
     lq_ai_purpose: str | None = None
     """M2-E2: tag for the gateway's routing-log ``purpose`` column.
     Distinguishes Citation Engine Stage 3/4 judge calls from regular

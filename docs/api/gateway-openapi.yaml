@@ -1209,6 +1209,33 @@ components:
             generates it before dispatch and forwards it; the gateway
             writes it into `inference_routing_log.message_id` so the
             audit-log row joins to the persisted message row by `id`.
+        lq_ai_restore_tool_arguments:
+          type: boolean
+          default: false
+          description: |
+            Ask the response path to restore pseudonyms in tool-call
+            arguments. By default the anonymization middleware restores a
+            reply's text and returns each
+            `tool_calls[].function.arguments` as the model wrote it. When
+            this is true and the request was pseudonymized, a
+            non-streaming response also has this request's pseudonyms
+            replaced by the originals in the string values of each tool
+            call's JSON arguments. A pseudonym is replaced only where it
+            stands as a whole token, and member names are not rewritten.
+            Arguments are returned exactly as sent when they are not a
+            JSON object or array, when an object names a member twice,
+            when they are longer than 65,536 characters or nested more
+            than 16 levels deep, and when nothing in them is a pseudonym
+            of this request.
+
+            The field changes only what the gateway returns to its
+            caller. It is stripped from the outbound provider body, and
+            it has no effect on a request that was not pseudonymized or
+            on the streaming path. A caller sets it only for a call whose
+            tool arguments it reads and never sends back to a model as a
+            tool call: the request path does not pseudonymize
+            `tool_calls` in an assistant message. The backend sets it on
+            a governed run's planning call (ADR 0038 D7).
         lq_ai_purpose:
           type: string
           description: |
