@@ -110,8 +110,8 @@
   ],
   "note": "The opening messages are rebuilt from this run's records by the code that sent them. They are what the application sent to the gateway, before any pseudonymization there. A later turn's full request is not kept; its reply and tool calls are. Document text returned by a read, and passages returned by a search, are not shown here.",
   "role": "sub-agent",
-  "root_id": "95ae918c-bbfe-492f-bb99-7879838821c4",
-  "session_id": "eefb0b66-f611-4a0a-bc85-0cdd805aefb5",
+  "root_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0",
+  "session_id": "c8214bc1-d8d4-4c4c-9288-59179c760004",
   "turns": [
     {
       "effect_key": "topic:t1",

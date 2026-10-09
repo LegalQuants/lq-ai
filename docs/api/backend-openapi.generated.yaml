@@ -2970,11 +2970,13 @@ components:
 
         Counts from the answer''s fiduciary gate. ``flagged`` means at least one
 
-        quotation could not be matched to the document it cites. Absent when the
+        quotation could not be matched to the file it cites. Absent when the
 
-        answer carried no quotation that named a selected document: nothing was
+        answer carried no quotation that named a source of the run (a selected
 
-        checked, and the answer is unverified.'
+        document, or a file one of its searches found): nothing was checked, and
+
+        the answer is unverified.'
       properties:
         checked:
           title: Checked

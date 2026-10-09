@@ -1,10 +1,10 @@
 {
-  "chat_id": "619593c8-4879-4b6b-a081-e9a5fb93a3d5",
+  "chat_id": "a893770c-6fc2-4f1b-912b-3747134c0dac",
   "documents": [
     {
       "attached_to_project": true,
       "characters": 68,
-      "file_id": "e276e463-32f6-48ee-92e0-2aeb78fa3d3e",
+      "file_id": "e8b60d1b-ea0c-4ce3-a130-0e57951c5310",
       "filename": "msa.txt",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -17,7 +17,7 @@
     {
       "attached_to_project": true,
       "characters": 53,
-      "file_id": "c889e071-21c5-4d19-8393-0ab2e6b2384b",
+      "file_id": "70b06b04-06d3-4881-8be0-9ae67ae4913e",
       "filename": "dpa.md",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -31,9 +31,9 @@
   "knowledge_bases": [],
   "knowledge_bases_omitted": 0,
   "max_documents": 8,
-  "project_id": "b9e4561d-845f-4f45-95f8-eea4784e01e4",
+  "project_id": "70e7b46b-2d72-4242-82f4-b37cd5e22866",
   "suggested_file_ids": [
-    "e276e463-32f6-48ee-92e0-2aeb78fa3d3e",
-    "c889e071-21c5-4d19-8393-0ab2e6b2384b"
+    "e8b60d1b-ea0c-4ce3-a130-0e57951c5310",
+    "70b06b04-06d3-4881-8be0-9ae67ae4913e"
   ]
 }

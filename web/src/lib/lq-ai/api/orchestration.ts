@@ -309,7 +309,10 @@ const base = '/autonomous/orchestration';
 export const orchestrationApi = {
 	tree: (id: string, signal?: AbortSignal) =>
 		apiRequest<OrchestrationTree>(`${base}/${encodeURIComponent(id)}/tree`, { signal }),
-	/** How one session of a run was set up and what its model wrote. Owner-only. */
+	/**
+	 * How one session of a run was set up and what its model wrote. The owner's read, or
+	 * an audited read by an admin or auditor.
+	 */
 	trace: (rootId: string, sessionId: string, signal?: AbortSignal) =>
 		apiRequest<SessionTraceRead>(
 			`${base}/${encodeURIComponent(rootId)}/sessions/${encodeURIComponent(sessionId)}/trace`,

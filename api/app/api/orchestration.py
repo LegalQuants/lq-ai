@@ -1,9 +1,13 @@
-"""Governed run intake, consent, closing and owner-only tree inspection.
+"""Governed run intake, consent, closing and inspection.
 
 Approval, rejection, halt, closing and inspection all live here and are the only
 governance path for a run, wherever it was started (ADR 0016 P6). The chat
 surface in :mod:`app.api.chat_runs` adds intake and availability reads and
 reuses :func:`begin_run`.
+
+Acting on a run is its owner's. Reading a run, its tree or a session's trace is
+its owner's, or an admin's or auditor's with one audit row for each read (ADR
+0038, ruling 10). The working-file route is the owner's alone.
 """
 
 import hashlib

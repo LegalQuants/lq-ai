@@ -6,7 +6,8 @@ note below). An implementation of the revised design exists on an unmerged branc
 described under [Implementation status](#implementation-status). It has had no
 maintainer or security review and does not merge before ratification.
 **Date:** 2026-10-06. **Baseline inspected:** `5e128d5ba`. The plan was written
-from a read of the code. The implementation status was rewritten on 2026-10-09.
+from a read of the code. The implementation status was rewritten on 2026-10-09 and
+extended on 2026-10-10.
 **Tracks:** track C1 of [#662](https://github.com/LegalQuants/lq-ai/issues/662),
 [#563](https://github.com/LegalQuants/lq-ai/issues/563),
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md) and the
@@ -261,7 +262,7 @@ increments followed the first build.
 | # | Slice | Now |
 |---|---|---|
 | 1 | Bind runs to chat | Built. Migration 0070; `POST /chats/{chat_id}/runs`; `GET /chats/{chat_id}/run-profiles`; delivery writes the bound message in the delivery transaction. Since changed: a chat may be in no matter (migration 0072), and a run may complete with no plan (migration 0073). Tests: `api/tests/autonomous/orchestration/test_runs_in_chat.py`, `test_runs_in_chat_migration.py` |
-| 2 | Visibility | Built. Chat and message identifiers on every run model call and tool-call-log row; the run's session audit rows in the receipts feed; `orchestration.job`, `orchestration.run` and `orchestration.effect` spans carrying identifiers and labels only; trace context carried through queued jobs; the worker wired for tracing in both compose files and both recipes. Tests: `test_runs_in_chat.py`, `test_run_tracing.py` |
+| 2 | Visibility | Built. Chat and message identifiers on every run model call (a run writes no tool-call-log row, because neither profile grants an external tool); the run's session audit rows in the receipts feed; `orchestration.job`, `orchestration.run` and `orchestration.effect` spans carrying identifiers and labels only; trace context carried through queued jobs; the worker wired for tracing in both compose files and both recipes. Tests: `test_runs_in_chat.py`, `test_run_tracing.py` |
 | 2g | Gateway purposes | Built. The gateway's closed purpose set lists every label the backend sends that fits the column, including `orchestration_run`. Test: `gateway/tests/test_inference_b4.py` |
 | 3 | Run message in the thread | Redone in increment 1. One column of lines replaces the first build's run panel and progress list. |
 | 4 | Registries | Built. `profiles.py`, `tools.py`; `GET /admin/orchestration/profiles`; the contract test (`test_registry_contract.py`). A profile may now pin engine prompt files in place of skills, and one profile is the composer profile. |
@@ -383,8 +384,8 @@ here differs from that section, that section is the present state.
   file picked for a run that is never proposed stays unattached.
 - **No second orchestrator skill.** The first build added a built-in skill,
   `contract-questions-orchestrator`, for the documents profile. It was removed. New
-  harness is instructed by engine prompt files, which are not skills. Whether either
-  prompt needs an attorney's attestation is open.
+  harness is instructed by engine prompt files, which are not skills. Ruling 1 settled
+  that neither prompt needs an attorney's attestation; they are reviewed as code.
 - **Budget.** A task is allowed one unit per model call it may make. For the fictional
   profile that is two tool turns and an answer; for New harness it is five tool turns and
   an answer. The total cap decides how many tasks can be funded, the planner is told, and a
@@ -392,17 +393,18 @@ here differs from that section, that section is the present state.
   tasks at the same cap than 0.8.0 did.
 - **Runs in flight at upgrade.** The fictional profile's operator policy changes,
   so a 0.8.0 run that is mid-flight stops at its next admission and stays
-  readable. Completed and stopped runs keep their plan hashes and approvals. Whether such
-  a run must survive is open.
+  readable. Completed and stopped runs keep their plan hashes and approvals. Ruling 3
+  settled that such a run need not survive; the upgrade notes are to say so.
 - **Document reads and pseudonymization.** A document a task reads is returned to the
   model as a tool result. The gateway pseudonymizes the content of system, user and
   assistant messages only, so the document's text reaches the provider as stored, as
   retrieved text does in ordinary chat. The request, the thread and the task text are
   pseudonymized where the route's tier calls for it, and placeholders in a reply's text are
-  restored. A placeholder inside a tool call's arguments is not restored, so a note, a
-  stated reason or a search query can hold one, and so can the plan tool's arguments (a plan
-  that does is refused). Both facts are pinned in
-  `gateway/tests/anonymization/test_middleware.py`. Whether source documents should be
+  restored. A placeholder inside a sub-agent's tool-call arguments is not restored, so a
+  note, a stated reason or a search query can hold one. When this was written the plan
+  tool's arguments were not restored either; since ruling 6 the gateway restores them on
+  request (see "Built after the maintainer's rulings"). What the gateway does without
+  that request is pinned in `gateway/tests/anonymization/test_middleware.py`. Whether source documents should be
   pseudonymized is the open question
   [DE-269](../PRD.md#9-deferred-enhancements-and-identified-future-work) already
   tracks. This plan did not decide it.
@@ -628,8 +630,8 @@ bundled-helper acceptance step, which need Docker images that this pass did not 
   questions. Rulings 4, 6 and 10 were built on choices he has not ruled on, which the
   ADR lists under each. D8, the access module, is proposed and not built.
 - **No full Docker stack smoke** of the revised design is recorded here.
-- **No browser test in CI.** The browser walkthrough is a recorded script, as the
-  test strategy states for browser coverage generally.
+- **No browser test in CI.** The browser checks were scripts that agents ran, kept outside
+  the repository, as the test strategy states for browser coverage generally.
 
 ## Evidence and limits
 

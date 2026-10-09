@@ -287,11 +287,12 @@ each `orchestration.effect`.
 **What a span does not carry.** A span holds identifiers and labels. It holds no
 prompt, no opening message, no model reply, no tool-call argument, no document text and
 no search query or passage. How a run's calls were set up and what its model wrote back
-are read from the run's own records through an owner-only route,
+are read from the run's own records through a route for the run's owner (and, with an
+audit row for each read, an admin or an auditor),
 `GET /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace`, described in the
 [backend OpenAPI sketch](api/backend-openapi.yaml). That read is not a span, a log or an
 export to a Collector. It rebuilds each call's opening from the records and returns each
-turn's text and tool calls to the run's owner only. It does not hold document text a read
+turn's text and tool calls to that reader. It does not hold document text a read
 returned or passages a search returned, nor a later turn's full request.
 
 **What was checked.** The plan's

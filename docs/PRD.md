@@ -4036,7 +4036,8 @@ and M4 single-agent/multi-agent classification are superseded by ADR 0035.
 Recorded from the [plan's Deferred section](plans/issue-662-c1-governed-runs-in-chat.md#deferred)
 and from the items ADR 0038 D7 lists as not built, while
 [ADR 0038](adr/0038-skill-backed-orchestration-profile.md) is proposed. These items
-are unnumbered: the maintainer allocates identifiers. ADR 0038 does not decide any of them,
+are unnumbered unless one says otherwise: the maintainer allocates identifiers. ADR 0038
+does not decide any of them,
 and none is implemented.
 
 - **Full prompt and tool-payload capture.** PRD §5.4 assigns it to an optional self-hosted
@@ -4047,7 +4048,7 @@ and none is implemented.
   plan tool's arguments (ADR 0038, ruling 6). A sub-agent's are sent back to the model on
   its next turn, so restoring them needs the request path to rewrite them too.
 - A query embedding for the knowledge-base search, which would be a priced, tier-bound
-  model call.
+  model call. Now the second step of DE-405.
 - Sources and connectors in runs, including case-law, authority and MCP tools.
 - Library skills assigned to sub-agents by the orchestrator (ADR 0035 D3).
 - Keeping and showing a model's reasoning text.

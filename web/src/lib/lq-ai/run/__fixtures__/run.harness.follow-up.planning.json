@@ -1,18 +1,18 @@
 {
   "answered_directly": false,
-  "chat_id": "619593c8-4879-4b6b-a081-e9a5fb93a3d5",
+  "chat_id": "a893770c-6fc2-4f1b-912b-3747134c0dac",
   "direct_answer": null,
   "effects": [],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "ad8e65b1-6cd4-495b-85fc-473a489124c8",
+  "message_id": "5e105a0c-4e52-480f-a3ea-6e67be8ad36e",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-10T00:49:26.324797Z",
+    "deadline": "2026-10-10T01:51:06.263817Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -37,13 +37,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "2a1a6f3b-3fe2-4e86-a9ef-52349cb7c196",
+    "owner_id": "cdafdcbe-00f6-4033-88e6-dca6be8cfa3c",
     "packet_digest": null,
-    "plan_id": "c0b6bd66-004a-4b21-9778-bc1c9ce48bd8",
+    "plan_id": "55090a0c-237e-48a6-8797-8ecd291fdfc0",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
+    "policy_version": "3f39bc2e4c2c74a3ce504c6c29ab34f0b531395b3af067890d1c356655766faf",
     "profile": "new_harness_v1",
-    "project_id": "b9e4561d-845f-4f45-95f8-eea4784e01e4",
+    "project_id": "70e7b46b-2d72-4242-82f4-b37cd5e22866",
     "root": {
       "anonymize": true,
       "grants": {
@@ -63,13 +63,13 @@
         "source_names": []
       },
       "skill": {
-        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "1fd5ae21-cd4f-4026-b7a1-dffc498649e0",
+    "root_id": "4bf27690-5f7e-4133-b3b4-705a235e90fc",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -96,7 +96,7 @@
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "1fd5ae21-cd4f-4026-b7a1-dffc498649e0",
+  "root_id": "4bf27690-5f7e-4133-b3b4-705a235e90fc",
   "sources": [],
   "spent_usd": "0.0000",
   "status": "planning",

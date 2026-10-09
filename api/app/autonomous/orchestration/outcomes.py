@@ -166,11 +166,12 @@ _PLACEHOLDER = re.compile(r"[A-Z][A-Z_]{1,40}_[0-9]{4}")
 def carries_placeholder(text: str) -> bool:
     """Whether text holds something shaped like a gateway placeholder.
 
-    On a route that pseudonymizes, the gateway puts the real value back in a
-    reply's text, not in a tool call's arguments. A plan handed over as a tool
-    call keeps any placeholder it carries. The calls that follow have their
-    own mappings: they cannot restore it, and may give the same placeholder to
-    a different value. Such a plan is refused rather than run.
+    On a route that pseudonymizes, the gateway is asked to put the real values
+    back in a plan's arguments, and it restores the placeholders it assigned
+    where each stands as a whole token. One that is left is one it did not
+    assign, or one inside a longer run of characters. The calls that follow
+    have their own mappings: they cannot restore it, and may give the same
+    placeholder to a different value. Such a plan is refused rather than run.
 
     The test is on shape, anywhere in the text, so text that only looks like
     a placeholder is refused too, and only where the planning call was in fact

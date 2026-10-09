@@ -1,9 +1,9 @@
 [
   {
-    "created_at": "2026-10-09T22:49:24.921701+00:00",
-    "id": "225ab479-31db-413e-9532-fd40ab36720d",
+    "created_at": "2026-10-09T23:51:04.981477+00:00",
+    "id": "54867b17-60b9-4f5c-a28a-ffbb1e871ff4",
     "partial": false,
-    "source_file_id": "d7a5b73c-835a-4c97-95f1-b1791dd29dc8",
+    "source_file_id": "9345f902-3b18-4c44-bfb6-b78fcf58dd67",
     "source_offset_end": 107,
     "source_offset_start": 64,
     "source_page": null,
@@ -13,23 +13,10 @@
     "verified": true
   },
   {
-    "created_at": "2026-10-09T22:49:24.921701+00:00",
-    "id": "a59161ba-d492-4107-96d1-4732a4a9a7b5",
+    "created_at": "2026-10-09T23:51:04.981477+00:00",
+    "id": "5540873d-ba61-478d-8871-033e88986d0d",
     "partial": false,
-    "source_file_id": "d7a5b73c-835a-4c97-95f1-b1791dd29dc8",
-    "source_offset_end": 21,
-    "source_offset_start": 0,
-    "source_page": null,
-    "source_text": "twelve months of fees",
-    "verification_confidence": null,
-    "verification_method": null,
-    "verified": false
-  },
-  {
-    "created_at": "2026-10-09T22:49:24.921701+00:00",
-    "id": "efd0ea22-125c-4750-87bb-ad2a8e63922e",
-    "partial": false,
-    "source_file_id": "2b885a94-5aac-45df-ab7e-042d5616dde5",
+    "source_file_id": "c215db07-f967-4cb7-bcc6-7c2cdd057874",
     "source_offset_end": 188,
     "source_offset_start": 115,
     "source_page": null,
@@ -37,5 +24,18 @@
     "verification_confidence": 1.0,
     "verification_method": "exact_match",
     "verified": true
+  },
+  {
+    "created_at": "2026-10-09T23:51:04.981477+00:00",
+    "id": "9a199fe7-b65e-441c-8044-c78db51f526f",
+    "partial": false,
+    "source_file_id": "9345f902-3b18-4c44-bfb6-b78fcf58dd67",
+    "source_offset_end": 21,
+    "source_offset_start": 0,
+    "source_page": null,
+    "source_text": "twelve months of fees",
+    "verification_confidence": null,
+    "verification_method": null,
+    "verified": false
   }
 ]

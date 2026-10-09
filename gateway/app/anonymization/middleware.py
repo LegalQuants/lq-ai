@@ -243,7 +243,7 @@ def post_anonymize_response(
     are left alone. Non-content fields (role, finish_reason, usage,
     routing metadata) are untouched.
 
-    Per Decision D: the gateway rehydrates response *content* only.
+    Per Decision D: by default the gateway rehydrates response *content* only.
     Citation rehydration happens downstream in the api/'s citation
     extraction, which operates on the already-rehydrated content.
 

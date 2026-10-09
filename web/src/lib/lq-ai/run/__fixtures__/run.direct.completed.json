@@ -1,31 +1,31 @@
 {
   "answered_directly": true,
-  "chat_id": "80a5b4a4-ebe9-4523-b63f-2c3105f60379",
+  "chat_id": "b1e2d9d5-0287-4a1c-aad2-9d5eb1946907",
   "direct_answer": "You're welcome.\n\nNothing was read or searched for this reply: it rests on this conversation only.",
   "effects": [
     {
       "accounting": {
         "anonymization_applied": true,
         "basis": "conservative-estimate-or-reported-usage-v1",
-        "charged_usd": "0.0713",
+        "charged_usd": "0.0714",
         "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
-        "estimated_prompt_tokens": 11054,
-        "messages_digest": "938eaab71017e0d50aa855886e02d8164f9f7d3c58255855ff8956416e91645f",
+        "estimated_prompt_tokens": 11075,
+        "messages_digest": "99bbe2bae73df830f8056b7dfc97c2ea135f83fb41e7901b1680b8293172f5af",
         "model": "native",
         "provider": "selected",
         "reported_usage_cost_usd": "0.0003",
-        "reserved_usd": "0.0713",
+        "reserved_usd": "0.0714",
         "tier": 1
       },
-      "charged_usd": "0.0713",
-      "completed_at": "2026-10-09T22:49:27.530389Z",
-      "created_at": "2026-10-09T22:49:27.520621Z",
+      "charged_usd": "0.0714",
+      "completed_at": "2026-10-09T23:51:08.227876Z",
+      "created_at": "2026-10-09T23:51:08.217429Z",
       "effect_key": "chat:plan:v1",
       "intent": "plan",
       "outcome": "success",
-      "reserved_usd": "0.0713",
+      "reserved_usd": "0.0714",
       "skill": {
-        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2",
         "version": "2"
@@ -42,14 +42,14 @@
   ],
   "evidence": "unverified",
   "evidence_result": null,
-  "message_id": "6489be5d-bab4-4608-97d0-92e86f329da9",
+  "message_id": "fa999168-5314-4f3f-884b-047e0549db74",
   "packet": null,
   "planning": {
     "attempt_timeout_seconds": 300,
     "budget_usd": "10.0000",
     "child_skill_version": "2",
     "contract_version": 3,
-    "deadline": "2026-10-10T00:49:27.483204Z",
+    "deadline": "2026-10-10T01:51:08.175141Z",
     "delegation_grants": {
       "analysis": [
         "plan",
@@ -74,13 +74,13 @@
     "max_active_children": 2,
     "max_children": 2,
     "model": "selected/native",
-    "owner_id": "01bbab73-50b4-4b64-926d-6bf01a8ed098",
+    "owner_id": "42d6194d-90de-4b2c-8d55-dcbaa714ae06",
     "packet_digest": null,
-    "plan_id": "8724497d-eb40-4f29-865d-1ed17d044b1f",
+    "plan_id": "9eb18d0e-a462-4c5e-8399-a08038274e3b",
     "planning_allowance_usd": "0.5781",
-    "policy_version": "c6f97bf5a31d527f9cb3fc680bc43aac63dd9aaafbf0fb9f53edd49df6f067a5",
+    "policy_version": "3f39bc2e4c2c74a3ce504c6c29ab34f0b531395b3af067890d1c356655766faf",
     "profile": "new_harness_v1",
-    "project_id": "f9509701-8290-4e08-a23f-df0f066b8289",
+    "project_id": "29a5607d-7efa-4479-9500-63508dd11c9a",
     "root": {
       "anonymize": true,
       "grants": {
@@ -100,13 +100,13 @@
         "source_names": []
       },
       "skill": {
-        "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
         "kind": "prompt",
         "name": "new_harness/orchestrator.v2"
       }
     },
     "root_allowance_usd": "1.1562",
-    "root_id": "d79f6061-e7b1-49cc-9606-1833a391dfd1",
+    "root_id": "f308ea09-6a08-434a-bfe2-21eba245505a",
     "root_skill_version": "2",
     "terms": {
       "answer_chars": 16384,
@@ -122,9 +122,9 @@
   "profile_title": "New harness",
   "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
   "reserved_usd": "0.0000",
-  "root_id": "d79f6061-e7b1-49cc-9606-1833a391dfd1",
+  "root_id": "f308ea09-6a08-434a-bfe2-21eba245505a",
   "sources": [],
-  "spent_usd": "0.0713",
+  "spent_usd": "0.0714",
   "status": "completed",
   "stop_reason": null,
   "tree": null

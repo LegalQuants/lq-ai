@@ -241,8 +241,9 @@ chat, and the composer names that run. Archiving a chat does not halt its run.
 
 Whatever an owner or operator can see for an ordinary chat turn must be available for a run
 through the same channel: the message's applied-skills, tier, provider, model, token and
-cost fields; the chat receipts; chat and message identifiers on routing-log and
-tool-call-log rows; audit rows; and traces that connect the API, the worker, the gateway
+cost fields; the chat receipts; chat and message identifiers on routing-log rows, and
+on tool-call-log rows once a run is granted an external tool, which neither profile is;
+audit rows; and traces that connect the API, the worker, the gateway
 and the provider where tracing is configured. The acceptance table below is the checklist.
 The gateway records a truthful purpose, `orchestration_run`, for run traffic instead of
 labelling it `chat`. A run's spans carry identifiers and labels only.
@@ -433,8 +434,9 @@ one call, a call to another name, and arguments that are not a valid plan fail t
 `unfunded_plan`. A plan written out as text fails as `plan_not_handed_over` (D1). A plan
 from a pseudonymized call that still carries a placeholder after the gateway restored its
 own fails as `plan_has_placeholders` (D7). The fictional profile keeps its text plan. The orchestrator has no other tool: it
-cannot read a document or search, so a question about a document always goes through a
-plan.
+cannot read a document or search, so it has nothing but a plan's results to answer a
+question about a document from. Its prompt tells it to plan for such a question, and no
+code stops it answering directly (D1).
 
 **For track C7: the gates between a chat tool and a run.** The chat tool loop and the run
 tool loop share no tool definition. A chat tool is a `ToolSpec` in the chat's allowlist
@@ -673,8 +675,9 @@ turns. These limits of the branch must close first.
   a run, and the organisation profile does not reach a run. Ordinary chat has them.
 - **No library skills** until the orchestrator can assign them (C2, ADR 0035 D3).
 - **The orchestrator has one tool and makes one planning call.** It cannot read a document
-  or search by itself, so a question about a document always goes through a plan. The plan
-  cannot propose matter documents; the owner supplies them.
+  or search by itself, so it has nothing but a plan's results to answer a question about
+  a document from. Its prompt tells it to plan for such a question, and no code enforces
+  that (D1). The plan cannot propose matter documents; the owner supplies them.
 - **Knowledge-base search is by keyword only, and the owner does not pick the knowledge
   bases.** A search finds a passage only when it holds every word of the query. A run lists
   every knowledge base attached to its matter, at most 16 (D5, rulings 7 and 9; DE-405).
@@ -786,8 +789,8 @@ ownership: each has one `owner_id`, and PRD §5.2's per-resource permissions (re
 share, delete) are not implemented. The rule is written in several places. Each resource
 route file has its own `_load_visible_*` helper with its own ownership check. The run
 engine has its own rule in `api/app/autonomous/orchestration/reading.py` (D5), which
-intake, the live policy check and each read share, and ownership comparisons appear in six
-files of the run engine. Nothing makes these agree. A run tool handler reaches its data
+intake, the live policy check and each read share, and ownership comparisons appear in
+several files of the run engine. Nothing makes these agree. A run tool handler reaches its data
 through the guarded effect path, and the model can name only a document number or a query,
 never a user, a matter or a file; but a new handler that issued its own query would not
 fail any check. A run rechecks its owner's Autonomous opt-in at each admission and does
@@ -862,7 +865,12 @@ branch as it is, and the item is marked **not built**.
    restores reply text. **Built** as its own change (D7): an opt-in request field, set by
    the application on a pseudonymized planning call only. It is a change to the security
    boundary and has had no security review. The refusal (`plan_has_placeholders`) is kept
-   as a second line, for a placeholder the gateway did not assign.
+   as a second line, for a placeholder the gateway did not assign. Built on one choice the
+   maintainer has not ruled on: the refusal looks for the shape anywhere in the plan,
+   also inside a longer run of characters, so on a route that pseudonymizes it also
+   refuses a plan holding text that only looks like a placeholder, such as a reference
+   written `EN_12345`. The orchestrator's prompt now tells the model to keep a
+   placeholder as written in a plan; until 2026-10-10 it told the model to write none.
 7. **Knowledge-base search** stays keyword only for C1, as a stated limit. Looser matching
    and a query embedding are deferred as DE-405.
 8. **A direct answer when documents are selected** is allowed, as built.
@@ -915,7 +923,8 @@ branch as it is, and the item is marked **not built**.
   thread, optional documents, a chat outside a matter, pseudonymization by the operator's
   setting, thinking control, small tool-calling fixes and the trace read); and the
   orchestrator's turn with knowledge-base search (the plan tool, the direct answer, source
-  numbers and frozen terms). They should land as ordered, separately reviewed changes.
+  numbers and frozen terms). The maintainer looked at each in that order. They are in one
+pull request, followed by one commit for each of the four rulings that needed code.
 - Release 0.8.0 shipped the orchestration tables, so schema changes must upgrade deployed
   databases. Migrations 0070 to 0073 are additive on a 0.8.0 database: 0070 adds the `run`
   message kind and the message-to-session link, and turns the profile column's enumerated
@@ -927,7 +936,8 @@ branch as it is, and the item is marked **not built**.
   reasoning-effort request field and its mapping to Ollama's `think`, naming a tool result
   after the call it answers, sending non-ASCII characters in tool-call arguments as
   themselves, and restoring placeholders in tool-call arguments on request), the rule for a
-  run outside a matter (D1, D5), pseudonymization following the
+  run outside a matter, including a matter's file read on that matter's terms (D1, D5),
+  the roles on runs and the cross-owner read (D1), pseudonymization following the
   operator's setting (D5), and the knowledge-base search (D5).
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.
@@ -961,7 +971,7 @@ ratification of this ADR and does not replace maintainer or security review.
 | Message | Applied skills, tier, provider, model, tokens and cost on the assistant message; content found by chat search and included in export | The same fields on the run's message, filled at delivery. `applied_skills` is empty for New harness, which applies no installed skill. The run heading carries the "New harness v<N> → provider/model" marker, the orchestrator's pinned prompt and its digest are in the receipts, and each call's pinned prompt is named in "How this run was set up" |
 | Receipts, model calls | Provider, model, tier, tokens, latency and anonymization, from routing-log rows carrying the chat identifier | Chat and message identifiers on every run model call |
 | Receipts, audit | Audit rows for the chat | The bound session's audit rows in the same feed |
-| Tool call log | Chat and message identifiers on each row | The same, together with the session identifier |
+| Tool call log | Chat and message identifiers on each row | The same, together with the session identifier, on any row a run writes. That table records calls to external tool providers, and neither run profile grants one, so a run writes none today |
 | Routing-log purpose | A truthful purpose label | `orchestration_run` for run traffic |
 | Traces | One trace across API, gateway and provider | Where tracing is configured, traces connecting API, worker, gateway and provider, with spans for each worker job, each claimed execution and each effect. Spans carry identifiers and labels only |
 | Citations | Citation checks, ledger and gate when the turn retrieves | The same for an answer that quotes a selected document or a file a search found (D5) |
@@ -992,9 +1002,11 @@ non-ASCII text. A reply that calls any other tool fails the plan, and so does a 
 written as text. Recovery across a worker restart reuses completed effects and repeats
 none.
 
-**What a run reads (D5).** Tests must reject unselected or revoked documents, a file held
-by another matter, a chat attachment that was not attached to the matter, widened task
-grants, stale approval, and hostile handoff text including a hostile thread. A
+**What a run reads (D5).** Tests must reject unselected or revoked documents, for a run in
+a matter a file that only another matter holds, a chat attachment that was not attached
+to the matter, widened task grants, stale approval, and hostile handoff text including a
+hostile thread. For a run outside a matter, tests must show that a matter's file brings
+that matter's terms and that a route which does not meet them is refused (ruling 4). A
 knowledge-base search must show only the passages D5 allows and count those it withholds.
 A quotation from a found file must be checked against that file. A run in a matter must
 list the knowledge bases attached to it, and a run outside a matter must list none. The

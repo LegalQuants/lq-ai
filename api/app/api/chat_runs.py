@@ -1,7 +1,7 @@
 """Governed runs as turns in a chat thread (ADR 0038 D1).
 
 Chat adds intake and two reads for the composer. Approval, rejection, halt,
-closing and inspection stay on the owner-only routes in
+closing and inspection stay on the routes in
 :mod:`app.api.orchestration`; there is no second governance path (ADR 0016 P6).
 
 * ``GET  /chats/{chat_id}/run-profiles`` — each registry profile's availability

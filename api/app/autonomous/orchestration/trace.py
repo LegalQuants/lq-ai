@@ -1,6 +1,7 @@
 """How a run was set up, and what its model wrote back (ADR 0038 D2).
 
-Owner-only. For one session of a run (the orchestrator, or one sub-agent) this
+For the run's owner, or an admin or auditor whose read is audited (ADR 0038,
+ruling 10). For one session of a run (the orchestrator, or one sub-agent) this
 read gives:
 
 * each model call's opening: the system message the session is pinned to, the

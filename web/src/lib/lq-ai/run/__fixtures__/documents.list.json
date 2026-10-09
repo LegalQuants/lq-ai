@@ -1,10 +1,10 @@
 {
-  "chat_id": "1ada2352-ed91-41c3-99b7-46649ace0379",
+  "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
   "documents": [
     {
       "attached_to_project": true,
       "characters": 244,
-      "file_id": "d7a5b73c-835a-4c97-95f1-b1791dd29dc8",
+      "file_id": "9345f902-3b18-4c44-bfb6-b78fcf58dd67",
       "filename": "msa.txt",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -17,7 +17,7 @@
     {
       "attached_to_project": false,
       "characters": 190,
-      "file_id": "2b885a94-5aac-45df-ab7e-042d5616dde5",
+      "file_id": "c215db07-f967-4cb7-bcc6-7c2cdd057874",
       "filename": "dpa.md",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -30,7 +30,7 @@
     {
       "attached_to_project": true,
       "characters": 4,
-      "file_id": "3414a406-7d21-4c95-9b06-3c3f89686010",
+      "file_id": "ac1cb54f-5233-4266-b48b-62e3bc64e2cc",
       "filename": "draft.docx",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -43,7 +43,7 @@
     {
       "attached_to_project": true,
       "characters": 0,
-      "file_id": "bd048753-adfc-4e80-8698-0b8407d0f3d1",
+      "file_id": "a2562402-eba0-4d97-80f8-596d586cb1bf",
       "filename": "scan.pdf",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -56,7 +56,7 @@
     {
       "attached_to_project": true,
       "characters": 0,
-      "file_id": "fc07928b-ef37-4539-a200-b1fe478fbf62",
+      "file_id": "d3997f72-06d1-4c07-a35f-5aa7c378a7dd",
       "filename": "broken.pdf",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -69,7 +69,7 @@
     {
       "attached_to_project": true,
       "characters": 2,
-      "file_id": "30fae223-6489-46da-82d1-175411ea0d7d",
+      "file_id": "98eac8f9-cfd2-40f0-80df-052c50f6153d",
       "filename": "image-only.pdf",
       "matter_minimum_inference_tier": null,
       "matter_privileged": false,
@@ -83,6 +83,6 @@
   "knowledge_bases": [],
   "knowledge_bases_omitted": 0,
   "max_documents": 8,
-  "project_id": "ee1fabb8-0b44-4ab6-bcef-d6a788997f3a",
+  "project_id": "9f904602-db14-4d29-a8c1-affaaff3cdb0",
   "suggested_file_ids": []
 }

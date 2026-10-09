@@ -5434,10 +5434,10 @@ paths:
   # turn_limit; the plan snapshot gains profile and documents; run and effect status
   # gain ``closed``. evidence_result is {gate_status, checked, matched, unmatched,
   # unresolved, unmarked} or null. unresolved counts quotations whose marker names no
-  # selected document; unmarked counts quoted passages with no source marker. Neither
+  # source of the run; unmarked counts quoted passages with no source marker. Neither
   # was checked. It is set only for a delivered answer on a profile whose evidence is
-  # ``citations`` and whose answer had at least one quotation naming a selected
-  # document; gate_status is the answer's fiduciary-gate status (fiduciary_grade,
+  # ``citations`` and whose answer had at least one quotation naming a source of the
+  # run (a selected document, or a file one of its searches found); gate_status is the answer's fiduciary-gate status (fiduciary_grade,
   # supported_only or flagged). Null means nothing was checked and the answer is
   # unverified. USD amounts are strings. backend-openapi.generated.yaml holds the
   # exact shapes.
@@ -5562,7 +5562,7 @@ paths:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
-        '400': {description: "Selection refused (none where the profile needs one, duplicates, more than eight, or a file that cannot be read, including a file in a project selected from a chat outside any project), or file_ids sent to a profile that reads a fixed document"}
+        '400': {description: "Selection refused (none where the profile needs one, duplicates, more than eight, or a file that cannot be read, including, for a chat in a project, a file that only another project holds), or file_ids sent to a profile that reads a fixed document"}
         '403': {description: "Unknown or switched-off profile, Autonomous opt-in absent, chat has no project and the profile needs one, project not permitted for the profile, route or pricing unavailable, or the cap cannot fund planning, one task and synthesis"}
         '404': {description: "Chat absent, archived or owned by another user, or project not found"}
         '409': {description: "Another run of the owner is active, or the request identity was reused with different input"}
@@ -5713,7 +5713,7 @@ paths:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/SessionTraceRead'
-        '404': {description: "Run absent or owned by another user, or the session is not part of its plan"}
+        '404': {description: "Run absent, or owned by another user and the caller is neither an admin nor an auditor, or the session is not part of its plan"}
 
   /api/v1/autonomous/orchestration/prompts/{family}/{name}:
     parameters:
@@ -8426,7 +8426,7 @@ components:
           description: |
             ADR 0038 (proposed). Set only on a ``kind: run`` assistant message: the
             root autonomous session of the run the message presents. Read the run's
-            plan, progress, files and receipts from the owner-only orchestration
+            plan, progress, files and receipts from the orchestration
             routes with this id. Null on every other message.
         content: {type: string}
         applied_skills:

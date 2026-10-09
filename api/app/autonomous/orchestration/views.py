@@ -299,16 +299,17 @@ class EvidenceRead(BaseModel):
     """The result of the citation checks on a delivered answer (ADR 0038 D5).
 
     Counts from the answer's fiduciary gate. ``flagged`` means at least one
-    quotation could not be matched to the document it cites. Absent when the
-    answer carried no quotation that named a selected document: nothing was
-    checked, and the answer is unverified.
+    quotation could not be matched to the file it cites. Absent when the
+    answer carried no quotation that named a source of the run (a selected
+    document, or a file one of its searches found): nothing was checked, and
+    the answer is unverified.
     """
 
     gate_status: str
     checked: int
     matched: int
     unmatched: int
-    # Quotations whose marker names no selected document, or that fall past the
+    # Quotations whose marker names no source of the run, or that fall past the
     # checking cap. Nothing was checked for them.
     unresolved: int = 0
     # Quoted passages with no source marker. The checks never saw them.

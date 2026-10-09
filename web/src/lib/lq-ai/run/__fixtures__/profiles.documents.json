@@ -1,6 +1,6 @@
 {
   "active_run": null,
-  "chat_id": "1ada2352-ed91-41c3-99b7-46649ace0379",
+  "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
   "composer_profile": "new_harness_v1",
   "profiles": [
     {
@@ -76,7 +76,7 @@
       "evidence": "citations",
       "instructions": [
         {
-          "digest": "b453fe3034ebe3b01d52fbecff3ae605b8f76d6ba425306afa7bae5f6c8f837b",
+          "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
           "kind": "prompt",
           "name": "new_harness/orchestrator.v2",
           "role": "orchestrator",
@@ -134,5 +134,5 @@
       ]
     }
   ],
-  "project_id": "ee1fabb8-0b44-4ab6-bcef-d6a788997f3a"
+  "project_id": "9f904602-db14-4d29-a8c1-affaaff3cdb0"
 }

@@ -345,6 +345,21 @@ def test_a_prompt_does_not_say_an_emphasised_quotation_goes_unchecked(name: str)
     assert inside is not None and inside.group("sq") == "**quoted words**"
 
 
+@pytest.mark.unit
+def test_the_orchestrator_prompt_does_not_say_a_plan_cannot_be_restored() -> None:
+    """The gateway restores the placeholders it assigned in a plan (ADR 0038, ruling 6).
+
+    The prompt went on telling the model to write no placeholder in a plan, because the
+    application could not put the value back. That was no longer true, and it worked
+    against the ruling: a plan that follows it names nobody.
+    """
+    prompt = load_prompt(ORCHESTRATOR).text
+    assert "cannot put the real value back in a plan" not in prompt
+    assert "write no token" not in prompt
+    assert "In a plan, keep each token exactly as written" in prompt
+    assert "It refuses a plan that carries a token you changed" in prompt
+
+
 # --- 2. The opening messages carry facts, in sections -----------------------
 
 
