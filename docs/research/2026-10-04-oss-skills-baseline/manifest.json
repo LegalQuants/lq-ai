@@ -1,0 +1,38 @@
+{
+  "EVIDENCE.md": {
+    "sha256": "0dc485c0b15106fb61a1cc25ecb38bcc37c42b37781e6bbe79f24f371ee7456d",
+    "bytes": 6108
+  },
+  "README.md": {
+    "sha256": "1937498d9cdbef3cd4b2b0dcae141096b7451f9a792d9527070161fd6a8699e4",
+    "bytes": 15232
+  },
+  "p5-next-day.json": {
+    "sha256": "003f0b1e90e7809014645f994631470a7c10b7fdc865d262a2b2479099c122c0",
+    "bytes": 28851
+  },
+  "prerequisites.json": {
+    "sha256": "d69d0e81a45e9ae68368c901d8daea8a35e2181669364e6fc501d7e8deed6870",
+    "bytes": 10806
+  },
+  "probe-results.json": {
+    "sha256": "15a3a8eae1845bbadc55d829016086fc44dfc73082b6605299569d14bc6c0152",
+    "bytes": 94699
+  },
+  "receipts.json": {
+    "sha256": "23b8d8a6f00f4311513af08fef7f457d6240ea13b8f5e1993cf80e7b64d2191d",
+    "bytes": 51895
+  },
+  "runtime.json": {
+    "sha256": "165a68378f7e9ed2b6c5d84bbe8f9479959f2b66dc598668676c87d0fa4679db",
+    "bytes": 14816
+  },
+  "smoke.json": {
+    "sha256": "26029a37915925bb7585beeb6417529fade84b162d67e28490a565b44fdb79bd",
+    "bytes": 3173
+  },
+  "sources.json": {
+    "sha256": "c97f4818ab4e8946ce5300c723d9ab7b65365bdde3e4862a6fcfb0416040f295",
+    "bytes": 1877
+  }
+}

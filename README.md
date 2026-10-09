@@ -498,6 +498,7 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 - [`docs/observability.md`](docs/observability.md) — OpenTelemetry traces/metrics, deployment recipes, operator guide.
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
+- [OSS skill capability research](docs/research/issue-662-oss-skill-capabilities.md) — the v0.8.0 baseline, evidence and adoption buckets supporting #662.
 - [`docs/playbooks.md`](docs/playbooks.md) — how Playbooks work and how to write one.
 - [`deploy/`](deploy/) — deployment recipes (Helm chart, [reverse-proxy + TLS recipes](deploy/reverse-proxy/) for Caddy/Traefik/nginx, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
 - [`docs/compliance/`](docs/compliance/) — Compliance Alignment Pack.

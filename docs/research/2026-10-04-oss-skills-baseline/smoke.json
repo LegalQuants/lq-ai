@@ -1,0 +1,101 @@
+{
+  "attempts": [
+    {
+      "name": "smoke",
+      "chat_id": "020cec74-d8c9-4be1-9cee-adb4abb69616",
+      "request": {
+        "content": "Invoke harness-probe-invoke by name for the synthetic smoke test.",
+        "model": "local",
+        "skills": [
+          "harness-probe-invoke"
+        ],
+        "file_ids": [],
+        "stream": false
+      },
+      "started_utc": "2026-10-04T00:40:22Z",
+      "status": 200,
+      "response": {
+        "message": {
+          "id": "e24f7845-7487-4890-bae7-f368b605d54a",
+          "chat_id": "020cec74-d8c9-4be1-9cee-adb4abb69616",
+          "role": "assistant",
+          "kind": "ai",
+          "content": "INVOKE-OK-4K7R",
+          "applied_skills": [
+            "harness-probe-invoke"
+          ],
+          "routed_inference_tier": 1,
+          "routed_provider": "host-ollama",
+          "routed_model": "qwen3.8:27b-mlx",
+          "requested_model": "local",
+          "prompt_tokens": 131,
+          "completion_tokens": 80,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T00:40:22.964594Z",
+          "is_enhanced": false
+        },
+        "citations": [],
+        "routed_inference_tier": 1,
+        "routed_provider": "host-ollama",
+        "cost_estimate": null,
+        "applied_skills": [
+          "harness-probe-invoke"
+        ],
+        "applied_file_ids": [],
+        "attached_skill_names": [
+          "harness-probe-invoke"
+        ],
+        "slash_unresolved": false,
+        "pending_tool_call": null,
+        "mcp_authorization_required": null
+      },
+      "elapsed_seconds": 7.11
+    },
+    {
+      "name": "recovery-smoke",
+      "chat_id": "82dc018d-badb-4799-b0bd-ace50c93e580",
+      "request": {
+        "content": "Invoke harness-probe-invoke by name.",
+        "model": "local",
+        "skills": [
+          "harness-probe-invoke"
+        ],
+        "file_ids": [],
+        "stream": true
+      },
+      "started_utc": "2026-10-04T00:58:15Z",
+      "status": 200,
+      "response": {
+        "type": "complete",
+        "lq_ai_message_id": "f3de1b23-54a1-4838-bd1c-3daa4c65f08c",
+        "message": {
+          "id": "f3de1b23-54a1-4838-bd1c-3daa4c65f08c",
+          "chat_id": "82dc018d-badb-4799-b0bd-ace50c93e580",
+          "role": "assistant",
+          "content": "INVOKE-OK-4K7R",
+          "model": "glm-4.7-flash:latest",
+          "provider": "host-ollama",
+          "routed_inference_tier": 1,
+          "tokens_in": 113,
+          "tokens_out": 334,
+          "created_at": "2026-10-04T00:58:29.769379+00:00"
+        },
+        "applied_skills": [
+          "harness-probe-invoke"
+        ],
+        "applied_file_ids": [],
+        "citations": [],
+        "routed_inference_tier": 1,
+        "routed_provider": "host-ollama"
+      },
+      "elapsed_seconds": 14.64
+    }
+  ],
+  "raw_records_sha256": {
+    "smoke.json": "5f3362e2c14ca3b97c016fc5cbcc5fb96b512d5ec2721b5623e7d2e82a795498",
+    "recovery-smoke.json": "792e9496b7a7fb6879d7474d152ee2edb77b556fa946e1523103c0e84446e6b6"
+  },
+  "transformation": "Duplicate top-level SSE events omitted; requests and final responses retained."
+}
