@@ -351,8 +351,11 @@ These were needed to build. Each is open for review and cheap to change.
 
 ### Choices made while building the revised design
 
-Nobody has ruled on these. [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md#open-questions)
-lists the open questions.
+These were written on 2026-10-09, before the maintainer ruled. He ruled on all of them
+that day ([ADR 0038](../adr/0038-skill-backed-orchestration-profile.md#rulings-on-the-open-questions)).
+"Built after the maintainer's rulings" below says what then changed: the quotation
+pattern, the file rule, the plan's placeholders and the roles on runs. Where a point
+here differs from that section, that section is the present state.
 
 - **A direct answer when documents are selected** is allowed, because a follow-up such as
   "shorten that" keeps the earlier run's documents selected. The prompt tells the model
@@ -568,6 +571,18 @@ notes reach a privileged reader through the tree and the trace. It found three s
 ones in the gateway change. Each is fixed or stated above. It is not a maintainer or
 security review.
 
+**Gates on 2026-10-10.** The branch was then rebased onto `main` at `224044cc9`, one
+commit past its base, which changes documents and review rules and no code. The suites
+were run as CI runs them. The whole API suite passed with its coverage gate (3,896
+passed, 17 skipped; 82.71% against 80%). `ruff` was clean, and so was
+`mypy app tests ../script_runner`, which is CI's command and checks the tests too; an
+earlier pass had run `mypy app` alone and missed one error in a test helper, since
+fixed. The gateway suite passed with its gate (1,074 passed, 3 skipped; 90.49% against
+88%). The web suite passed (3,289 passed in 108 files), and `check:lq-ai` gave 0 errors
+and 7 known warnings. The API suite ran before the last commits, which change
+documents only. Not run: CI's stack smoke workflow, its release-image check and its
+bundled-helper acceptance step, which need Docker images that this pass did not build.
+
 ### Not done, or not verified
 
 - **Local models only, and single runs.** Agents ran New harness on local models through
@@ -579,7 +594,7 @@ security review.
 - **A reasoning model and the output limit.** The limit of 8,192 output tokens per call
   covers reasoning and answer together. The gateway can now ask for a reasoning effort, but
   New harness sends none unless the operator sets one, and a level did not reduce
-  reasoning on the two models it was tried on (ADR 0038, open question 5).
+  reasoning on the two models it was tried on (ADR 0038, ruling 5).
 - **Findings passed as JSON.** The fictional profile still hands the tasks' findings to
   its orchestrator as JSON, so a line break or a quotation mark inside them is escaped and
   a model can copy the escape into its answer. New harness passes them as text between
@@ -609,8 +624,9 @@ security review.
 - **No ratification.** ADR 0038 is Proposed. The direct answer, and a run in a chat that
   is in no matter, amend ADR 0035 D1 and D2, which are Accepted. ADR 0038 D1 gives the
   words, and they are ratified with it.
-- **Open rulings.** The ADR's nine open questions are unanswered, among them the two prompt
-  texts, the quotation pattern, the file rules and the placeholder limit.
+- **Choices inside the rulings.** The maintainer ruled on all eleven of the ADR's open
+  questions. Rulings 4, 6 and 10 were built on choices he has not ruled on, which the
+  ADR lists under each. D8, the access module, is proposed and not built.
 - **No full Docker stack smoke** of the revised design is recorded here.
 - **No browser test in CI.** The browser walkthrough is a recorded script, as the
   test strategy states for browser coverage generally.

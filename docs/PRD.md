@@ -4043,9 +4043,9 @@ and none is implemented.
   LLM-tracing sink at the gateway. That sink is not implemented: the `telemetry` block in
   the gateway configuration is read by no code. It should serve ordinary turns and runs
   alike. The [observability guide](observability.md#6-whats-not-yet-shipped) says so.
-- Restoring placeholders in the plan tool's arguments at the gateway, so that a request
-  that names a person can be planned on a route that pseudonymizes. A note for security
-  review is drafted. The change is not made.
+- Restoring placeholders in a sub-agent's tool-call arguments. The gateway restores the
+  plan tool's arguments (ADR 0038, ruling 6). A sub-agent's are sent back to the model on
+  its next turn, so restoring them needs the request path to rewrite them too.
 - A query embedding for the knowledge-base search, which would be a priced, tier-bound
   model call.
 - Sources and connectors in runs, including case-law, authority and MCP tools.

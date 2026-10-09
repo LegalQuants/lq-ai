@@ -108,10 +108,11 @@ that it passes C1's acceptance statement), and
 the changes have had no maintainer or security review. R12 rests on controlled-provider
 tests and those single runs: its limits are placeholders not measured on real documents,
 its quotation checks use only the Citation Engine's exact and tolerant stages, and its
-knowledge-base search is by keyword only. One limit in R11 needs a decision: on a route
-that pseudonymizes, a plan that carries a placeholder is refused, so a request that names a
-person usually cannot be planned there. ADR 0038 lists nine open questions, and the plan
-lists the remaining gaps under "Not done, or not verified".
+knowledge-base search is by keyword only. On a route that pseudonymizes, the gateway
+restores the placeholders it assigned in a plan's arguments, and a plan that still carries
+one is refused (ADR 0038, ruling 6). The maintainer ruled on ADR 0038's eleven open
+questions on 2026-10-09, and the plan lists the remaining gaps under "Not done, or not
+verified".
 
 Build order and design: [plan](../plans/issue-662-c1-governed-runs-in-chat.md).
 Script for human acceptance: [UAT runbook](../runbooks/adr38-runs-in-chat-uat.md).
