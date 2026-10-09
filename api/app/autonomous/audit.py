@@ -29,12 +29,24 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Final
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import audit_action
+from app.autonomous.enums import ToolIntent
 from app.models.autonomous import AutonomousSession
+
+OWNERSHIP_DENIED_OUTCOME: Final[str] = "ownership_denied"
+
+
+class AuditedRetrievalOwnershipDenied(ValueError):
+    """Retrieval refused after its closing ownership-denied audit was flushed.
+
+    The analysis loop must preserve the nonfatal ValueError observation without
+    adding a second closing row. Audit-write failures never use this signal.
+    """
+
 
 _ACTIONS: frozenset[str] = frozenset(
     {
@@ -101,4 +113,19 @@ async def autonomous_audit(
         resource_type="autonomous_session",
         resource_id=str(session.id),
         details=details or None,
+    )
+
+
+async def audit_retrieval_ownership_denial(db: AsyncSession, session: AutonomousSession) -> None:
+    """Flush a payload-free refusal; the executor owns commit or rollback.
+
+    Called only when a retrieval ownership predicate refuses access. Preserve
+    audit failures rather than suppressing them or continuing into retrieval.
+    """
+    await autonomous_audit(
+        db,
+        session,
+        "tool_call",
+        tool=str(ToolIntent.retrieve_chunks),
+        outcome=OWNERSHIP_DENIED_OUTCOME,
     )

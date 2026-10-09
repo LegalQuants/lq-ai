@@ -361,10 +361,12 @@ async def test_action_error_is_nonfatal_observation(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("mode", ["query", "file", "since"])
 async def test_foreign_kb_denial_is_nonfatal_loop_observation(
     db_session: AsyncSession,
     seeded_matter_session: AutonomousSession,
     kb_with_one_indexed_file: KbOneFile,
+    mode: str,
 ) -> None:
     """AG-01 through the executor loop: a foreign-KB denial degrades, not crashes.
 
@@ -379,12 +381,18 @@ async def test_foreign_kb_denial_is_nonfatal_loop_observation(
     """
     kb = kb_with_one_indexed_file
     assert seeded_matter_session.user_id != kb.owner_id  # the premise: cross-owner
+    private_query = "PRIVATE_QUERY_494"
+    args = {
+        "query": {"kb_id": str(kb.kb_id), "query": private_query},
+        "file": {"file_id": str(kb.file_id)},
+        "since": {"kb_id": str(kb.kb_id), "since": "2026-01-01T00:00:00Z"},
+    }[mode]
 
     gw = _ScriptedGateway(
         [
             {
                 "next_intent": "retrieve_chunks",
-                "args": {"kb_id": str(kb.kb_id), "query": "confidential"},
+                "args": args,
                 "rationale": "x",
             },
             {"done": True, "rationale": "enough evidence"},
@@ -421,13 +429,22 @@ async def test_foreign_kb_denial_is_nonfatal_loop_observation(
     assert not result.get("analysis_evidence")
     assert _CHUNK_TEXT_DEFAULT not in all_prompt_text
 
-    # The ``started`` audit row was written before the gate refused, and the
-    # failed attempt is closed by one ``error`` row naming the exception type
-    # (never its message), so the receipt does not show a call left in flight.
+    # One started row and one payload-free closing refusal, with no duplicate
+    # generic error row. The nonfatal ValueError observation remains unchanged.
     rows = await _audit_rows(db_session, str(seeded_matter_session.id))
     assert _tool_started_calls(rows, "retrieve_chunks") == 1
+    denied = [r.details for r in rows if (r.details or {}).get("outcome") == "ownership_denied"]
+    assert denied == [{"tool": "retrieve_chunks", "outcome": "ownership_denied"}]
+    assert private_query not in json.dumps([r.details for r in rows])
+    assert _CHUNK_TEXT_DEFAULT not in json.dumps([r.details for r in rows])
     errors = _tool_error_rows(rows, "retrieve_chunks")
-    assert errors == [{"tool": "retrieve_chunks", "outcome": "error", "error_type": "ValueError"}]
+    assert errors == []
+    outcomes = [
+        r.details["outcome"]
+        for r in rows
+        if r.details and r.details.get("tool") == "retrieve_chunks"
+    ]
+    assert sorted(outcomes) == ["ownership_denied", "started"]
 
 
 # ---------------------------------------------------------------------------
