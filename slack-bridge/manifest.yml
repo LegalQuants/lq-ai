@@ -8,16 +8,14 @@
 #
 # Scopes are kept narrow on purpose — the bridge only needs to:
 #
-#   - present a future slash command (`commands`)
+#   - present the `/lq` slash command (`commands`)
 #   - reply to invocations and post in invited channels (`chat:write`)
+#   - let the api resolve a command invoker's profile email for
+#     identity binding (`users:read` + `users:read.email`, DE-288)
 #
 # It does NOT need `channels:read` / `groups:read` / `im:read` because
 # the bot does not read silent channels (PRD §3.15 — only acts on
 # explicit user invocations).
-#
-# The slash-command surface (M3-D2) is descoped to M4 / community per
-# DE-288, so this manifest declares no `slash_commands` block today.
-# Community contributors adding `/lq` extend this file via PR.
 #
 # `${LQ_AI_BRIDGE_PUBLIC_URL}` is a placeholder the operator replaces
 # manually before pasting into Slack — Slack's manifest UI does not
@@ -45,6 +43,14 @@ features:
   bot_user:
     display_name: LQ.AI
     always_online: false
+  slash_commands:
+    - command: /lq
+      # Replace ${LQ_AI_BRIDGE_PUBLIC_URL} with the externally
+      # reachable base URL of the bridge before saving the manifest.
+      url: ${LQ_AI_BRIDGE_PUBLIC_URL}/slack/commands
+      description: Ask LQ.AI a quick question
+      usage_hint: ask "your question"
+      should_escape: false
 
 oauth_config:
   redirect_urls:
@@ -58,11 +64,10 @@ oauth_config:
     bot:
       - commands
       - chat:write
+      - users:read
+      - users:read.email
 
 settings:
-  # Slash commands + interactive components land in M3-D2 / community
-  # per DE-288. When they do, populate interactivity.request_url and
-  # add the slash_commands block above.
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false

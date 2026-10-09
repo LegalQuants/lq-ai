@@ -9,10 +9,9 @@ The bridge surface is intentionally tiny at v0.3.0:
   platform admin-consent flow. See ``app.oauth``.
 * ``GET  /teams/oauth/callback`` — receives Microsoft's redirect
   after the tenant admin consents.
-
-Everything else — slash commands, Bot Framework activity routing,
-per-user identity binding — is M3-D2 (descoped, see DE-288) / M3-D4
-(admin UI) / community contribution scope.
+* ``POST /teams/messages`` — the Bot Framework messaging endpoint
+  carrying the ``/lq`` command surface (DE-288). See ``app.commands``
+  (including its documented inbound-auth limitation).
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+from .commands import router as commands_router
 from .config import Settings, get_settings
 from .oauth import router as oauth_router
 from .observability import init_otel
@@ -59,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     app.include_router(oauth_router)
+    app.include_router(commands_router)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

@@ -10,13 +10,11 @@ The bridge surface is intentionally tiny at v0.3.0:
   See ``app.oauth``.
 * ``GET  /slack/oauth/callback`` — receives Slack's redirect after the
   user consents.
-* ``POST /slack/events`` — inbound webhook from Slack. At v0.3.0 the
-  bridge verifies the signature and returns 200; the handler stub is
-  the foundation M3-D2 (slash commands, descoped to M4 per DE-288)
-  will fill in.
-
-Everything else — slash commands, message handlers, per-user identity
-binding — is M3-D2 / M3-D4 / community contribution scope.
+* ``POST /slack/events`` — inbound webhook from Slack. The bridge
+  verifies the signature and returns 200; non-command events remain a
+  no-op.
+* ``POST /slack/commands`` — the ``/lq`` slash-command surface
+  (DE-288). See ``app.commands``.
 """
 
 from __future__ import annotations
@@ -28,6 +26,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+from .commands import router as commands_router
 from .config import Settings, get_settings
 from .oauth import router as oauth_router
 from .observability import init_otel
@@ -63,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     FastAPIInstrumentor.instrument_app(app)
 
     app.include_router(oauth_router)
+    app.include_router(commands_router)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
