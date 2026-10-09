@@ -469,7 +469,21 @@ that it can be reviewed apart, and none has had maintainer or security review.
   a run whose delivered answer holds two emphasised quotations the documents hold and
   one they do not, and the web's marker iterator. Not changed: emphasis inside the
   quotation marks, and the underline in an ordinary message's prose, which is not drawn
-  for an emphasised quotation. Not checked in a browser.
+  for an emphasised quotation.
+
+  Run on the development stack on 2026-10-10 with the local model, one run each. Asked
+  for its quotations in bold, the orchestrator first declined and told the reader that
+  the application does not recognise a bold quotation. Both prompt files still said so,
+  and this ruling had made it untrue. In `orchestrator.v2` and `subagent.v2` that
+  sentence is replaced by the reason that still holds: emphasis marks inside the
+  quotation marks are looked up as part of the quoted words. The instruction to write
+  quotations plainly stays, and a test holds both files to the pattern. The files are
+  edited in place because neither is released, so a development run that pinned the
+  earlier text now reads as changed. On the corrected prompts the same request gave an
+  answer with two quotations written `**"words"** (Source: [1])`. The pattern before
+  this ruling finds neither. Both were checked and matched, and in a browser the
+  citation list under the answer showed both as verified, with no underline in the
+  prose. Whether a model writes bold at all is the model's choice; this is one answer.
 
 - **Ruling 6, the plan's placeholders.** The gateway's chat-completion request takes an
   opt-in, `lq_ai_restore_tool_arguments`. With it, and where the request was
@@ -570,7 +584,10 @@ security review.
   its orchestrator as JSON, so a line break or a quotation mark inside them is escaped and
   a model can copy the escape into its answer. New harness passes them as text between
   marked lines.
-- **No human acceptance.** The runs were driven by agents. The
+- **No recorded human acceptance.** The maintainer used the third increment on a
+  local model on 2026-10-09 and said that it passes C1's acceptance statement. That
+  is one person's use, not a recorded acceptance: the runs kept as evidence were
+  driven by agents. The
   [UAT runbook](../runbooks/adr38-runs-in-chat-uat.md) was rewritten on 2026-10-09 for
   New harness, from a read of the code, and no person has followed it. The first build's
   [recorded walkthrough](../uat/adr38-runs-in-chat/README.md) was not redone, so its
@@ -580,8 +597,13 @@ security review.
 - **Long sessions.** A run that outlasts the access token, and the idle
   sign-out, were not exercised.
 - **No security review.** The changes touch authorization, audit and
-  `gateway/**`. Four are routed to it: the gateway changes, the rule for a run outside a
-  matter, pseudonymization following the operator's setting, and the knowledge-base search.
+  `gateway/**`. Five are on a security path: the gateway changes (a reasoning-effort
+  field, two Ollama tool-call fixes, and restoring placeholders in the plan tool's
+  arguments); the rule for a run outside a matter, including a matter's file read on
+  that matter's terms; the roles on runs and the cross-owner read with its audit row;
+  pseudonymization following the operator's setting; and the knowledge-base search.
+  Under ADR 0034, accepted on 2026-10-04, security review means maintainer review
+  with the security-path checklist applied; the project has no separate security team.
   The DE-294 handoff rules are implemented as tests, not reviewed.
 - **No ratification.** ADR 0038 is Proposed. The direct answer amends ADR 0035 D1, which is
   Accepted, and that amendment is a separate draft awaiting its own ratification.

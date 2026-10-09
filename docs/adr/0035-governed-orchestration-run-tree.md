@@ -5,8 +5,10 @@
 **Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
 **Proposed follow-on:** [ADR 0038](0038-skill-backed-orchestration-profile.md) proposes
-hosting runs in the main chat, tool calls for approved children and a first profile on
-real documents. The decision below remains in force.
+an experimental orchestrator model in the main chat, tool calls for approved children,
+and runs on the owner's documents and knowledge bases. It also proposes an amendment to
+D1, so that a root may answer without a batch. Until that amendment is ratified, the
+decision below remains in force as written.
 
 ## Context
 

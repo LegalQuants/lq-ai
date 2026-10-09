@@ -101,7 +101,9 @@ records what was built and how it was checked. Each of R8–R13 has controlled-p
 coverage on the implementation branch. The browser behavior behind R8 and R9 was exercised
 in single runs driven by agents, on a scripted provider and on local models. The recorded
 walkthrough in `docs/uat/adr38-runs-in-chat/` is of the first build and does not show the
-present design. None of the six has human acceptance or a run on a configured provider, and
+present design. None of the six has a recorded human acceptance or a run on a configured
+provider (the maintainer used the present design on a local model on 2026-10-09 and said
+that it passes C1's acceptance statement), and
 the changes have had no maintainer or security review. R12 rests on controlled-provider
 tests and those single runs: its limits are placeholders not measured on real documents,
 its quotation checks use only the Citation Engine's exact and tolerant stages, and its

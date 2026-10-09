@@ -2,7 +2,8 @@
 
 **Status:** Proposed (2026-09-23; rewritten 2026-10-06; rewritten again 2026-10-09, after
 the maintainer redirected C1 on 2026-10-07 and 2026-10-08; D8 added 2026-10-09; the maintainer's
-rulings on the open questions recorded 2026-10-09). Nothing in it is ratified.
+rulings on the open questions recorded 2026-10-09; rulings 2, 4, 6 and 10 built
+2026-10-10). Nothing in it is ratified.
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
 **Amends:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md) for run
@@ -184,7 +185,9 @@ does not depend on a route remembering it. The composer says so in place of offe
 harness (`role_read_only`). A viewer still reads their own runs, and may halt or close
 one: those only narrow authority, and an owner whose role was changed must be able to
 stop what they started. These are the first routes in the API to apply the viewer role;
-the gate for it existed and no route used it.
+the gate for it existed and no route used it. That wider gap is finding API-02 of the
+security audit ([#288](https://github.com/LegalQuants/lq-ai/issues/288)), open as
+[#576](https://github.com/LegalQuants/lq-ai/issues/576). This change does not close it.
 
 An admin or an auditor may read another owner's run: the run, its plan and tree, and each
 session's trace (the pinned prompts, the opening messages, what each model wrote, and the
@@ -538,7 +541,10 @@ written inside the quotation marks is part of the quoted words and is not remove
 ordinary chat message the citation list shows an emphasised quotation, and the coloured
 underline in the prose is not drawn for it, because the rendered page has the quotation
 and its marker in separate elements. Both prompts still tell the model to write
-quotations plainly.
+quotations plainly. The reason they give is that emphasis marks inside the quotation
+marks are looked up as part of the quoted words. Until 2026-10-10 they said that an
+emphasised quotation is not recognised, which this ruling had made untrue, and on a
+model run the orchestrator repeated it to the reader.
 
 **Knowledge-base search.** *Authorization path; needs security review.* A run in a matter
 lists the knowledge bases attached to that matter when the request is accepted: the
@@ -816,6 +822,8 @@ branch as it is, and the item is marked **not built**.
    the API and in the web, with tests for ordinary chat's extractor and for a run's
    delivered answer. It changes a contract ordinary chat shares and has had no review.
    Not changed: emphasis inside the quotation marks, and the underline in the prose (D5).
+   Shown once on a local model and in a browser, after the two prompt files were
+   corrected (build plan).
 3. **A 0.8.0 run in flight at upgrade** need not survive. The upgrade notes are to tell
    operators to finish or halt demonstration runs before upgrading.
 4. **The file rules.** A run outside a matter may read a file that a matter holds, and
@@ -976,7 +984,10 @@ Controlled-provider tests establish the contract. A configured-provider acceptan
 required before claiming live operation. The build plan's Implementation status says what
 has been run, on what, and what has not. Each profile's switch defaults to off. Maintainer
 and security review, including ADR 0035's helper-specific gates, remain release
-requirements. Ratification of this ADR precedes merging the implementation.
+requirements. Security review, wherever this ADR asks for it, has the meaning ADR 0034
+gave it on 2026-10-04: maintainer review with the security-path checklist applied, the
+project having no separate security team. Ratification of this ADR precedes merging the
+implementation.
 
 ## Supporting evidence
 
