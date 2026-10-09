@@ -23,13 +23,19 @@ export type CitationRenderState =
  * the exact same surface. The `s` (dotAll) flag lets the body span line
  * breaks; `g` is required for iterative matching via `matchAll`.
  *
+ * Up to three `*` or `_` may stand between the closing quote and the
+ * marker, so a quotation the model wrapped in Markdown emphasis
+ * (`**"..."** (Source: [N])`) is still a citation, as it is to the api.
+ * The emphasis before the opening quote is ordinary text ahead of the
+ * match, so a match still starts at the opening quote.
+ *
  * Capture groups:
  *   1: straight-quote body, 2: straight-quote source index
  *   3: curly-quote body,    4: curly-quote source index
  * Exactly one of (1,2) or (3,4) is populated per match.
  */
 export const CITATION_REGEX =
-	/"([^"]+?)"\s*\(Source:\s*\[(\d+)\]\)|“([^”]+?)”\s*\(Source:\s*\[(\d+)\]\)/gs;
+	/"([^"]+?)"[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)|“([^”]+?)”[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)/gs;
 
 /** Convenience: parsed citation marker from a model response. */
 export interface ParsedCitationMarker {

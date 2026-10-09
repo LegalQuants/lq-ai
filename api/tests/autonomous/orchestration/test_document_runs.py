@@ -420,6 +420,52 @@ async def test_a_quotation_that_cannot_be_matched_is_recorded_as_unverified(
     }
 
 
+async def test_a_quotation_wrapped_in_emphasis_is_checked_like_any_other(
+    documents: SimpleNamespace,
+) -> None:
+    """Seen on a local model: quotations written as ``**"words"** (Source: [N])``.
+
+    ADR 0038, ruling 2. Before it, the pattern did not recognise these, so
+    nothing was checked for them and an invented one passed unseen. Now each is
+    checked: the one the document holds matches, and the invented one is
+    recorded as not matching and flags the gate.
+    """
+    api = documents
+    chat_id, msa, dpa = await setup(api)
+    api.gateway.synthesis_answer = (
+        'Fees are due **"within thirty (30) days of the invoice date"** (Source: [1]). '
+        "Breach notice is due *“within seventy-two (72) hours of becoming aware of a "
+        "Personal Data Breach”* (Source: [2]). "
+        'The cap is **"twelve months of fees paid in the preceding year"** (Source: [1]).'
+    )
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[msa, dpa])
+    await run_to_completion(api, value)
+    message = (await messages(api, chat_id))[1]
+    async with api.env.factory() as db:
+        rows = (
+            await db.scalars(
+                select(MessageCitation).where(MessageCitation.message_id == UUID(message["id"]))
+            )
+        ).all()
+        # The stored quotation is the text between the quotation marks: no emphasis in it.
+        assert {(c.source_text, c.verified) for c in rows} == {
+            ("within thirty (30) days of the invoice date", True),
+            (
+                "within seventy-two (72) hours of becoming aware of a Personal Data Breach",
+                True,
+            ),
+            ("twelve months of fees paid in the preceding year", False),
+        }
+    assert (await read(api, value["root_id"]))["evidence_result"] == {
+        "gate_status": "flagged",
+        "checked": 3,
+        "matched": 2,
+        "unmatched": 1,
+        "unresolved": 0,
+        "unmarked": 0,
+    }
+
+
 async def test_a_quoted_passage_without_a_marker_is_reported_as_unchecked(
     documents: SimpleNamespace,
 ) -> None:

@@ -260,3 +260,69 @@ def test_locate_in_chunk_public_exact_and_miss() -> None:
     start, end = span
     assert content[start:end] == "hold Confidential Information"
     assert locate_in_chunk("text that is absent", content) is None
+
+
+# --- A quotation wrapped in Markdown emphasis (ADR 0038, ruling 2) ------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "written",
+    [
+        '**"The contract term shall be five years."** (Source: [1])',
+        '*"The contract term shall be five years."* (Source: [1])',
+        '_"The contract term shall be five years."_ (Source: [1])',
+        '***"The contract term shall be five years."*** (Source: [1])',
+        "**“The contract term shall be five years.”** (Source: [1])",
+        '**"The contract term shall be five years."**(Source: [1])',
+    ],
+)
+def test_extract_a_quotation_wrapped_in_emphasis(written: str) -> None:
+    """Emphasis around the quotation marks does not hide the citation.
+
+    The quote body is the text between the quotation marks, without the
+    emphasis characters, so it is located and verified as written in the source.
+    """
+
+    chunk = _chunk(content="The contract term shall be five years.", char_offset_start=40)
+
+    candidates = extract_citations(f"The agreement says {written}.", [chunk])
+
+    assert len(candidates) == 1
+    assert candidates[0].source_text == "The contract term shall be five years."
+    assert (candidates[0].source_offset_start, candidates[0].source_offset_end) == (40, 78)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "written",
+    [
+        # More emphasis characters than Markdown uses.
+        '"The contract term shall be five years."**** (Source: [1])',
+        # Words between the quotation and its marker: not a marker for it.
+        '"The contract term shall be five years." *see* (Source: [1])',
+        '"The contract term shall be five years."* and so on (Source: [1])',
+    ],
+)
+def test_extract_ignores_what_is_not_emphasis_before_the_marker(written: str) -> None:
+    chunk = _chunk(content="The contract term shall be five years.")
+
+    assert extract_citations(written, [chunk]) == []
+
+
+@pytest.mark.unit
+def test_extract_plain_and_emphasised_quotations_side_by_side() -> None:
+    """Each keeps its own body; the emphasis of one does not reach into the next."""
+
+    chunk = _chunk(content="Fees are due in thirty days. Notice is due in ten days.")
+    response = (
+        'It says **"Fees are due in thirty days."** (Source: [1]) and '
+        '"Notice is due in ten days." (Source: [1]).'
+    )
+
+    candidates = extract_citations(response, [chunk])
+
+    assert [c.source_text for c in candidates] == [
+        "Fees are due in thirty days.",
+        "Notice is due in ten days.",
+    ]

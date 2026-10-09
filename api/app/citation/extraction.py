@@ -108,10 +108,18 @@ class CitationCandidate:
 # ``re.DOTALL`` lets the body span line breaks. The body uses a lazy
 # match (``+?``) so we don't gobble a closing quote that belongs to a
 # later, different citation.
+#
+# Up to three ``*`` or ``_`` may stand between the closing quote and the
+# marker, so a quotation the model wrapped in Markdown emphasis
+# (``**"..."** (Source: [N])``) is still a citation and is checked like
+# any other (ADR 0038, ruling 2). The emphasis before the opening quote
+# is ordinary text ahead of the match. The quote body is unchanged: the
+# characters between the quotation marks, with no emphasis in it.
+# The web mirrors this pattern in ``citations/state.ts``; change both.
 _CITATION_RE = re.compile(
-    r'"(?P<sq>[^"]+?)"\s*\(Source:\s*\[(?P<sq_index>\d+)\]\)'
+    r'"(?P<sq>[^"]+?)"[*_]{0,3}\s*\(Source:\s*\[(?P<sq_index>\d+)\]\)'
     r"|"
-    r"“(?P<cq>[^”]+?)”\s*\(Source:\s*\[(?P<cq_index>\d+)\]\)",
+    r"“(?P<cq>[^”]+?)”[*_]{0,3}\s*\(Source:\s*\[(?P<cq_index>\d+)\]\)",
     flags=re.DOTALL,
 )
 

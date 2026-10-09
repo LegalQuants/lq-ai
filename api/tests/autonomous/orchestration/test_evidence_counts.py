@@ -89,3 +89,18 @@ def test_a_stray_quotation_mark_never_raises() -> None:
     answer = 'A stray " mark, then "a properly quoted passage of some length" (Source: [1]).'
     marked, unresolved, _ = counts(answer)
     assert (marked, unresolved) == (1, 0)
+
+
+def test_a_marked_quotation_wrapped_in_emphasis_is_marked_not_unmarked() -> None:
+    # ADR 0038, ruling 2: the shared pattern accepts emphasis around the
+    # quotation marks, so such a quotation is checked and not reported as unseen.
+    answer = (
+        'Fees are due **"within thirty (30) days of the invoice date"** (Source: [1]). '
+        "Notice is due *“without undue delay and within 48 hours”* (Source: [2])."
+    )
+    assert counts(answer) == (2, 0, 0)
+
+
+def test_an_emphasised_quotation_with_no_marker_is_still_unmarked() -> None:
+    answer = 'The clause says **"the Supplier may suspend the service on seven days notice"**.'
+    assert counts(answer) == (0, 0, 1)

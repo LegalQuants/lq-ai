@@ -456,6 +456,21 @@ lists the open questions.
   ordinary path; the browser walkthrough caught it. Ordinary messages are
   unchanged.
 
+### Built after the maintainer's rulings of 2026-10-09
+
+The maintainer ruled on ADR 0038's open questions on 2026-10-09 and said the branch
+passes C1's acceptance statement. Four rulings needed code. Each is its own commit, so
+that it can be reviewed apart, and none has had maintainer or security review.
+
+- **Ruling 2, quotations in emphasis.** The Citation Engine's quotation pattern, which
+  ordinary chat shares, accepts up to three `*` or `_` between the closing quotation mark
+  and `(Source: [N])`, in `api/app/citation/extraction.py` and in the web's
+  `citations/state.ts`. Tests: the extractor, the counts of what the checks could see,
+  a run whose delivered answer holds two emphasised quotations the documents hold and
+  one they do not, and the web's marker iterator. Not changed: emphasis inside the
+  quotation marks, and the underline in an ordinary message's prose, which is not drawn
+  for an emphasised quotation. Not checked in a browser.
+
 ### Not done, or not verified
 
 - **Local models only, and single runs.** Agents ran New harness on local models through

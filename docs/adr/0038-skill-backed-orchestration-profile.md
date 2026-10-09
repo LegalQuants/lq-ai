@@ -443,7 +443,8 @@ that is not built, and this section describes the branch.
 
 **Evidence is per run.** A source is a selected document or a file one of the run's
 searches found. For a run with a source, the delivered answer's quotations are checked. A
-quotation is recognised when it is written exactly as `"quoted words" (Source: [N])`; it
+quotation is recognised when it is written as `"quoted words" (Source: [N])`, with or
+without Markdown emphasis around the quotation marks; it
 is looked up in the whole text of the file that source number N names, by the Citation
 Engine's exact stage and then its tolerant stage, with its ledger and its gate, on the
 run's chat message. No judge model is called, because a judge call would be neither a
@@ -459,11 +460,16 @@ with no source is labelled unverified, and the note under the answer says the an
 from the model alone. A direct answer is unverified (D1).
 
 The pattern that recognises a quotation is the Citation Engine's, shared with ordinary
-chat (`api/app/citation/extraction.py`, mirrored in the web at `citations/state.ts`). A
-quotation wrapped in Markdown emphasis, `*"words"* (Source: [N])`, is not recognised, and
-the answer is reported as having quotations that were not checked. Both prompts tell the
-model to write quotations plainly. The pattern is to accept emphasis (ruling 2); that is
-not built.
+chat (`api/app/citation/extraction.py`, mirrored in the web at `citations/state.ts`). It
+accepts up to three `*` or `_` between the closing quotation mark and the marker, so a
+quotation wrapped in Markdown emphasis, `**"words"** (Source: [N])`, is checked like any
+other, in ordinary chat and in runs (ruling 2). That is the form a local model was seen to
+write. The quotation that is looked up is the text between the quotation marks. Emphasis
+written inside the quotation marks is part of the quoted words and is not removed. In an
+ordinary chat message the citation list shows an emphasised quotation, and the coloured
+underline in the prose is not drawn for it, because the rendered page has the quotation
+and its marker in separate elements. Both prompts still tell the model to write
+quotations plainly.
 
 **Knowledge-base search.** *Authorization path; needs security review.* A run in a matter
 lists the knowledge bases attached to that matter when the request is accepted: the
@@ -563,9 +569,10 @@ turns. These limits of the branch must close first.
 - **Knowledge-base search is by keyword only, and the owner does not pick the knowledge
   bases.** A search finds a passage only when it holds every word of the query. A run lists
   every knowledge base attached to its matter, at most 16 (D5, rulings 7 and 9; DE-405).
-- **A quotation is checked only when it is written exactly as `"words" (Source: [N])`.**
-  With Markdown emphasis around it, it is not recognised and the answer is reported as
-  having quotations that were not checked (D5). Ruling 2 changes this; not built.
+- **A quotation is checked only when it carries its marker, `"words" (Source: [N])`.**
+  Markdown emphasis around the quotation marks is accepted (ruling 2). Emphasis written
+  inside the quotation marks is not removed, so such a quotation is looked up with those
+  characters in it (D5).
 - **A task's answer is plain Markdown of at most 12,000 characters, and a combined answer
   is at most 16,384.** A longer one is cut and marked.
 - **A plan is strict.** A plan with any member beyond `tasks`, or a task with any extra
@@ -675,16 +682,18 @@ resource routes and the chat path one file at a time (ruling 11, DE-406).
 The maintainer ruled on all eleven on 2026-10-09, and on the same day said that the branch
 passes C1's acceptance statement. A ruling is a direction. It does not ratify this ADR, and
 it does not replace security review where the item is on the authorization path or the
-gateway. Four rulings ask for something the branch does not do yet. Until each is built,
-the decision text above describes the branch as it is, and the item is marked **not
-built**.
+gateway. Four rulings (2, 4, 6 and 10) asked for something the branch did not do. Each
+says below whether it is now built. Until one is, the decision text above describes the
+branch as it is, and the item is marked **not built**.
 
 1. **The prompt texts.** They are engine prompts, reviewed as code. No attorney's
    attestation is required for either.
 2. **Quotations in emphasis.** The shared quotation pattern is to accept a quotation
-   wrapped in Markdown emphasis, for ordinary chat and for runs alike. It lands as its own
-   reviewed change with tests for both. **Not built**: D5 and D7 still describe the strict
-   pattern.
+   wrapped in Markdown emphasis, for ordinary chat and for runs alike. **Built** as its own
+   change: the pattern accepts up to three `*` or `_` after the closing quotation mark, in
+   the API and in the web, with tests for ordinary chat's extractor and for a run's
+   delivered answer. It changes a contract ordinary chat shares and has had no review.
+   Not changed: emphasis inside the quotation marks, and the underline in the prose (D5).
 3. **A 0.8.0 run in flight at upgrade** need not survive. The upgrade notes are to tell
    operators to finish or halt demonstration runs before upgrading.
 4. **The file rules.** A run outside a matter may read a file that a matter holds, and
