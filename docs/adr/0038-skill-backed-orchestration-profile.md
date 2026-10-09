@@ -992,9 +992,9 @@ implementation.
 ## Supporting evidence
 
 The [UAT record](../uat/adr35-chat/README.md) shows provider timeouts leaving runs
-uncertain, which D6 addresses. The [recorded walkthrough of the first
-build](../uat/adr38-runs-in-chat/README.md) was made before the redirection and shows the
-earlier design. It is not evidence for this one.
+uncertain, which D6 addresses. The recorded walkthrough of the first build was made
+before the redirection and showed the earlier design. It was removed from the branch
+on 2026-10-10, and no walkthrough of the present design is recorded.
 [#662](https://github.com/LegalQuants/lq-ai/issues/662) and its research note describe the
 capability tracks that D3 serves. The [feature PRD](../prds/issue-563-governed-orchestration.md)
 defines the requirements this ADR extends.

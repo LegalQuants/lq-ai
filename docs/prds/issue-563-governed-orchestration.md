@@ -99,9 +99,9 @@ The accepted scope above stands for released software.
 [Implementation status](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status)
 records what was built and how it was checked. Each of R8–R13 has controlled-provider test
 coverage on the implementation branch. The browser behavior behind R8 and R9 was exercised
-in single runs driven by agents, on a scripted provider and on local models. The recorded
-walkthrough in `docs/uat/adr38-runs-in-chat/` is of the first build and does not show the
-present design. None of the six has a recorded human acceptance or a run on a configured
+in single runs driven by agents, on a scripted provider and on local models. The first
+build's recorded walkthrough was removed from the branch, and none of the present design
+is recorded. None of the six has a recorded human acceptance or a run on a configured
 provider (the maintainer used the present design on a local model on 2026-10-09 and said
 that it passes C1's acceptance statement), and
 the changes have had no maintainer or security review. R12 rests on controlled-provider

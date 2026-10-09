@@ -24,9 +24,8 @@ off. The direct answer amends ADR 0035 D1, which is Accepted; that amendment is 
 draft awaiting its own ratification. Design, and what was and was not verified:
 [plan](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). This runbook
 replaces the one written for the first build, which had a profile control beside the model
-picker. The recorded walkthrough in
-[`docs/uat/adr38-runs-in-chat/`](../uat/adr38-runs-in-chat/README.md) shows that build and
-not this one. The earlier stand-alone page, as released in 0.8.0, is covered by the
+picker. That build's recorded walkthrough was removed from the branch on 2026-10-10,
+and none of this build is recorded. The earlier stand-alone page, as released in 0.8.0, is covered by the
 [ADR 0035 runbook](adr35-chat-uat.md).
 
 ## Setup
@@ -345,9 +344,9 @@ do not establish live inference or human acceptance.
 
 ## Evidence and sign-off
 
-The recorded walkthrough in the [first build's folder](../uat/adr38-runs-in-chat/README.md)
-was made on 2026-10-06, before the design changed, and a walkthrough of this build has not
-been recorded. Agents have run New harness on a scripted provider and on local models, which
+The first build's recorded walkthrough was made on 2026-10-06, before the design
+changed, and was removed from the branch on 2026-10-10. A walkthrough of this build has
+not been recorded. Agents have run New harness on a scripted provider and on local models, which
 is not human acceptance. Record the branch commit, the provider and model, the composer's
 figures, run and message identifiers, the model-dependent outcomes (the cases listed at the
 head of the acceptance script) and any failed attempts. Keep provider secrets out of the record.

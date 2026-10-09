@@ -1,9 +1,0 @@
-{
-  "what": "A chat created with no title (the server's default is 'New chat'), then a run proposed from it.",
-  "request": "Explain how either party may terminate the fictional services agreement.",
-  "header_before": "New chat",
-  "header_after_propose_without_reload": "New chat",
-  "sidebar_after_propose_without_reload": "New chat",
-  "title_the_api_holds_after_propose": "Explain how either party may terminate the fictional services agreement.",
-  "header_after_reload": "Explain how either party may terminate the fictional services agreement."
-}

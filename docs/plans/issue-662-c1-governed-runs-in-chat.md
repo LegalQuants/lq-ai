@@ -268,7 +268,7 @@ increments followed the first build.
 | 5 | Child tool loop | Built. `loop.py`: native calls on the granted set, one durable effect per turn and per call, refusals recorded, the turn limit, replay from receipts. Sub-agents of New harness also have the knowledge-base search. Tests: `test_tool_loop.py`, `test_contract_versions.py` |
 | 6 | Close an uncertain run | Built. Migration 0071; `POST /autonomous/orchestration/chat-runs/{root_id}/close`. Test: `test_close_uncertain.py` |
 | 7 | Real documents | Replaced by New harness, in increments 2 and 3. The first build's documents profile no longer exists. |
-| 8 | Acceptance | The runbook was rewritten for the revised design and no person has followed it. The recorded walkthrough describes the first build and was not redone (see "Not done, or not verified"). The stand-alone page's intake form is removed. |
+| 8 | Acceptance | The runbook was rewritten for the revised design and no person has followed it. The recorded walkthrough described the first build, was not redone, and was removed from the branch on 2026-10-10 (see "Not done, or not verified"). The stand-alone page's intake form is removed. |
 
 **Increment 1: the interface, on the first build's engine.**
 
@@ -590,8 +590,9 @@ security review.
   driven by agents. The
   [UAT runbook](../runbooks/adr38-runs-in-chat-uat.md) was rewritten on 2026-10-09 for
   New harness, from a read of the code, and no person has followed it. The first build's
-  [recorded walkthrough](../uat/adr38-runs-in-chat/README.md) was not redone, so its
-  screenshots show a composer, a run message and a profile choice that no longer exist.
+  recorded walkthrough showed a composer, a run message and a profile choice that no
+  longer exist. It was removed from the branch on 2026-10-10, and no walkthrough of
+  the present build is recorded.
 - **The walkthrough's tooling is not in the branch.** The scripted provider, the stack
   scripts and the browser scripts are kept with the maintainer.
 - **Long sessions.** A run that outlasts the access token, and the idle
