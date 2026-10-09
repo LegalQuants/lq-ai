@@ -286,8 +286,9 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
-      # ADR 0038 D5: the run profile that reads real documents. Its own switch
-      # and its own pinned route; nothing is inherited from the fictional one.
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
       LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
       LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
       LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
@@ -458,8 +459,9 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
-      # ADR 0038 D5: the run profile that reads real documents. Its own switch
-      # and its own pinned route; nothing is inherited from the fictional one.
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
       LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
       LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
       LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
