@@ -117,8 +117,9 @@ adjusting the other.
 - **PRD §7.8** gains a note that release *planning* uses named trains while release *numbering*
   stays computed per ADR 0025 — the two are not in tension, they are different objects.
 - **ROADMAP.md** gains the "Path to 1.0" section with the four trains and their contents.
-- Gate items carry the `road-to-1.0` label and sit in one GitHub milestone, `v1.0.0`, which has
-  no due date because the tag has none (decision 5). The trains are **not** GitHub milestones:
+- Gate items carry the `road-to-1.0` label, which is the complete list. They sit in one GitHub
+  milestone, `v1.0.0`, unless a nearer release milestone already holds them; `v1.0.0` has no
+  due date because the tag has none (decision 5). The trains are **not** GitHub milestones:
   an issue can be in only one, so the trains' names and dates live in ROADMAP.md. `v1.0.0` is
   the one version the project may name ahead of time — ADR 0025 reserves `major` for it and
   ADR 0029 defines it by criteria. The other numbered release milestones are kept as release
