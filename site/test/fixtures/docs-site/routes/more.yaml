@@ -1,0 +1,7 @@
+# A second manifest file, read alongside example.yaml.
+- route: operate/manifest-slice
+  source: site/test/fixtures/repo/route-mapped/sliced.md
+  title: Sliced fixture page
+  description: A fixture page whose body is sliced with from/to before it is rendered.
+  from: "## Only this section"
+  to: "## Not included"

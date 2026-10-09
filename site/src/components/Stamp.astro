@@ -1,0 +1,57 @@
+---
+/**
+ * Stamp — "Checked against `<sha>` · <date>", plus the canonical repository
+ * files the page was checked against, each linked at that exact commit.
+ *
+ * This is the site's central honesty device (mini-PRD; ADR 0028 requirement 1):
+ * a reader can open every source at the revision the page was written from and
+ * see for themselves whether the page still matches. Writers never type it —
+ * `npm run sync` computes `checkedAgainst` and `sourceFiles` from git history
+ * and injects them into the frontmatter.
+ *
+ * When the sync has not run (or could not resolve a commit), the component
+ * renders nothing rather than an empty or invented stamp.
+ */
+import { blobUrl, REPO_URL } from '../repo.mjs';
+
+interface Props {
+  checkedAgainst?: { sha: string; date: string };
+  sourceFiles?: string[];
+}
+
+const { checkedAgainst, sourceFiles = [] } = Astro.props;
+const sha = checkedAgainst?.sha;
+const date = checkedAgainst?.date;
+---
+
+{
+  sha && (
+    <div class="lq-stamp">
+      <p class="lq-stamp__line">
+        <span>
+          Checked against{' '}
+          <a href={`${REPO_URL}/commit/${sha}`} rel="nofollow">
+            <code>{sha}</code>
+          </a>
+          {date && (
+            <>
+              {' · '}
+              <time datetime={date}>{date}</time>
+            </>
+          )}
+        </span>
+      </p>
+      {sourceFiles.length > 0 && (
+        <ul class="lq-stamp__sources">
+          {sourceFiles.map((path) => (
+            <li>
+              <a href={blobUrl(sha, path)} rel="nofollow">
+                {path}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,10 @@
+# Fixture route manifest — the happy path. A second file, more.yaml, proves
+# the sync reads every file in routes/, not just this one.
+- route: operate/manifest-basic
+  source: site/test/fixtures/repo/route-mapped/basic.md
+  description: A fixture page mapped straight from its canonical source, with no docs/site wrapper.
+  audience: [operator]
+  status: draft
+  sidebar:
+    order: 5
+  next: [operate/manifest-slice, start/links]
