@@ -10,6 +10,11 @@ Grounded in the preserved research
 (a five-agent study plus an **executed** Docling 2.120.1 conversion run against the
 10 quickstart contracts; receipts co-located).
 
+**Accepted amendment (2026-10-04):** [ADR 0033](0033-document-pipeline-honesty-and-ocr.md)
+reverses the *priority* of the DE-387 deferral and answers the core-vs-operator seam
+question this ADR left open: the seam lives in core and adapters are opt-in. The
+decision to remove the dead Docling integration is unchanged.
+
 **Relates to:** ADR [0006](0006-document-pipeline-architecture.md) (the pipeline
 that specifies the Docling→PyMuPDF fallback), ADR [0017](0017-docx-ingest-via-pandoc.md)
 (reuses the `structured_content` column for DOCX revision payloads), DE-351

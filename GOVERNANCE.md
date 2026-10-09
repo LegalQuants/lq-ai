@@ -32,9 +32,32 @@ product.
   [CONTRIBUTING.md](CONTRIBUTING.md) sets the merge threshold
   (one maintainer approval; two preferred for multi-subsystem changes).
   Volunteers apply through an existing member.
+- **Trusted reviewers.** Contributors granted **review authority without merge authority**,
+  appointed by the committee on a maintainer's nomination from demonstrated review
+  contributions. The rung exists so that review capacity can grow before write access is
+  granted, and it is **advertised openly** rather than filled by invitation. Adopted by
+  [ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md).
 - **Contributors.** Anyone who opens an issue or PR. The contribution path is in
   [CONTRIBUTING.md](CONTRIBUTING.md); the skill-specific path (including
   practicing-attorney attestation) is in [skills/CONTRIBUTING.md](skills/CONTRIBUTING.md).
+
+## Becoming a maintainer
+
+Review capacity — not authorship — is the project's binding constraint, and the path to
+merge authority is published so that it can be walked deliberately. The committee promotes a
+trusted reviewer to maintainer on three criteria:
+
+1. **Sustained review quality over at least one quarter** — reviews that catch real defects,
+   not approvals.
+2. **Security-path familiarity** — demonstrated competence on `gateway/`, authentication,
+   authorization, audit logging or cryptographic changes, because merge authority without it
+   cannot discharge the routing in [.github/CODEOWNERS](.github/CODEOWNERS).
+3. **A committee vote**, recorded in the minutes under the async-ratification rule above.
+
+Openings at both rungs are advertised; interest is welcome from anyone already reviewing.
+See [ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md) for the reasoning, and
+[ADR 0030](docs/adr/0030-pacing-1.0-preconditions-and-named-trains.md) for why the second
+maintainer is a precondition for dating 1.0.
 
 ## How decisions are made
 
