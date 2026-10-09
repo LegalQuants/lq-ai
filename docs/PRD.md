@@ -2233,6 +2233,42 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Model field offers autocomplete with the actual provider's model list when the provider is selected; the field remains free-text-editable; one Cypress E2E covers the admin Edit-alias modal exercising the autocomplete.
 
+#### DE-404 — Minimize the panes of the matter workspace
+
+**Status:** Open. Raised by the maintainer on 2026-10-09 while using New harness (ADR 0038, proposed) in a matter chat.
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** A chat opened in a matter is drawn between three other panes: the matter's details, files, knowledge bases and skills on the left; the matter's chat list beside it; and "Attached files" on the right. None of them can be closed, so on a laptop screen the thread and the composer get about a third of the width, and a run's plan, lines and receipts are read in that space. The user preference `workspace_layout` (`three_pane`, `two_pane`, `one_pane`) is stored and can be set under Settings → Appearance, but no page or component reads it, so choosing a value changes nothing.
+
+**Specific scope:** Give each side pane of the matter workspace a control that minimizes it to a narrow rail and restores it, reachable by keyboard and labelled for a screen reader. The state is kept for each user and survives a reload. Decide in the same change what `workspace_layout` means: either it sets which panes start minimized, or it is removed from Settings. A minimized pane still shows what the user must not miss: a count of attached files, and a file whose ingestion failed. No change to what a pane contains, and no change to a chat outside a matter.
+
+**Acceptance criteria:** Each side pane of a matter chat can be minimized and restored with the pointer and with the keyboard; the thread takes the freed width; the state is still there after a reload; `workspace_layout` either has an effect that the settings page describes or is gone from it; a failed file is still signalled while its pane is minimized; component tests cover the states, and the behaviour is checked in a browser at a laptop width.
+
+#### DE-405 — Better recall for a run's knowledge-base search
+
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 7.
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** A New harness task searches the matter's knowledge bases by keyword only, and a passage is found only when it holds every word of the query. In one development run on a local model, seven of nine searches found nothing. Ordinary chat's retrieval uses a query embedding as well; a run does not, because an embedding is a model call, and every model call of a run must be priced, bound to an inference tier and reserved against the run's allowance (ADR 0035 D6).
+
+**Specific scope:** Two steps that can land apart. First, looser keyword matching that needs no model call: passages holding some of the query's words, ranked, with the rules for withheld passages unchanged. Second, a query embedding for a run as a priced, tier-bound effect with its own binding and allowance, disclosed on the plan card. The second step is on the authorization path and the gateway and needs security review.
+
+**Acceptance criteria:** On a fixed set of questions over the test knowledge base, the share of searches that return a relevant passage is measured before and after and reported; a withheld passage is still withheld and counted; an embedding call, if built, appears in the run's receipts with its cost and tier, and a run whose allowance cannot fund it searches by keyword and says so.
+
+#### DE-406 — Move the resource routes and the chat path onto the access module
+
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 11. Depends on ADR 0038 D8, which is not built.
+
+**Priority:** P2 · **Effort:** L
+
+**Context:** ADR 0038 D8 proposes one module that answers who may read what, and moves the run engine onto it first. The resource routes (files, knowledge bases, matters, chats, playbooks) and the chat path each keep their own ownership check until they are moved. While they do, a change to access has to be made in the module and in each of those places.
+
+**Specific scope:** Move each route file's own visibility helper, and the chat path's file and knowledge-base reads, onto the access module, one file to a change, with no change to anyone's access. Authorization path; each change needs security review.
+
+**Acceptance criteria:** No route file and no chat-path module compares an owner identifier itself; a test fails one that does; the existing authorization tests pass unchanged before and after each move.
+
 ### PRD-process and capability refinements
 
 #### DE-020 — Standardize the optional-input pattern across skills

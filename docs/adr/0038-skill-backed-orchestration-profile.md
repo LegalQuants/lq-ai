@@ -1,7 +1,8 @@
 # ADR 0038 — Governed runs in chat: an orchestrator model
 
 **Status:** Proposed (2026-09-23; rewritten 2026-10-06; rewritten again 2026-10-09, after
-the maintainer redirected C1 on 2026-10-07 and 2026-10-08). Nothing in it is ratified.
+the maintainer redirected C1 on 2026-10-07 and 2026-10-08; D8 added 2026-10-09; the maintainer's
+rulings on the open questions recorded 2026-10-09). Nothing in it is ratified.
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
 **Amends:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md) for run
@@ -282,7 +283,7 @@ a pin reads from the place its kind names, so a prompt name is never looked up a
 installed skills and a skill name never among prompts. A skill pin serializes without its
 kind, as it did before, so a plan retained from 0.8.0 keeps the hash its approval is bound
 to (`test_contract_versions.py`). The prompts are engine prompts and are reviewed as code.
-Whether either needs an attorney's attestation is open (open question 1).
+Neither needs an attorney's attestation (ruling 1).
 
 With Skills hidden, a skill would reach New harness only when the orchestrator assigns
 one. That is track C2 and depends on ADR 0035 D3. It is not built.
@@ -299,7 +300,7 @@ nothing for it. On a reasoning model hidden reasoning counts against the output 
 which is why a run with a fixed limit needs the control. A profile's route may carry an
 effort (`LQ_AI_NEW_HARNESS_REASONING_EFFORT`). It is part of the bound policy and so of
 each call's identity, and it is omitted when unset, so a 0.8.0 call keeps its identity.
-New harness sends none unless the operator sets one (open question 5). The model's
+New harness sends none unless the operator sets one (ruling 5). The model's
 reasoning text is not kept or shown.
 
 **A run's terms are frozen in its intake.** The limits a run states to its models and is
@@ -436,8 +437,9 @@ every policy check while the run is live, and at each read.
   it is listed as `in_another_matter`. The owner can attach the file to the second matter
   themselves, which is their recorded action, and it is then readable there.
 
-Ordinary chat is looser: it reads any file the owner owns. Whether this rule is the right
-one is open (open question 4).
+Ordinary chat is looser: it reads any file the owner owns. The maintainer has ruled
+that a run outside a matter may read a matter's file on that matter's terms (ruling 4);
+that is not built, and this section describes the branch.
 
 **Evidence is per run.** A source is a selected document or a file one of the run's
 searches found. For a run with a source, the delivered answer's quotations are checked. A
@@ -460,7 +462,8 @@ The pattern that recognises a quotation is the Citation Engine's, shared with or
 chat (`api/app/citation/extraction.py`, mirrored in the web at `citations/state.ts`). A
 quotation wrapped in Markdown emphasis, `*"words"* (Source: [N])`, is not recognised, and
 the answer is reported as having quotations that were not checked. Both prompts tell the
-model to write quotations plainly. This is open (open question 2).
+model to write quotations plainly. The pattern is to accept emphasis (ruling 2); that is
+not built.
 
 **Knowledge-base search.** *Authorization path; needs security review.* A run in a matter
 lists the knowledge bases attached to that matter when the request is accepted: the
@@ -559,10 +562,10 @@ turns. These limits of the branch must close first.
   cannot propose matter documents; the owner supplies them.
 - **Knowledge-base search is by keyword only, and the owner does not pick the knowledge
   bases.** A search finds a passage only when it holds every word of the query. A run lists
-  every knowledge base attached to its matter, at most 16 (D5, open questions 7 and 9).
+  every knowledge base attached to its matter, at most 16 (D5, rulings 7 and 9; DE-405).
 - **A quotation is checked only when it is written exactly as `"words" (Source: [N])`.**
   With Markdown emphasis around it, it is not recognised and the answer is reported as
-  having quotations that were not checked (D5, open question 2).
+  having quotations that were not checked (D5). Ruling 2 changes this; not built.
 - **A task's answer is plain Markdown of at most 12,000 characters, and a combined answer
   is at most 16,384.** A longer one is cut and marked.
 - **A plan is strict.** A plan with any member beyond `tasks`, or a task with any extra
@@ -581,11 +584,15 @@ turns. These limits of the branch must close first.
   Full payload capture waits for PRD §5.4 (D2).
 - **The 0.8.0 page no longer starts runs.** Operators who enabled it lose its intake form
   (D1).
+- **Access rules are not in one place.** The rule for what a run reads is the run
+  engine's own, and nothing makes a new run tool use it (D8). Not built.
 - **Evidence is thin.** Tests use a controlled provider. Development runs on local models,
-  driven by agents, are single runs and not a rate. No run has used a configured hosted
-  provider, and no person has accepted the branch.
+  driven by agents, are single runs and not a rate. The maintainer used the branch on a
+  local model and said on 2026-10-09 that it passes C1's acceptance statement; that is
+  one person's judgment of the build and not a measurement. No run has used a hosted
+  provider. The requirement below names a configured provider and does not say hosted.
 
-**A plan that carries a placeholder is refused (open; needs a decision).** On a route that
+**A plan that carries a placeholder is refused, until the gateway restores it (ruling 6).** On a route that
 pseudonymizes, the gateway replaces a name in message text with a placeholder such as
 `PERSON_0001` and puts it back in a reply's text, with a mapping that lasts for one
 request. It does not touch tool-call arguments. A plan handed over as a tool call (D4)
@@ -604,55 +611,108 @@ every route that resolves to tier 3, 4 or 5. The fix is for the gateway to resto
 tool's arguments on request. That is a change to the security boundary. It is not made here, and a note for the
 security reviewers has been drafted. The alternatives are to plan in text on a route that
 pseudonymizes, which makes the orchestrator behave in two ways depending on the route, or to
-keep refusing. In one development run on a pseudonymizing route, made before the refusal
+keep refusing; the maintainer chose the gateway fix. In one development run on a pseudonymizing route, made before the refusal
 existed, the plan call's arguments held a placeholder. In two runs made after it, the model
-carried none. The refusal itself has been exercised in tests only. The maintainer decides
-(open question 6).
+carried none. The refusal itself has been exercised in tests only.
 
 **Not built:** a query embedding for the search (it would be a priced, tier-bound model
 call with its own binding); restoring placeholders in the plan tool's arguments at the
 gateway; case-law, authority and MCP tools for a run; and the orchestrator reading or
 searching by itself.
 
-## Open questions
+### D8 — Who may read what is decided in one place, and a run tool cannot read around it
 
-The maintainer has not ruled on any of these. Each stays open until they do.
+*Authorization path; needs security review. Proposed on 2026-10-09 at the maintainer's
+direction that access limits be enforced by structure. Not built.*
 
-1. **The two prompt texts, and whether either needs an attorney's attestation.** The
-   texts are `orchestrator.v2.md` and `subagent.v2.md`. They are engine prompts and are
-   reviewed as code. No attestation is claimed for either.
-2. **Whether the shared quotation pattern should accept a quotation wrapped in emphasis.**
-   Making it do so changes a contract that ordinary chat shares. It was seen once, in one of
-   five document runs on a local model (2026-10-08). Until it is decided, both prompts tell
-   the model to write quotations plainly.
-3. **Whether a 0.8.0 run in flight at upgrade must survive.** The fictional profile now
-   grants tools, so its policy version is not the one a 0.8.0 run was approved under. A
-   0.8.0 run still in flight at upgrade stops at its next admission. Settled runs are read
-   without the policy and are unaffected.
-4. **The file rules.** That a run outside a matter reads only files filed in no matter;
-   that a run never takes a file out of its matter; and that a knowledge-base search
-   withholds a passage whose file another matter holds. Ordinary chat reads any file the
-   owner owns. These rules are on the authorization path and need security review.
-5. **The reasoning-effort setting ships empty.** `LQ_AI_NEW_HARNESS_REASONING_EFFORT` is
-   empty, so nothing is sent unless the operator sets a level. Measured on two local models
-   on 2026-10-08, one sample each, a level did not reduce reasoning. On one of them the
-   output was 875 tokens with nothing set, 1,021 with `low`, 734 with `high` and 49 with
-   `none`, and the `none` sample got a date wrong. A level sent to a model that cannot think
-   may be refused. Whether to ship `low` is the maintainer's to confirm.
-6. **The placeholder limit** in D7: keep refusing, restore the plan tool's arguments at the
-   gateway, or plan in text on a route that pseudonymizes.
-7. **Knowledge-base search is by keyword only.** A passage is found only when it holds
-   every word of the query. In one development run on a local model, seven of nine searches
-   found nothing. A query embedding would be a priced, tier-bound model call with its own
-   binding, and is not built.
-8. **A direct answer when documents are selected.** It is allowed, because a follow-up such
-   as "shorten that" keeps the earlier run's documents selected, and barring it would send
-   every follow-up through a plan. The cost is that the prompt's rule against answering a
-   question about a document directly is an instruction that no code enforces (D1). This
-   choice was made while building.
-9. **Which knowledge bases a run lists.** All that are attached to the matter when the
-   request is accepted, at most 16, in order of attachment, without the owner picking. This
-   choice was made while building.
+**What the code does today.** Access to a file, a knowledge base or a matter is decided by
+ownership: each has one `owner_id`, and PRD §5.2's per-resource permissions (read, write,
+share, delete) are not implemented. The rule is written in several places. Each resource
+route file has its own `_load_visible_*` helper with its own ownership check. The run
+engine has its own rule in `api/app/autonomous/orchestration/reading.py` (D5), which
+intake, the live policy check and each read share, and ownership comparisons appear in six
+files of the run engine. Nothing makes these agree. A run tool handler reaches its data
+through the guarded effect path, and the model can name only a document number or a query,
+never a user, a matter or a file; but a new handler that issued its own query would not
+fail any check. A run rechecks its owner's Autonomous opt-in at each admission and does
+not look at the owner's role.
+
+**One access module.** The API gains one module, outside the run engine, that answers who
+may read what. It takes a principal (the user, with their role) and an optional matter,
+and returns queries: the files that principal may read there, the knowledge bases they may
+search there, the matters they may open. Resource routes, the chat path and run tools all
+take their rows from it. The D5 file rule moves into it unchanged. Ordinary chat's looser
+rule (any file the owner owns) is stated in the same module beside it, so the difference
+between the two is one visible line and not two implementations (ruling 4).
+
+**A run tool is handed a reader, not a database.** A run tool handler receives a reader
+that the access module built for the run's stored owner and matter. The handler has no
+database session and no model classes. It cannot name another owner or another matter,
+because the reader has no parameter for either. A contract test fails a registered tool
+whose handler module imports a model class or a session, so the rule is held by the test
+suite and not by the author remembering it. The eight gates in D4 are unchanged; this is
+a ninth, and it is the only one about rows.
+
+**The principal is rechecked while a run executes.** Each admission builds the principal
+again from the stored owner. A run whose owner no longer exists, is scheduled for deletion
+or may no longer act stops at its next admission, as it does today when the opt-in is
+turned off. Which roles may start, approve or read a run is ruling 10; the module is
+where that answer is written.
+
+**What this does not do.** It adds no sharing model and changes nobody's access. A
+deployment behaves the same before and after it. Its purpose is that a later change to
+access (a role limit, a knowledge base shared with a team, the per-resource permissions of
+PRD §5.2) is made in one place and reaches chat, the resource routes and every run tool
+together.
+
+**Order.** It is a precondition for tracks C2 to C7 adding run tools, so that no tool is
+written against the scattered checks. It is not a condition of C1's acceptance. It lands
+as its own reviewed change: the module with the run engine moved onto it first, then the
+resource routes and the chat path one file at a time (ruling 11, DE-406).
+
+## Rulings on the open questions
+
+The maintainer ruled on all eleven on 2026-10-09, and on the same day said that the branch
+passes C1's acceptance statement. A ruling is a direction. It does not ratify this ADR, and
+it does not replace security review where the item is on the authorization path or the
+gateway. Four rulings ask for something the branch does not do yet. Until each is built,
+the decision text above describes the branch as it is, and the item is marked **not
+built**.
+
+1. **The prompt texts.** They are engine prompts, reviewed as code. No attorney's
+   attestation is required for either.
+2. **Quotations in emphasis.** The shared quotation pattern is to accept a quotation
+   wrapped in Markdown emphasis, for ordinary chat and for runs alike. It lands as its own
+   reviewed change with tests for both. **Not built**: D5 and D7 still describe the strict
+   pattern.
+3. **A 0.8.0 run in flight at upgrade** need not survive. The upgrade notes are to tell
+   operators to finish or halt demonstration runs before upgrading.
+4. **The file rules.** A run outside a matter may read a file that a matter holds, and
+   then takes on that matter's inference-tier floor and privilege flag. This replaces the
+   rule in D1 and D5 that such a run reads only files filed in no matter. Not ruled on:
+   whether the same holds for a run in one matter reading a file that only another matter
+   holds, and what applies when the selected files come from matters with different
+   floors (the proposal is the highest floor, and privileged if any is). Authorization
+   path; needs security review. **Not built.**
+5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
+6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
+   restores reply text. It is a change to the security boundary and goes to security
+   review with the drafted note. The refusal (`plan_has_placeholders`) stays until that
+   change lands. **Not built.**
+7. **Knowledge-base search** stays keyword only for C1, as a stated limit. Looser matching
+   and a query embedding are deferred as DE-405.
+8. **A direct answer when documents are selected** is allowed, as built.
+9. **Which knowledge bases a run lists**: all that are attached to the matter, at most
+   16, without the owner picking, as built.
+10. **Roles.** A viewer cannot start, approve or reject a run, and can read their own. An
+    auditor may read any owner's run and its trace, and can change nothing. This widens
+    who can read a run's prompts, plan and task results beyond its owner, so it needs
+    security review. Not ruled on: whether an auditor's read includes a run's working
+    files and the text of its answer. **Not built**: run routes are still on ownership and
+    the Autonomous opt-in.
+11. **The order of D8.** The run engine moves onto the access module first. The resource
+    routes and the chat path may follow later and do not hold back a C2 to C7 run tool;
+    that move is deferred as DE-406.
 
 ## Alternatives
 
@@ -668,11 +728,13 @@ The maintainer has not ruled on any of these. Each stays open until they do.
 | Stream run progress over the message stream | Runs outlive requests, and ADR 0035 defers streaming. |
 | Keep the closed-choice planner for sub-agents | One choice per turn, stopping on anything else, limits what a skill can do. The chat tool loop already uses native calls on a closed set. |
 | Authorize chat attachments by ownership alone | Adds a second rule to the read boundary. In a matter, attaching to the matter keeps one rule. Outside a matter the one rule is the owner's own files that are filed in no matter (D5). |
-| Let a run outside a matter read any file the owner owns | A file in a matter carries that matter's tier floor and privilege flag, which a run with no matter does not apply (D5). Open. |
+| Let a run outside a matter read any file the owner owns, on its own terms | A file in a matter carries that matter's tier floor and privilege flag, which a run with no matter does not apply (D5). The maintainer ruled that such a run may read the file on the matter's terms (ruling 4). |
 | Embed the knowledge-base search query | A priced, tier-bound model call that needs its own binding and allowance. Not built (D7). |
 | Keep a full prompt record in the application now | Exceeds what an ordinary turn keeps; it belongs with the PRD §5.4 sink, for both. |
 | Allow open-ended agents to choose skills, tools or sources | Task prose would become authority and defeat the approved-scope boundary. |
 | Move orchestration to a separate harness service | Duplicates the governance path without solving authorization. |
+| Leave the read rule in the run engine and review each new tool by hand | The rule is then held by reviewers remembering it. A change to access would need a separate edit in each route file and in the run engine, and one missed place is a read that should have been refused (D8). |
+| Decide access in the database with row-level security | It would be structural, and it changes how every query in the API runs, including the workers' and the migrations'. It is not ruled out for later; D8's module is the smaller step and is where such policies would be derived from. |
 | Replace the chat-completion path now | The gaps listed in D7. |
 
 ## Consequences
@@ -696,6 +758,8 @@ The maintainer has not ruled on any of these. Each stays open until they do.
   after the call it answers, and sending non-ASCII characters in tool-call arguments as
   themselves), the rule for a run outside a matter (D1, D5), pseudonymization following the
   operator's setting (D5), and the knowledge-base search (D5).
+- D8 is not built. It is a change to authorization across the API, routed to security
+  review, and it lands before any C2 to C7 run tool.
 - ADR 0011's model picker now holds one entry that is not a provider model (D1).
 - ADR 0035 is unchanged. Its D1 amendment is a separate draft awaiting ratification.
 - PRD §3.1 and §3.10, the feature PRD, the OpenAPI sketches, the schema document,
@@ -713,8 +777,10 @@ The maintainer has not ruled on any of these. Each stays open until they do.
 > and execute it. it is not to reproduce the constrained demo to the chat
 
 The bracket marks a word missing from the statement. Nothing else in it is changed.
-Whether the branch meets it is for the maintainer to say after using it. The checks below
-exercise the build and do not stand in for that judgment.
+Whether the branch meets it is for the maintainer to say after using it. On 2026-10-09,
+after using the third increment on a local model, the maintainer said that it passes. The
+checks below exercise the build and do not stand in for that judgment. Passing C1 is not
+ratification of this ADR and does not replace maintainer or security review.
 
 **Visibility (D2).** Each row must hold for a run in main chat.
 
