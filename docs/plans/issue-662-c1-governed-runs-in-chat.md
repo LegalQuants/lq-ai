@@ -541,9 +541,11 @@ The guards these four changes add were probed by breaking each one in a copy of 
 and running the tests that should notice: 49 breaks (19 for ruling 4, 8 for ruling 10, 20
 for ruling 6, 2 for ruling 2). Forty-eight were caught by a failing test. The one that was
 not removes the owner check a halt route makes before calling the store, and the store
-makes the same check itself, so the route still refused. The probes show that a test holds
-each guard that was probed. They do not show that the guards are the right ones or that
-none is missing.
+makes the same check itself, so the route still refused. A fiftieth break was badly built
+and is not counted: it changed the not-found message of the trace read, which one branch
+gives both for a run that does not exist and for another owner's, so both answers changed
+alike and no test could differ. The probes show that a test holds each guard that was
+probed. They do not show that the guards are the right ones or that none is missing.
 
 An independent review of rulings 4, 6 and 10 was made by an agent that was given the code
 and not the author's view of it. It found two things of substance: an answer written
