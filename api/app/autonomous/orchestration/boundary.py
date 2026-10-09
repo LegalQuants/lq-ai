@@ -110,7 +110,8 @@ async def constrain_call(
                 raise ToolNotGranted("orchestration document read is out of bounds")
             span = {"offset": offset, "max_chars": max_chars}
         # The same rule intake and the policy check apply; see ``reading``. A
-        # run outside a matter has no project and reads only files in no matter.
+        # run outside a matter reads the owner's selected files wherever they
+        # are filed, under their matters' terms, which the store has checked.
         visible = await db.scalar(
             readable_documents(
                 owner_id=session.user_id,

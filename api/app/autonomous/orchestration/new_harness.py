@@ -27,8 +27,10 @@ What makes it general:
   Citation Engine's local stages; no judge model is called.
 * The chat may be in a matter or in none. In a matter the matter's inference
   tier floor and privilege flag apply at every call. Outside a matter the run
-  is never privileged, its floor is this profile's, and it reads only files
-  that are filed in no matter (see ``reading``).
+  may read the owner's files wherever they are filed, and takes on the
+  strictest floor and the privilege flag of the matters that hold them; with
+  no such file it is not privileged and its floor is this profile's (see
+  ``reading``).
 * Pseudonymization follows the operator's gateway setting for the routed tier.
   Each call's receipt records whether it was applied.
 

@@ -2112,13 +2112,13 @@ application, at intake, on every policy check while the run is live, and at each
 
 | Rule | Where |
 |---|---|
-| The run is never privileged, and a plan that says otherwise is refused. | `store._project_scope` |
-| Its inference-tier floor is the profile's own; no matter sets one. | `begin_run`, `intake.quote_intake` |
-| It reads only the owner's undeleted files that are filed in no matter: `files.project_id IS NULL` and no `project_files` row. | `reading.readable_documents`, used by intake, `policy.CurrentPolicy` and `boundary.constrain_call` |
+| It reads the owner's undeleted files wherever they are filed (ADR 0038, ruling 4). | `reading.readable_documents`, used by intake, `policy.CurrentPolicy` and `boundary.constrain_call` |
+| It runs under the strictest terms of the matters that hold its selected documents (`files.project_id`, or a `project_files` row): the lowest `projects.minimum_inference_tier` any of them sets, and privileged if any is. With none, it is not privileged and its floor is the profile's own. | `reading.selection_terms`, set by `begin_run` |
+| Those terms are worked out again at every admission. A floor that has tightened, or a privilege flag that no longer matches, stops the run. A privilege flag with no privileged matter behind it is refused. | `store._data_terms` |
 | Nothing is attached to a matter for it. | `store.start_planning` |
 
-A file that belongs to a matter carries that matter's tier floor and privilege flag. A
-run with no matter applies neither, which is why it does not read one. A profile says
+A file that belongs to a matter carries that matter's tier floor and privilege flag, and
+a run with no matter takes them on when it reads the file. A profile says
 whether it may start outside a matter (`project_scope = "any"`); New harness may, and
 the fictional profile, which is limited to one dedicated matter, may not.
 

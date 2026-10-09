@@ -5771,6 +5771,21 @@ components:
         filename:
           title: Filename
           type: string
+        matter_minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Matter Minimum Inference Tier
+        matter_privileged:
+          default: false
+          title: Matter Privileged
+          type: boolean
+        matters:
+          default: []
+          items:
+            type: string
+          title: Matters
+          type: array
         mime_type:
           title: Mime Type
           type: string
@@ -13471,9 +13486,11 @@ paths:
 
         candidate attaches it to the matter when the run is accepted. Outside a
 
-        matter: named candidates only, and one that is filed in a matter is listed
+        matter: named candidates only. One that a matter holds is listed with that
 
-        as unreadable here. The documents the last run in this chat read are always
+        matter''s name, floor and privilege flag, which a run that reads it takes
+
+        on. The documents the last run in this chat read are always
 
         listed, and are returned as the suggested selection while they can still be
 

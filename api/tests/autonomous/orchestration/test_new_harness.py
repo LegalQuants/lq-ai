@@ -58,7 +58,7 @@ from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.policy import load_instructions
 from app.autonomous.orchestration.profiles import registered_profiles
 from app.autonomous.orchestration.prompts import load_prompt
-from app.autonomous.orchestration.store import _project_scope
+from app.autonomous.orchestration.store import _data_terms
 from app.errors import Forbidden
 from app.main import app
 from app.models.audit import AuditLog
@@ -682,9 +682,15 @@ async def test_a_run_outside_a_matter_belongs_to_none(harness: SimpleNamespace) 
 
 
 @pytest.mark.parametrize("filing", ["uploaded", "attached"])
-async def test_a_file_filed_in_a_matter_cannot_be_selected(
+async def test_a_file_filed_in_a_matter_can_be_selected_and_says_what_it_brings(
     harness: SimpleNamespace, filing: str
 ) -> None:
+    """ADR 0038, ruling 4. Before it, such a file was listed as ``in_a_matter`` and refused.
+
+    The fixture matter sets no floor and is not privileged, so the run's terms
+    are what they would be with no document. Stricter matters are in
+    ``test_matter_terms.py``.
+    """
     api = harness
     chat_id = await new_chat(api, in_project=False)
     free = await filed(api, "free.txt", MSA)
@@ -697,19 +703,44 @@ async def test_a_file_filed_in_a_matter_cannot_be_selected(
     assert response.status_code == 200, response.text
     by_name = {d["filename"]: d for d in response.json()["documents"]}
     assert (by_name["free.txt"]["selectable"], by_name["free.txt"]["reason"]) == (True, None)
+    assert by_name["free.txt"]["matters"] == []
     held_row = by_name["held.txt"]
-    assert (held_row["selectable"], held_row["reason"]) == (False, "in_a_matter")
-    # The whole selection is refused, and nothing is written.
-    refused = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free, held], expect=400)
-    assert refused["detail"]["details"]["file_id"] == held
-    assert refused["detail"]["details"]["reason"] == "in_a_matter"
-    assert await messages(api, chat_id) == [] and not api.gateway.requests
+    assert (held_row["selectable"], held_row["reason"]) == (True, None)
+    # Named, with what selecting it would put the run under.
+    assert held_row["matters"] == ["Fixture"]
+    assert held_row["matter_minimum_inference_tier"] is None
+    assert held_row["matter_privileged"] is False
+
+    api.gateway.expected_documents = [
+        {"number": 1, "filename": "free.txt"},
+        {"number": 2, "filename": "held.txt"},
+    ]
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free, held])
+    assert value["planning"]["project_id"] is None
+    assert value["planning"]["root"]["privileged"] is False
+    final = await run_to_completion(api, value)
+    assert final["status"] == "completed"
+    # Both were read, and the matter's file stayed where it was filed.
+    assert "seventy-two (72) hours" in json.dumps(api.gateway.tool_results)
+    async with api.env.factory() as db:
+        attached = select(ProjectFile.project_id).where(ProjectFile.file_id == UUID(free))
+        assert not (await db.scalars(attached)).all()
+        audit = select(AuditLog.id).where(
+            AuditLog.user_id == api.env.owner_id, AuditLog.action == "project.file_attached"
+        )
+        assert not (await db.scalars(audit)).all()
 
 
 @pytest.mark.parametrize("filing", ["attached", "uploaded"])
-async def test_a_file_filed_after_approval_is_not_read(
+async def test_a_file_filed_after_approval_in_a_matter_with_the_same_terms_is_still_read(
     harness: SimpleNamespace, filing: str
 ) -> None:
+    """Filing a selected file in a matter changes the run only if the matter's terms differ.
+
+    The fixture matter sets no floor and is not privileged: the terms the run
+    was approved under still hold, so it goes on. A matter that brings stricter
+    terms stops it (``test_matter_terms.py``).
+    """
     api = harness
     chat_id = await new_chat(api, in_project=False)
     contract = await filed(api, "msa.txt", MSA)
@@ -724,18 +755,23 @@ async def test_a_file_filed_after_approval_is_not_read(
         else:
             file = update(File).where(File.id == UUID(contract))
             await db.execute(file.values(project_id=api.env.project_id))
-    sent = len(api.gateway.requests)
     for child in children:
-        assert await job(api, value["root_id"], child) == "stopped"
-    assert len(api.gateway.requests) == sent
+        assert await job(api, value["root_id"], child) == "completed"
     async with api.env.factory() as db:
         reads = select(Effect.effect_key).where(
             Effect.intent == "retrieve_chunks", Effect.session_id.in_([UUID(c) for c in children])
         )
-        assert not (await db.scalars(reads)).all()
+        assert len((await db.scalars(reads)).all()) == len(children)
 
 
-async def test_a_run_outside_a_matter_cannot_be_privileged(harness: SimpleNamespace) -> None:
+async def test_a_run_outside_a_matter_is_privileged_only_with_a_privileged_matter_behind_it(
+    harness: SimpleNamespace,
+) -> None:
+    """With no document from a privileged matter, a claimed privilege flag is refused.
+
+    The flag turns pseudonymization off at the gateway, so it must come from a
+    matter and never from a request.
+    """
     api = harness
     api.gateway.expected_documents = []
     chat_id = await new_chat(api, in_project=False)
@@ -745,11 +781,12 @@ async def test_a_run_outside_a_matter_cannot_be_privileged(harness: SimpleNamesp
 
     snapshot = PlanningSnapshot.model_validate_json(json.dumps(planned["planning"]))
     plan = PreparedPlan.model_validate_json(json.dumps(planned["tree"]["plan"]))
-    for held in (snapshot, plan):
-        _project_scope(None, held)
-        claimed = held.root.model_copy(update={"privileged": True})
-        with pytest.raises(Forbidden):
-            _project_scope(None, held.model_copy(update={"root": claimed}))
+    async with api.env.factory() as db:
+        for held in (snapshot, plan):
+            await _data_terms(db, None, held)
+            claimed = held.root.model_copy(update={"privileged": True})
+            with pytest.raises(Forbidden, match="data policy has changed"):
+                await _data_terms(db, None, held.model_copy(update={"root": claimed}))
 
 
 # --- 6. Pseudonymization follows the operator's gateway setting --------------

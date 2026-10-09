@@ -554,11 +554,19 @@ export interface RunDocument {
 	attached_to_project: boolean;
 	selectable: boolean;
 	/**
-	 * `unsupported_type`, `not_ingested`, `ingestion_failed`, `no_text`, `in_a_matter`
-	 * (a file that belongs to a matter, listed from a chat that is in none), or
-	 * `in_another_matter` (a candidate that only another matter holds).
+	 * `unsupported_type`, `not_ingested`, `ingestion_failed`, `no_text` or
+	 * `in_another_matter` (in a matter's chat, a candidate that only another matter holds).
 	 */
 	reason?: string | null;
+	/**
+	 * In a chat that is in no matter, for a file that a matter holds: the owner's matters
+	 * that hold it, the lowest inference tier floor any of its matters sets (null when none
+	 * sets one), and whether one of them is privileged. A run that selects the file runs
+	 * under these terms. Absent or empty otherwise.
+	 */
+	matters?: string[];
+	matter_minimum_inference_tier?: number | null;
+	matter_privileged?: boolean;
 }
 
 /** A knowledge base attached to the chat's matter, which a task of a run started here may search. */

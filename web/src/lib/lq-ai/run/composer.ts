@@ -569,9 +569,6 @@ const UNREADABLE_REASONS: Record<string, string> = {
 	not_ingested: 'Not processed yet. Wait for it to finish, then refresh the list.',
 	ingestion_failed: 'Processing failed, so this file cannot be read.',
 	no_text: 'No text could be extracted from this file, for example a scan or an image-only PDF.',
-	// Listed from a chat that is in no matter: a matter's file carries that matter's rules.
-	in_a_matter:
-		'This file belongs to a matter. Start the request from a chat in that matter to use it.',
 	// Listed from a chat in one matter: a run does not move a file out of another.
 	in_another_matter:
 		'This file belongs to another matter. Add it to this matter yourself if this run should read it.'
@@ -587,12 +584,51 @@ export function unreadableReason(doc: RunDocument): string | null {
 		: 'This file cannot be read in a run.';
 }
 
+/** Names in a sentence: “a”, “a” and “b”, or “a”, “b” and “c”. Each is shown as text. */
+function quotedList(names: string[]): string {
+	const quoted = names.map((name) => `“${name}”`);
+	if (quoted.length <= 1) return quoted.join('');
+	return `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
+}
+
 /**
- * The note for a selectable file that is not yet attached to the matter, else null.
- * A chat in no matter adds nothing to one, so it has no such note for any file.
+ * In a chat that is in no matter, what picking a matter's file brings: a run that reads
+ * it runs under the rules of the matters that hold it (ADR 0038, ruling 4). Null for a
+ * file that no matter holds. A privileged matter turns pseudonymization off for the whole
+ * run, which the strip's own sentence about the route cannot know, so it is said here.
+ */
+export function matterTermsNote(doc: RunDocument): string | null {
+	const names = (Array.isArray(doc.matters) ? doc.matters : [])
+		.filter((name): name is string => typeof name === 'string')
+		.map((name) => name.trim())
+		.filter((name) => name !== '');
+	const stated = doc.matter_minimum_inference_tier;
+	const floor = typeof stated === 'number' && Number.isFinite(stated) ? stated : null;
+	const privileged = doc.matter_privileged === true;
+	if (names.length === 0 && floor === null && !privileged) return null;
+	const several = names.length > 1;
+	const from =
+		names.length === 0
+			? 'From a matter.'
+			: `From the ${several ? 'matters' : 'matter'} ${quotedList(names)}.`;
+	const rules: string[] = [];
+	if (floor !== null) rules.push(`inference tier ${floor} or stronger`);
+	if (privileged) rules.push('privileged, so nothing is pseudonymized');
+	const whose = several ? 'their' : 'its';
+	return rules.length === 0
+		? `${from} A run that reads it follows ${whose} rules.`
+		: `${from} A run that reads it follows ${whose} rules: ${rules.join('; ')}.`;
+}
+
+/**
+ * The note for a selectable file. In a matter: that a file not yet attached to it will
+ * be. In a chat that is in no matter, where nothing is added to one: what a matter's
+ * file brings with it. Null otherwise.
  */
 export function documentNote(doc: RunDocument, inMatter = true): string | null {
-	return inMatter && doc.selectable && !doc.attached_to_project ? ADDED_TO_MATTER_NOTE : null;
+	if (!doc.selectable) return null;
+	if (!inMatter) return matterTermsNote(doc);
+	return doc.attached_to_project ? null : ADDED_TO_MATTER_NOTE;
 }
 
 /** Whether a profile takes documents from the owner: a selection it needs, or one it may have. */

@@ -295,7 +295,7 @@ Tests: `web/src/lib/lq-ai/run/__tests__/` (`composer.test.ts`, `harness.test.ts`
 | Pseudonymization | Follows the operator's gateway setting for the routed tier. The fictional profile keeps the earlier rule. |
 | Gateway | A reasoning-effort request field, mapped to `think` by the Ollama adapter; an Ollama tool result named after its call; non-ASCII characters in tool-call arguments sent as themselves. The setting `LQ_AI_NEW_HARNESS_REASONING_EFFORT` ships empty. Tests: `gateway/tests/test_ollama_tool_calls.py`. |
 | Trace read | `GET /autonomous/orchestration/{root_id}/sessions/{session_id}/trace`: each call's system message, opening message and tools, rebuilt and compared with the recorded digest, and each turn's text and tool calls. |
-| A chat outside a matter | Migration 0072. Such a run is never privileged, has the profile's tier floor, reads only files filed in no matter and searches no knowledge base. |
+| A chat outside a matter | Migration 0072. Such a run searches no knowledge base. Since ruling 4 (built 2026-10-10) it reads the owner's files wherever they are filed, under the strictest terms of the matters that hold them; with no document from a matter it is not privileged and has the profile's tier floor. |
 
 Tests: `test_new_harness.py`, `test_new_harness_guards.py`, `test_document_runs.py`,
 `test_evidence_counts.py`, `test_registry_contract.py`, `test_contract_versions.py` in
@@ -483,9 +483,13 @@ that it can be reviewed apart, and none has had maintainer or security review.
   still carries a placeholder is kept. Tests: the restore step alone, the gateway against
   a mocked provider with and without the opt-in and for a request that was not
   pseudonymized, the adapter's stripped fields, the binding's form and match, the
-  boundary's refusal, and controlled-provider runs. Not done: a run on a route that
-  pseudonymizes, and a test of the streaming path with the field set (that path does not
-  read it).
+  boundary's refusal, and controlled-provider runs. Run once on the development stack with
+  the gateway pseudonymizing at the local route's tier: sent straight to the gateway, the
+  same request came back with `PERSON_0001` in the plan arguments three times of three
+  without the field and with the name three times of three with it; through the
+  application, three requests naming a person were all planned, one plan naming the person
+  and two naming nobody. Not done: a test of the streaming path with the field set (that
+  path does not read it).
 
 - **Ruling 10, roles.** Starting a run, approving a plan and rejecting one require a
   member or admin role (`RunActor` in `api/app/api/dependencies.py`); the store refuses a
@@ -497,6 +501,40 @@ that it can be reviewed apart, and none has had maintainer or security review.
   admin reading another owner's run with the audit rows counted, and the 404 for anyone
   else. No new route. Not done: the web shows a privileged reader the owner's controls on
   the receipt page, and each fails; a run is not stopped when its owner's role changes.
+
+- **Ruling 4, a matter's file in a chat that is in no matter.** `reading.readable_documents`
+  no longer excludes a matter's file for a run with no matter. `reading.selection_terms`
+  gives the strictest terms of the matters that hold a set of documents; `begin_run` sets
+  the run's floor and privilege flag from it, and `store._data_terms` works it out again
+  at every admission and stops the run when the terms have tightened or the privilege
+  flag no longer matches. A route that cannot meet the terms is refused before anything
+  is stored, with a message that names the cause. The document listing gives each
+  matter-held file its matters' names, floor and privilege flag, and the picker notes
+  them. No migration. Tests: the listing, the terms of a set of files, a run under a
+  floor and under privilege with the gateway fields and receipts checked, a direct
+  answer, the refusal, four kinds of change after approval, and a change that loosens
+  the terms. An independent review then found that such a run's answer was shown, through
+  the thread, to a later run without the terms; `intake.thread_excerpt` now replaces an
+  earlier answer written under stricter terms with a note, and tests cover a privileged
+  matter, a floor alone and privilege alone. Three choices are the build's and not the
+  maintainer's: the strictest terms where matters differ, withholding that earlier
+  answer, and no change for a run in a matter. Run once on the development
+  stack: a privileged matter with a floor of 1, a file filed in it, and a chat in no
+  matter. The listing named the matter and its terms, the run took them on, the planning
+  call went out at tier 1 and its receipt records that nothing was pseudonymized. On that
+  stack the local route is not pseudonymized in any case, so the run does not show the
+  privilege flag turning pseudonymization off; a controlled-provider test does. In a
+  browser, the picker drew the file as selectable with its note. Not done: the strip is
+  not quoted again when such a file is picked.
+
+The guards these four changes add were probed by breaking each one in a copy of the tree
+and running the tests that should notice: 41 breaks (14 for ruling 4, 8 for ruling 10, 17
+for ruling 6, 2 for ruling 2). Forty were caught by a failing test. The one that was not
+removes the owner check a halt route makes before calling the store, and the store makes
+the same check itself, so the route still refused. The probes show that a test holds each
+guard that was probed. They do not show that the guards are the right ones or that none
+is missing; an independent review of rulings 4, 6 and 10 was also made, by an agent, and
+is not a maintainer or security review.
 
 ### Not done, or not verified
 

@@ -42,6 +42,7 @@ import {
 	instructionRows,
 	knowledgeBasesLine,
 	knowledgeBasesLineParts,
+	matterTermsNote,
 	minDocuments,
 	newRequestId,
 	pickerEmpty,
@@ -1049,13 +1050,16 @@ describe('unreadableReason', () => {
 		expect(new Set(reasons).size).toBe(4);
 	});
 
-	it('says a matter’s file cannot be used from a chat that is in no matter, and where to start from', () => {
+	it('lets a matter’s file be picked from a chat that is in no matter', () => {
+		// ADR 0038, ruling 4. It was refused as `in_a_matter`; it is now read on the matter’s terms.
 		const [inAMatter, loose] = documents('no-project').documents;
-		expect(inAMatter.reason).toBe('in_a_matter');
-		expect(unreadableReason(inAMatter)).toBe(
-			'This file belongs to a matter. Start the request from a chat in that matter to use it.'
-		);
+		expect(inAMatter).toMatchObject({ selectable: true, reason: null, matters: ['Fixture'] });
+		expect(unreadableReason(inAMatter)).toBeNull();
 		expect(unreadableReason(loose)).toBeNull();
+		// An older server’s reason is still never left without words.
+		expect(unreadableReason(document({ selectable: false, reason: 'in_a_matter' }))).toBe(
+			'This file cannot be read in a run (in a matter).'
+		);
 	});
 
 	it('never leaves a file that cannot be read without a reason', () => {
@@ -1097,15 +1101,90 @@ describe('documentNote', () => {
 		expect(documentNote(DOCX)).toBeNull();
 	});
 
-	it('has no note at all in a chat that is in no matter, where nothing is added to one', () => {
-		// Every file of a chat in no matter is recorded as not attached to one; that is not
-		// a promise to add it.
+	it('in a chat that is in no matter, promises to add nothing and says what a matter’s file brings', () => {
 		const { documents: listed, project_id } = documents('no-project');
 		expect(project_id).toBeNull();
+		// Every file of a chat in no matter is recorded as not attached to one; that is not
+		// a promise to add it.
 		expect(listed.every((doc) => doc.attached_to_project === false)).toBe(true);
-		for (const doc of listed) expect(documentNote(doc, false), doc.filename).toBeNull();
-		expect(documentNote(listed[1], true)).toBe(ADDED_TO_MATTER_NOTE);
+		for (const doc of listed) {
+			expect(documentNote(doc, false) ?? '', doc.filename).not.toContain('Will be added');
+		}
+		const [inAMatter, loose] = listed;
+		expect(documentNote(inAMatter, false)).toBe(
+			'From the matter “Fixture”. A run that reads it follows its rules.'
+		);
+		expect(documentNote(loose, false)).toBeNull();
+		expect(documentNote(loose, true)).toBe(ADDED_TO_MATTER_NOTE);
 		expect(documentNote(DPA, false)).toBeNull();
+		// A file that cannot be read has its reason and no note.
+		expect(documentNote({ ...inAMatter, selectable: false }, false)).toBeNull();
+	});
+});
+
+describe('matterTermsNote', () => {
+	// Recorded from the API: one matter sets a floor of 3, another is privileged with a floor of 2.
+	const [privileged, floored, loose] = (() => {
+		const listed = documents('no-project-terms').documents;
+		const named = (filename: string) => listed.find((doc) => doc.filename === filename)!;
+		return [named('msa.txt'), named('dpa.md'), named('loose-note.txt')];
+	})();
+
+	it('is recorded as the server sends it: every matter named, the lowest floor, privileged if any', () => {
+		expect(privileged).toMatchObject({
+			selectable: true,
+			matters: ['Board advice', 'Fixture', 'Vendor renewal'],
+			matter_minimum_inference_tier: 2,
+			matter_privileged: true
+		});
+		expect(floored).toMatchObject({
+			matters: ['Fixture', 'Vendor renewal'],
+			matter_minimum_inference_tier: 3,
+			matter_privileged: false
+		});
+		expect(loose).toMatchObject({ matters: [], matter_minimum_inference_tier: null });
+	});
+
+	it('names the matters and says what a run that reads the file takes on', () => {
+		expect(matterTermsNote(privileged)).toBe(
+			'From the matters “Board advice”, “Fixture” and “Vendor renewal”. A run that reads it follows their rules: inference tier 2 or stronger; privileged, so nothing is pseudonymized.'
+		);
+		expect(matterTermsNote(floored)).toBe(
+			'From the matters “Fixture” and “Vendor renewal”. A run that reads it follows their rules: inference tier 3 or stronger.'
+		);
+		expect(matterTermsNote(loose)).toBeNull();
+	});
+
+	it('says a privileged matter turns pseudonymization off, because the strip cannot know it', () => {
+		const note = matterTermsNote(document({ matters: ['Advice'], matter_privileged: true }));
+		expect(note).toBe(
+			'From the matter “Advice”. A run that reads it follows its rules: privileged, so nothing is pseudonymized.'
+		);
+	});
+
+	it('still says so when no matter of the owner’s is named', () => {
+		expect(matterTermsNote(document({ matters: [], matter_minimum_inference_tier: 1 }))).toBe(
+			'From a matter. A run that reads it follows its rules: inference tier 1 or stronger.'
+		);
+	});
+
+	it('is null for a file with nothing from a matter, and for fields of the wrong kind', () => {
+		for (const fields of [
+			{},
+			{ matters: [] },
+			{ matters: ['  ', ''], matter_minimum_inference_tier: null, matter_privileged: false },
+			{ matters: 'Advice', matter_minimum_inference_tier: '2', matter_privileged: 'yes' }
+		]) {
+			expect(
+				matterTermsNote(document(fields as Partial<RunDocument>)),
+				JSON.stringify(fields)
+			).toBeNull();
+		}
+	});
+
+	it('shows a matter’s name as the words it is', () => {
+		const note = matterTermsNote(document({ matters: ['<b>Acme</b> & "Co"'] }))!;
+		expect(note).toContain('“<b>Acme</b> & "Co"”');
 	});
 });
 
@@ -1195,17 +1274,21 @@ describe('documentRows', () => {
 		]);
 	});
 
-	it('in a chat that is in no matter, notes no file, lists a matter’s file disabled with why, and leaves the loose file free', () => {
+	it('in a chat that is in no matter, leaves a matter’s file free to pick and notes what it brings', () => {
 		const read = documents('no-project');
 		const rows = documentRows(read.documents, [], read.max_documents, { inMatter: false });
-		expect(rows.map((row) => row.note)).toEqual([null, null]);
 		const [inAMatter, loose] = rows;
-		expect(inAMatter).toMatchObject({ filename: 'msa.txt', disabled: true });
-		expect(inAMatter.reason).toBe(
-			'This file belongs to a matter. Start the request from a chat in that matter to use it.'
+		expect(inAMatter).toMatchObject({ filename: 'msa.txt', disabled: false, reason: null });
+		expect(inAMatter.note).toBe(
+			'From the matter “Fixture”. A run that reads it follows its rules.'
 		);
-		expect(loose).toMatchObject({ filename: 'loose-note.txt', disabled: false, reason: null });
-		// Said the other way, a chat in a matter notes the same file.
+		expect(loose).toMatchObject({
+			filename: 'loose-note.txt',
+			disabled: false,
+			reason: null,
+			note: null
+		});
+		// Said the other way, a chat in a matter notes the loose file as one it would add.
 		expect(documentRows(read.documents, [], read.max_documents)[1].note).toBe(ADDED_TO_MATTER_NOTE);
 	});
 
@@ -1339,11 +1422,12 @@ describe('defaultDocumentSelection', () => {
 		expect(choose({ read: odd, attachedFileIds: [SCAN.file_id, 'also-not-listed'] })).toEqual([
 			MSA.file_id
 		]);
+		// A matter’s file can be read from a chat that is in no matter, so it is chosen too.
 		const loose = documents('no-project');
 		const [inAMatter, looseFile] = loose.documents;
 		expect(
 			choose({ read: loose, attachedFileIds: [inAMatter.file_id, looseFile.file_id] })
-		).toEqual([looseFile.file_id]);
+		).toEqual([inAMatter.file_id, looseFile.file_id]);
 	});
 
 	it('names a file once, however many ways it was asked for', () => {

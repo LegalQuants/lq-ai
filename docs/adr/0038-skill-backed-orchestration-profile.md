@@ -150,12 +150,14 @@ in text, and a reply of its that is not a plan fails as before.
 
 **A chat outside a matter.** *Authorization path; needs security review.* A chat need not
 be in a matter (the API calls a matter a project). Migration 0072 lets
-`orchestration_roots.project_id` be null. Such a run is never privileged, and a plan that
-says otherwise is refused. Its inference-tier floor is the profile's own. Nothing is
-attached to a matter for it, it reads only the owner's files that are filed in no matter
-(D5), and it searches no knowledge base. A file in a matter carries that matter's tier
-floor and privilege flag, which a run with no matter does not apply. The fictional profile
-still needs its dedicated matter.
+`orchestration_roots.project_id` be null. Such a run has no terms of its own. With no
+document from a matter it is not privileged and its inference-tier floor is the profile's.
+It may read the owner's files wherever they are filed, and it then takes on the terms of
+the matters that hold them (D5, ruling 4): the lowest floor any of them sets, and
+privileged if any of them is. A privilege flag is never taken from a request; a plan that
+carries one with no privileged matter behind it is refused. Nothing is attached to a
+matter for such a run, and it searches no knowledge base. The fictional profile still
+needs its dedicated matter.
 
 **The fictional demonstration is out of chat.** The composer does not offer the 0.8.0
 fictional profile (`model_demo_v1`). It stays a test fixture, and its retained runs stay
@@ -448,23 +450,60 @@ ingests are selectable, currently PDF with text, plain text and Markdown. A file
 cannot be read is shown with its reason and is never silently omitted. The whole selection
 is refused if any file is missing, another owner's or unreadable.
 
-**The file rule: a run never takes a file out of its matter.** *Authorization path; needs
-security review.* One rule decides which files a run may read. It is applied at intake, at
-every policy check while the run is live, and at each read.
+**The file rule: a matter's terms go with its files.** *Authorization path; needs
+security review.* One rule decides which files a run may read and on what terms. It is
+applied at intake, at every admission while the run is live, and at each read.
 
 - A run in a matter reads the owner's own, undeleted files that are attached to that
-  matter.
-- A run outside any matter reads the owner's own, undeleted files that are filed in no
-  matter.
-- A file that a matter holds carries that matter's tier floor and privilege flag. A run
-  with no matter does not read it; the composer lists it as `in_a_matter`. A run in one
-  matter does not accept, as a candidate to attach, a file that only another matter holds;
-  it is listed as `in_another_matter`. The owner can attach the file to the second matter
-  themselves, which is their recorded action, and it is then readable there.
+  matter. It runs under that matter's inference-tier floor and privilege flag, and no
+  other's. It does not accept, as a candidate to attach, a file that only another matter
+  holds; that file is listed as `in_another_matter`. The owner can attach the file to the
+  second matter themselves, which is their recorded action, and it is then readable there.
+- A run outside any matter reads the owner's own, undeleted files, wherever they are
+  filed (ruling 4). It has no terms of its own, so it runs under the strictest terms of
+  the matters that hold its selected documents: the lowest floor any of them sets, and
+  privileged if any of them is. An archived matter still counts. With no document from a
+  matter the run is not privileged and its floor is the profile's.
 
-Ordinary chat is looser: it reads any file the owner owns. The maintainer has ruled
-that a run outside a matter may read a matter's file on that matter's terms (ruling 4);
-that is not built, and this section describes the branch.
+For a run outside a matter the terms are taken from the server's records when the request
+is accepted, never from the request. The store works them out again at every admission and
+compares them with the run's: the run's floor may not be weaker, and it carries the
+privilege flag exactly when one of those matters is privileged. So a matter whose floor
+tightens, a matter that becomes privileged or stops being so, and a selected file that is
+filed in a stricter matter each stop the run before its next call, as a change to a
+matter's policy stops a run in that matter. A floor that becomes weaker does not stop it;
+the run keeps the floor it was approved under. A request whose pinned route cannot
+meet the terms is refused before anything is stored, and the refusal says that a selected
+document's matter is the reason.
+
+The privilege flag turns pseudonymization off at the gateway, for the whole run: its
+request, the thread and every task, not only the privileged file. The picker says so on
+the file. In a chat that is in no matter it names the owner's matters that hold a file,
+the floor and the privilege flag. The strip's own lines about the route are quoted for the
+chat before any selection and do not change when such a file is picked; that is a limit
+(D7).
+
+**An earlier answer follows its terms.** The planning call is shown the chat's recent
+messages (D1), and an earlier run's answer may hold what a matter's file said. So that
+answer is shown only to a run whose own terms are at least as strict: its floor no
+weaker, and privileged if the earlier run was. Otherwise the planning call is shown a
+note in its place, which the owner also sees when reading what was sent. A follow-up that
+keeps the earlier run's documents has that run's terms and is shown its answer, and the
+composer starts a follow-up from those documents. An earlier run whose terms cannot be
+read is treated as stricter. The rule applies to every run; between runs of one matter it
+changes nothing unless the matter's terms were loosened in between. It covers runs only:
+an ordinary turn in the same chat is still shown the answer (D7).
+
+Three points in this are choices made while building, which the maintainer has not ruled
+on. Where the selected files come from matters with different terms, the strictest apply.
+An earlier answer is withheld from a later run that lacks its terms; an independent
+review found that it was otherwise shown, and the alternative of carrying the terms
+forward with the thread was not built. And a run in one matter is unchanged: it still
+does not read a file that only another matter holds, and it applies its own matter's
+terms and no other's. So for a file that two matters hold, a run in one of them applies
+that matter's terms, while a run outside any matter applies the stricter of the two; the
+heading above is exact only for the second. Ordinary chat remains looser than both: it reads any file the owner owns and
+applies no matter's terms to it.
 
 **Evidence is per run.** A source is a selected document or a file one of the run's
 searches found. For a run with a source, the delivered answer's quotations are checked. A
@@ -586,7 +625,17 @@ turns. These limits of the branch must close first.
   and is never approved. A matter is no longer required.
 - **No streaming.** An answer arrives when the run finishes. A run has a deadline of 7,200
   seconds, and development runs on local models have taken minutes.
-- **A run outside a matter cannot read a file that is filed in a matter** (D5).
+- **A run outside a matter reads a matter's file on that matter's terms, and the strip
+  does not show it** (D5). The route's tier and the pseudonymization sentence in the strip
+  are quoted for the chat with nothing selected. Picking a privileged matter's file turns
+  pseudonymization off for the run; the picker's note on the file says so and the strip
+  does not change. A route that cannot meet a matter's floor is refused only when the
+  request is sent.
+- **A matter's terms do not follow the answer into ordinary chat.** A run that read a
+  matter's file writes its answer into a chat that is in no matter. A later run in that
+  chat is shown the answer only if it has the same terms or stricter (D5). An ordinary
+  turn is not a run: it is shown the answer as part of the thread, on whatever model is
+  chosen, and applies no matter's terms to it.
 - **No tools that leave the deployment.** No case-law, authority or MCP tool is granted to
   a run, and the organisation profile does not reach a run. Ordinary chat has them.
 - **No library skills** until the orchestrator can assign them (C2, ADR 0035 D3).
@@ -668,11 +717,17 @@ too. The orchestrator's own answer is reply text and is restored as before.
 
 Limits of this: a number in restored arguments keeps its value and may not keep its
 spelling; an upgrade in the middle of a pseudonymized planning call changes that call's
-identity; and the change is exercised by unit tests, a gateway test against a mocked
-provider and controlled-provider run tests. No run on a route that pseudonymizes has been
-made since it was built. In one development run on such a route, made before the refusal
-existed, the plan call's arguments held a placeholder; in two made after it, the model
-carried none. The alternatives were to plan in text on a route that pseudonymizes, which
+identity. The change is exercised by unit tests, a gateway test against a mocked provider
+and controlled-provider run tests. It was also run once on a development stack, on
+2026-10-10, with the local route's tier added to `apply_at_tiers`. The same request,
+which told the model to copy a person's name into its plan, was sent straight to the
+gateway six times: three times without the field the arguments came back holding
+`PERSON_0001`, and three times with it they came back holding the name. Through the
+application, three requests that each named a person were all planned and none was
+refused; one plan named the person and two named nobody. Those are single runs on one
+local model, driven by an agent, and not a rate. Before the change, one development run
+on such a route had held a placeholder in the plan call's arguments. The alternatives were
+to plan in text on a route that pseudonymizes, which
 makes the orchestrator behave in two ways depending on the route, or to keep refusing; the
 maintainer chose the gateway change.
 
@@ -753,11 +808,13 @@ branch as it is, and the item is marked **not built**.
    operators to finish or halt demonstration runs before upgrading.
 4. **The file rules.** A run outside a matter may read a file that a matter holds, and
    then takes on that matter's inference-tier floor and privilege flag. This replaces the
-   rule in D1 and D5 that such a run reads only files filed in no matter. Not ruled on:
-   whether the same holds for a run in one matter reading a file that only another matter
-   holds, and what applies when the selected files come from matters with different
-   floors (the proposal is the highest floor, and privileged if any is). Authorization
-   path; needs security review. **Not built.**
+   rule that such a run reads only files filed in no matter. **Built** as its own change
+   (D1, D5): the terms are set at intake from the server's records and worked out again
+   at every admission. Built on three choices the maintainer has not ruled on: where the
+   files' matters differ, the strictest terms apply (the lowest floor, and privileged if
+   any is); an earlier answer written under stricter terms is not shown to a later run
+   that lacks them; and a run in one matter still does not read a file that only another
+   matter holds. Authorization path; no security review.
 5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
 6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
    restores reply text. **Built** as its own change (D7): an opt-in request field, set by
@@ -795,8 +852,9 @@ branch as it is, and the item is marked **not built**.
 | Hand over the plan as JSON in the reply text | A reply that is a plan cannot be told from an answer without parsing it, and the orchestrator may now answer. Text stays for the fictional profile, and D7 considers it again for a route that pseudonymizes. |
 | Stream run progress over the message stream | Runs outlive requests, and ADR 0035 defers streaming. |
 | Keep the closed-choice planner for sub-agents | One choice per turn, stopping on anything else, limits what a skill can do. The chat tool loop already uses native calls on a closed set. |
-| Authorize chat attachments by ownership alone | Adds a second rule to the read boundary. In a matter, attaching to the matter keeps one rule. Outside a matter the one rule is the owner's own files that are filed in no matter (D5). |
-| Let a run outside a matter read any file the owner owns, on its own terms | A file in a matter carries that matter's tier floor and privilege flag, which a run with no matter does not apply (D5). The maintainer ruled that such a run may read the file on the matter's terms (ruling 4). |
+| Authorize chat attachments by ownership alone | Adds a second rule to the read boundary. In a matter, attaching to the matter keeps one rule. Outside a matter the rule is the owner's own files, under the terms of the matters that hold them (D5). |
+| Let a run outside a matter read any file the owner owns, on its own terms | A file in a matter carries that matter's tier floor and privilege flag, which a run with no terms of its own would not apply. The maintainer ruled that such a run may read the file on the matter's terms (ruling 4), and that is what is built (D5). |
+| Keep refusing a matter's file to a run outside a matter (the rule before ruling 4) | Safe, and it sends the owner to a chat in that matter for any question that touches one of its files. The maintainer chose to let the file be read under the matter's terms. |
 | Embed the knowledge-base search query | A priced, tier-bound model call that needs its own binding and allowance. Not built (D7). |
 | Keep a full prompt record in the application now | Exceeds what an ordinary turn keeps; it belongs with the PRD §5.4 sink, for both. |
 | Allow open-ended agents to choose skills, tools or sources | Task prose would become authority and defeat the approved-scope boundary. |

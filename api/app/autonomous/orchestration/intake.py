@@ -48,9 +48,12 @@ from app.autonomous.orchestration.planning import (
 from app.autonomous.orchestration.policy import OperatorPolicy, load_instructions
 from app.autonomous.orchestration.profiles import RunProfile, dedicated_project, run_terms
 from app.autonomous.orchestration.reading import (
+    MatterTerms,
     attached_knowledge_bases,
     filed_in_a_matter,
     filed_in_another_matter,
+    holding_matters,
+    strictest,
 )
 from app.autonomous.orchestration.sourcing import run_sources
 from app.autonomous.orchestration.tools import get_tool
@@ -390,16 +393,38 @@ def prepare_model_plan(
 _SOURCE_MARKER = re.compile(r"\(Source:\s*\[(\d{1,3})\]\)")
 
 
-async def _name_sources(db: AsyncSession, root_id: UUID, text: str) -> str:
+# Shown to the planning call, and to the owner who reads what was sent, in place of
+# an earlier run's answer that was written under stricter data terms than the
+# request now being planned.
+WITHHELD_ANSWER = (
+    "[An earlier answer is not shown here. It was written under stricter data terms "
+    "(a matter's inference tier floor or privilege flag) than this request has.]"
+)
+
+
+def _stricter_than(snapshot: object, terms: MatterTerms) -> bool:
+    """Whether the run this intake belongs to ran under stricter terms than ``terms``.
+
+    Its floor was lower, or it was privileged and ``terms`` is not. An intake
+    whose terms cannot be read counts as stricter: the answer is then
+    withheld, never shown on a guess.
+    """
+    scope = snapshot.get("root") if isinstance(snapshot, dict) else None
+    if not isinstance(scope, dict):
+        return True
+    floor, privileged = scope.get("minimum_inference_tier"), scope.get("privileged")
+    if type(floor) is not int or type(privileged) is not bool:
+        return True
+    return floor < terms.minimum_inference_tier or (privileged and not terms.privileged)
+
+
+async def _name_sources(db: AsyncSession, root_id: UUID, text: str, snapshot: dict | None) -> str:
     """Rewrite an earlier run's ``(Source: [N])`` markers to the file they named.
 
     Documents are numbered per run. In a later run the same number may be a
     different file, so a marker carried forward unchanged would point the
-    planner at the wrong one.
+    planner at the wrong one. ``snapshot`` is that earlier run's intake.
     """
-    snapshot = await db.scalar(
-        select(OrchestrationRoot.planning_snapshot).where(OrchestrationRoot.session_id == root_id)
-    )
     names: dict[int, str] = {}
     for entry in (snapshot or {}).get("documents") or ():
         if isinstance(entry, dict) and type(entry.get("number")) is int:
@@ -414,7 +439,9 @@ async def _name_sources(db: AsyncSession, root_id: UUID, text: str) -> str:
     return _SOURCE_MARKER.sub(named, text)
 
 
-async def thread_excerpt(db: AsyncSession, *, chat_id: UUID) -> tuple[ThreadMessage, ...]:
+async def thread_excerpt(
+    db: AsyncSession, *, chat_id: UUID, terms: MatterTerms | None = None
+) -> tuple[ThreadMessage, ...]:
     """The chat before this request, as the planning call will be shown it.
 
     The same rows an ordinary turn's history uses: user and assistant messages
@@ -422,6 +449,14 @@ async def thread_excerpt(db: AsyncSession, *, chat_id: UUID) -> tuple[ThreadMess
     marked when cut, and the oldest are dropped until the whole fits. Read once
     at intake and frozen in the run's planning snapshot, so a replayed planning
     call sees exactly what the first attempt saw, and the owner can read it.
+
+    ``terms`` are the data terms of the run being started. An earlier run's
+    answer that was written under stricter terms is replaced by
+    :data:`WITHHELD_ANSWER`: it may hold what a matter's file said, and this
+    run's planning call goes out on this run's terms (ADR 0038 D5). A run
+    outside any matter takes its terms from the documents selected for it, so
+    a follow-up that keeps the earlier run's documents is shown its answer and
+    one that drops them is not. With no ``terms`` nothing is withheld.
     """
     rows = (
         await db.execute(
@@ -442,7 +477,15 @@ async def thread_excerpt(db: AsyncSession, *, chat_id: UUID) -> tuple[ThreadMess
             # A run that produced no answer leaves its message empty.
             continue
         if session_id is not None:
-            text = await _name_sources(db, session_id, text)
+            earlier = await db.scalar(
+                select(OrchestrationRoot.planning_snapshot).where(
+                    OrchestrationRoot.session_id == session_id
+                )
+            )
+            if terms is not None and _stricter_than(earlier, terms):
+                text = WITHHELD_ANSWER
+            else:
+                text = await _name_sources(db, session_id, text, earlier)
         cut = len(text) > MAX_THREAD_MESSAGE_CHARS
         if cut:
             text = text[:MAX_THREAD_MESSAGE_CHARS].rstrip()
@@ -497,6 +540,13 @@ class SelectableDocument:
     selectable: bool
     reason: str | None
     document_id: UUID | None = None
+    # Set only when listed from a chat outside any matter, for a file that a
+    # matter holds: selecting it puts the run under these terms (ADR 0038,
+    # ruling 4). The names are the owner's own matters; the floor is the
+    # lowest any holding matter sets, or None when none sets one.
+    matters: tuple[str, ...] = ()
+    matter_minimum_inference_tier: int | None = None
+    matter_privileged: bool = False
 
 
 def _readability(file: File, document: Document | None) -> str | None:
@@ -525,10 +575,12 @@ async def list_documents(
     picking it attaches it to the matter. A file that cannot be read is listed
     with the reason, never silently left out.
 
-    A candidate that another matter holds is listed as unreadable here: a run
-    does not take a file out of its matter. Outside a matter (``project_id``
-    is None) only candidates are listed, and one that any matter holds is
-    unreadable. See :mod:`app.autonomous.orchestration.reading` for the rule
+    In a matter, a candidate that only another matter holds is listed as
+    unreadable: a run in one matter has that matter's terms and no others.
+    Outside a matter (``project_id`` is None) only candidates are listed. One
+    that a matter holds can be selected, and is listed with that matter's
+    name, floor and privilege flag, because a run that reads it takes those
+    terms on. See :mod:`app.autonomous.orchestration.reading` for the rule
     and its reason; the predicates are the ones the read checks use.
     """
     attached = (
@@ -557,15 +609,24 @@ async def list_documents(
             .order_by(File.created_at, File.id)
         )
     ).all()
+    # Outside a matter, what each matter-held file would bring with it.
+    holders: dict[UUID, list[tuple]] = {}
+    if project_id is None:
+        held_documents = [
+            document.id for _, document, held in rows if held and document is not None
+        ]
+        if held_documents:
+            for row in (await db.execute(holding_matters(held_documents))).all():
+                holders.setdefault(row[0], []).append(tuple(row))
     result = []
     for file, document, held_elsewhere in rows:
         reason = _readability(file, document)
-        if project_id is None:
-            if held_elsewhere:
-                reason = "in_a_matter"
-        elif held_elsewhere and file.id not in attached:
+        if project_id is not None and held_elsewhere and file.id not in attached:
             # Attached here as well is the owner's own earlier action, and readable.
             reason = "in_another_matter"
+        held_by = holders.get(file.id, [])
+        terms = strictest(held_by)
+        floors = [row[4] for row in held_by if row[4] is not None]
         result.append(
             SelectableDocument(
                 file_id=file.id,
@@ -577,6 +638,19 @@ async def list_documents(
                 selectable=reason is None,
                 reason=reason,
                 document_id=document.id if document else None,
+                # Only the owner's own matters are named, in name order.
+                matters=tuple(
+                    sorted(
+                        (
+                            (row[2] or "").strip()[:256] or "Untitled matter"
+                            for row in held_by
+                            if row[3] == owner_id
+                        ),
+                        key=str.casefold,
+                    )
+                ),
+                matter_minimum_inference_tier=min(floors) if floors else None,
+                matter_privileged=terms.privileged,
             )
         )
     return result
@@ -590,7 +664,9 @@ async def select_documents(
     Returns the selection and the subset not yet attached to the matter. The
     whole selection is refused if any file is missing, another owner's, or
     unreadable: nothing is dropped from what the owner chose. An empty
-    selection is a run with no documents. Outside a matter nothing is attached.
+    selection is a run with no documents. Outside a matter nothing is attached;
+    a file that a matter holds may be selected there, and the caller then puts
+    the run under that matter's terms (``reading.selection_terms``).
     """
     if len(file_ids) > MAX_SELECTED_DOCUMENTS or len(set(file_ids)) != len(file_ids):
         raise ValidationError(

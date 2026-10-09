@@ -1,0 +1,593 @@
+"""ADR 0038, ruling 4: a run outside any matter reads a matter's file on that matter's terms.
+
+A matter's inference-tier floor and privilege flag go with its files. A run
+started from a chat in no matter has no terms of its own, so it takes on the
+strictest of the matters that hold its selected documents: the lowest floor
+any of them sets, and privileged if any of them is.
+
+* The picker says what selecting such a file brings.
+* The terms are set when the request is accepted, from the server's records.
+* A route that cannot meet them is refused before anything is stored.
+* They are worked out again at every admission, so a change stops the run
+  before its next model call.
+
+A run in a matter is unchanged: it has that matter's terms and no others, and
+still does not accept a file that only another matter holds.
+"""
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+from typing import Any
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import func, select, update
+from tests.autonomous.orchestration.model_harness import (
+    CHATS,
+    job,
+    messages,
+    new_chat,
+    read,
+    run_to_completion,
+    start_in_chat,
+    tool_call,
+)
+from tests.autonomous.orchestration.test_document_runs import DPA, MSA, PROFILE
+from tests.autonomous.orchestration.test_new_harness import approved, filed, requests_of
+
+from app.autonomous.orchestration.intake import WITHHELD_ANSWER, _stricter_than
+from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, selection_terms
+from app.models.document import Document
+from app.models.file import File
+from app.models.orchestration import OrchestrationEffect as Effect, OrchestrationRoot
+from app.models.project import Project, ProjectFile
+
+pytestmark = pytest.mark.integration
+
+READ_FIRST = [[tool_call("read_document", {"document": 1, "reason": "Read."})], None]
+REFUSED = "belongs to a matter whose inference tier floor or privilege setting"
+ASSISTANT = "assistant"
+
+
+@pytest.fixture
+def harness(model_demo: SimpleNamespace) -> SimpleNamespace:
+    """New harness on, with no floor of its own, so a matter's floor is the run's.
+
+    The fixture route is tier 1, the strongest, and its gateway pseudonymizes
+    at tier 1.
+    """
+    api = model_demo
+    api.runtime.settings.new_harness_enabled = True
+    api.runtime.settings.new_harness_minimum_tier = NO_FLOOR
+    api.gateway.child_script = READ_FIRST
+    api.gateway.child_answer = "The clause was read."
+    api.gateway.synthesis_answer = "## Answer\n\nThe clause was read."
+    return api
+
+
+async def matter(
+    api: SimpleNamespace,
+    name: str,
+    *,
+    floor: int | None = None,
+    privileged: bool = False,
+    archived: bool = False,
+) -> UUID:
+    """Another of the owner's matters, with its own terms."""
+    async with api.env.factory.begin() as db:
+        project = Project(
+            owner_id=api.env.owner_id,
+            name=name,
+            slug=f"terms-{uuid4()}",
+            minimum_inference_tier=floor,
+            privileged=privileged,
+            archived_at=func.now() if archived else None,
+        )
+        db.add(project)
+        await db.flush()
+        return project.id
+
+
+async def hold(api: SimpleNamespace, file_id: str, project_id: UUID) -> None:
+    async with api.env.factory.begin() as db:
+        db.add(ProjectFile(project_id=project_id, file_id=UUID(file_id)))
+
+
+async def from_matter(api: SimpleNamespace, name: str, text: str, project_id: UUID) -> str:
+    file_id = await filed(api, name, text)
+    await hold(api, file_id, project_id)
+    return file_id
+
+
+async def listing(api: SimpleNamespace, chat_id: UUID, *file_ids: str) -> dict[str, Any]:
+    response = await api.client.get(
+        f"{CHATS}/{chat_id}/run-documents", params={"file_id": list(file_ids)}
+    )
+    assert response.status_code == 200, response.text
+    return {d["filename"]: d for d in response.json()["documents"]}
+
+
+async def stored_roots(api: SimpleNamespace) -> int:
+    async with api.env.factory() as db:
+        return len(
+            (
+                await db.scalars(
+                    select(OrchestrationRoot.session_id).where(
+                        OrchestrationRoot.owner_id == api.env.owner_id,
+                        OrchestrationRoot.profile == PROFILE,
+                    )
+                )
+            ).all()
+        )
+
+
+async def set_terms(api: SimpleNamespace, project_id: UUID, **values: Any) -> None:
+    async with api.env.factory.begin() as db:
+        await db.execute(update(Project).where(Project.id == project_id).values(**values))
+
+
+# --- The picker says what a matter's file brings ------------------------------
+
+
+async def test_the_picker_names_the_matters_and_their_strictest_terms(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    open_matter = await matter(api, "Open matter")
+    floored = await matter(api, "Floored matter", floor=3)
+    secret = await matter(api, "Privileged matter", floor=2, privileged=True)
+    closed = await matter(api, "Archived matter", floor=1, archived=True)
+    free = await filed(api, "free.txt", MSA)
+    one = await from_matter(api, "one.txt", MSA, floored)
+    both = await from_matter(api, "both.txt", DPA, floored)
+    await hold(api, both, secret)
+    await hold(api, both, open_matter)
+    old = await from_matter(api, "old.txt", MSA, closed)
+
+    chat_id = await new_chat(api, in_project=False)
+    rows = await listing(api, chat_id, free, one, both, old)
+    assert all(row["selectable"] and row["reason"] is None for row in rows.values())
+    terms = {
+        name: (
+            sorted(row["matters"]),
+            row["matter_minimum_inference_tier"],
+            row["matter_privileged"],
+        )
+        for name, row in rows.items()
+    }
+    assert terms == {
+        "free.txt": ([], None, False),
+        "one.txt": (["Floored matter"], 3, False),
+        # Every matter that holds it is named; the lowest floor, and privileged if any is.
+        "both.txt": (["Floored matter", "Open matter", "Privileged matter"], 2, True),
+        # Archiving a matter does not release its files from its terms.
+        "old.txt": (["Archived matter"], 1, False),
+    }
+
+
+async def test_a_chat_in_a_matter_is_unchanged(harness: SimpleNamespace) -> None:
+    """Its run has that matter's terms and no others: another matter's file is still refused."""
+    api = harness
+    other = await matter(api, "Other matter", floor=2)
+    theirs = await from_matter(api, "theirs.txt", MSA, other)
+    chat_id = await new_chat(api)
+    rows = await listing(api, chat_id, theirs)
+    row = rows["theirs.txt"]
+    assert (row["selectable"], row["reason"]) == (False, "in_another_matter")
+    # Nothing is said about terms a run in this matter would never take on.
+    assert (row["matters"], row["matter_minimum_inference_tier"], row["matter_privileged"]) == (
+        [],
+        None,
+        False,
+    )
+    refused = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[theirs], expect=400)
+    assert refused["detail"]["details"]["reason"] == "in_another_matter"
+    assert await stored_roots(api) == 0
+
+
+# --- The run takes the terms on, from the server's records ---------------------
+
+
+async def test_the_terms_of_a_set_of_documents_are_the_strictest_of_their_matters(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    floored = await matter(api, "Floored matter", floor=3)
+    secret = await matter(api, "Privileged matter", floor=2, privileged=True)
+    closed = await matter(api, "Archived matter", floor=1, archived=True)
+    files = {
+        "free": await filed(api, "free.txt", MSA),
+        "floored": await from_matter(api, "one.txt", MSA, floored),
+        "secret": await from_matter(api, "two.txt", DPA, secret),
+        "closed": await from_matter(api, "three.txt", MSA, closed),
+        # In the fixture matter by upload, which sets no floor.
+        "uploaded": await filed(api, "four.txt", MSA, uploaded=True),
+        # Uploaded straight into the floored matter: held by the file's own
+        # project, with no attachment row.
+        "uploaded_floored": await filed(api, "five.txt", MSA),
+    }
+    async with api.env.factory.begin() as db:
+        await db.execute(
+            update(File)
+            .where(File.id == UUID(files["uploaded_floored"]))
+            .values(project_id=floored)
+        )
+    async with api.env.factory() as db:
+        ids = {
+            name: await db.scalar(select(Document.id).where(Document.file_id == UUID(file_id)))
+            for name, file_id in files.items()
+        }
+
+        async def terms(*names: str) -> MatterTerms:
+            return await selection_terms(db, [ids[name] for name in names], lock=True)
+
+        assert await terms() == MatterTerms(NO_FLOOR, False)
+        assert await terms("free") == MatterTerms(NO_FLOOR, False)
+        assert await terms("uploaded") == MatterTerms(NO_FLOOR, False)
+        assert await terms("floored") == MatterTerms(3, False)
+        assert await terms("uploaded_floored") == MatterTerms(3, False)
+        assert await terms("free", "uploaded_floored") == MatterTerms(3, False)
+        assert await terms("secret") == MatterTerms(2, True)
+        assert await terms("free", "floored", "uploaded") == MatterTerms(3, False)
+        assert await terms("floored", "secret") == MatterTerms(2, True)
+        assert await terms("floored", "secret", "closed") == MatterTerms(1, True)
+
+
+async def test_a_run_takes_on_the_floor_of_the_matter_its_document_comes_from(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    floored = await matter(api, "Floored matter", floor=3)
+    contract = await from_matter(api, "msa.txt", MSA, floored)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    chat_id = await new_chat(api, in_project=False)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[contract])
+    root = value["planning"]["root"]
+    assert value["planning"]["project_id"] is None
+    assert (root["minimum_inference_tier"], root["privileged"]) == (3, False)
+    final = await run_to_completion(api, value)
+    assert final["status"] == "completed"
+    # Every call of the run asked the gateway for that floor, and none claimed privilege.
+    assert {
+        (r.minimum_inference_tier, r.lq_ai_project_minimum_inference_tier, r.lq_ai_privileged)
+        for r in api.gateway.requests
+    } == {(3, 3, False)}
+    # The file was read where it is. Nothing was filed or attached anywhere else.
+    assert "thirty (30) days" in json.dumps(api.gateway.tool_results)
+    async with api.env.factory() as db:
+        held = (
+            await db.scalars(
+                select(ProjectFile.project_id).where(ProjectFile.file_id == UUID(contract))
+            )
+        ).all()
+        assert held == [floored]
+
+
+async def test_a_run_with_a_privileged_matters_document_is_privileged_and_not_pseudonymized(
+    harness: SimpleNamespace,
+) -> None:
+    """The gateway skips pseudonymization for privileged work, as it does in that matter."""
+    api = harness
+    secret = await matter(api, "Privileged matter", floor=1, privileged=True)
+    advice = await from_matter(api, "msa.txt", MSA, secret)
+    free = await filed(api, "free.txt", DPA)
+    api.gateway.expected_documents = [
+        {"number": 1, "filename": "free.txt"},
+        {"number": 2, "filename": "msa.txt"},
+    ]
+    chat_id = await new_chat(api, in_project=False)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free, advice])
+    root = value["planning"]["root"]
+    assert (root["minimum_inference_tier"], root["privileged"]) == (1, True)
+    final = await run_to_completion(api, value)
+    assert final["status"] == "completed"
+    assert {(r.minimum_inference_tier, r.lq_ai_privileged) for r in api.gateway.requests} == {
+        (1, True)
+    }
+    # Reported on every call's receipt, not assumed.
+    effects = list(final["effects"]) + [
+        e for child in final["tree"]["children"] for e in child["effects"]
+    ]
+    applied = {e["accounting"]["anonymization_applied"] for e in effects if e.get("accounting")}
+    assert applied == {False}
+    # Without the privileged file the same chat is pseudonymized as the operator set it.
+    api.gateway.requests.clear()
+    api.gateway.expected_documents = [{"number": 1, "filename": "free.txt"}]
+    plain = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free])
+    assert plain["planning"]["root"]["privileged"] is False
+    assert await job(api, plain["root_id"]) == "completed"
+    (planning,) = (await read(api, plain["root_id"]))["effects"]
+    assert planning["accounting"]["anonymization_applied"] is True
+
+
+async def test_a_direct_answer_is_made_under_the_selected_documents_terms(
+    harness: SimpleNamespace,
+) -> None:
+    """The planning call is shown the thread and the file names, so the terms apply to it too."""
+    api = harness
+    secret = await matter(api, "Privileged matter", floor=1, privileged=True)
+    advice = await from_matter(api, "msa.txt", MSA, secret)
+    api.gateway.direct_answer = "You're welcome."
+    chat_id = await new_chat(api, in_project=False)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[advice])
+    assert await job(api, value["root_id"]) == "completed"
+    answered = await read(api, value["root_id"])
+    assert answered["status"] == "completed" and answered["answered_directly"] is True
+    (request,) = requests_of(api, "propose_plan")
+    assert (request.minimum_inference_tier, request.lq_ai_privileged) == (1, True)
+
+
+# --- A route that cannot meet the terms is refused before anything is stored ----
+
+
+async def test_a_route_weaker_than_the_matters_floor_is_refused_and_says_why(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    api.gateway.config["providers"][0]["tier"] = 3
+    api.gateway.config["anonymization"] = {"enabled": True, "apply_at_tiers": []}
+    strict = await matter(api, "Strict matter", floor=2)
+    contract = await from_matter(api, "msa.txt", MSA, strict)
+    free = await filed(api, "free.txt", DPA)
+    chat_id = await new_chat(api, in_project=False)
+
+    refused = await start_in_chat(
+        api, chat_id, profile=PROFILE, file_ids=[free, contract], expect=403
+    )
+    assert REFUSED in refused["detail"]["message"]
+    assert refused["detail"]["details"] == {"minimum_inference_tier": 2, "privileged": False}
+    # Nothing was stored, written or sent.
+    assert await stored_roots(api) == 0
+    assert await messages(api, chat_id) == [] and api.gateway.requests == []
+
+    # The same route serves the chat with a file that brings no terms.
+    api.gateway.expected_documents = [{"number": 1, "filename": "free.txt"}]
+    accepted = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free])
+    assert accepted["planning"]["root"]["minimum_inference_tier"] == NO_FLOOR
+
+
+async def test_a_route_that_is_unavailable_anyway_is_not_blamed_on_the_matter(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    api.gateway.config["cost_tracking"]["enabled"] = False
+    strict = await matter(api, "Strict matter", floor=2)
+    contract = await from_matter(api, "msa.txt", MSA, strict)
+    chat_id = await new_chat(api, in_project=False)
+
+    refused = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[contract], expect=403)
+    assert REFUSED not in refused["detail"]["message"]
+    assert await stored_roots(api) == 0
+
+
+# --- The terms are worked out again at every admission -------------------------
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        # The matter becomes privileged: the run would send it pseudonymized, or elsewhere.
+        "matter_becomes_privileged",
+        # The matter's floor tightens below the tier the run was approved for.
+        "floor_tightens",
+        # The file is also filed in a stricter matter.
+        "filed_in_a_stricter_matter",
+    ],
+)
+async def test_terms_that_tighten_after_approval_stop_the_run_before_its_next_call(
+    harness: SimpleNamespace, change: str
+) -> None:
+    api = harness
+    floored = await matter(api, "Floored matter", floor=3)
+    contract = await from_matter(api, "msa.txt", MSA, floored)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    chat_id = await new_chat(api, in_project=False)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[contract])
+    children = await approved(api, value)
+
+    if change == "matter_becomes_privileged":
+        await set_terms(api, floored, privileged=True)
+    elif change == "floor_tightens":
+        await set_terms(api, floored, minimum_inference_tier=2)
+    else:
+        await hold(api, contract, await matter(api, "Stricter matter", floor=1, privileged=True))
+
+    sent = len(api.gateway.requests)
+    for child in children:
+        assert await job(api, value["root_id"], child) == "stopped"
+    assert len(api.gateway.requests) == sent
+    async with api.env.factory() as db:
+        reads = select(Effect.effect_key).where(
+            Effect.intent == "retrieve_chunks", Effect.session_id.in_([UUID(c) for c in children])
+        )
+        assert not (await db.scalars(reads)).all()
+    # The owner can still read the run and what stopped.
+    assert (await read(api, value["root_id"]))["status"] != "completed"
+
+
+async def test_a_privilege_flag_whose_matter_is_no_longer_privileged_stops_the_run(
+    harness: SimpleNamespace,
+) -> None:
+    """The flag turns pseudonymization off, so it is not kept without a privileged matter behind it."""
+    api = harness
+    secret = await matter(api, "Privileged matter", floor=1, privileged=True)
+    advice = await from_matter(api, "msa.txt", MSA, secret)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    chat_id = await new_chat(api, in_project=False)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[advice])
+    assert value["planning"]["root"]["privileged"] is True
+    children = await approved(api, value)
+
+    await set_terms(api, secret, privileged=False)
+    sent = len(api.gateway.requests)
+    for child in children:
+        assert await job(api, value["root_id"], child) == "stopped"
+    assert len(api.gateway.requests) == sent
+
+
+async def test_terms_that_loosen_or_stay_as_they_were_do_not_stop_the_run(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    floored = await matter(api, "Floored matter", floor=3)
+    contract = await from_matter(api, "msa.txt", MSA, floored)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    chat_id = await new_chat(api, in_project=False)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[contract])
+    children = await approved(api, value)
+
+    # A weaker floor allows what was approved; a second matter with no terms adds none.
+    await set_terms(api, floored, minimum_inference_tier=4)
+    await hold(api, contract, await matter(api, "Open matter"))
+    for child in children:
+        assert await job(api, value["root_id"], child) == "completed"
+    assert await job(api, value["root_id"]) == "completed"
+    final = await read(api, value["root_id"])
+    assert final["status"] == "completed"
+    # It ran on the terms it was approved under, not the looser ones.
+    assert {r.minimum_inference_tier for r in api.gateway.requests} == {3}
+
+
+# --- An answer written under a matter's terms is not shown to a run without them ---
+
+
+def thread_of(value: dict[str, Any]) -> list[tuple[str, str]]:
+    """The chat as the run's planning call was shown it, frozen in its intake."""
+    return [(m["role"], m["content"]) for m in value["planning"]["thread"]]
+
+
+@pytest.mark.parametrize(
+    ("floor", "privileged"),
+    [
+        # Privileged: a later run without the file would be pseudonymized, or routed as the chat alone.
+        (1, True),
+        # A floor alone: a later run without the file could go to a weaker route.
+        (2, False),
+        # Privilege alone, with a floor any route meets: only the flag differs.
+        (NO_FLOOR, True),
+    ],
+)
+async def test_an_answer_written_under_a_matters_terms_is_not_shown_to_a_later_run_without_them(
+    harness: SimpleNamespace, floor: int, privileged: bool
+) -> None:
+    """Found in review. The answer may hold what the matter's file said.
+
+    A run outside any matter takes its terms from the documents selected for
+    it. A follow-up that keeps the earlier run's documents has its terms and is
+    shown its answer; one that drops them is shown a note in its place.
+    """
+    api = harness
+    held = await matter(api, "Strict matter", floor=floor, privileged=privileged)
+    advice = await from_matter(api, "msa.txt", MSA, held)
+    free = await filed(api, "free.txt", DPA)
+    answer = "## Answer\n\nONLY-IN-THE-MATTER: fees are due in thirty days."
+    api.gateway.synthesis_answer = answer
+    chat_id = await new_chat(api, in_project=False)
+
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    first = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[advice])
+    assert (await run_to_completion(api, first))["status"] == "completed"
+    assert [m["content"] for m in await messages(api, chat_id)][1] == answer
+
+    # Dropped: no document, and a document that brings no terms.
+    for file_ids, listed in (([], []), ([free], [{"number": 1, "filename": "free.txt"}])):
+        api.gateway.expected_documents = listed
+        api.gateway.requests.clear()
+        later = await start_in_chat(
+            api, chat_id, profile=PROFILE, goal="Shorten that.", file_ids=file_ids
+        )
+        root = later["planning"]["root"]
+        assert (root["minimum_inference_tier"], root["privileged"]) == (NO_FLOOR, False)
+        shown = thread_of(later)
+        assert (ASSISTANT, WITHHELD_ANSWER) in shown
+        assert "ONLY-IN-THE-MATTER" not in json.dumps(later["planning"])
+        # And it is what the model was sent, not only what was stored.
+        assert await job(api, later["root_id"]) == "completed"
+        (planning,) = requests_of(api, "propose_plan")
+        sent = json.dumps([m.content for m in planning.messages])
+        assert "ONLY-IN-THE-MATTER" not in sent and "An earlier answer is not shown here" in sent
+        # The owner's own request of that turn is theirs, and is shown.
+        assert ("user", first["planning"]["goal"]) in shown
+        halted = await api.client.post(
+            f"/api/v1/autonomous/orchestration/chat-runs/{later['root_id']}/halt"
+        )
+        assert halted.status_code == 200
+
+    # Kept: the same document, so the same terms, and the answer is there to follow up on.
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    kept = await start_in_chat(
+        api, chat_id, profile=PROFILE, goal="Shorten that.", file_ids=[advice]
+    )
+    assert (ASSISTANT, answer) in thread_of(kept)
+    assert WITHHELD_ANSWER not in json.dumps(kept["planning"])
+
+
+async def test_an_earlier_answer_is_shown_where_the_terms_are_the_same_or_stricter(
+    harness: SimpleNamespace,
+) -> None:
+    """Nothing is withheld between runs of one matter, or from a run that is stricter."""
+    api = harness
+    answer = "## Answer\n\nFees are due in thirty days."
+    api.gateway.synthesis_answer = answer
+    api.gateway.expected_documents = []
+    api.gateway.child_script = [None]
+
+    # Two runs in the fixture matter.
+    inside = await new_chat(api)
+    assert (await run_to_completion(api, await start_in_chat(api, inside, profile=PROFILE)))[
+        "status"
+    ] == "completed"
+    again = await start_in_chat(api, inside, profile=PROFILE, goal="Shorten that.")
+    assert (ASSISTANT, answer) in thread_of(again)
+    assert (
+        await api.client.post(f"/api/v1/autonomous/orchestration/chat-runs/{again['root_id']}/halt")
+    ).status_code == 200
+
+    # A run with no terms, then one in the same chat that takes a privileged matter's on.
+    outside = await new_chat(api, in_project=False)
+    assert (await run_to_completion(api, await start_in_chat(api, outside, profile=PROFILE)))[
+        "status"
+    ] == "completed"
+    secret = await matter(api, "Privileged matter", floor=1, privileged=True)
+    advice = await from_matter(api, "msa.txt", MSA, secret)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    stricter = await start_in_chat(
+        api, outside, profile=PROFILE, goal="Check it against this.", file_ids=[advice]
+    )
+    assert stricter["planning"]["root"]["privileged"] is True
+    assert (ASSISTANT, answer) in thread_of(stricter)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("earlier", "now", "stricter"),
+    [
+        ({"minimum_inference_tier": 5, "privileged": False}, MatterTerms(5, False), False),
+        ({"minimum_inference_tier": 2, "privileged": False}, MatterTerms(2, False), False),
+        ({"minimum_inference_tier": 3, "privileged": False}, MatterTerms(2, False), False),
+        ({"minimum_inference_tier": 1, "privileged": True}, MatterTerms(1, True), False),
+        ({"minimum_inference_tier": 5, "privileged": False}, MatterTerms(1, True), False),
+        # A lower floor then, or privilege then and none now.
+        ({"minimum_inference_tier": 2, "privileged": False}, MatterTerms(3, False), True),
+        ({"minimum_inference_tier": 1, "privileged": True}, MatterTerms(1, False), True),
+        ({"minimum_inference_tier": 5, "privileged": True}, MatterTerms(5, False), True),
+        # Terms that cannot be read are treated as stricter: withheld, not guessed.
+        ({"minimum_inference_tier": "1", "privileged": False}, MatterTerms(5, False), True),
+        ({"minimum_inference_tier": 5}, MatterTerms(5, False), True),
+        ({}, MatterTerms(5, False), True),
+        (None, MatterTerms(5, False), True),
+    ],
+)
+def test_which_earlier_terms_count_as_stricter(
+    earlier: dict[str, Any] | None, now: MatterTerms, stricter: bool
+) -> None:
+    snapshot = None if earlier is None else {"root": earlier}
+    assert _stricter_than(snapshot, now) is stricter
+    if earlier is not None:
+        # An intake with no scope at all, or one that is not an object.
+        assert _stricter_than({"root": "x"}, now) is True

@@ -48,6 +48,7 @@ from app.autonomous.orchestration.outcomes import (
     topic_coverage,
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.reading import selection_terms
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message
@@ -173,18 +174,39 @@ async def _now(db: AsyncSession) -> datetime:
     return (await db.execute(select(func.clock_timestamp()))).scalar_one()
 
 
-def _project_scope(project: Project | None, plan: PreparedPlan | PlanningSnapshot) -> None:
-    if project is None:
-        # Outside a matter nothing sets a tier floor or a privilege flag. The
-        # privilege flag turns pseudonymization off at the gateway, so a run
-        # with no privileged matter behind it must not carry one.
-        if plan.root.privileged:
-            raise Forbidden(message="A run outside a matter cannot be privileged")
-        return
+def _project_scope(project: Project, plan: PreparedPlan | PlanningSnapshot) -> None:
+    """Hold a run in a matter to that matter's floor and privilege flag."""
     # Gateway tier semantics: lower numbers provide stronger protection.
     # An unset project floor adds no restriction beyond the explicit plan.
     if plan.root.minimum_inference_tier > (project.minimum_inference_tier or 5) or (
         project.privileged and not plan.root.privileged
+    ):
+        raise Forbidden(message="Project data policy has changed")
+
+
+async def _data_terms(
+    db: AsyncSession, project: Project | None, plan: PreparedPlan | PlanningSnapshot
+) -> None:
+    """Hold a run to the data terms it runs under, as they are now.
+
+    In a matter those are the matter's. Outside any matter they are the
+    strictest of the matters that hold the run's selected documents (ADR
+    0038, ruling 4): the run's floor may not be weaker than theirs, and it is
+    privileged exactly when one of them is. The privilege flag turns
+    pseudonymization off at the gateway, so a run must not carry it with no
+    privileged matter behind it, and must carry it when there is one.
+
+    Called at every admission. A matter whose terms tighten, or a selected
+    file that is filed in a stricter matter, stops the run before its next
+    call.
+    """
+    if project is not None:
+        _project_scope(project, plan)
+        return
+    terms = await selection_terms(db, plan.root.resources.document_ids, lock=True)
+    if (
+        plan.root.minimum_inference_tier > terms.minimum_inference_tier
+        or plan.root.privileged is not terms.privileged
     ):
         raise Forbidden(message="Project data policy has changed")
 
@@ -271,7 +293,7 @@ class OrchestrationStore:
             )
         ).scalar_one()
         plan = await self._stored_plan(db, root)
-        _project_scope(project, plan)
+        await _data_terms(db, project, plan)
         return root, plan, await _now(db)
 
     async def _stored_plan(self, db: AsyncSession, root: Root) -> PreparedPlan | PlanningSnapshot:
@@ -357,7 +379,7 @@ class OrchestrationStore:
                 project = await self._owner_project(
                     db, plan.owner_id, plan.project_id, creating=True
                 )
-                _project_scope(project, plan)
+                await _data_terms(db, project, plan)
                 root = await db.scalar(
                     select(Root).where(Root.session_id == plan.root_id).with_for_update()
                 )
@@ -527,7 +549,7 @@ class OrchestrationStore:
                 project = await self._owner_project(
                     db, actor_id, snapshot.project_id, creating=True
                 )
-                _project_scope(project, snapshot)
+                await _data_terms(db, project, snapshot)
                 chat: Chat | None = None
                 if chat_id is not None:
                     chat = await db.scalar(select(Chat).where(Chat.id == chat_id).with_for_update())

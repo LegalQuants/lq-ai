@@ -366,8 +366,10 @@ class CurrentPolicy:
 
         selected_ids = set(plan.root.resources.document_ids)
         if selected_ids:
-            # One rule for a matter and for a run outside any matter; see
-            # ``reading``. The same query guards each read at the boundary.
+            # One query for a matter and for a run outside any matter; see
+            # ``reading``. The same query guards each read at the boundary. The
+            # terms a run outside a matter takes on from its documents' matters
+            # are checked by the store, at this same admission.
             rows = await db.scalars(
                 readable_documents(
                     owner_id=plan.owner_id,

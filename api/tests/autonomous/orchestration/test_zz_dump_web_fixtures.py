@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import update
@@ -42,7 +42,7 @@ from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.orchestration import OrchestrationAccount as Account
-from app.models.project import ProjectFile
+from app.models.project import Project, ProjectFile
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 
 TARGET = os.environ.get("LQ_DUMP_RUN_FIXTURES")
@@ -428,6 +428,32 @@ async def test_record_new_harness_traces_and_runs_without_documents_or_a_matter(
     save(
         "documents.no-project",
         await get(api, f"{CHATS}/{outside}/run-documents", file_id=[loose_id, msa]),
+    )
+    # The same listing when the file's matters have terms of their own: one sets a
+    # floor, another is privileged. A run that selects the file takes them on
+    # (ADR 0038, ruling 4).
+    async with api.env.factory.begin() as db:
+        floored = Project(
+            owner_id=api.env.owner_id,
+            name="Vendor renewal",
+            slug=f"vendor-renewal-{uuid4()}",
+            minimum_inference_tier=3,
+        )
+        secret = Project(
+            owner_id=api.env.owner_id,
+            name="Board advice",
+            slug=f"board-advice-{uuid4()}",
+            minimum_inference_tier=2,
+            privileged=True,
+        )
+        db.add_all([floored, secret])
+        await db.flush()
+        db.add(ProjectFile(project_id=floored.id, file_id=UUID(dpa)))
+        db.add(ProjectFile(project_id=floored.id, file_id=UUID(msa)))
+        db.add(ProjectFile(project_id=secret.id, file_id=UUID(msa)))
+    save(
+        "documents.no-project-terms",
+        await get(api, f"{CHATS}/{outside}/run-documents", file_id=[loose_id, msa, dpa]),
     )
 
 

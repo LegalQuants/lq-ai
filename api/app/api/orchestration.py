@@ -44,6 +44,7 @@ from app.autonomous.orchestration.intake import (
 from app.autonomous.orchestration.planning import ThreadMessage
 from app.autonomous.orchestration.profiles import registered_profiles
 from app.autonomous.orchestration.prompts import load_prompt
+from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, selection_terms
 from app.autonomous.orchestration.service import DemonstrationService
 from app.autonomous.orchestration.tools import get_tool
 from app.autonomous.orchestration.trace import SessionTraceRead, read_session_trace
@@ -176,8 +177,11 @@ async def begin_run(
     matter), a priced route, a funded allowance, and the store's one-active-run
     rule. Planning is queued only after the root is durable.
 
-    Outside a matter nothing sets a privilege flag or a tier floor, so the run
-    is not privileged and its floor is the profile's own (ADR 0038 D5).
+    Outside a matter the run has no terms of its own. It takes on the
+    strictest terms of the matters that hold its selected documents: the
+    lowest floor any of them sets, and privileged if any of them is (ADR 0038
+    D5, ruling 4). With no document, or none from a matter, it is not
+    privileged and its floor is the profile's own.
     """
     profile = runtime.run_profile
     policy = runtime.require_policy()
@@ -222,10 +226,24 @@ async def begin_run(
             documents, attach = await select_documents(
                 db, owner_id=user.id, project_id=project_id, file_ids=file_ids
             )
+            if project_id is None:
+                # The store works these out again at every admission and
+                # holds the run to them.
+                terms = await selection_terms(db, [d.document_id for d in documents])
+                privileged, tier = terms.privileged, terms.minimum_inference_tier
         # Read once, here, and frozen in the intake: a replayed planning call
         # must see exactly the thread the first attempt saw.
+        # An earlier answer written under stricter terms than this run's is not
+        # shown to its planning call: the call goes out on this run's terms.
         thread: tuple[ThreadMessage, ...] = (
-            await thread_excerpt(db, chat_id=chat_id)
+            await thread_excerpt(
+                db,
+                chat_id=chat_id,
+                terms=MatterTerms(
+                    minimum_inference_tier=min(tier, policy.minimum_inference_tier),
+                    privileged=privileged,
+                ),
+            )
             if profile.reads_thread and chat_id is not None
             else ()
         )
@@ -240,20 +258,50 @@ async def begin_run(
     routes = runtime.effects().inference
     assert routes is not None
     # Quote first, so a route that cannot be priced never files a document.
-    await prepare_intake(
-        profile,
-        settings=runtime.settings,
-        skills=runtime.skills,
-        policy=policy,
-        routes=routes,
-        root_id=request_id,
-        owner_id=user.id,
-        project_id=project_id,
-        goal=goal,
-        privileged=privileged,
-        minimum_inference_tier=tier,
-        today=today,
-    )
+    from_matters = project_id is None and (privileged or tier < NO_FLOOR)
+    try:
+        await prepare_intake(
+            profile,
+            settings=runtime.settings,
+            skills=runtime.skills,
+            policy=policy,
+            routes=routes,
+            root_id=request_id,
+            owner_id=user.id,
+            project_id=project_id,
+            goal=goal,
+            privileged=privileged,
+            minimum_inference_tier=tier,
+            today=today,
+        )
+    except Forbidden:
+        if not from_matters:
+            raise
+        # Quote again as the chat alone would be quoted. If that is refused
+        # too, the route is unavailable whatever is selected, and that refusal
+        # is the one to give. If it is accepted, the selected documents'
+        # matters are the reason.
+        await prepare_intake(
+            profile,
+            settings=runtime.settings,
+            skills=runtime.skills,
+            policy=policy,
+            routes=routes,
+            root_id=request_id,
+            owner_id=user.id,
+            project_id=None,
+            goal=goal,
+            privileged=False,
+            minimum_inference_tier=NO_FLOOR,
+            today=today,
+        )
+        raise Forbidden(
+            message=(
+                "A selected document belongs to a matter whose inference tier floor "
+                "or privilege setting this run's route does not meet."
+            ),
+            details={"minimum_inference_tier": tier, "privileged": privileged},
+        ) from None
     if profile.documents == "packet":
         assert project_id is not None  # a packet profile is limited to one matter
         documents = (

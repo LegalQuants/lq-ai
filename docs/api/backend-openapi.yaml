@@ -5538,11 +5538,17 @@ paths:
         owner's or unreadable. In a project, a selected file that is not yet
         attached to it is attached when the run is accepted, with an audit row.
 
-        A run from a chat outside any project is never privileged, its
-        inference-tier floor is the profile's own, nothing is attached, and it
-        reads only the owner's files that are filed in no project: a file that
-        belongs to a project carries that project's tier floor and privilege
-        flag, which such a run does not apply.
+        A run from a chat outside any project has no terms of its own and
+        nothing is attached for it. It may read the owner's files wherever
+        they are filed, and then runs under the strictest terms of the
+        projects that hold them: the lowest inference-tier floor any of them
+        sets, and privileged if any of them is. With no such file it is not
+        privileged and its floor is the profile's own. The terms are worked
+        out again at every admission. A request whose route cannot meet them
+        is refused with 403 before anything is stored. The recent messages
+        shown to the planning call leave out an earlier run's answer that was
+        written under stricter terms than this run has; a note stands in its
+        place.
       requestBody:
         required: true
         content:
@@ -5621,11 +5627,15 @@ paths:
         (``project_id`` null): named candidates only, and nothing is attached.
         A file that cannot be read is listed with its reason
         (``unsupported_type``, ``not_ingested``, ``ingestion_failed``,
-        ``no_text``, ``in_a_matter`` for a file that belongs to a project
-        when the chat is in none, or ``in_another_matter`` for a candidate
-        that only another project holds) and is not selectable; it is never
-        silently omitted. A run does not move a file from one project into
-        another. Only PDF with text, plain text and Markdown are selectable.
+        ``no_text``, or ``in_another_matter`` for a candidate that only
+        another project holds, when the chat is in a project) and is not
+        selectable; it is never silently omitted. A run in a project does not
+        move a file from one project into another. For a chat outside any
+        project, a file that a project holds can be selected and carries
+        ``matters`` (the names of the owner's projects that hold it),
+        ``matter_minimum_inference_tier`` (the lowest floor any of them sets,
+        or null) and ``matter_privileged``: a run that selects it runs under
+        those terms. Only PDF with text, plain text and Markdown are selectable.
         Another owner's file is never listed.
 
         The documents the last run in this chat read are always listed, and

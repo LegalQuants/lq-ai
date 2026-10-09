@@ -1741,7 +1741,7 @@ describe('the document picker, in one line', () => {
 		page(picker({ documents: [] }), 'empty matter').shows('or add files to the matter');
 	});
 
-	it('in a chat that is in no matter, names no matter in its own words: no note, no sentence', () => {
+	it('in a chat that is in no matter, promises to add nothing, and says what a matter’s file brings', () => {
 		const read = documents('no-project');
 		const html = picker({
 			documents: read.documents,
@@ -1756,13 +1756,29 @@ describe('the document picker, in one line', () => {
 			'No documents yet. Attach a file to this chat, then refresh the list.'
 		);
 		expect(empty).not.toMatch(/matter/i);
-		// A file of a matter says why it cannot be picked, in the words of the reason, and is disabled.
+		// A file of a matter can be picked, and is noted with what picking it brings (ADR 0038, ruling 4).
 		page(html, 'no matter').shows(
-			'This file belongs to a matter. Start the request from a chat in that matter to use it.'
+			'<span class="note">From the matter “Fixture”. A run that reads it follows its rules.</span>'
 		);
 		const tag = tagOf(html, `lq-ai-run-document-${read.documents[0].file_id}`);
 		expect(tag).toContain('data-selected="false"');
-		expect(html).toMatch(/<input type="checkbox"[^>]*disabled/);
+		expect(html).not.toMatch(/<input type="checkbox"[^>]*disabled/);
+	});
+
+	it('draws a privileged matter’s terms on its file, and a matter’s name as text', () => {
+		const read = documents('no-project-terms');
+		const html = picker({ documents: read.documents, inMatter: false, selected: [] });
+		page(html, 'terms').shows(
+			'A run that reads it follows their rules: inference tier 2 or stronger; privileged, so nothing is pseudonymized.'
+		);
+		page(html, 'terms').shows('inference tier 3 or stronger.');
+		const hostile = picker({
+			documents: [{ ...read.documents[0], matters: ['<img src=x onerror=alert(1)>'] }],
+			inMatter: false,
+			selected: []
+		});
+		expect(hostile).not.toContain('<img');
+		page(hostile, 'hostile name').shows('“&lt;img src=x onerror=alert(1)');
 	});
 
 	it('says the run reads no document when none is selected and none is needed', () => {

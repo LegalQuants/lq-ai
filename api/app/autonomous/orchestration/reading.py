@@ -7,17 +7,25 @@ what the owner is offered and what a run may read cannot drift apart.
 
 * A run in a matter reads the owner's own, undeleted files that are attached
   to that matter.
-* A run outside any matter reads the owner's own, undeleted files that are
-  filed in no matter at all.
+* A run outside any matter reads the owner's own, undeleted files, wherever
+  they are filed, and takes on the terms of every matter that holds one of
+  them (ADR 0038, ruling 4).
 
 A file that a matter holds carries that matter's inference-tier floor and
-privilege flag. So a run never takes one out of its matter: a run with no
-matter does not read it, and a run in another matter does not accept it as a
-candidate to attach (:func:`filed_in_another_matter`). The owner can attach a
-file to a second matter themselves; that is their recorded action, and the
-file is then attached to the run's matter like any other.
+privilege flag, and they go with the file. A run with no matter has no terms
+of its own, so it runs under the strictest of its documents' matters: the
+lowest floor any of them sets, and privileged if any of them is
+(:func:`selection_terms`). Those terms are worked out when the request is
+accepted and again at every admission, so a matter whose terms tighten, or a
+file that is filed in a stricter matter, stops the run before its next call.
 
-Knowledge bases follow the same thinking (:func:`searchable_knowledge_bases`).
+A run in one matter is different: it has that matter's terms and no others.
+It does not accept, as a candidate to attach, a file that only another matter
+holds (:func:`filed_in_another_matter`). The owner can attach a file to a
+second matter themselves; that is their recorded action, and the file is then
+attached to the run's matter like any other.
+
+Knowledge bases are narrower (:func:`searchable_knowledge_bases`).
 A run in a matter may search the knowledge bases attached to that matter that
 its plan lists. A run outside any matter searches none. A passage is shown
 unless its file is held by another matter and not by this one, so a search
@@ -28,15 +36,17 @@ well is the owner's own earlier action, as it is for a selected document.
 from __future__ import annotations
 
 from collections.abc import Collection
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, exists, select
+from sqlalchemy import Select, exists, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
 from app.models.file import File
 from app.models.knowledge import KnowledgeBase
-from app.models.project import ProjectFile
+from app.models.project import Project, ProjectFile
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 
 
@@ -82,10 +92,85 @@ def readable_documents(
         )
     )
     if project_id is None:
-        return query.where(~filed_in_a_matter())
+        # Wherever the file is filed. What it costs the run to read a matter's
+        # file is in ``selection_terms``, which the store holds the run to.
+        return query
     return query.join(ProjectFile, ProjectFile.file_id == File.id).where(
         ProjectFile.project_id == project_id
     )
+
+
+# Gateway tier semantics: a lower number is a stronger protection. A matter
+# that sets no floor allows any route, which is 5.
+NO_FLOOR = 5
+
+
+@dataclass(frozen=True)
+class MatterTerms:
+    """The data terms a set of files brings with it from the matters that hold them."""
+
+    minimum_inference_tier: int = NO_FLOOR
+    privileged: bool = False
+
+
+def holding_matters(
+    document_ids: Collection[UUID],
+) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
+    """Each matter that holds the file of one of these documents, by upload or attachment.
+
+    One row for each file and matter: the file, then the matter's id, name,
+    owner, floor and privilege flag. An archived matter is included: archiving
+    a matter does not release its files from its terms. So is a matter of
+    another owner, should one ever hold the file.
+    """
+    return (
+        select(
+            File.id,
+            Project.id,
+            Project.name,
+            Project.owner_id,
+            Project.minimum_inference_tier,
+            Project.privileged,
+        )
+        .select_from(Document)
+        .join(File, File.id == Document.file_id)
+        .join(
+            Project,
+            or_(
+                Project.id == File.project_id,
+                exists().where(
+                    ProjectFile.project_id == Project.id, ProjectFile.file_id == File.id
+                ),
+            ),
+        )
+        .where(Document.id.in_(document_ids))
+        .order_by(File.id, Project.id)
+    )
+
+
+def strictest(rows: Collection[Any]) -> MatterTerms:
+    """The strictest terms among ``holding_matters`` rows: lowest floor, privileged if any."""
+    return MatterTerms(
+        minimum_inference_tier=min((row[4] or NO_FLOOR for row in rows), default=NO_FLOOR),
+        privileged=any(row[5] for row in rows),
+    )
+
+
+async def selection_terms(
+    db: AsyncSession, document_ids: Collection[UUID], *, lock: bool = False
+) -> MatterTerms:
+    """The terms a run outside any matter takes on from the documents it selected.
+
+    The strictest of every matter that holds one of them. No matter, or no
+    document, means no floor and not privileged. With ``lock`` the matters are
+    share-locked for the transaction, as a run's own matter is.
+    """
+    if not document_ids:
+        return MatterTerms()
+    query = holding_matters(document_ids)
+    if lock:
+        query = query.with_for_update(read=True, of=Project)
+    return strictest((await db.execute(query)).all())
 
 
 def read_locks(project_id: UUID | None) -> tuple[Any, ...]:

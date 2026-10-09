@@ -177,9 +177,16 @@ class RunDocument(BaseModel):
     characters: int
     attached_to_project: bool
     selectable: bool
-    # unsupported_type | not_ingested | ingestion_failed | no_text | in_a_matter |
-    # in_another_matter
+    # unsupported_type | not_ingested | ingestion_failed | no_text | in_another_matter
     reason: str | None = None
+    # For a chat outside any matter, a file that a matter holds: the owner's
+    # matters that hold it, the lowest inference tier floor any holding matter
+    # sets (null when none sets one), and whether one of them is privileged. A
+    # run that selects the file runs under these terms. Empty, null and false
+    # for a chat in a matter and for a file no matter holds.
+    matters: list[str] = []
+    matter_minimum_inference_tier: int | None = None
+    matter_privileged: bool = False
 
 
 class RunKnowledgeBase(BaseModel):
@@ -219,7 +226,8 @@ class ChatRunRequest(BaseModel):
     it needs at least one, takes none to eight, or reads a fixed one and
     refuses any. In a matter, a file not yet attached to the matter is attached
     when the run is accepted, with an audit row (ADR 0038 D5). Outside a matter
-    nothing is attached and a file that is filed in a matter is refused."""
+    nothing is attached, and a file that a matter holds puts the run under that
+    matter's inference tier floor and privilege flag."""
 
 
 async def _owned_chat(runtime: DemonstrationService, chat_id: uuid.UUID, user: User) -> Chat:
@@ -327,7 +335,9 @@ async def _availability(
             owner_id=user.id,
             project_id=project.id if project is not None else None,
             goal="Readiness quote",
-            # Outside a matter nothing sets a privilege flag or a tier floor.
+            # Outside a matter the chat alone sets no privilege flag or tier
+            # floor. A run that selects a matter's file takes that matter's on;
+            # this quote is made before any selection and does not show that.
             privileged=project.privileged if project is not None else False,
             minimum_inference_tier=(project.minimum_inference_tier or 5)
             if project is not None
@@ -467,8 +477,9 @@ async def run_documents(
 
     In a matter: the matter's files, plus named candidates. Selecting a
     candidate attaches it to the matter when the run is accepted. Outside a
-    matter: named candidates only, and one that is filed in a matter is listed
-    as unreadable here. The documents the last run in this chat read are always
+    matter: named candidates only. One that a matter holds is listed with that
+    matter's name, floor and privilege flag, which a run that reads it takes
+    on. The documents the last run in this chat read are always
     listed, and are returned as the suggested selection while they can still be
     read.
 
@@ -520,6 +531,9 @@ async def run_documents(
                 attached_to_project=d.attached_to_project,
                 selectable=d.selectable,
                 reason=d.reason,
+                matters=list(d.matters),
+                matter_minimum_inference_tier=d.matter_minimum_inference_tier,
+                matter_privileged=d.matter_privileged,
             )
             for d in listed
         ],
