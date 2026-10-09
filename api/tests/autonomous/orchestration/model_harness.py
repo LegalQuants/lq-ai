@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
@@ -93,6 +93,11 @@ def operation_of(request: Any) -> str:
 
 def is_task(request: Any) -> bool:
     return operation_of(request) in {"answer_contract_question", "work_on_task"}
+
+
+def literally(text: str) -> Callable[[re.Match[str]], str]:
+    """A replacement for ``re.sub`` that writes ``text`` as it is, backslashes included."""
+    return lambda _match: text
 
 
 def tool_call(name: str, arguments: dict[str, Any] | str, call_id: str = "call_1") -> dict:
@@ -321,7 +326,7 @@ class ModelGateway:
                     # Whole tokens only, as the real gateway restores them.
                     call["function"]["arguments"] = re.sub(
                         rf"(?<![A-Za-z0-9_]){re.escape(placeholder)}(?![A-Za-z0-9_])",
-                        lambda _match, original=original: original,
+                        literally(original),
                         call["function"]["arguments"],
                     )
         return SimpleNamespace(

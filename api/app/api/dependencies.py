@@ -226,6 +226,13 @@ async def get_mutating_user(user: ActiveUser) -> User:
 
 
 MutatingUser = Annotated[User, Depends(get_mutating_user)]
+"""Type alias for endpoints that must reject ``viewer`` users.
+
+State-changing handlers (POST/PATCH/DELETE) on owned resources use
+this in place of ``ActiveUser`` so the role gate fires before any
+business logic runs. Admin-only endpoints continue to use
+``AdminUser``; pure-read endpoints stay on ``ActiveUser``.
+"""
 
 
 async def get_run_actor(user: AutonomousEnabledUser) -> User:
@@ -252,13 +259,6 @@ async def get_run_actor(user: AutonomousEnabledUser) -> User:
 
 
 RunActor = Annotated[User, Depends(get_run_actor)]
-"""Type alias for endpoints that must reject ``viewer`` users.
-
-State-changing handlers (POST/PATCH/DELETE) on owned resources use
-this in place of ``ActiveUser`` so the role gate fires before any
-business logic runs. Admin-only endpoints continue to use
-``AdminUser``; pure-read endpoints stay on ``ActiveUser``.
-"""
 
 
 # ---------------------------------------------------------------------------
