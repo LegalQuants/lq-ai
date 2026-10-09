@@ -386,6 +386,7 @@ export interface MessagePostResponse {
 	routed_provider?: string | null;
 	cost_estimate?: number | null;
 	applied_skills?: string[];
+	applied_file_ids?: string[];
 }
 
 // ----- SSE message-stream events -----
@@ -410,6 +411,7 @@ export interface MessageCompleteFrame {
 	message: Message;
 	citations?: Citation[];
 	applied_skills?: string[];
+	applied_file_ids?: string[];
 	routed_inference_tier?: 1 | 2 | 3 | 4 | 5 | null;
 	routed_provider?: string | null;
 }

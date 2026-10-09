@@ -150,6 +150,7 @@
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
 	import {
 		canAttachChatFile,
+		hasAppliedProcessingFile,
 		processingFileNames,
 		readyFileNames,
 		selectFileIdsForSend
@@ -264,6 +265,7 @@
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+	let attachmentWarning: string | null = null;
 	// Why the composer refused to send (a skill's inputs are missing or not
 	// loaded). Kept apart from `sendError` because it describes the form's
 	// current state: it is dropped as soon as the skills, their inputs or the
@@ -439,6 +441,7 @@
 		activeChatStore.set(chat);
 		streamingMessageId = null;
 		sendError = null;
+		attachmentWarning = null;
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
@@ -664,7 +667,8 @@
 	 */
 	async function consumeIntoMessage(
 		body: ReadableStream<Uint8Array>,
-		assistantId0: string
+		assistantId0: string,
+		processingFileIds: string[] = []
 	): Promise<void> {
 		let assistantId = assistantId0;
 		await consumeMessageStream(body, {
@@ -698,6 +702,10 @@
 			},
 			onComplete: (frame) => {
 				streamingMessageId = null;
+				if (hasAppliedProcessingFile(processingFileIds, frame.applied_file_ids)) {
+					attachmentWarning =
+						'An attached file was still processing when sent. It was accepted for this turn, but its contents may not have been available for this response.';
+				}
 				messagesStore.update(($m) =>
 					$m.map((m) =>
 						m.id === assistantId
@@ -771,6 +779,7 @@
 		}
 
 		sendError = null;
+		attachmentWarning = null;
 		// Clear any prior gate card up front: a new turn supersedes a stranded
 		// gate even if this send throws before the stream's `onStart` fires.
 		pendingGate = null;
@@ -838,6 +847,9 @@
 			slug,
 			source: attachmentSources[slug] ?? 'picker'
 		}));
+		const processingFileIds = chatFiles
+			.filter((file) => file.ingestion_status !== 'ready' && file.ingestion_status !== 'failed')
+			.map((file) => file.id);
 
 		try {
 			const res = await messagesApi.sendMessageStream(
@@ -872,7 +884,7 @@
 				throw new Error('Empty stream body');
 			}
 
-			await consumeIntoMessage(res.body, draftAssistantId);
+			await consumeIntoMessage(res.body, draftAssistantId, processingFileIds);
 		} catch (e: unknown) {
 			streamingMessageId = null;
 			console.error('lq-ai: stream failed', e);
@@ -1283,6 +1295,15 @@
 						data-testid="lq-ai-send-error"
 					>
 						{sendError ?? inputsError}
+					</div>
+				{/if}
+				{#if attachmentWarning}
+					<div
+						class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1"
+						role="status"
+						data-testid="lq-ai-attachment-warning"
+					>
+						{attachmentWarning}
 					</div>
 				{/if}
 

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	MAX_CHAT_ATTACHED_FILES,
 	canAttachChatFile,
+	hasAppliedProcessingFile,
 	processingFileNames,
 	readyFileNames,
 	selectFileIdsForSend
@@ -88,6 +89,17 @@ describe('selectFileIdsForSend', () => {
 		const ids = selectFileIdsForSend(files);
 		expect(ids).toHaveLength(16);
 		expect(ids).not.toContain('bad');
+	});
+});
+
+describe('hasAppliedProcessingFile', () => {
+	it('detects a file that was still ingesting when the backend accepted it', () => {
+		expect(hasAppliedProcessingFile(['pending-id'], ['ready-id', 'pending-id'])).toBe(true);
+	});
+
+	it('does not warn when no still-ingesting file was applied', () => {
+		expect(hasAppliedProcessingFile(['pending-id'], ['ready-id'])).toBe(false);
+		expect(hasAppliedProcessingFile(['pending-id'], undefined)).toBe(false);
 	});
 });
 

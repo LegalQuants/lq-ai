@@ -32,6 +32,15 @@ export function selectFileIdsForSend(files: FileMeta[]): string[] | undefined {
 	return ids.length > 0 ? ids : undefined;
 }
 
+/** Whether the backend accepted a file that was still ingesting when sent. */
+export function hasAppliedProcessingFile(
+	processingFileIds: string[],
+	appliedFileIds?: string[]
+): boolean {
+	if (!appliedFileIds) return false;
+	return processingFileIds.some((id) => appliedFileIds.includes(id));
+}
+
 /**
  * Names of the attached files whose text will reach the model on this send.
  * The backend only injects text for 'ready' files, so only these can stand
