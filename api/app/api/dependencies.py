@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.errors import InternalError, PasswordChangeRequired, Unauthorized
-from app.models.user import User
+from app.models.user import MUTATING_ROLES, User
 from app.security.jwt import decode_access_token
 
 log = logging.getLogger(__name__)
@@ -188,7 +188,7 @@ opt-out split."""
 # both mutate. Backed by ``users.role`` (migration 0017) with a
 # server-default of ``member`` so existing rows + new signups
 # inherit mutating access without explicit promotion.
-_MUTATING_ROLES = frozenset({"admin", "member"})
+_MUTATING_ROLES = MUTATING_ROLES
 
 
 def is_privileged_reader(user: User) -> bool:
@@ -226,6 +226,32 @@ async def get_mutating_user(user: ActiveUser) -> User:
 
 
 MutatingUser = Annotated[User, Depends(get_mutating_user)]
+
+
+async def get_run_actor(user: AutonomousEnabledUser) -> User:
+    """`AutonomousEnabledUser` plus the role check that excludes a read-only role.
+
+    For the routes that start a governed run, approve its plan or reject it
+    (ADR 0038, ruling 10). A ``viewer`` reads their own runs, and an
+    ``auditor`` reads across owners; neither may change what runs. Halting
+    and closing a run stay on `ActiveUser`: they only narrow authority, and
+    an owner whose role was changed must still be able to stop their run.
+    """
+
+    if getattr(user, "role", "member") not in MUTATING_ROLES:
+        from app.errors import Forbidden
+
+        raise Forbidden(
+            message=(
+                "Starting, approving and rejecting a run requires a member or admin "
+                "role; your role has read-only access."
+            ),
+            details={"role": user.role, "required_roles": sorted(MUTATING_ROLES)},
+        )
+    return user
+
+
+RunActor = Annotated[User, Depends(get_run_actor)]
 """Type alias for endpoints that must reject ``viewer`` users.
 
 State-changing handlers (POST/PATCH/DELETE) on owned resources use

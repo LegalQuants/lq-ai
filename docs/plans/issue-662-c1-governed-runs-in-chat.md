@@ -487,6 +487,17 @@ that it can be reviewed apart, and none has had maintainer or security review.
   pseudonymizes, and a test of the streaming path with the field set (that path does not
   read it).
 
+- **Ruling 10, roles.** Starting a run, approving a plan and rejecting one require a
+  member or admin role (`RunActor` in `api/app/api/dependencies.py`); the store refuses a
+  read-only role as well. The composer reports `role_read_only`. An admin or auditor may
+  read another owner's run, tree and session trace, each read writing one audit row
+  (`auditor.run_viewed`, `auditor.run_trace_viewed`); working files, approval, rejection,
+  halt and closing stay with the owner. Tests: a viewer and an auditor refused at the
+  routes and in the store, a viewer reading and halting their own run, an auditor and an
+  admin reading another owner's run with the audit rows counted, and the 404 for anyone
+  else. No new route. Not done: the web shows a privileged reader the owner's controls on
+  the receipt page, and each fails; a run is not stopped when its owner's role changes.
+
 ### Not done, or not verified
 
 - **Local models only, and single runs.** Agents ran New harness on local models through

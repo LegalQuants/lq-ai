@@ -5030,6 +5030,7 @@ components:
             - operator_disabled
             - not_configured
             - autonomous_opt_in_required
+            - role_read_only
             - chat_archived
             - project_required
             - project_unavailable
@@ -11284,6 +11285,13 @@ paths:
       - autonomous
   /api/v1/autonomous/orchestration/chat-runs/{root_id}:
     get:
+      description: 'A run as its owner sees it: the request, the plan, each step and
+        the answer.
+
+
+        The owner, or an admin or auditor reading another owner''s run; that
+
+        read writes one ``auditor.run_viewed`` audit row.'
       operationId: chat_run_api_v1_autonomous_orchestration_chat_runs__root_id__get
       parameters:
       - in: path
@@ -11459,6 +11467,8 @@ paths:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
     get:
+      description: 'One of a run''s working files. Owner-only: an admin or auditor
+        is not given it.'
       operationId: workspace_file_api_v1_autonomous_orchestration__root_id__files__session_id___name__get
       parameters:
       - in: path
@@ -11569,7 +11579,11 @@ paths:
         back.
 
 
-        Owner-only. ``session_id`` is the run''s root for the orchestrator, or one
+        The owner, or an admin or auditor reading another owner''s run; that read
+
+        writes one ``auditor.run_trace_viewed`` audit row (ADR 0038, ruling 10).
+
+        ``session_id`` is the run''s root for the orchestrator, or one
 
         task''s dispatch id. Gives the pinned system message, the opening message,
 
@@ -11614,6 +11628,12 @@ paths:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/tree:
     get:
+      description: 'A run''s approved plan and its sessions.
+
+
+        The owner, or an admin or auditor reading another owner''s run; that
+
+        read writes one ``auditor.run_viewed`` audit row.'
       operationId: tree_api_v1_autonomous_orchestration__root_id__tree_get
       parameters:
       - in: path

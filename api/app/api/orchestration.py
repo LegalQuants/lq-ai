@@ -16,7 +16,13 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.api.dependencies import ActiveUser, AdminUser, AutonomousEnabledUser
+from app.api.dependencies import (
+    ActiveUser,
+    AdminUser,
+    RunActor,
+    is_privileged_reader,
+)
+from app.auditor_audit import auditor_audit
 from app.autonomous.orchestration.assembly import planning_message, planning_tools
 from app.autonomous.orchestration.chat_demo import PACKET, PROFILE, packet
 from app.autonomous.orchestration.contracts import (
@@ -111,6 +117,45 @@ async def _chat_read(runtime: DemonstrationService, root_id: UUID, owner_id: UUI
     if hashlib.sha256(source.encode()).hexdigest() != value.planning.packet_digest:
         return value
     return value.model_copy(update={"packet": source})
+
+
+async def owner_for_read(
+    runtime: DemonstrationService,
+    root_id: UUID,
+    user: User,
+    *,
+    event: Literal["run_viewed", "run_trace_viewed"],
+    request: Request,
+) -> UUID:
+    """Whose run this is, for a caller who may read it (ADR 0038, ruling 10).
+
+    The owner reads their own run. An admin or an auditor
+    (``is_privileged_reader``) may read another owner's run and how its
+    sessions were set up, and each such read writes one ``auditor`` audit
+    row before anything is returned. For anyone else, and for a run that
+    does not exist, the caller's own id is returned: the read then applies
+    its owner filter and answers 404 for both alike.
+
+    This is for reads only. Approval, rejection, halt, closing and a run's
+    working files stay with the owner.
+    """
+    async with runtime.store.sessions() as db:
+        owner_id: UUID | None = await db.scalar(
+            select(OrchestrationRoot.owner_id).where(OrchestrationRoot.session_id == root_id)
+        )
+        if owner_id is None or owner_id == user.id or not is_privileged_reader(user):
+            return user.id
+        await auditor_audit(
+            db,
+            user=user,
+            event=event,
+            resource_type="autonomous_session",
+            resource_id=str(root_id),
+            viewed_user_id=owner_id,
+            request=request,
+        )
+        await db.commit()  # a read path: persist the audit row explicitly
+        return owner_id
 
 
 async def begin_run(
@@ -323,9 +368,7 @@ async def chat_capabilities(user: ActiveUser, runtime: Service) -> dict:
 
 
 @router.post("/chat-runs", response_model=ChatRunRead, status_code=202)
-async def start_chat(
-    body: ChatPlanRequest, user: AutonomousEnabledUser, runtime: Service
-) -> ChatRunRead:
+async def start_chat(body: ChatPlanRequest, user: RunActor, runtime: Service) -> ChatRunRead:
     """Start a fictional-profile run with no chat. Retained for existing clients.
 
     New runs start from a chat (``POST /chats/{chat_id}/runs``). A run started
@@ -341,8 +384,16 @@ async def start_chat(
 
 
 @router.get("/chat-runs/{root_id}", response_model=ChatRunRead)
-async def chat_run(root_id: UUID, user: ActiveUser, runtime: Service) -> ChatRunRead:
-    return await _chat_read(runtime, root_id, user.id)
+async def chat_run(
+    root_id: UUID, user: ActiveUser, runtime: Service, request: Request
+) -> ChatRunRead:
+    """A run as its owner sees it: the request, the plan, each step and the answer.
+
+    The owner, or an admin or auditor reading another owner's run; that
+    read writes one ``auditor.run_viewed`` audit row.
+    """
+    owner_id = await owner_for_read(runtime, root_id, user, event="run_viewed", request=request)
+    return await _chat_read(runtime, root_id, owner_id)
 
 
 @router.post("/chat-runs/{root_id}/halt", response_model=ChatRunRead)
@@ -411,30 +462,41 @@ async def prompt(family: str, name: str, user: ActiveUser) -> PromptRead:
 
 
 @router.get("/{root_id}/tree", response_model=TreeRead)
-async def tree(root_id: UUID, user: ActiveUser, runtime: Service) -> TreeRead:
-    return await read_tree(runtime.store.sessions, root_id, user.id)
+async def tree(root_id: UUID, user: ActiveUser, runtime: Service, request: Request) -> TreeRead:
+    """A run's approved plan and its sessions.
+
+    The owner, or an admin or auditor reading another owner's run; that
+    read writes one ``auditor.run_viewed`` audit row.
+    """
+    owner_id = await owner_for_read(runtime, root_id, user, event="run_viewed", request=request)
+    return await read_tree(runtime.store.sessions, root_id, owner_id)
 
 
 @router.get("/{root_id}/sessions/{session_id}/trace", response_model=SessionTraceRead)
 async def session_trace(
-    root_id: UUID, session_id: UUID, user: ActiveUser, runtime: Service
+    root_id: UUID, session_id: UUID, user: ActiveUser, runtime: Service, request: Request
 ) -> SessionTraceRead:
     """How one session of a run was set up, and what its model wrote back.
 
-    Owner-only. ``session_id`` is the run's root for the orchestrator, or one
+    The owner, or an admin or auditor reading another owner's run; that read
+    writes one ``auditor.run_trace_viewed`` audit row (ADR 0038, ruling 10).
+    ``session_id`` is the run's root for the orchestrator, or one
     task's dispatch id. Gives the pinned system message, the opening message,
     the tools offered, and each turn's text and tool calls. See
     :mod:`app.autonomous.orchestration.trace` for what is rebuilt, how it is
     checked against what was sent, and what is not kept.
     """
+    owner_id = await owner_for_read(
+        runtime, root_id, user, event="run_trace_viewed", request=request
+    )
     return await read_session_trace(
-        runtime.store.sessions, runtime.skills.current(), root_id, user.id, session_id
+        runtime.store.sessions, runtime.skills.current(), root_id, owner_id, session_id
     )
 
 
 @router.post("/{root_id}/approve", response_model=TreeRead)
 async def approve(
-    root_id: UUID, body: ApprovalRequest, user: AutonomousEnabledUser, runtime: Service
+    root_id: UUID, body: ApprovalRequest, user: RunActor, runtime: Service
 ) -> TreeRead:
     retained = await read_tree(runtime.store.sessions, root_id, user.id)
     runtime = runtime.for_profile(retained.mode)
@@ -451,12 +513,13 @@ async def approve(
 async def workspace_file(
     root_id: UUID, session_id: UUID, name: str, user: ActiveUser, runtime: Service
 ) -> WorkspaceContent:
+    """One of a run's working files. Owner-only: an admin or auditor is not given it."""
     return await read_workspace_file(runtime.store.sessions, root_id, user.id, session_id, name)
 
 
 @router.post("/{root_id}/reject", response_model=TreeRead)
 async def reject(
-    root_id: UUID, body: RejectionRequest, user: AutonomousEnabledUser, runtime: Service
+    root_id: UUID, body: RejectionRequest, user: RunActor, runtime: Service
 ) -> TreeRead:
     await read_tree(runtime.store.sessions, root_id, user.id)
     await runtime.store.reject(root_id, actor_id=user.id, revision=body.revision)

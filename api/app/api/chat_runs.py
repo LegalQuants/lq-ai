@@ -25,7 +25,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import select
 
-from app.api.dependencies import ActiveUser, AutonomousEnabledUser
+from app.api.dependencies import ActiveUser, RunActor
 from app.api.orchestration import Service, begin_run
 from app.autonomous.orchestration.contracts import TaskText
 from app.autonomous.orchestration.intake import (
@@ -48,7 +48,7 @@ from app.errors import Forbidden, LQAIError, NotFound
 from app.models.chat import Chat, Message
 from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
-from app.models.user import User
+from app.models.user import MUTATING_ROLES, User
 from app.schemas.autonomous import Phase
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -59,6 +59,7 @@ Reason = Literal[
     "operator_disabled",
     "not_configured",
     "autonomous_opt_in_required",
+    "role_read_only",
     "chat_archived",
     "project_required",
     "project_unavailable",
@@ -76,6 +77,7 @@ def _reason_text(reason: str, profile: RunProfile) -> str:
             f"The operator has enabled {profile.title} but its configuration is incomplete."
         ),
         "autonomous_opt_in_required": "Turn on Autonomous in your settings to start a run.",
+        "role_read_only": "Your role has read-only access, so you cannot start a run.",
         "chat_archived": "This chat is archived.",
         "project_required": (
             f"{profile.title} starts from a chat inside a matter. This chat has no matter."
@@ -297,6 +299,9 @@ async def _availability(
         return unavailable("operator_disabled")
     if not user.autonomous_enabled:
         return unavailable("autonomous_opt_in_required")
+    if user.role not in MUTATING_ROLES:
+        # A viewer or an auditor reads; neither starts a run (ADR 0038, ruling 10).
+        return unavailable("role_read_only")
     if chat.archived_at is not None:
         return unavailable("chat_archived")
     if project is None and chat.project_id is not None:
@@ -533,7 +538,7 @@ async def run_documents(
     summary="Start a governed run as a turn in this chat",
 )
 async def start_run(
-    chat_id: uuid.UUID, body: ChatRunRequest, user: AutonomousEnabledUser, runtime: Service
+    chat_id: uuid.UUID, body: ChatRunRequest, user: RunActor, runtime: Service
 ) -> ChatRunRead:
     """Accept one planning request and write its two messages.
 

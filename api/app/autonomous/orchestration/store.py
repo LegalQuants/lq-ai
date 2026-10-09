@@ -60,7 +60,7 @@ from app.models.orchestration import (
     OrchestrationRoot as Root,
 )
 from app.models.project import Project, ProjectFile
-from app.models.user import User
+from app.models.user import MUTATING_ROLES, User
 from app.models.work_product import WorkProductAttribution
 from app.schemas.autonomous import Phase
 from app.schemas.chats import derive_chat_title
@@ -231,6 +231,10 @@ class OrchestrationStore:
         )
         if owner is None or not owner.autonomous_enabled:
             raise Forbidden(message="Autonomous execution is not enabled for this owner")
+        if creating and owner.role not in MUTATING_ROLES:
+            # Held here as well as at the route: starting a run is an act, and
+            # a read-only role may not (ADR 0038, ruling 10).
+            raise Forbidden(message="A read-only role cannot start a run")
         if project_id is None:
             return None
         project = await db.scalar(
@@ -239,6 +243,17 @@ class OrchestrationStore:
         if project is None or project.owner_id != owner_id or project.archived_at is not None:
             raise Forbidden(message="Orchestration requires an owned active project")
         return project
+
+    async def _may_act(self, db: AsyncSession, actor_id: UUID) -> None:
+        """Approving and rejecting change what runs; a read-only role may not.
+
+        The route refuses first. This is the same rule where no route can
+        skip it (ADR 0038, ruling 10). Halting and closing are not acts in
+        this sense: they only narrow authority.
+        """
+        role = await db.scalar(select(User.role).where(User.id == actor_id))
+        if role not in MUTATING_ROLES:
+            raise Forbidden(message="A read-only role cannot approve or reject a plan")
 
     async def _root(
         self, db: AsyncSession, root_id: UUID
@@ -816,6 +831,7 @@ class OrchestrationStore:
             root, plan, now = await self._root(db, root_id)
             if actor_id != root.owner_id:
                 raise Forbidden(message="Only the owner may approve this plan")
+            await self._may_act(db, actor_id)
             if not isinstance(plan, PreparedPlan):
                 raise Conflict(message="Planning has not produced an approvable plan")
             if revision != plan.revision or plan_hash != plan.approval_hash():
@@ -853,6 +869,7 @@ class OrchestrationStore:
             root, plan, now = await self._root(db, root_id)
             if actor_id != root.owner_id:
                 raise Forbidden(message="Only the owner may reject this plan")
+            await self._may_act(db, actor_id)
             if revision != plan.revision:
                 raise Conflict(message="Rejection refers to a stale plan")
             if root.status == "rejected":

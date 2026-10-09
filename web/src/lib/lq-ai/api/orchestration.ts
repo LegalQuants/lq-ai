@@ -493,7 +493,7 @@ export interface ProfileAvailability {
 	available: boolean;
 	/**
 	 * Why the profile cannot be used here: `operator_disabled`, `not_configured`,
-	 * `autonomous_opt_in_required`, `chat_archived`, `project_required`,
+	 * `autonomous_opt_in_required`, `role_read_only`, `chat_archived`, `project_required`,
 	 * `project_unavailable`, `project_not_permitted`, `route_unavailable` or `active_run`.
 	 */
 	reason?: string | null;

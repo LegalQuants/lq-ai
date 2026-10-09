@@ -169,12 +169,36 @@ intake form is gone.
 message holds the link. Root delivery writes the answer into the message in the same
 transaction as its audit row and keeps its evidence status. A run that ends without an
 answer leaves the message without content, so it is not replayed to later turns.
-Approval, rejection, halt, closing and inspection keep their existing owner-only routes.
+Approval, rejection, halt and closing keep their existing owner-only routes. Inspection is
+the owner's, and an admin's or an auditor's with an audit row for each read (below).
 Chat adds an intake route and no second governance path (ADR 0016 P6). The binding is to
 the autonomous session, not to the orchestration root, so other governed session kinds can
 later be hosted the same way without a new link.
 
-**Preconditions.** The owner's Autonomous opt-in; an operator-enabled profile whose route
+**Roles (ruling 10).** *Authorization path; needs security review.* Starting a run,
+approving a plan and rejecting one need a role that may change things: member or admin. A
+viewer and an auditor are refused (403), at the route and again in the store, so the rule
+does not depend on a route remembering it. The composer says so in place of offering New
+harness (`role_read_only`). A viewer still reads their own runs, and may halt or close
+one: those only narrow authority, and an owner whose role was changed must be able to
+stop what they started. These are the first routes in the API to apply the viewer role;
+the gate for it existed and no route used it.
+
+An admin or an auditor may read another owner's run: the run, its plan and tree, and each
+session's trace (the pinned prompts, the opening messages, what each model wrote, and the
+answer). This follows the existing rule for receipts and ledgers (`is_privileged_reader`),
+and each such read writes one audit row naming the reader and the owner
+(`auditor.run_viewed`, `auditor.run_trace_viewed`). It is wider than that rule was: until
+now a privileged reader saw records about a chat, not its text. They are not given a run's
+working files, and cannot approve, reject, halt or close it. Anyone else gets the 404 that
+a missing run gets. The receipt page will open for them with its controls drawn; each
+control then fails.
+
+Not built: stopping an approved run at its next admission when its owner's role becomes
+read-only. Today only the Autonomous opt-in is rechecked there (D8).
+
+**Preconditions.** The owner's Autonomous opt-in and a role that may act (above); an
+operator-enabled profile whose route
 is priced and whose total cap can fund planning, one task and synthesis; a chat that is not
 archived; and one active run per owner (ADR 0035 D1). A matter is not required. The
 composer states why New harness is unavailable. A run that holds the owner's single
@@ -213,7 +237,8 @@ message, and the tools offered, in full. Beside the reply to a call, in the plan
 task's steps, under the answer line and on the plan line of a run that has no plan,
 "What the model wrote" shows the text and each tool call with its arguments, as text; the
 direct line has no such fold, because its reply is the answer drawn under the run (it has the
-set-up fold and "Receipts"). Both come from an owner-only read,
+set-up fold and "Receipts"). Both come from one read, the owner's (and an admin's or an
+auditor's, audited; D1),
 `GET /autonomous/orchestration/{root_id}/sessions/{session_id}/trace`. The opening message
 is not stored. It is rebuilt from the run's records by the function that built it for
 sending, and compared with the digest recorded when the call went out; the read reports
@@ -671,7 +696,8 @@ files of the run engine. Nothing makes these agree. A run tool handler reaches i
 through the guarded effect path, and the model can name only a document number or a query,
 never a user, a matter or a file; but a new handler that issued its own query would not
 fail any check. A run rechecks its owner's Autonomous opt-in at each admission and does
-not look at the owner's role.
+not look at the owner's role there; the role is checked when a run is started, approved or
+rejected (D1, ruling 10).
 
 **One access module.** The API gains one module, outside the run engine, that answers who
 may read what. It takes a principal (the user, with their role) and an optional matter,
@@ -746,9 +772,12 @@ branch as it is, and the item is marked **not built**.
 10. **Roles.** A viewer cannot start, approve or reject a run, and can read their own. An
     auditor may read any owner's run and its trace, and can change nothing. This widens
     who can read a run's prompts, plan and task results beyond its owner, so it needs
-    security review. Not ruled on: whether an auditor's read includes a run's working
-    files and the text of its answer. **Not built**: run routes are still on ownership and
-    the Autonomous opt-in.
+    security review. **Built** as its own change (D1), with these choices the maintainer
+    has not ruled on: an auditor cannot start, approve or reject either, because the
+    role is read-only by definition; the cross-owner read is given to an admin as well
+    as an auditor, as the existing rule for receipts does; that read includes the
+    answer's text, which the trace cannot leave out; and a run's working files stay
+    owner-only. Not built: stopping a running run when its owner's role changes.
 11. **The order of D8.** The run engine moves onto the access module first. The resource
     routes and the chat path may follow later and do not hold back a C2 to C7 run tool;
     that move is deferred as DE-406.

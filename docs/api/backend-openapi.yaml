@@ -5294,12 +5294,12 @@ paths:
       summary: Read retained planning, proposed plan, results and skill receipts
       responses:
         '200':
-          description: Owner-only; readable after disablement; tree is null before a valid proposal. Fictional agreement text is included only when the installed fixture matches this run's pinned digest.
+          description: The owner's read; an admin or auditor may read another owner's run, and that read writes one ``auditor.run_viewed`` audit row (ADR 0038, proposed). Readable after disablement; tree is null before a valid proposal. Fictional agreement text is included only when the installed fixture matches this run's pinned digest.
           content:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/ChatRunRead'
-        '404': {description: Model run absent or owned by another user}
+        '404': {description: Model run absent, or owned by another user and the caller is neither an admin nor an auditor}
   /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
     parameters:
       - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -5346,12 +5346,12 @@ paths:
       summary: Inspect owned plan, progress, budgets, receipts and unverified outcomes
       responses:
         '200':
-          description: Readable after opt-out, halt or feature disablement
+          description: Readable after opt-out, halt or feature disablement. The owner's read; an admin or auditor may read another owner's run, and that read writes one ``auditor.run_viewed`` audit row (ADR 0038, proposed).
           content:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
-        '404': {description: Root absent or owned by another user}
+        '404': {description: Root absent, or owned by another user and the caller is neither an admin nor an auditor}
   /api/v1/autonomous/orchestration/{root_id}/approve:
     parameters:
       - {name: root_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -5371,6 +5371,8 @@ paths:
             application/json:
               schema:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/TreeRead'
+        '403': {description: The caller has not opted in to Autonomous, or has a read-only role (viewer or auditor)}
+        '404': {description: Root absent or owned by another user}
         '409': {description: Stale revision/hash or conflicting transition}
   /api/v1/autonomous/orchestration/{root_id}/reject:
     parameters:
@@ -5414,7 +5416,7 @@ paths:
       - {name: name, in: path, required: true, schema: {type: string}}
     get:
       tags: [autonomous]
-      summary: Inspect a private or shared working file in an owned run
+      summary: Inspect a private or shared working file in an owned run (owner-only; not given to an admin or auditor)
       responses:
         '200':
           description: Bounded UTF-8 contents and revision; readable after halt or opt-out
@@ -5475,7 +5477,8 @@ paths:
       summary: "ADR 0038 (proposed): start a governed run as a turn in this chat"
       description: |
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
-        Requires the owner's Autonomous opt-in and an operator-enabled profile.
+        Requires the owner's Autonomous opt-in, a member or admin role (a viewer
+        or an auditor is refused with 403) and an operator-enabled profile.
         The chat is inside an active owned project, or, where the profile allows
         it, in no project at all. Accepts one planning request.
         The request becomes an ordinary user message and the reply is one
@@ -5569,7 +5572,7 @@ paths:
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
         Each registry profile's availability for this chat, and the reason when
         it is unavailable (``operator_disabled``, ``not_configured``,
-        ``autonomous_opt_in_required``, ``chat_archived``, ``project_required``,
+        ``autonomous_opt_in_required``, ``role_read_only``, ``chat_archived``, ``project_required``,
         ``project_unavailable``, ``project_not_permitted``, ``route_unavailable``
         or ``active_run``). ``project_required`` is given only by a profile that
         cannot start from a chat outside any project.
@@ -5667,7 +5670,9 @@ paths:
       summary: "ADR 0038 (proposed): how one session of a run was set up, and what its model wrote back"
       description: |
         Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
-        Owner-only. ``session_id`` is the run's root for the orchestrator, or one
+        The owner's read; an admin or auditor may read another owner's run, and
+        that read writes one ``auditor.run_trace_viewed`` audit row.
+        ``session_id`` is the run's root for the orchestrator, or one
         task's dispatch id. ``calls`` gives each model call's opening: the pinned
         system message (an installed skill or an engine prompt file), the opening
         user message, and the tool schemas offered. ``turns`` gives each reply:

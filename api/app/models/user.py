@@ -12,6 +12,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
+# PRD §5.2: the roles that may change things. ``viewer`` reads what it owns
+# and ``auditor`` reads across owners; neither may act. One definition, so
+# that a route's gate and a service's own check cannot drift apart.
+MUTATING_ROLES: frozenset[str] = frozenset({"admin", "member"})
+
 
 class User(Base):
     """A LQ.AI user. Auth-owning per ADR 0002.

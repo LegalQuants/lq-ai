@@ -56,6 +56,7 @@ const FALLBACK_REASONS: Record<string, (title: string) => string> = {
 	not_configured: (title) =>
 		`The operator has enabled ${title} but its configuration is incomplete.`,
 	autonomous_opt_in_required: () => 'Turn on Autonomous in your settings to start a run.',
+	role_read_only: () => 'Your role has read-only access, so you cannot start a run.',
 	chat_archived: () => 'This chat is archived, so it cannot start a run.',
 	project_required: (title) =>
 		`${capitalised(title)} starts from a chat inside a matter. This chat has no matter.`,
