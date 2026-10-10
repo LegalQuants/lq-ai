@@ -2993,6 +2993,126 @@ paths:
         '401':
           description: Not authenticated.
 
+  /api/v1/tabular/bulk-ops:
+    get:
+      summary: List caller-owned retained reports and memos
+      tags: [tabular]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200':
+          description: Caller-owned outputs, including those whose source was deleted
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/TabularBulkOp'}}
+  /api/v1/tabular/bulk-ops/{bulk_op_id}:
+    get:
+      summary: Read an owned retained output independently of its parent
+      tags: [tabular]
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: bulk_op_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Owned report or memo
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularBulkOp'}
+        '404': {description: Missing or owned by another user}
+
+  /api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [tabular]
+      summary: Preview the cost of a proposed bulk operation (DE-304)
+      description: |
+        Synchronous cost preview — no bulk-op row is created. Mirrors
+        ``POST /tabular/preview-cost`` (Decision C-5): the UI calls this
+        before arming the confirmation gate. Calls count is one per grid
+        row for ``redline_rows``, one total for ``summarize_column``;
+        per-call cost is a rolling average over recent
+        ``purpose='tabular_bulk_op'`` routing-log rows with a
+        conservative cold-start default (ADR 0040 D3).
+
+        The parent execution must be caller-owned (404 collapse) and in
+        ``status='completed'`` (409 otherwise — same posture as export).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TabularBulkOpPreviewRequest'}
+      responses:
+        '200':
+          description: Cost preview.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularBulkOpPreviewResponse'}
+        '400':
+          description: ``summarize_column`` without a valid ``column_name`` from the snapshotted spec.
+        '404':
+          description: Execution not found or not authorized.
+        '409':
+          description: Execution not in ``status='completed'``.
+        '422':
+          description: Validation error (unknown ``kind`` etc.).
+        '401':
+          description: Not authenticated.
+
+  /api/v1/tabular/executions/{execution_id}/bulk-ops:
+    parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      tags: [tabular]
+      summary: Start a bulk operation over a completed tabular execution (DE-304)
+      description: |
+        Creates a ``tabular_bulk_ops`` row at ``status='pending'`` and
+        enqueues the ARQ job on the shared playbook queue (Decision
+        C-3). Returns 202; the detail view polls
+        ``GET /api/v1/tabular/executions/{id}`` — the ``bulk_ops``
+        array embedded there is the read-side (ADR 0040 D2).
+
+        Two kinds (ADR 0040): ``redline_rows`` (one redline-style
+        review memo per grid row, combined into a redline report) and
+        ``summarize_column`` (one memo synthesizing a chosen column
+        across all rows). Per-item failures are persisted per-row and
+        rendered as failures — they never block the batch, and the
+        report never silently omits failed rows.
+
+        ``confirmed_cost_usd`` echoes the preview value for audit; the
+        $1.00 confirmation gate is UI-side (Decision C-5, matching
+        ``POST /tabular/execute``). Outputs are drafts for attorney
+        review, not final work product.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TabularBulkOpRequest'}
+      responses:
+        '202':
+          description: Bulk op scheduled; row created at status `pending`.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TabularBulkOp'}
+        '400':
+          description: Invalid ``column_name``, or execution has no results grid rows.
+        '404':
+          description: Execution not found or not authorized.
+        '409':
+          description: Execution not in ``status='completed'``.
+        '422':
+          description: Validation error.
+        '401':
+          description: Not authenticated.
+
   /api/v1/playbooks/{playbook_id}/execute:
     parameters:
       - in: path
@@ -6728,6 +6848,14 @@ components:
         created_at: {type: string, format: date-time}
         started_at: {type: string, format: date-time, nullable: true}
         completed_at: {type: string, format: date-time, nullable: true}
+        bulk_ops:
+          type: array
+          items: {$ref: '#/components/schemas/TabularBulkOp'}
+          description: |
+            Bulk operations run over this execution, recent-first
+            (DE-304 / ADR 0040). Embedded in the detail response —
+            rather than behind a dedicated GET — because the detail
+            endpoint is what the UI already polls.
 
     TabularExecutionSummary:
       type: object
@@ -6754,6 +6882,127 @@ components:
         cost_estimate_usd: {type: string, nullable: true}
         cost_actual_usd: {type: string, nullable: true}
         created_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time, nullable: true}
+
+    # DE-304 / ADR 0040 — Tabular bulk-operation wire shapes.
+    TabularBulkOpPreviewRequest:
+      type: object
+      required: [kind, column_name, skill_name]
+      description: |
+        Request body for
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost``.
+        Both operations require a selected column and a skill. Inputs are
+        validated before work is queued; the skill is resolved owner-scope first.
+      properties:
+        kind:
+          type: string
+          enum: [redline_rows, summarize_column]
+        column_name: {type: string}
+        skill_name: {type: string}
+        skill_inputs: {type: object, additionalProperties: true}
+
+    TabularBulkOpPreviewResponse:
+      type: object
+      required: [kind, calls_count, per_call_cost_usd, estimated_cost_usd]
+      description: Skill identity/version/hash identify the instructions previewed.
+      properties:
+        skill_name: {type: string, nullable: true}
+        skill_version: {type: string, nullable: true}
+        skill_content_hash: {type: string, nullable: true}
+        kind:
+          type: string
+          enum: [redline_rows, summarize_column]
+        calls_count:
+          type: integer
+          description: |
+            Gateway calls the op will make — one per grid row for
+            ``redline_rows``; one total for ``summarize_column``.
+        per_call_cost_usd:
+          type: string
+          description: |
+            Rolling-average cost over recent
+            ``purpose='tabular_bulk_op'`` routing-log rows (conservative
+            cold-start default before calibration), serialized as a
+            JSON string to preserve decimal precision.
+        estimated_cost_usd:
+          type: string
+          description: |
+            ``per_call_cost_usd * calls_count``, serialized as a JSON
+            string to preserve decimal precision.
+
+    TabularBulkOpRequest:
+      type: object
+      required: [kind, column_name, skill_name, skill_content_hash]
+      description: |
+        Request body for
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops``.
+        ``confirmed_cost_usd`` echoes the preview value — persisted for
+        audit (Decision C-5 idiom; the $1.00 confirmation gate is
+        UI-side, matching ``POST /tabular/execute``).
+      properties:
+        kind:
+          type: string
+          enum: [redline_rows, summarize_column]
+        column_name: {type: string}
+        skill_name: {type: string}
+        skill_inputs: {type: object, additionalProperties: true}
+        skill_content_hash: {type: string, pattern: "^[a-f0-9]{64}$"}
+        confirmed_cost_usd: {type: string, nullable: true}
+
+    TabularBulkOp:
+      type: object
+      required: [id, execution_id, source_execution_id, provenance, user_id, kind, status, params, created_at]
+      description: |
+        One row from the ``tabular_bulk_ops`` table (migration 0071).
+        Lifecycle: ``pending → running → completed | failed``. Per ADR
+        0040 D4, ``completed`` includes batches with per-item failures
+        — failed items are persisted in ``results.items[*]`` with
+        ``status='failed'`` + ``error`` and rendered as failures;
+        ``failed`` is reserved for whole-batch orchestration crashes
+        (``error_text`` populated).
+      properties:
+        id: {type: string, format: uuid}
+        execution_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Live parent link, null after hard deletion.
+        source_execution_id: {type: string, format: uuid}
+        provenance: {type: object, additionalProperties: true}
+        user_id: {type: string, format: uuid}
+        kind:
+          type: string
+          enum: [redline_rows, summarize_column]
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        params:
+          type: object
+          additionalProperties: {type: string, nullable: true}
+          description: |
+            Op parameters snapshotted at request time (C-1 posture) —
+            Selected ``column_name`` and ``skill_name`` for both operations.
+        results:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            ``{schema_version, items, summary}`` once terminal
+            (currently ``de304-v1``). Each item:
+            ``{document_id (uuid, null for the summarize memo),
+            document_name, status ('completed'|'failed'),
+            output_text (Markdown draft; partial text retained on incomplete
+            completion, null when none returned), finish_reason (nullable),
+            error (null on success), cost_usd (string), source_rows (memo
+            coverage: document_name, value, status available|missing)}``.
+            Only a normal stop below the output cap is a completed item;
+            incomplete outputs are failed items rendered with a warning.
+            ``summary`` carries ``total_items`` + ``failed_items``.
+        confirmed_cost_usd: {type: string, nullable: true}
+        cost_actual_usd: {type: string, nullable: true}
+        error_text: {type: string, nullable: true}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time, nullable: true}
         completed_at: {type: string, format: date-time, nullable: true}
 
     AdminUserRow:

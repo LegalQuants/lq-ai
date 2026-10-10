@@ -223,6 +223,7 @@ original bytes for any files you uploaded.
                             a third party (e.g., trial counsel, an
                             auditor) when you need to attest to how a
                             specific piece of model output was produced.
+- `tabular_bulk_ops.json` — retained reports, memos and their source metadata.
 - `skills.json`          — empty under M1; skills are filesystem-canonical
                             (see ADR 0004) and live in the deployment's
                             `skills/` directory rather than the database.
@@ -358,6 +359,25 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
         zf.writestr(
             "work_product_attribution.json",
             json.dumps([_serialize_work_product(r) for r in attrib_rows], indent=2),
+        )
+
+        # Retained reports/memos remain user work product after their source is deleted.
+        from app.models.tabular import TabularBulkOp
+        from app.schemas.tabular import TabularBulkOpResponse
+
+        bulk_ops = await session.scalars(
+            select(TabularBulkOp).where(TabularBulkOp.user_id == user.id).order_by(TabularBulkOp.id)
+        )
+        zf.writestr(
+            "tabular_bulk_ops.json",
+            json.dumps(
+                [
+                    TabularBulkOpResponse.model_validate(row).model_dump(mode="json")
+                    for row in bulk_ops
+                ],
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
 
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).

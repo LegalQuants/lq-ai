@@ -61,7 +61,7 @@ to distribute new files; the filesystem registry follows its existing reload/res
 path. Browsing the refreshed catalog does not change previously installed copies.
 An absent or empty catalog returns an empty list and setup guidance.
 
-Apply migration 0071 through the deployment's normal migration mechanism. For a
+Apply migration 0072 through the deployment's normal migration mechanism. For a
 running development stack, rebuild api, arq-worker and ingest-worker together;
 never run a host migration against the live development database. Integration
 checks use a disposable database and cover team permissions, member discovery/use,

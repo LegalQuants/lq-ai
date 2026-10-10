@@ -4241,6 +4241,10 @@ Two paths; the contributor picks one as part of the PR:
 
 #### DE-304 — Tabular Review bulk operations: redline-per-row + summarize-column (deferred from M3-C4)
 
+> **Status: design accepted (2026-10-04); implementation in PR #418, pending validation and merge.** [ADR 0040](adr/0040-tabular-bulk-operations.md) adopts selected-column report/summary skills, a dedicated operation table (migration `0071`), cost preview, visible partial failures, and owner-accessible reports/memos retained independently of their source execution. Architectural approval does not establish deployment or UI acceptance.
+
+Recipe corrections in PR #418 retain finish reasons and partial text, flag capped or unconfirmed drafts as failed items, and show server-generated memo source coverage independently of the prose. Reports render sanitized Markdown. Row drafts remain bounded at 1,500 output tokens; the single memo receives 4,000 to allow comparison and missing-evidence sections, without automatic retries. The gateway preserves the bulk-operation purpose tag for cost calibration.
+
 **Priority:** P2 (operators get most of M3-C4's value from export today; bulk operations is the "second step" beyond a static grid) · **Effort:** M (~3–4 hr code; ~1–2 hr design conversation upfront because the output pattern is architecturally novel)
 
 **Context:** The M3-C4 spec bundled two distinct deliverables — XLSX/CSV export, and bulk operations on the grid. The export half shipped at M3-C4a (PR #75); the bulk operations half is deferred here because it surfaces architectural decisions the substrate work does not anticipate. M3-C4's M3 scope is reduced to "export only" for v0.3.0; the M3 plan's effort estimate stays 8–10 hr because the M3-C4a work landed in that range.
@@ -5205,6 +5209,11 @@ Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle
 **Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 4.3 — coverage gate).**
 
 Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/ci.yml`), set — per the ratchet-don't-aspire pattern in the engineering-discipline testing survey — at *measured* coverage, not the documented targets. Measured 2026-07-25: **api 81.49%** (12242/15023 statements) — clears the documented 80% target, so the api gate enforces the target itself (`--cov-fail-under=80`), no delta. **Gateway 88.94%** (4464/5019 statements) — below the documented 90% target, so the gateway gate is a no-decrease ratchet at the measured floor (`--cov-fail-under=88`; floored to the integer because coverage.py compares the exact value, so a gate of 89 would fail today's 88.94%). DE-395 closes the gateway 88→90 gap. The uncovered mass is concentrated (per-module, same run): `app/cli.py` 0%, `app/db.py` 71%, `app/config_writer.py` 75%, `app/providers/tool/mcp.py` 75%, `app/observability.py` 76%, `app/main.py` 80%, `app/providers/tool/govinfo.py` 84%, `app/tool_egress_log.py` 84%. Plan: test the untested `cli.py` entry points and the `config_writer` error branches first (those two alone are ~105 of the 555 missed statements), re-measure, and bump the ci.yml floor to each newly measured integer (88 → 89 → 90) rather than jumping; when 90 is measured, flip the gateway row in HONEST-STATE §8 from "ratchet" to "at target" and close this DE. Raising the *targets* themselves (e.g. api beyond 80) is out of scope here.
+#### DE-405 — Offline install bundle as a release asset (`docker save` image bundle)
+
+**Priority:** P3 · **Effort:** S · **Status (2026-07-25): filed (roadmap 3.5 follow-up).**
+
+The air-gap verification harness (roadmap 3.5, `.github/workflows/airgap-verify.yml`) verifies compose local-profile boot and Tier-1 chat under its documented egress and DNS policy — but an air-gapped operator still has to assemble the image set by hand from the per-component BOM in `docs/security/air-gap-verification.md`. The k3s pattern from the air-gap OSS survey closes the gap: publish a per-release `docker save` bundle (all compose images at their pinned digests + the Ollama model directory contract documented alongside) as a release asset, generated in `release.yml` so the *shipped* artifact is the *certified* one. Scope: a release-job step producing `lq-ai-airgap-bundle-<version>.tar.zst` + a checksum/cosign attestation, and a runbook section ("load the bundle" replaces the pre-fetch checklist). Depends on the air-gap CI landing first so the bundle contents track the verified profile.
 
 #### DE-396 — OCR normalization layer violates its documented idempotence contract
 

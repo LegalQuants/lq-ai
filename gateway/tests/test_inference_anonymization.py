@@ -470,3 +470,51 @@ async def test_streaming_rehydrates_pseudonyms_across_chunk_boundaries(
     content = _collect_sse_content(response.content)
     assert content == "Hello John Smith ack."
     assert recorder.rows[0].anonymization_applied is True
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_bulk_skill_inputs_anonymized_while_source_quotes_stay_verbatim(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    client, recorder, app = http_client
+    respx.get(f"{BACKEND_URL}/api/v1/internal/organization-profile").mock(
+        return_value=httpx.Response(
+            404, json={"error": {"code": "not_found", "message": "No profile"}}
+        )
+    )
+
+    class InputAnalyzer(_StubAnalyzer):
+        def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
+            start = text.find("John Smith")
+            return [_Span("PERSON", start, start + len("John Smith"))] if start >= 0 else []
+
+    app.state.anonymizer = Anonymizer(analyzer=InputAnalyzer({}))
+    upstream = _mock_anthropic(response_text="Draft for PERSON_0001.")
+    source_text = "Source agreement signed by John Smith."
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [
+                {"role": "user", "content": source_text, "lq_ai_skip_anonymization": True}
+            ],
+            "lq_ai_purpose": "tabular_bulk_op",
+            "lq_ai_inline_skills": [
+                {
+                    "name": "bulk-report",
+                    "body": "Draft for {{client_name}}.",
+                    "inputs": {"client_name": "John Smith"},
+                    "source": "tabular-bulk-op",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["anonymization_applied"] is True
+    provider_body = json.loads(upstream.calls.last.request.content)
+    assert "John Smith" not in provider_body["system"]
+    assert "PERSON_0001" in provider_body["system"]
+    assert _anthropic_user_content(upstream.calls.last) == source_text
+    assert recorder.rows[-1].anonymization_applied is True
+    assert recorder.rows[-1].purpose == "tabular_bulk_op"

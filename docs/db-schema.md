@@ -1153,7 +1153,7 @@ CREATE TABLE user_skills (
     frontmatter_extra JSONB NOT NULL DEFAULT '{}',
     body              TEXT NOT NULL,
     slash_alias       TEXT,                                       -- 0023: chat-composer trigger alias (e.g. '/nda')
-    installation_provenance JSONB,                              -- 0071: immutable installation snapshot
+    installation_provenance JSONB,                              -- 0072: immutable installation snapshot
     forked_from       TEXT,                                       -- 0023: source skill slug when created via fork
     archived_at       TIMESTAMPTZ,                                -- soft-delete
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1193,7 +1193,7 @@ CREATE UNIQUE INDEX idx_user_skills_slash_alias_team_active
 |---|---|---|
 | `slash_alias` | 0023 | Optional chat-composer trigger alias. Must match `^/[a-z0-9-]{1,32}$` (enforced by `chk_user_skills_slash_alias_format`). Unique per active owner (partial unique indexes above). `POST` and `PATCH /user-skills` return 422 with `"slash_alias '...' is already used by another of your skills."` on collision. |
 | `forked_from` | 0023 | Slug of the source skill when this row was created via the fork button on the skill detail page. Stored as plain text — the source may be a filesystem-canonical built-in with no DB row (per ADR 0004). Set on create; read-only afterward. |
-| `installation_provenance` | 0071 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
+| `installation_provenance` | 0072 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
 
 Resolution path during prompt assembly (`/internal/skills/{slug}?user_id=…`): user-scope row for the requesting user wins on slug match; falls through to the filesystem registry otherwise. D8.1's only addition is the `teams` FK target and a middle resolution slot for team-scope rows.
 
@@ -1534,11 +1534,15 @@ Substrate for the Tabular / Multi-Document Review surface
 execution walks a `documents × columns` grid and produces a
 row-per-document by column-per-spec result, run as a LangGraph workflow
 on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
-doc: reuse the queue rather than add a second worker container). One
-table, introduced by migration `0036_tabular_executions.py`:
+doc: reuse the queue rather than add a second worker container). Two
+tables (migrations `0036_tabular_executions.py` and
+`0071_tabular_bulk_ops.py`):
 
 * `tabular_executions` — one row per execution; persists the inputs +
   status + assembled grid so the result view can re-render a week later.
+* `tabular_bulk_ops` — one row per bulk operation over a completed
+  execution (DE-304 / ADR 0040); persists the op params + per-item
+  results causally linked to the parent execution.
 
 ### `tabular_executions` (M3)
 
@@ -1616,6 +1620,38 @@ populated once status is `completed` (may carry partial output on
 
 Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
 from M3-A6's migration 0034.
+
+### `tabular_bulk_ops` (DE-304 / [ADR 0040](adr/0040-tabular-bulk-operations.md))
+
+One row per selected-column report/memo operation (migration 0071).
+
+```sql
+CREATE TABLE tabular_bulk_ops (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id UUID REFERENCES tabular_executions(id) ON DELETE SET NULL,
+    source_execution_id UUID NOT NULL,
+    provenance JSONB NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('redline_rows','summarize_column')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    params JSONB NOT NULL DEFAULT '{}'::jsonb,
+    results JSONB,
+    confirmed_cost_usd NUMERIC(10,4),
+    cost_actual_usd NUMERIC(10,4),
+    error_text TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+CREATE INDEX idx_tabular_bulk_ops_execution_recent ON tabular_bulk_ops (execution_id, created_at DESC);
+CREATE INDEX idx_tabular_bulk_ops_owner_recent ON tabular_bulk_ops (user_id, created_at);
+```
+
+`execution_id` is a nullable live link. `source_execution_id` preserves the original identity after hard deletion. `provenance` stores column/document metadata and the immutable skill snapshot (body, references, version, scope, hash, input bindings and tier floor); it does not duplicate source documents or the full grid. `params` identifies the selected column and skill.
+
+Source soft/hard deletion retains outputs; owner-scoped list/detail endpoints remain available independently. Account deletion cascades through the owner FK and removes work product, and account export includes `tabular_bulk_ops.json`. Queued work fails if its source is gone. Migration downgrade refuses while retained rows exist.
+
+`completed` includes visible per-item failures. Results use `{schema_version: 'de304-v1', items: [{document_id, document_name, status, output_text, error, cost_usd}], summary: {total_items, failed_items}}`. Per-call costs currently remain unreconciled; the aggregate is not metered spend.
 
 ---
 

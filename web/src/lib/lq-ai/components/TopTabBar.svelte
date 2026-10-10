@@ -78,10 +78,10 @@
 />
 
 <style>
-  .lq-tabbar { border-bottom: 1px solid var(--lq-border); padding: 0 var(--lq-space-4); }
+  .lq-tabbar { border-bottom: 1px solid var(--lq-border); padding: 0 var(--lq-space-4); min-width: 0; overflow-x: auto; flex-shrink: 0; }
   .lq-tabbar ul { display: flex; gap: var(--lq-space-4); margin: 0; padding: 0; list-style: none; }
   .lq-tab {
-    display: inline-flex; align-items: center; gap: var(--lq-space-1);
+    display: inline-flex; align-items: center; gap: var(--lq-space-1); white-space: nowrap;
     background: transparent; border: 0; padding: var(--lq-space-3) var(--lq-space-1);
     font-size: 14px; font-weight: 500; color: var(--lq-text-secondary);
     cursor: pointer; border-bottom: 2px solid transparent;
