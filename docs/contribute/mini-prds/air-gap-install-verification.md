@@ -89,7 +89,10 @@ docs/security/
 
 - The workflow does not test Mode 1 (cloud-provider routing). Mode 1's egress is intentional; the test would always pass trivially or always fail trivially depending on whether the allowlist is open. A separate test could verify that Mode 1's egress is **only** to the configured providers; that is a follow-on PR.
 - The workflow does not test Kubernetes / Helm-chart deployment egress. The Helm chart is itself deferred (DE-030); when the chart lands, a follow-on PR adds an equivalent test using NetworkPolicy.
-- DNS-level egress detection (catching a service that resolves an external hostname even without traffic) is out of scope. The pcap-based assertion catches the actual packet, which is the substantive property; DNS resolution without traffic is a false positive for the air-gap property.
+- DNS isolation and detection are in scope under DE-233. Preserve Docker service
+  discovery, prevent external DNS forwarding through the host, and fail the normal
+  test window on direct UDP/TCP DNS attempts outside the stack subnet, even when
+  blocked. Deliberate DNS probes belong in a separate negative-control window.
 - The test does not verify Mode 2 inference quality. Model quality is a separate testing concern; this test verifies the egress property.
 - The runbook documents the Compose-based test path; the Kubernetes path is welcome but not required for this PR.
 - The test does not assert the absence of inbound traffic; the air-gap property is about outbound traffic.
