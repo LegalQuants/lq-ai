@@ -340,21 +340,28 @@ def source_metadata(catalog_dir: Path) -> tuple[str | None, str | None, str]:
     for root in (catalog_dir, catalog_dir.parent):
         gitdir = _git_directory(root)
         if gitdir is not None:
+            # Bind identity and revision to the same selected checkout. A
+            # broken child HEAD must not inherit an unrelated parent's SHA.
+            revision = _sha_from_git_entry(root / ".git")
             parser = configparser.ConfigParser(interpolation=None)
             try:
                 parser.read_string((gitdir / "config").read_text(encoding="utf-8"))
                 repository = public_repository_identity(
                     parser.get('remote "origin"', "url", fallback=None)
                 )
-                return repository, resolve_submodule_sha(catalog_dir), "git-checkout"
+                return repository, revision, "git-checkout"
             except (OSError, UnicodeError, configparser.Error):
-                return None, resolve_submodule_sha(catalog_dir), "git-checkout"
+                return None, revision, "git-checkout"
     for root in (catalog_dir, catalog_dir.parent):
         try:
             path = root / CATALOG_METADATA_FILE
-            if path.stat().st_size > 8192:
+            if not path.is_file():
                 continue
-            manifest = json.loads(path.read_text(encoding="utf-8"))
+            with path.open("rb") as stream:
+                data = stream.read(8193)
+            if len(data) > 8192:
+                continue
+            manifest = json.loads(data.decode("utf-8"))
             if not isinstance(manifest, dict) or manifest.get("format_version") != 1:
                 continue
             repository = public_repository_identity(manifest.get("repository"))

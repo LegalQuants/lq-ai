@@ -50,6 +50,12 @@ _SKILL_FILE_NAME = "SKILL.md"
 _REFERENCE_DIR = "reference"
 _EXAMPLES_DIR = "examples"
 
+# The installer reads a third-party catalog on every request. Bound input
+# before parsing or serializing it, including alias expansion in YAML extras.
+_CATALOG_SKILL_MAX_BYTES = 1_048_576
+_CATALOG_YAML_MAX_NODES = 10_000
+_CATALOG_YAML_MAX_DEPTH = 64
+
 # Files / folders that are not part of a skill at all and must be skipped
 # even when present at the top level of the skills directory.
 _TOP_LEVEL_NON_SKILLS: Final[frozenset[str]] = frozenset(
@@ -183,7 +189,7 @@ def _walk_into(
             continue
 
         try:
-            record = _load_one(folder, source=source)
+            record = _load_one(folder, source=source, bounded=contained)
         except LoaderError as exc:
             failures.append(str(exc))
             log.warning("skill load failed: %s", exc)
@@ -239,7 +245,48 @@ def _iter_skill_folders(base: Path) -> Iterator[Path]:
         yield child
 
 
-def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
+def _validate_catalog_yaml(value: object, skill_name: str) -> None:
+    """Reject cycles and bound the expanded tree before Pydantic/JSON walks it."""
+    stack: list[tuple[object, int, bool]] = [(value, 0, False)]
+    active: set[int] = set()
+    nodes = 0
+    text_bytes = 0
+    while stack:
+        item, depth, leaving = stack.pop()
+        if leaving:
+            active.remove(id(item))
+            continue
+        nodes += 1
+        if depth > _CATALOG_YAML_MAX_DEPTH or nodes > _CATALOG_YAML_MAX_NODES:
+            raise LoaderError(skill_name, "frontmatter YAML exceeds complexity limits")
+        if isinstance(item, (bytes, set)):
+            raise LoaderError(skill_name, "binary and set YAML metadata are not supported")
+        if isinstance(item, str):
+            try:
+                text_bytes += len(item.encode("utf-8"))
+            except UnicodeError as exc:
+                raise LoaderError(skill_name, "frontmatter metadata must be valid UTF-8") from exc
+            if text_bytes > _CATALOG_SKILL_MAX_BYTES:
+                raise LoaderError(skill_name, "frontmatter YAML exceeds complexity limits")
+        if not isinstance(item, (dict, list, tuple)):
+            continue
+        if id(item) in active:
+            raise LoaderError(skill_name, "frontmatter YAML contains recursive aliases")
+        if len(item) > _CATALOG_YAML_MAX_NODES:
+            raise LoaderError(skill_name, "frontmatter YAML exceeds complexity limits")
+        active.add(id(item))
+        stack.append((item, depth, True))
+        if isinstance(item, dict):
+            for key, child in item.items():
+                stack.append((key, depth + 1, False))
+                stack.append((child, depth + 1, False))
+        else:
+            stack.extend((child, depth + 1, False) for child in item)
+
+
+def _load_one(
+    folder: Path, source: SkillSource = "built-in", *, bounded: bool = False
+) -> SkillRecord:
     """Load a single skill from its folder. Raises LoaderError on failure.
 
     ``source`` is stamped onto the returned :class:`SkillRecord` so the
@@ -249,7 +296,16 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
 
     skill_md = folder / _SKILL_FILE_NAME
     try:
-        text = skill_md.read_text(encoding="utf-8")
+        if bounded:
+            with skill_md.open("rb") as stream:
+                data = stream.read(_CATALOG_SKILL_MAX_BYTES + 1)
+            if len(data) > _CATALOG_SKILL_MAX_BYTES:
+                raise LoaderError(folder.name, "SKILL.md exceeds the 1 MiB catalog size limit")
+            text = data.decode("utf-8")
+        else:
+            text = skill_md.read_text(encoding="utf-8")
+    except UnicodeError as exc:
+        raise LoaderError(folder.name, "SKILL.md must be valid UTF-8") from exc
     except OSError as exc:
         raise LoaderError(folder.name, f"cannot read SKILL.md: {exc}") from exc
 
@@ -266,11 +322,24 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
 
     try:
         parsed = yaml.safe_load(raw_yaml)
+    except RecursionError as exc:
+        raise LoaderError(folder.name, "frontmatter YAML exceeds complexity limits") from exc
+    except (ValueError, TypeError) as exc:
+        raise LoaderError(folder.name, "frontmatter YAML contains invalid scalar values") from exc
     except yaml.YAMLError as exc:
+        if bounded:
+            mark = getattr(exc, "problem_mark", None)
+            location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+            # YAML exceptions include source excerpts. A catalog entry must
+            # not copy raw source text into container logs through load_errors.
+            raise LoaderError(folder.name, f"frontmatter YAML is invalid{location}") from exc
         raise LoaderError(
             folder.name,
             f"frontmatter YAML is invalid: {exc}",
         ) from exc
+
+    if bounded:
+        _validate_catalog_yaml(parsed, folder.name)
 
     if not isinstance(parsed, dict):
         raise LoaderError(
@@ -295,6 +364,12 @@ def _load_one(folder: Path, source: SkillSource = "built-in") -> SkillRecord:
             folder.name,
             f"frontmatter validation failed: {loc} — {msg}",
         ) from exc
+
+    if bounded:
+        try:
+            frontmatter.model_dump(mode="json")
+        except (ValueError, TypeError) as exc:
+            raise LoaderError(folder.name, "frontmatter metadata must contain JSON values") from exc
 
     reference_paths = _list_subfolder_files(folder / _REFERENCE_DIR)
     example_paths = _list_subfolder_files(folder / _EXAMPLES_DIR)
@@ -414,7 +489,7 @@ def load_skill_folder(folder: Path | str, *, source: SkillSource = "community") 
     """
 
     folder_path = Path(folder)
-    record = _load_one(folder_path, source=source)
+    record = _load_one(folder_path, source=source, bounded=True)
     if record.name != folder_path.name:
         raise LoaderError(
             folder_path.name,

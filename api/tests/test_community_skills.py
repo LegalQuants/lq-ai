@@ -29,8 +29,10 @@ initialized in the checkout (ADR 0041 §3 makes absence first-class).
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -58,7 +60,9 @@ from app.skills.community_installer import (
     resolve_catalog_dir,
     resolve_submodule_sha,
     scan_catalog,
+    source_metadata,
 )
+from app.skills.loader import LoaderError, load_skill_folder
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
 _SHA = "abc123def4567890abc123def4567890abc123de"
@@ -884,3 +888,203 @@ def test_installation_preserves_runtime_verification_and_tier_controls(tmp_path:
     assert extra["ensemble_verification"] is True
     assert extra["use_organization_profile"] is False
     assert extra["output_format"] == "report"
+
+
+def _unsafe_catalog_entry(base: Path, kind: str) -> Path:
+    blocks = {
+        "yaml": "  token: 'PRIVATE_SOURCE_SENTINEL\n",
+        "binary": "  extension: !!binary /w==\n",
+        "integer": "  extension: " + "9" * 5_000 + "\n",
+        "set": "  extension: !!set {first: null, second: null}\n",
+        "surrogate": '  extension: "\\uD800"\n',
+        "text-expansion": "  a: &text "
+        + "x" * 65_536
+        + "\n  b: ["
+        + ", ".join(["*text"] * 32)
+        + "]\n",
+        "recursive": "  extension: &loop {self: *loop}\n",
+        "alias-expansion": (
+            "  a: &a [x, x, x, x, x, x, x, x, x, x]\n"
+            "  b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\n"
+            "  c: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\n"
+            "  d: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\n"
+            "  e: [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n"
+        ),
+        "deep": "  extension: " + "[" * 70 + "x" + "]" * 70 + "\n",
+    }
+    folder = _write_skill(base, "unsafe", lq_ai_block=blocks.get(kind, ""))
+    path = folder / "SKILL.md"
+    if kind == "utf8":
+        path.write_bytes(path.read_bytes() + b"\xff")
+    elif kind == "oversized":
+        path.write_bytes(b"x" * 1_048_577)
+    return folder
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("kind", "error"),
+    [
+        ("utf8", "valid UTF-8"),
+        ("yaml", "YAML is invalid"),
+        ("binary", "not supported"),
+        ("integer", "invalid scalar values"),
+        ("set", "not supported"),
+        ("surrogate", "valid UTF-8"),
+        ("text-expansion", "complexity limits"),
+        ("recursive", "recursive aliases"),
+        ("alias-expansion", "complexity limits"),
+        ("deep", "complexity limits"),
+        ("oversized", "1 MiB"),
+    ],
+)
+def test_catalog_rejects_unsafe_input_without_losing_valid_entries(
+    tmp_path: Path, kind: str, error: str
+) -> None:
+    _write_skill(tmp_path, "safe")
+    folder = _unsafe_catalog_entry(tmp_path, kind)
+    catalog = scan_catalog(tmp_path)
+    assert [record.name for record in catalog.records] == ["safe"]
+    assert len(catalog.load_errors) == 1
+    assert error in catalog.load_errors[0]
+    assert "PRIVATE_SOURCE_SENTINEL" not in catalog.load_errors[0]
+    with pytest.raises(LoaderError, match=error):
+        load_skill_folder(folder)
+
+
+@pytest.mark.unit
+def test_catalog_allows_small_nonrecursive_yaml_aliases(tmp_path: Path) -> None:
+    _write_skill(
+        tmp_path,
+        "safe",
+        lq_ai_block="  first: &value {flag: true}\n  second: *value\n",
+    )
+    catalog = scan_catalog(tmp_path)
+    assert not catalog.load_errors
+    snapshot = installation_snapshot(catalog.records[0], catalog)
+    extra = snapshot["installed_content"]["frontmatter_extra"]
+    assert extra["first"] == extra["second"] == {"flag": True}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("head", [None, "broken", "ref: refs/heads/missing"])
+def test_repository_revision_never_falls_back_to_another_checkout(
+    tmp_path: Path, head: str | None
+) -> None:
+    catalog_dir = tmp_path / "skills"
+    catalog_dir.mkdir()
+    for root, repository, revision in (
+        (tmp_path, "https://example.test/parent.git", _SHA),
+        (catalog_dir, "https://example.test/child.git", head),
+    ):
+        gitdir = root / ".git"
+        gitdir.mkdir()
+        if revision is not None:
+            (gitdir / "HEAD").write_text(revision)
+        (gitdir / "config").write_text(f'[remote "origin"]\nurl = {repository}\n')
+    assert source_metadata(catalog_dir) == ("https://example.test/child.git", None, "git-checkout")
+
+
+@pytest.mark.unit
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFO regression needs POSIX")
+def test_portable_metadata_ignores_nonregular_files(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "lq-catalog-provenance.json")
+    assert source_metadata(tmp_path) == (None, None, "unknown")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "utf8",
+        "yaml",
+        "binary",
+        "integer",
+        "surrogate",
+        "text-expansion",
+        "recursive",
+        "alias-expansion",
+        "oversized",
+    ],
+)
+async def test_unsafe_catalog_entry_returns_422_without_installing(
+    admin_client: tuple[AsyncClient, str, User],
+    catalog_dir: Path,
+    db_session: AsyncSession,
+    kind: str,
+) -> None:
+    ac, token, _admin = admin_client
+    _unsafe_catalog_entry(catalog_dir, kind)
+    listing = await ac.get("/api/v1/admin/community-skills", headers=_auth(token))
+    assert listing.status_code == 200, listing.text
+    assert all(item["slug"] != "unsafe" for item in listing.json()["items"])
+    assert any("unsafe" in error for error in listing.json()["load_errors"])
+    detail = await ac.get("/api/v1/admin/community-skills/unsafe", headers=_auth(token))
+    assert detail.status_code == 422, detail.text
+    installed = await ac.post(
+        "/api/v1/admin/community-skills/unsafe/install",
+        headers=_auth(token),
+        json={"expected_review_hash": "0" * 64},
+    )
+    assert installed.status_code == 422, installed.text
+    assert not (await db_session.execute(select(UserSkill))).scalars().all()
+    assert (
+        not (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "community_skill.installed")
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("revocation", ["admin", "password", "deleted"])
+async def test_old_admin_token_does_not_bypass_current_account_gates(
+    admin_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+    revocation: str,
+) -> None:
+    ac, token, admin = admin_client
+    if revocation == "admin":
+        admin.is_admin = False
+    elif revocation == "password":
+        admin.must_change_password = True
+    else:
+        admin.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+    expected = 401 if revocation == "deleted" else 403
+    for path in ("", "/lease-review"):
+        result = await ac.get(f"/api/v1/admin/community-skills{path}", headers=_auth(token))
+        assert result.status_code == expected, result.text
+    result = await ac.post(
+        "/api/v1/admin/community-skills/lease-review/install",
+        headers=_auth(token),
+        json={"expected_review_hash": "0" * 64},
+    )
+    assert result.status_code == expected, result.text
+
+
+@pytest.mark.integration
+async def test_revoked_team_admin_cannot_install_a_previously_reviewed_skill(
+    admin_client: tuple[AsyncClient, str, User],
+    db_session: AsyncSession,
+) -> None:
+    ac, token, admin = admin_client
+    team = Team(id=uuid.uuid4(), name="Legal", slug="legal", created_by_user_id=admin.id)
+    db_session.add(team)
+    await db_session.flush()
+    membership = TeamMember(
+        team_id=team.id, user_id=admin.id, role="admin", added_by_user_id=admin.id
+    )
+    db_session.add(membership)
+    await db_session.commit()
+    payload = await _install_payload(ac, token, "lease-review", team.id)
+    membership.role = "member"
+    await db_session.commit()
+    result = await ac.post(
+        "/api/v1/admin/community-skills/lease-review/install", headers=_auth(token), json=payload
+    )
+    assert result.status_code == 404, result.text
+    assert not (await db_session.execute(select(UserSkill))).scalars().all()

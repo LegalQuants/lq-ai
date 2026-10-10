@@ -24,7 +24,9 @@ Installed copies never follow catalog updates automatically.
 ## Source metadata in a checkout or container
 
 The source repository is read from this checkout's Git origin and stripped of
-credentials/query parameters before display or audit. A Git HEAD is recorded as a
+credentials/query parameters before display or audit. Identity and revision come
+from the same checkout; a broken HEAD stays unknown rather than inheriting a
+parent repository revision. A Git HEAD is recorded as a
 source revision, never asserted to verify the installed files. Local modifications
 are identified by the installed-content hash.
 
@@ -59,9 +61,20 @@ to distribute new files; the filesystem registry follows its existing reload/res
 path. Browsing the refreshed catalog does not change previously installed copies.
 An absent or empty catalog returns an empty list and setup guidance.
 
-Apply migration 0070 through the deployment's normal migration mechanism. For a
+Apply migration 0071 through the deployment's normal migration mechanism. For a
 running development stack, rebuild api, arq-worker and ingest-worker together;
 never run a host migration against the live development database. Integration
 checks use a disposable database and cover team permissions, member discovery/use,
 personal precedence, stale-review conflicts and immutable provenance. Security
 review remains required before merge.
+
+## Catalog input limits
+
+The installer rejects SKILL.md files larger than 1 MiB before parsing. Files must
+use UTF-8; frontmatter must be nonrecursive, no deeper than 64 levels, and contain
+at most 10,000 nodes and 1 MiB of text after expanding YAML aliases. Binary and
+set-valued YAML metadata are rejected; installed metadata must serialize as JSON.
+Small nonrecursive aliases are
+supported. Malformed entries appear in catalog errors while valid entries remain
+available. Parser diagnostics report location without copying source text into
+logs. Portable provenance manifests must be regular files of at most 8 KiB.
