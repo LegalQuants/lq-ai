@@ -2068,6 +2068,224 @@ components:
       - query
       title: ColumnSpec
       type: object
+    CommunityCatalogResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CommunitySkillSummary'
+          title: Items
+          type: array
+        load_errors:
+          items:
+            type: string
+          title: Load Errors
+          type: array
+        source:
+          $ref: '#/components/schemas/CommunityCatalogSource'
+      required:
+      - items
+      - source
+      title: CommunityCatalogResponse
+      type: object
+    CommunityCatalogSource:
+      properties:
+        metadata_source:
+          default: unknown
+          title: Metadata Source
+          type: string
+        operator_hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operator Hint
+        path:
+          title: Path
+          type: string
+        repository:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Repository
+        sha:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sha
+        submodule_present:
+          title: Submodule Present
+          type: boolean
+      required:
+      - path
+      - submodule_present
+      title: CommunityCatalogSource
+      type: object
+    CommunitySkillDetail:
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          title: Description
+          type: string
+        install_ref:
+          title: Install Ref
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        installed_for_me:
+          title: Installed For Me
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        provenance:
+          additionalProperties: true
+          title: Provenance
+          type: object
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - installed_for_me
+      - body_preview
+      - content_yaml
+      - content_md
+      - install_ref
+      - provenance
+      title: CommunitySkillDetail
+      type: object
+    CommunitySkillInstall:
+      additionalProperties: false
+      properties:
+        expected_review_hash:
+          pattern: ^[0-9a-f]{64}$
+          title: Expected Review Hash
+          type: string
+        owner_team_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+        scope:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      required:
+      - expected_review_hash
+      title: CommunitySkillInstall
+      type: object
+    CommunitySkillSummary:
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        description:
+          title: Description
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        installed_for_me:
+          title: Installed For Me
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - installed_for_me
+      - body_preview
+      title: CommunitySkillSummary
+      type: object
     CurrentTierResponse:
       description: '``GET /inference/current-tier`` response.
 
@@ -7062,6 +7280,12 @@ components:
           format: uuid
           title: Id
           type: string
+        installation_provenance:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Installation Provenance
         owner_team_id:
           anyOf:
           - format: uuid
@@ -7792,6 +8016,128 @@ paths:
       summary: Report whether the first-run bootstrap admin password is still active.
       tags:
       - admin
+  /api/v1/admin/community-skills:
+    get:
+      operationId: list_community_skills_api_v1_admin_community_skills_get
+      parameters:
+      - in: query
+        name: scope
+        required: false
+        schema:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      - in: query
+        name: owner_team_id
+        required: false
+        schema:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityCatalogResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Community Skills
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}:
+    get:
+      operationId: get_community_skill_api_v1_admin_community_skills__slug__get
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      - in: query
+        name: scope
+        required: false
+        schema:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      - in: query
+        name: owner_team_id
+        required: false
+        schema:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunitySkillDetail'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Community Skill
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}/install:
+    post:
+      operationId: install_community_skill_api_v1_admin_community_skills__slug__install_post
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommunitySkillInstall'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSkillResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Install Community Skill
+      tags:
+      - admin-community-skills
   /api/v1/admin/config:
     get:
       description: Return the gateway's sanitized current config (D0.5).
@@ -13919,13 +14265,12 @@ paths:
     get:
       description: "Return summaries for skills visible to the caller.\n\nMerging\
         \ semantics (per ADR 0012):\n\n* ``scope=all`` (default) — caller's user-scope\
-        \ rows first, then\n  built-ins. Dedup on slug: a user shadow hides the built-in\
-        \ of\n  the same slug from this listing.\n* ``scope=user`` — caller's user-scope\
-        \ rows only.\n* ``scope=builtin`` — filesystem built-ins only (no shadow merge).\n\
-        * ``scope=team`` — empty list until D8.1 (team scope deferred).\n\nThe ``tag``\
-        \ filter applies to both layers; a built-in matches if\nits ``lq_ai.tags``\
-        \ contains the tag, a user shadow matches if its\n``tags`` column contains\
-        \ it."
+        \ rows, newest eligible\n  team rows, then built-ins. Dedup matches single-skill\
+        \ resolution.\n* ``scope=user`` — caller's user-scope rows only.\n* ``scope=builtin``\
+        \ — filesystem built-ins only (no shadow merge).\n* ``scope=team`` — skills\
+        \ from teams the caller belongs to.\n\nThe ``tag`` filter applies after personal/team\
+        \ precedence; a built-in matches if\nits ``lq_ai.tags`` contains the tag,\
+        \ a user shadow matches if its\n``tags`` column contains it."
       operationId: list_skills_api_v1_skills_get
       parameters:
       - in: query
