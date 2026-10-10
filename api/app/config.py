@@ -475,6 +475,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_TOOL_MAX_EGRESS_TIER", "TOOL_MAX_EGRESS_TIER"),
     )
 
+    @field_validator("tool_max_egress_tier", mode="before")
+    @classmethod
+    def empty_tool_egress_ceiling(cls, value: object) -> object:
+        # Compose forwards an unset optional value as an empty string.
+        # Only that blank means unset; invalid nonblank values still fail.
+        return None if value == "" else value
+
     # Optional skill data/tools. Bundled execution is confined to a separately
     # configured local broker; no command or host-process fallback exists.
     skill_workspaces_enabled: bool = Field(

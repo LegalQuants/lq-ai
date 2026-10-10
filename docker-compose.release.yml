@@ -235,6 +235,8 @@ services:
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Shared with arq-worker so chat and autonomous calls apply one default.
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
       JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -337,6 +339,7 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}

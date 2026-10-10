@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterator
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import AsyncMock
 
 import pytest
@@ -13,7 +13,7 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.autonomous.enums import ToolIntent
-from app.autonomous.guard import _governed_external_dispatch, guarded_tool_call
+from app.autonomous.guard import ToolResult, _governed_external_dispatch, guarded_tool_call
 from app.chat.tool_loop import execute_tool
 from app.chat.tool_schemas import ToolSpec
 from app.config import get_settings
@@ -29,6 +29,8 @@ from app.research.service import reset_provider_cache
 from app.tools.governance import _reset_provider_tier_cache_for_tests
 
 pytestmark = pytest.mark.integration
+
+ExternalToolKind = Literal["mcp", "research", "authority"]
 
 
 class Gateway:
@@ -130,7 +132,7 @@ async def context(
     return user, project, chat, session
 
 
-def tool(kind: str) -> tuple[ToolSpec, ToolIntent, dict[str, Any]]:
+def tool(kind: ExternalToolKind) -> tuple[ToolSpec, ToolIntent, dict[str, Any]]:
     if kind == "mcp":
         provider, op, intent, args = (
             "acme-mcp",
@@ -180,7 +182,7 @@ async def dispatch(
     session: AutonomousSession,
     gw: Gateway,
     caller: str,
-    kind: str,
+    kind: ExternalToolKind,
 ) -> Any:
     spec, intent, params = tool(kind)
     if caller == "chat":
@@ -217,7 +219,7 @@ async def test_callers_apply_and_forward_ceiling(
     monkeypatch: pytest.MonkeyPatch,
     gateway: Gateway,
     caller: str,
-    kind: str,
+    kind: ExternalToolKind,
     operator: int | None,
     project_ceiling: int | None,
     expected: int | None,
@@ -231,6 +233,7 @@ async def test_callers_apply_and_forward_ceiling(
     if allowed:
         await dispatch(db_session, user, chat, session, gateway, caller, kind)
         gateway.call_tool.assert_awaited_once()
+        assert gateway.call_tool.await_args is not None
         assert gateway.call_tool.await_args.kwargs["max_allowed_tier"] == expected
     else:
         with pytest.raises(ToolTierRefused):
@@ -259,7 +262,7 @@ async def test_governed_scope_composes_with_operator_and_project(
     db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
     gateway: Gateway,
-    kind: str,
+    kind: ExternalToolKind,
     scope: int,
     expected: int,
     source: str,
@@ -286,6 +289,7 @@ async def test_governed_scope_composes_with_operator_and_project(
     if allowed:
         await invoke()
         gateway.call_tool.assert_awaited_once()
+        assert gateway.call_tool.await_args is not None
         assert gateway.call_tool.await_args.kwargs["max_allowed_tier"] == expected
     else:
         with pytest.raises(ToolTierRefused):
@@ -340,7 +344,9 @@ async def test_actual_sql_failure_commits_refusal_from_caller(
                 assert row.outcome == "refused_tier"
                 assert row.ceiling_source == "unresolved"
                 assert row.max_allowed_tier is None
-                assert (await observer.get(Chat, chat_id)).title == "Outer transaction retained"
+                observed_chat = await observer.get(Chat, chat_id)
+                assert observed_chat is not None
+                assert observed_chat.title == "Outer transaction retained"
             assert "sensitive_policy_sentinel" not in caplog.text
         finally:
             await db.rollback()
@@ -452,15 +458,15 @@ async def test_orchestrated_guard_preserves_composed_ceiling(
     class AdmittedEffect:
         # Durable store admission/settlement has an independent integration
         # suite. Leave the real scope guard and dispatch policy in this test.
-        async def admit(self, intent, params):
+        async def admit(self, intent: ToolIntent, params: dict[str, Any]) -> tuple[Decimal, None]:
             return Decimal("0"), None
 
-        async def settle(self, db, result):
+        async def settle(self, db: AsyncSession, result: ToolResult) -> None:
             pass
 
     _, intent, params = tool("authority")
 
-    async def invoke():
+    async def invoke() -> ToolResult:
         return await guarded_tool_call(
             session,
             intent,
@@ -486,6 +492,7 @@ async def test_orchestrated_guard_preserves_composed_ceiling(
     else:
         await invoke()
         gateway.call_tool.assert_awaited_once()
+        assert gateway.call_tool.await_args is not None
         assert gateway.call_tool.await_args.kwargs["max_allowed_tier"] == expected
         assert (
             gateway.call_tool.await_args.kwargs["configuration_revision"]

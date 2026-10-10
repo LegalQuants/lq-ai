@@ -22,7 +22,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -1330,9 +1330,11 @@ async def test_approve_enforces_proposal_and_current_ceiling(
         db_session.add(project)
         await db_session.flush()
         chat = await db_session.get(Chat, chat_id)
+        assert chat is not None
         chat.project_id = project.id
         await db_session.flush()
         pending = await db_session.get(ChatPendingToolCall, pending_id)
+        assert pending is not None
         pending.max_egress_tier = await _resolve_proposal_ceiling(db_session, chat_id=chat_id)
         assert pending.max_egress_tier == original
         await db_session.commit()
@@ -1372,6 +1374,7 @@ async def test_approve_enforces_proposal_and_current_ceiling(
             assert replay.status_code == 409
         if allowed:
             call.assert_awaited_once()
+            assert call.await_args is not None
             assert call.await_args.kwargs["max_allowed_tier"] == expected
         else:
             call.assert_not_awaited()
@@ -1405,7 +1408,7 @@ async def test_approve_sql_policy_error_refuses_and_audits(
     scalar = db_session.scalar
     failed = False
 
-    async def fail_policy_once(statement, *args, **kwargs):
+    async def fail_policy_once(statement: Any, *args: Any, **kwargs: Any) -> Any:
         nonlocal failed
         if not failed and "chats.project_id" in str(statement):
             failed = True

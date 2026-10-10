@@ -20,6 +20,7 @@ Coverage:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable, Iterator
 from decimal import Decimal
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -44,13 +45,15 @@ from app.tools.governance import (
 )
 from tests.test_tool_call_log_model import _make_user
 
+OperatorCeiling = Callable[[int | None], None]
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def operator_ceiling(monkeypatch):
+def operator_ceiling(monkeypatch: pytest.MonkeyPatch) -> Iterator[OperatorCeiling]:
     """Set/clear LQ_AI_TOOL_MAX_EGRESS_TIER for one test, resetting the cache."""
 
     def _set(value: int | None) -> None:
@@ -129,13 +132,13 @@ async def _governed(
 
 
 @pytest.mark.unit
-def test_setting_parses_valid_value(monkeypatch) -> None:
+def test_setting_parses_valid_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LQ_AI_TOOL_MAX_EGRESS_TIER", "2")
     assert Settings(_env_file=None).tool_max_egress_tier == 2  # type: ignore[call-arg]
 
 
 @pytest.mark.unit
-def test_setting_defaults_to_none(monkeypatch) -> None:
+def test_setting_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LQ_AI_TOOL_MAX_EGRESS_TIER", raising=False)
     monkeypatch.delenv("TOOL_MAX_EGRESS_TIER", raising=False)
     assert Settings(_env_file=None).tool_max_egress_tier is None  # type: ignore[call-arg]
@@ -143,14 +146,14 @@ def test_setting_defaults_to_none(monkeypatch) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("bad", ["0", "6", "x", "-1"])
-def test_setting_rejects_out_of_range(monkeypatch, bad: str) -> None:
+def test_setting_rejects_out_of_range(monkeypatch: pytest.MonkeyPatch, bad: str) -> None:
     monkeypatch.setenv("LQ_AI_TOOL_MAX_EGRESS_TIER", bad)
     with pytest.raises(PydanticValidationError):
         Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 @pytest.mark.unit
-def test_setting_bare_alias_still_binds(monkeypatch) -> None:
+def test_setting_bare_alias_still_binds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LQ_AI_TOOL_MAX_EGRESS_TIER", raising=False)
     monkeypatch.setenv("TOOL_MAX_EGRESS_TIER", "4")
     assert Settings(_env_file=None).tool_max_egress_tier == 4  # type: ignore[call-arg]
@@ -162,25 +165,33 @@ def test_setting_bare_alias_still_binds(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_resolve_nothing_set(db_session: AsyncSession, operator_ceiling) -> None:
+async def test_resolve_nothing_set(
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
+) -> None:
     assert await resolve_tool_egress_ceiling(db_session, project_id=None) == (None, None)
 
 
 @pytest.mark.asyncio
-async def test_resolve_operator_default_only(db_session: AsyncSession, operator_ceiling) -> None:
+async def test_resolve_operator_default_only(
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
+) -> None:
     operator_ceiling(2)
     assert await resolve_tool_egress_ceiling(db_session, project_id=None) == (2, "operator")
 
 
 @pytest.mark.asyncio
-async def test_resolve_project_only(db_session: AsyncSession, operator_ceiling) -> None:
+async def test_resolve_project_only(
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
+) -> None:
     user = await _add_user(db_session)
     project = await _make_project(db_session, user, max_egress_tier=3)
     assert await resolve_tool_egress_ceiling(db_session, project_id=project.id) == (3, "project")
 
 
 @pytest.mark.asyncio
-async def test_resolve_scope_only(db_session: AsyncSession, operator_ceiling) -> None:
+async def test_resolve_scope_only(
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
+) -> None:
     assert await resolve_tool_egress_ceiling(db_session, project_id=None, scope_ceiling=4) == (
         4,
         "execution_scope",
@@ -189,7 +200,7 @@ async def test_resolve_scope_only(db_session: AsyncSession, operator_ceiling) ->
 
 @pytest.mark.asyncio
 async def test_resolve_min_wins_and_reports_source(
-    db_session: AsyncSession, operator_ceiling
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
 ) -> None:
     operator_ceiling(4)
     user = await _add_user(db_session)
@@ -201,7 +212,9 @@ async def test_resolve_min_wins_and_reports_source(
 
 
 @pytest.mark.asyncio
-async def test_resolve_operator_can_be_binding(db_session: AsyncSession, operator_ceiling) -> None:
+async def test_resolve_operator_can_be_binding(
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
+) -> None:
     operator_ceiling(1)
     user = await _add_user(db_session)
     project = await _make_project(db_session, user, max_egress_tier=5)
@@ -212,7 +225,7 @@ async def test_resolve_operator_can_be_binding(db_session: AsyncSession, operato
 
 @pytest.mark.asyncio
 async def test_resolve_project_null_means_no_project_ceiling(
-    db_session: AsyncSession, operator_ceiling
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
 ) -> None:
     operator_ceiling(3)
     user = await _add_user(db_session)
@@ -222,7 +235,7 @@ async def test_resolve_project_null_means_no_project_ceiling(
 
 @pytest.mark.asyncio
 async def test_resolve_dangling_project_id_is_not_unresolved(
-    db_session: AsyncSession, operator_ceiling
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
 ) -> None:
     # A non-null project_id with no matching row is "no Project", not a
     # lookup failure — only the operator/scope values apply.
@@ -233,7 +246,7 @@ async def test_resolve_dangling_project_id_is_not_unresolved(
 
 
 @pytest.mark.asyncio
-async def test_resolve_project_lookup_error_fail_closed(operator_ceiling) -> None:
+async def test_resolve_project_lookup_error_fail_closed(operator_ceiling: OperatorCeiling) -> None:
     broken = AsyncMock()
     broken.begin_nested = MagicMock(return_value=AsyncMock())
     broken.scalar.side_effect = RuntimeError("db gone")
@@ -246,7 +259,7 @@ async def test_resolve_project_lookup_error_fail_closed(operator_ceiling) -> Non
 
 @pytest.mark.asyncio
 async def test_resolve_scope_zero_resolves_for_api_refusal(
-    db_session: AsyncSession, operator_ceiling
+    db_session: AsyncSession, operator_ceiling: OperatorCeiling
 ) -> None:
     # Scope 0 ("no egress") must resolve here so the API tier check refuses
     # before dispatch; governed_tool_invocation never forwards 0 to the gateway.
@@ -415,7 +428,7 @@ def test_project_create_defaults_ceiling_none() -> None:
 @pytest.mark.parametrize("bad", [0, 6, -1])
 def test_project_create_rejects_out_of_range(bad: int) -> None:
     with pytest.raises(PydanticValidationError):
-        ProjectCreateRequest(name="M", max_egress_tier=bad)
+        ProjectCreateRequest.model_validate({"name": "M", "max_egress_tier": bad})
 
 
 @pytest.mark.unit
@@ -430,7 +443,7 @@ def test_project_update_accepts_and_clears_ceiling() -> None:
 @pytest.mark.parametrize("bad", [0, 6])
 def test_project_update_rejects_out_of_range(bad: int) -> None:
     with pytest.raises(PydanticValidationError):
-        ProjectUpdateRequest(max_egress_tier=bad)
+        ProjectUpdateRequest.model_validate({"max_egress_tier": bad})
 
 
 # ---------------------------------------------------------------------------
