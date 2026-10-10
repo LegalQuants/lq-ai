@@ -700,6 +700,8 @@ export interface UserSkill {
 	 * spawned the row. Null for from-scratch creates.
 	 */
 	forked_from: string | null;
+	/** Original community installation record; read-only even after edits. */
+	installation_provenance?: Record<string, unknown> | null;
 	archived_at: string | null;
 	created_at: string;
 	updated_at: string;

@@ -133,6 +133,7 @@ class UserSkillResponse(BaseModel):
     body: str
     slash_alias: str | None = None
     forked_from: str | None = None
+    installation_provenance: dict[str, Any] | None = None
     archived_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -285,6 +286,7 @@ def _to_response(row: UserSkill) -> UserSkillResponse:
         body=row.body,
         slash_alias=row.slash_alias,
         forked_from=row.forked_from,
+        installation_provenance=row.installation_provenance,
         archived_at=row.archived_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
