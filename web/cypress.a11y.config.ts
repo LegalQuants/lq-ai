@@ -9,6 +9,7 @@ import {
 	type Baseline,
 	type Finding
 } from './cypress/support/a11y-gate';
+import { assertBaselineSource, assertCaptureSource } from './cypress/support/a11y-source';
 import { stateIds } from './cypress/support/a11y-states';
 
 const baselinePath = 'cypress/fixtures/a11y-baseline.json';
@@ -30,6 +31,8 @@ export default defineConfig({
 				readFileSync('node_modules/axe-core/package.json', 'utf8')
 			).version;
 			const sourceSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+			const measuredSource = process.env.A11Y_BASELINE_SOURCE_SHA ?? sourceSha;
+			if (capture) assertCaptureSource(measuredSource, sourceSha);
 			let baseline: Baseline | undefined;
 			if (!capture) {
 				baseline = validateBaseline(JSON.parse(readFileSync(baselinePath, 'utf8')));
@@ -45,16 +48,19 @@ export default defineConfig({
 						throw new Error('Cannot establish baseline comparison base');
 					execFileSync('git', ['cat-file', '-e', `${base}^{commit}`]);
 					const path = 'web/' + baselinePath;
-					const existing = execFileSync('git', ['ls-tree', '--name-only', base, '--', path], {
-						encoding: 'utf8'
-					}).trim();
+					const existing = execFileSync(
+						'git',
+						['ls-tree', '--full-tree', '--name-only', base, '--', path],
+						{
+							encoding: 'utf8'
+						}
+					).trim();
 					if (existing)
 						validateBaselineUpdate(
 							JSON.parse(execFileSync('git', ['show', `${base}:${path}`], { encoding: 'utf8' })),
 							baseline
 						);
-					else if (baseline.sourceSha !== base)
-						throw new Error('Initial baseline must be measured from the PR base');
+					else assertBaselineSource(baseline.sourceSha, base);
 				}
 			}
 			const audits: Array<{ state: string; findings: Finding[]; incompleteRules: string[] }> = [];
@@ -100,7 +106,7 @@ export default defineConfig({
 						throw new Error('Capture failed; critical/unknown findings cannot be accepted');
 					const candidate = validateBaseline({
 						schemaVersion: 1,
-						sourceSha,
+						sourceSha: measuredSource,
 						axeVersion,
 						states: stateIds,
 						recordedAt: new Date().toISOString(),

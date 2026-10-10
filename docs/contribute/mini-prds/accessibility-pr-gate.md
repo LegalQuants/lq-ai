@@ -16,7 +16,7 @@ The check appears on every PR, avoiding path-filtered required checks that remai
 
 Each fingerprint retains state, viewport/theme, axe rule, the complete target path (including frame/shadow paths), impact, and a capped count. A new element cannot reuse another element's exception; losing one old violation cannot offset a new one. Critical and unknown-impact findings always fail. New serious, moderate and minor findings fail. Malformed/duplicate entries and incomplete/duplicate state inventories fail.
 
-The initial measurement comes from main at `7ac94dd1a581b745912d100b19ad23d822de6222` with axe-core 4.14.0: **248 exact serious fingerprints across 28 state variants**. No critical findings were observed. This replaces the July route/rule observations rather than treating them as current evidence. Metadata records owner, reason, source SHA and capture date.
+The initial measurement comes from main at `0f5615227daa81e47168f88b03f96c29e5d6b92b` with axe-core 4.14.0: **230 exact serious fingerprints across 28 state variants**. No critical findings were observed. This replaces the July route/rule observations rather than treating them as current evidence. Metadata records owner, reason, source SHA and capture date.
 
 Subsequent exceptions may only shrink relative to the PR base. Fixed entries are flagged as stale and must be removed or have their count reduced. The job rejects new exceptions/count growth and scanner/matrix changes. An intentional policy change or scanner upgrade needs its own maintainer-reviewed decision and update to these controls, not automatic regeneration to green.
 
@@ -35,12 +35,16 @@ npm run test:frontend -- --run
 
 `cy:a11y:proof` injects a new unnamed button on the login page and succeeds only when that specific finding makes the integrated scanner fail. It must not treat an arbitrary Cypress failure as proof. The normal gate and negative-proof reports are separate.
 
-For an approved local measurement on a clean current-main product tree, `npm run cy:a11y:baseline` writes `cypress/results/a11y-baseline.candidate.json`. Capture is refused in CI. Review the candidate and source identity before replacing `cypress/fixtures/a11y-baseline.json`; do not baseline defects introduced by the implementation under review. After initial adoption, automatic additions will be rejected.
+For an approved local measurement on a clean current-main product tree, `A11Y_BASELINE_SOURCE_SHA=<current-main-sha> npm run cy:a11y:baseline` writes `cypress/results/a11y-baseline.candidate.json`. Capture is refused in CI. Review the candidate and source identity before replacing `cypress/fixtures/a11y-baseline.json`; do not baseline defects introduced by the implementation under review. After initial adoption, automatic additions will be rejected.
 
 Dependency justification: axe-core supplies the established WCAG rule engine, which we cannot reasonably recreate; cypress-axe injects that engine into the existing Cypress environment. Both are exact dev dependency pins, leaving production application code unchanged. Their upstream licenses are MPL-2.0 and MIT respectively; no third-party source is vendored.
 
 ## Honest acceptance state
 
-Local evidence: production build passed with the bounded heap; standalone TypeScript and ESLint checks passed; 25 comparison tests passed; 28 browser variants passed; an injected critical unnamed-button finding failed the integrated job as intended. The full frontend suite passed: 847 tests across 87 files.
+Local evidence: production build passed with the bounded heap; standalone TypeScript and ESLint checks passed; 25 comparison tests passed; 28 browser variants passed; an injected critical unnamed-button finding failed the integrated job as intended. The full frontend suite passed: 864 tests across 88 files.
 
-The branch workflow has not yet run on GitHub and its required-check status has not been changed. Fresh Linux/fork CI evidence remains a prerequisite to claiming that enforcement is active. GitHub-verified cryptographic signatures and DCO trailers are separate requirements for the replacement commits.
+PR #712 reached its first GitHub run: the production build passed, but the initial baseline guard stopped the scanner because main had gained shared-navigation changes after the measurement. The baseline was remeasured on the refreshed base; the guard now tolerates only unrelated base commits with identical production frontend inputs and adopted ancestry. Required-check status has not been changed. Fresh Linux/fork CI evidence remains a prerequisite to claiming that enforcement is active. GitHub-verified cryptographic signatures and DCO trailers are separate requirements for the replacement commits.
+
+## Baseline source provenance
+
+The first baseline must name a commit in the PR base history. Its production frontend inputs must match the current base: source/assets/config, frontend/build dependency lock entries (excluding only the standalone axe additions), and production build commands. Docs/backend/unit-test-only commits do not invalidate identical UI inputs. The checks resolve paths from the repository root even when Cypress runs in web/. Local capture checks the selected source against the product tree being measured. A changed component, asset, production dependency, build command or scanner still requires deliberate fresh evidence; this is not an automatic baseline expansion.
