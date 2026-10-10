@@ -3440,6 +3440,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Acceptance criteria:** axe-core CI gate is green on `main`; gate fails PRs with new WCAG 2.1 AA violations; third-party audit at M2 produces a public report with all critical findings remediated or documented.
 
+**Implementation status (replacement of #437):** The first automated slice checks seven named LQ.AI states across desktop/phone and explicit light/dark variants with axe A/AA rules. It is wired as a dedicated frontend-only pull-request job with exact current-main noncritical exceptions; new findings at every severity fail and critical/unknown-impact findings cannot be exempted. Local production-build, comparison and browser evidence is recorded in [the credited implementation plan](contribute/mini-prds/accessibility-pr-gate.md). GitHub workflow execution and required-check activation are pending. Broader route coverage and the manual/third-party audit remain outstanding; this is partial delivery, not a WCAG conformance claim. Credit: @SaifAlYounan, PR #437 / issue #386.
+
 #### DE-233 — Air-gap install verification CI test
 
 **Priority:** P1 · **Effort:** S

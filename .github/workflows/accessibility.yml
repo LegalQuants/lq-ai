@@ -1,0 +1,49 @@
+name: Accessibility
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: accessibility-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  accessibility:
+    name: Accessibility (axe A/AA regressions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked test dependencies
+        run: npm ci
+      - name: Typecheck the standalone scanner
+        run: npx tsc --project tsconfig.a11y.json
+      - name: Build the production frontend (no API or model stack)
+        env:
+          PUBLIC_LQ_AI_API_BASE_URL: ""
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npm run build
+      - name: Check exact accessibility exceptions
+        run: npm run cy:a11y
+      - name: Prove a new violation fails
+        run: npm run cy:a11y:proof
+      - name: Upload synthetic accessibility results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: accessibility-results
+          path: web/cypress/results/
+          if-no-files-found: error
+          retention-days: 14
