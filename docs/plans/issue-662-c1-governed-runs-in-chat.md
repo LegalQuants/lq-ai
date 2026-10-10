@@ -587,14 +587,19 @@ one ADR, and #684, which closes a refused ownership check in `retrieve_chunks` w
 branch adds the bounded document read, and the rebase conflicted there. It is resolved
 as main's audited check followed by the bounded read, and a test holds that order
 (`api/tests/autonomous/test_bounded_read_ownership_audit.py`): with the check left
-unaudited, three of its four cases fail. The knowledge-base search this branch adds
+unaudited, three of its five cases fail. The maintainer then ruled that the bounded
+read is refused outside a governed run, as the knowledge-base search is. The
+chokepoint now refuses it there before the ownership check, and the whole-file read
+is unchanged; `test_document_runs.py` and the last case of that file hold both.
+The knowledge-base search this branch adds
 does not go through that check. It leaves out a knowledge base that is no longer the
 owner's, archived or detached, counts it, and writes no such audit row;
 `docs/security/audit-logging.md` now says so.
 
 The suites were run as CI runs them. After the second rebase the whole API suite
 passed with its coverage gate (3,928 passed, 17 skipped; 82.77% against
-80%). `ruff` was clean, and so was
+80%), and passed again on the commit that refuses the bounded read outside a run
+(3,930 passed, 17 skipped; 82.76%). `ruff` was clean, and so was
 `mypy app tests ../script_runner`, which is CI's command and checks the tests too; an
 earlier pass had run `mypy app` alone and missed one error in a test helper, since
 fixed. The gateway suite passed with its gate (1,074 passed, 3 skipped; 90.49% against

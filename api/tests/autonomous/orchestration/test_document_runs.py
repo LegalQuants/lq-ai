@@ -37,9 +37,13 @@ from tests.autonomous.orchestration.model_harness import (
     tool_call,
 )
 
+from app.autonomous import guard
+from app.autonomous.enums import ToolIntent
+from app.autonomous.guard import guarded_tool_call
 from app.autonomous.orchestration.effects import GuardedEffects
 from app.errors import ToolNotGranted
 from app.models.audit import AuditLog
+from app.models.autonomous import AutonomousSession
 from app.models.chat import MessageCitation
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.document import Document
@@ -588,6 +592,66 @@ async def test_the_read_boundary_refuses_anything_outside_the_selection(
     shown = json.dumps(api.gateway.tool_results)
     assert "document_not_selected" in shown
     assert "Unselected matter text." not in shown and "Loose text." not in shown
+
+
+async def test_a_bounded_read_is_served_only_as_a_step_of_the_run(
+    documents: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    api = documents
+    chat_id, msa, dpa = await setup(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[msa, dpa])
+    root = value["root_id"]
+    assert await job(api, root) == "completed"
+    planned = await read(api, root)
+    await approve(api, planned)
+    assert await job(api, root) == "waiting_children"
+    child = planned["tree"]["plan"]["children"][0]["dispatch_id"]
+    served: list[str] = []
+    read_text = guard._handle_read_document_text
+
+    async def counting(file_id: Any, **kwargs: Any) -> Any:
+        served.append(str(file_id))
+        return await read_text(file_id, **kwargs)
+
+    monkeypatch.setattr(guard, "_handle_read_document_text", counting)
+    effects: GuardedEffects = api.runtime.for_profile(PROFILE).effects()
+    store = effects.store
+    claim = await store.claim(UUID(root), UUID(child), worker_id=uuid4(), seconds=60)
+    try:
+        await store.phase(claim, Phase.analysis)
+        scope = (await store.execution_view(claim)).scope
+        # The owner's file, selected for this run: the ownership check and the
+        # boundary both pass it. What the two calls lack is the run's own step.
+        params = {"file_id": msa, "offset": 0, "max_chars": 1000}
+        async with api.env.factory.begin() as db:
+            session = await db.get(AutonomousSession, UUID(child))
+            assert session is not None
+            with pytest.raises(ToolNotGranted, match="requires a governed run"):
+                await guarded_tool_call(
+                    session, ToolIntent.retrieve_chunks, params, db, SimpleNamespace()
+                )
+            with pytest.raises(ToolNotGranted, match="requires a governed run"):
+                await guarded_tool_call(
+                    session,
+                    ToolIntent.retrieve_chunks,
+                    params,
+                    db,
+                    SimpleNamespace(),
+                    execution_scope=scope,
+                )
+        assert not served
+        result = await effects.read_document(
+            claim,
+            effect_key="probe:read:step",
+            phase=Phase.analysis,
+            file_id=UUID(msa),
+            offset=0,
+            max_chars=1000,
+        )
+    finally:
+        await store.release_claim(claim)
+    assert result.data["text"].startswith("MASTER SERVICES AGREEMENT")
+    assert served == [msa]
 
 
 @pytest.mark.parametrize("change", ["detach", "delete", "archive_project", "opt_out"])

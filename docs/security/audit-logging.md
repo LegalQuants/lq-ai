@@ -56,17 +56,20 @@ and disappear on rollback. An audit-write failure remains an
 error and cannot grant access. These rows are not an independent durable
 incident log, and #494 does not add alerts or alter orchestration-scope refusals.
 
-ADR 0038 adds two ways to call `retrieve_chunks` (D4 and D5). The bounded
-read of one file's text sits behind the same file predicate as the
-whole-file read, and a refusal there writes the same row. In a governed run,
-the orchestration boundary checks the file against the run's selection
-before that predicate is reached, and its refusal is a scope refusal. A
-session that is not a governed run can request the bounded read too, and
-reaches it on the file predicate alone, as it does the whole-file read.
+ADR 0038 adds two ways to call `retrieve_chunks` (D4 and D5): a bounded read
+of one file's text, and a keyword search of the knowledge bases an approved
+plan lists. Both are refused outside a governed run, before any ownership
+predicate is reached, and the chokepoint writes no audit row of its own for
+that refusal. The whole-file read is unchanged: a session that is not a
+governed run still reaches it on the file predicate.
 
-The keyword search of the knowledge bases an approved plan lists is refused
-outside a governed run. Inside one it does not refuse a knowledge base that
-has lapsed. One that is no longer the owner's, is archived, or is no longer
+In a governed run, the orchestration boundary checks the file of a bounded
+read against the run's selection first, and its refusal is a scope refusal.
+The read then sits behind the same file predicate as the whole-file read,
+and a refusal there writes the same `ownership_denied` row.
+
+The keyword search does not refuse a knowledge base that has lapsed. One
+that is no longer the owner's, is archived, or is no longer
 attached to the run's matter is left out of the search; the step's result
 gives how many were listed and how many were searched; and no
 `ownership_denied` row is written. The model does not name the knowledge

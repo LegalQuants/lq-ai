@@ -326,6 +326,18 @@ async def guarded_tool_call(
             # matter included, would be whatever a model wrote.
             raise ToolNotGranted("A search of several knowledge bases requires a governed run")
 
+        if (
+            intent == ToolIntent.retrieve_chunks
+            and isinstance(params, dict)
+            and "file_id" in params
+            and "max_chars" in params
+            and (execution_scope is None or effect is None)
+        ):
+            # The bounded read of a file's text is a step of a governed run
+            # (ADR 0038 D4/D5). The whole-file fetch stays open to a session
+            # that is not one, on its ownership check.
+            raise ToolNotGranted("A bounded document read requires a governed run")
+
         if intent in WORKSPACE_INTENTS and (
             execution_scope is None
             or effect is None
@@ -1601,10 +1613,10 @@ async def _handle_retrieve_chunks(
         )
         if "max_chars" in params:
             # Mode 2b: a bounded read of the file's canonical text (ADR 0038
-            # D4/D5). In a governed run the orchestration boundary has already
-            # rechecked selection and project attachment. A session that is
-            # not a governed run reaches it on the ownership check above
-            # alone, as it does the whole-file fetch below.
+            # D4/D5). The chokepoint refuses it outside a governed run, and in
+            # one the orchestration boundary has already rechecked selection
+            # and project attachment. The ownership check above is a second
+            # check behind both.
             return await _handle_read_document_text(
                 file_id_raw,
                 offset=int(params.get("offset", 0)),
