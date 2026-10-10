@@ -7635,6 +7635,16 @@ components:
           enum: [1,2,3,4,5]
           nullable: true
           description: "When set, requests below this tier are refused"
+        max_egress_tier:
+          type: integer
+          enum: [1,2,3,4,5]
+          nullable: true
+          description: |
+            Matter-scoped tool-egress ceiling (DE-358 item 6 / AG-03).
+            The effective ceiling is min(operator default
+            LQ_AI_TOOL_MAX_EGRESS_TIER, this value, orchestration scope).
+            NULL means the project sets no ceiling. Independent of
+            minimum_inference_tier and privileged.
         attached_skill_names:
           type: array
           items: {type: string}
@@ -7684,6 +7694,10 @@ components:
         context_md: {type: string, description: "Free-form Markdown context document; max 100 KiB."}
         privileged: {type: boolean, default: false}
         minimum_inference_tier: {type: integer, enum: [1,2,3,4,5]}
+        max_egress_tier:
+          type: integer
+          enum: [1,2,3,4,5]
+          description: "Optional matter-scoped tool-egress ceiling (DE-358 item 6 / AG-03)."
 
     ProjectUpdate:
       type: object
@@ -7699,6 +7713,11 @@ components:
         context_md: {type: string, description: "Free-form Markdown context document; max 100 KiB."}
         privileged: {type: boolean}
         minimum_inference_tier: {type: integer, enum: [1,2,3,4,5], nullable: true}
+        max_egress_tier:
+          type: integer
+          enum: [1,2,3,4,5]
+          nullable: true
+          description: "Matter-scoped tool-egress ceiling; explicit null clears it."
         archived:
           type: boolean
           description: |

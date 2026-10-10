@@ -158,12 +158,16 @@ CREATE TABLE projects (
     context_md               TEXT,  -- free-form markdown
     privileged               BOOLEAN NOT NULL DEFAULT FALSE,
     minimum_inference_tier   SMALLINT,
+    max_egress_tier          SMALLINT,  -- 0070: matter-scoped tool-egress ceiling, 1-5, NULL = none
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at              TIMESTAMPTZ,  -- soft-delete; NULL means active
     CONSTRAINT chk_projects_tier_range CHECK (
         minimum_inference_tier IS NULL OR (minimum_inference_tier BETWEEN 1 AND 5)
+    ),
+    CONSTRAINT chk_projects_max_egress_tier_range CHECK (  -- 0070
+        max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)
     ),
     CONSTRAINT chk_projects_privileged_implies_tier CHECK (
         (privileged = false) OR (minimum_inference_tier IS NOT NULL)
@@ -1149,7 +1153,7 @@ CREATE TABLE user_skills (
     frontmatter_extra JSONB NOT NULL DEFAULT '{}',
     body              TEXT NOT NULL,
     slash_alias       TEXT,                                       -- 0023: chat-composer trigger alias (e.g. '/nda')
-    installation_provenance JSONB,                              -- 0070: immutable installation snapshot
+    installation_provenance JSONB,                              -- 0071: immutable installation snapshot
     forked_from       TEXT,                                       -- 0023: source skill slug when created via fork
     archived_at       TIMESTAMPTZ,                                -- soft-delete
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1189,7 +1193,7 @@ CREATE UNIQUE INDEX idx_user_skills_slash_alias_team_active
 |---|---|---|
 | `slash_alias` | 0023 | Optional chat-composer trigger alias. Must match `^/[a-z0-9-]{1,32}$` (enforced by `chk_user_skills_slash_alias_format`). Unique per active owner (partial unique indexes above). `POST` and `PATCH /user-skills` return 422 with `"slash_alias '...' is already used by another of your skills."` on collision. |
 | `forked_from` | 0023 | Slug of the source skill when this row was created via the fork button on the skill detail page. Stored as plain text — the source may be a filesystem-canonical built-in with no DB row (per ADR 0004). Set on create; read-only afterward. |
-| `installation_provenance` | 0070 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
+| `installation_provenance` | 0071 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
 
 Resolution path during prompt assembly (`/internal/skills/{slug}?user_id=…`): user-scope row for the requesting user wins on slug match; falls through to the filesystem registry otherwise. D8.1's only addition is the `teams` FK target and a middle resolution slot for team-scope rows.
 
@@ -1908,6 +1912,27 @@ them for owner inspection/export/reset. Project archival blocks tool access but
 retains inspection. Account export includes `skill_workspaces.json`. Migration
 0068 refuses downgrade while any workspace remains: export and intentionally
 clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
+
+### Tool-egress ceiling columns (0070, DE-358 item 6 / AG-03)
+
+Migration 0070 adds the nullable columns behind the API-side matter-scoped
+tool-egress ceiling ([ADR 0014 amendment 2026-10-01](adr/0014-gateway-egress-boundary-for-tool-providers.md),
+[ADR 0015 amendment 2026-10-01](adr/0015-governed-tool-calling-model.md)).
+The effective ceiling is the numeric `min()` over the operator default
+(`LQ_AI_TOOL_MAX_EGRESS_TIER`), `projects.max_egress_tier`, and the
+orchestration `ExecutionScope.maximum_egress_tier` — a project can only
+tighten the operator default, never loosen it. The policy is independent
+of `minimum_inference_tier` and `privileged`.
+
+| Table | New columns | Constraints |
+|---|---|---|
+| `projects` | `max_egress_tier` SMALLINT, NULL = no project ceiling | `chk_projects_max_egress_tier_range`: NULL or 1–5 |
+| `chat_pending_tool_call` | `max_egress_tier` SMALLINT — ceiling resolved at proposal time; approval re-resolves and executes under `min(original, current)` | `chk_chat_pending_tool_call_max_egress_tier_range`: NULL or 1–5 |
+| `tool_call_log` | `max_allowed_tier` SMALLINT — the ceiling actually applied; `ceiling_source` TEXT — which policy bound it | `chk_tool_call_log_max_allowed_tier_range`: NULL or 0–5 (0 = a scope "no egress" refusal was audited); `chk_tool_call_log_ceiling_source`: NULL or one of `operator`, `project`, `execution_scope`, `pending_original`, `unresolved` |
+
+A scope ceiling of `0` refuses in the API and is never sent to the gateway.
+An unreadable policy fail-closes: no dispatch, refused audit row with
+`ceiling_source="unresolved"`.
 
 ### `autonomous_schedules` (M4)
 

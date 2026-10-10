@@ -528,14 +528,27 @@ async def _governed_external_dispatch(
     shared helper, annotating the caller-owned ``autonomous.tool_call`` span
     (D-a1).  The ``estimate`` from R4 is forwarded verbatim as
     ``estimated_cost`` (single-estimate invariant — the helper never
-    re-estimates). Bound orchestration sources use their fixed provider/tier
-    and approved ceiling through dispatch; legacy sessions retain a None ceiling.
-    ``origin="autonomous"`` and there is no
-    per-user OAuth token (D-a5).
+    re-estimates).
+
+    DE-358 item 6 / AG-03 (issue #593): the matter-scoped egress ceiling is
+    resolved once here as ``min(operator default, session project value,
+    execution-scope value)`` via
+    :func:`app.tools.governance.resolve_tool_egress_ceiling`.  The same
+    value reaches ``governed_tool_invocation`` and every governed gateway
+    ``call_tool`` in the dispatch closure, so API and gateway can never
+    disagree.  ``origin="autonomous"`` and there is no per-user OAuth token
+    (D-a5).
+
+    A scope ceiling of ``0`` refuses in the API and is never sent to the
+    gateway.
     """
     # Local import: governance.py imports ToolResult from this module, so a
     # top-level import here would be circular.
-    from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+    from app.tools.governance import (
+        governed_tool_invocation,
+        resolve_provider_tier,
+        resolve_tool_egress_ceiling,
+    )
 
     if source_binding is None:
         provider, tool = await _resolve_external_call(intent, params, gateway)
@@ -544,6 +557,16 @@ async def _governed_external_dispatch(
         provider, tool = source_binding.source.name, source_binding.operation
         provider_tier = source_binding.source.egress_tier
 
+    # Issue #593: compose the matter-scoped ceiling from the operator
+    # default, the session's project, and the orchestration scope.  Bound
+    # orchestration sources keep their fixed provider/tier; the ceiling is
+    # still composed on top (min of everything that is set).
+    ceiling, ceiling_source = await resolve_tool_egress_ceiling(
+        db,
+        project_id=session.project_id,
+        scope_ceiling=maximum_egress_tier,
+    )
+
     async def _dispatch_closure() -> ToolResult:
         if source_binding is not None:
             return await _handle_retrieve_authority(
@@ -551,10 +574,16 @@ async def _governed_external_dispatch(
                 db=db,
                 gateway=gateway,
                 source_binding=source_binding,
-                maximum_egress_tier=maximum_egress_tier,
+                maximum_egress_tier=ceiling,
             )
         return await _dispatch(
-            intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
+            intent,
+            params,
+            gateway=gateway,
+            db=db,
+            session=session,
+            estimated_cost=estimate,
+            maximum_egress_tier=ceiling,
         )
 
     return await governed_tool_invocation(
@@ -564,7 +593,8 @@ async def _governed_external_dispatch(
         tool=tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=maximum_egress_tier,
+        max_allowed_tier=ceiling,
+        ceiling_source=ceiling_source,
         estimated_cost=estimate,  # single-estimate — forwarded, never re-estimated
         dispatch=_dispatch_closure,
         span=span,
@@ -583,6 +613,7 @@ async def _dispatch(
     db: AsyncSession,
     session: AutonomousSession,
     estimated_cost: Decimal,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Route a granted, in-budget tool intent to its handler.
 
@@ -605,6 +636,10 @@ async def _dispatch(
         estimated_cost: The cost projected by R4 for this call; inference
             handlers return this value as ``cost_usd`` so the session is
             charged exactly what R4 approved.
+        maximum_egress_tier: The resolved matter-scoped egress ceiling
+            (issue #593), forwarded to the external-call handlers so the
+            gateway enforces the same number the API applied. ``None``
+            means unconstrained.
 
     Returns:
         A :class:`ToolResult` with ``cost_usd`` and tool-specific ``data``.
@@ -747,13 +782,17 @@ async def _dispatch(
         )
 
     if intent == ToolIntent.retrieve_caselaw:
-        return await _handle_retrieve_caselaw(params, db=db)
+        return await _handle_retrieve_caselaw(
+            params, db=db, maximum_egress_tier=maximum_egress_tier
+        )
 
     if intent == ToolIntent.call_mcp_tool:
-        return await _handle_call_mcp_tool(params, db=db)
+        return await _handle_call_mcp_tool(params, db=db, maximum_egress_tier=maximum_egress_tier)
 
     if intent == ToolIntent.retrieve_authority:
-        return await _handle_retrieve_authority(params, db=db, gateway=gateway)
+        return await _handle_retrieve_authority(
+            params, db=db, gateway=gateway, maximum_egress_tier=maximum_egress_tier
+        )
 
     # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
     raise ValueError(f"_dispatch: unhandled intent {intent!r}")
@@ -763,6 +802,7 @@ async def _handle_retrieve_caselaw(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_caselaw`` — gateway-brokered case-law research (PR5a).
 
@@ -775,6 +815,11 @@ async def _handle_retrieve_caselaw(
     - ``get_cluster``      → ``{cluster_id}``
     - ``read_opinion``     → ``{opinion_id}``
     - ``find_in_case``     → ``{opinion_id, query[, max_matches]}``
+
+    ``maximum_egress_tier`` is the resolved matter-scoped ceiling
+    (issue #593), forwarded so the gateway enforces the same number the API
+    applied. ``None`` means unconstrained. ``read_opinion``/``find_in_case``
+    only read the durable cache (no gateway egress) and ignore it.
 
     Realized cost is resolved via the per-provider cost model (DE-344);
     falls back to ``Decimal("0")`` if resolution fails (non-fatal).
@@ -789,14 +834,18 @@ async def _handle_retrieve_caselaw(
 
     op = str(params.get("op") or "")
     if op == "verify_citations":
-        data = await research_service.verify_citations(params["text"])
+        data = await research_service.verify_citations(
+            params["text"], max_allowed_tier=maximum_egress_tier
+        )
     elif op == "search_case_law":
         args = params.get("args")
         if args is None:
             args = {k: v for k, v in params.items() if k != "op"}
-        data = await research_service.search_case_law(args)
+        data = await research_service.search_case_law(args, max_allowed_tier=maximum_egress_tier)
     elif op == "get_cluster":
-        data = await research_service.get_cluster(db, cluster_id=int(params["cluster_id"]))
+        data = await research_service.get_cluster(
+            db, cluster_id=int(params["cluster_id"]), max_allowed_tier=maximum_egress_tier
+        )
     elif op == "read_opinion":
         data = await research_service.read_opinion(db, opinion_id=int(params["opinion_id"]))
     elif op == "find_in_case":
@@ -829,6 +878,7 @@ async def _handle_call_mcp_tool(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``call_mcp_tool`` — a gateway-brokered MCP tool call (PR5a).
 
@@ -847,8 +897,9 @@ async def _handle_call_mcp_tool(
     ``auth: oauth`` MCP server therefore raises
     :exc:`~app.errors.MCPAuthorizationRequired` from the gateway adapter,
     which is left to propagate — correct, autonomous cannot use per-user-OAuth
-    servers).  ``max_allowed_tier=None`` (no per-session ceiling in v1; the
-    gateway still enforces its configured ceiling).
+    servers).  ``maximum_egress_tier`` is the resolved matter-scoped ceiling
+    (issue #593): the same value the API applied is handed to the gateway,
+    so API and gateway can never disagree. ``None`` means unconstrained.
 
     Zero cost in v1 (D-a3 / DE-344).
 
@@ -887,7 +938,9 @@ async def _handle_call_mcp_tool(
     # therefore fail at the gateway.
     from app.clients.gateway import get_gateway_client
 
-    result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
+    result = await get_gateway_client().call_tool(
+        provider, tool, args, max_allowed_tier=maximum_egress_tier
+    )
 
     # ── DE-344: realized cost from per-provider cost model ──────────────────
     # Local import avoids circular: governance.py → guard.py → cost.py.
@@ -1002,7 +1055,11 @@ async def _handle_retrieve_authority(
     # ── One egress (ADR 0014): call through gateway only ────────────────────
     result: dict[str, Any]
     if source_binding is None:
-        result = await gateway.call_tool(provider_name, op, args)
+        # Legacy (unbound) path: still a governed gateway call, so it gets
+        # the same resolved ceiling the API applied (issue #593).
+        result = await gateway.call_tool(
+            provider_name, op, args, max_allowed_tier=maximum_egress_tier
+        )
     else:
         result = await gateway.call_tool(
             provider_name,

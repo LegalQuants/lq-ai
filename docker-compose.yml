@@ -259,6 +259,8 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Shared with arq-worker so chat and autonomous calls apply one default.
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       # JWT (auth — per ADR 0002 the backend owns auth)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
@@ -425,6 +427,7 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills loader — the worker's on_startup installs the skill
       # registry via the shared bootstrap (app/skills/bootstrap.py) so
