@@ -176,14 +176,12 @@ jobs:
       - name: Drive login -> chat -> Tier-1 response
         run: ./scripts/airgap/drive-smoke.sh
 
-      - name: Assert zero successful egress (inventory blocked attempts)
-        # Hard-fails only on BREACH packets (replies from non-private
-        # sources = egress got past the seal). Blocked outbound attempts
-        # — upstream phone-home behavior that would simply fail in a
-        # true air gap — are inventoried with container attribution into
-        # sealed.attempts.txt in the evidence artifact, and surfaced in
-        # the job summary. First live run (2026-07-25) showed 24 such
-        # blocked attempts from three containers; the seal held.
+      - name: Assert no outside DNS attempts or public replies
+        # Hard-fails on DNS attempts outside the stack subnet or packets
+        # from non-private sources. Other outbound attempts are inventoried
+        # with container attribution in sealed.attempts.txt and surfaced
+        # in the job summary. Interpret this capture alongside the installed
+        # firewall rules and counters to confirm packet drops.
         run: |
           ./scripts/airgap/capture-egress.sh stop sealed
           ./scripts/airgap/capture-egress.sh assert-clean sealed

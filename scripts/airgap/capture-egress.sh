@@ -1,31 +1,29 @@
 #!/usr/bin/env bash
 # Egress canary (DE-032 / DE-233) — tcpdump watch on the lq-ai compose
-# bridge, recording any packet that tries to leave the deployment.
+# bridge, recording outside DNS attempts and suspect connection packets.
 #
 # The seal (deny-egress.sh) DROPs offending packets; this canary catches
 # the ATTEMPT. tcpdump on the bridge interface sees frames as the
 # containers emit them — before the FORWARD-hook drop — so telemetry
 # that an app silently tolerates as a connection error (the failure mode
-# the survey memo flagged) still shows up in the pcap and fails the job.
+# the survey memo flagged) still shows up in the pcap.
 #
 # The capture uses a BPF filter that records ONLY suspect packets, in
-# two classes:
+# three classes:
 #   * ATTEMPTS — packets whose DESTINATION is not RFC1918 / loopback /
-#     multicast / broadcast (outbound tries; the seal drops them, so
-#     they are SYN retries and pre-seal FIN teardowns).
-#   * BREACHES — packets whose SOURCE is non-private (a reply came back
-#     in from the outside world; only possible if egress actually
-#     SUCCEEDED — i.e. the seal leaked).
-# Intra-stack traffic (all RFC1918) is never captured.
+#     multicast / broadcast (outbound tries, including SYN retries and
+#     pre-seal FIN teardowns).
+#   * BREACHES — packets whose SOURCE is non-private (public replies).
+#   * DNS ATTEMPTS — UDP/TCP port-53 packets aimed outside the stack
+#     subnets, including private upstream resolvers, excluding loopback.
+# Intra-stack traffic is excluded from these capture classes.
 #
-# `assert-clean` semantics (first live run, 2026-07-25, taught us the
-# split): upstream components attempt phone-home connections at boot —
-# blocked by the seal, exactly as they would fail in a true air gap.
-# Attempted-and-blocked egress therefore does NOT fail the job; it is
-# inventoried into <name>.attempts.txt (with container attribution) as
-# part of the evidence artifact. Any BREACH packet fails hard. The
-# certified claim is: the stack installs and answers with ZERO
-# SUCCESSFUL egress, and every attempt is on the record.
+# `assert-clean` rejects outside DNS attempts and BREACH packets. Other
+# outbound attempts are inventoried into <name>.attempts.txt (with
+# container attribution) as part of the evidence artifact. A passing
+# capture directly establishes no outside DNS attempts or public replies;
+# interpret it alongside the installed firewall rules and counters to
+# confirm packet drops.
 # Anti-vacuous-pass guard: the workflow's negative-control step runs a
 # deliberate egress attempt against a second capture on the SAME
 # interface with the SAME filter and asserts packets DO appear
@@ -77,8 +75,7 @@ ATTEMPT_BPF_V6='ip6 and
     not dst net fe80::/10 and
     not dst net ff00::/8 and
     not dst host ::1'
-# BREACH class: non-private SOURCE (a reply from outside made it onto
-# the bridge — impossible unless egress succeeded past the seal).
+# BREACH class: non-private SOURCE (a public reply observed on the bridge).
 BREACH_BPF_V4='ip and
     not src net 10.0.0.0/8 and
     not src net 172.16.0.0/12 and
@@ -199,8 +196,7 @@ assert_clean() {
     return 1
   fi
 
-  # BREACH: any packet sourced from a non-private address = a reply got
-  # back in = egress SUCCEEDED past the seal. Hard failure, always.
+  # BREACH: any packet sourced from a non-private address fails the check.
   breaches="$(count_packets "$pcap" "(${BREACH_BPF_V4}) or (${BREACH_BPF_V6})")"
   if [ "$breaches" != "0" ]; then
     echo "capture-egress: FAIL — ${breaches} packet(s) from non-private sources on the bridge:" >&2
@@ -209,15 +205,14 @@ assert_clean() {
     return 1
   fi
 
-  # ATTEMPT: outbound tries the seal dropped. These are exactly what a
-  # component would experience in a true air gap (connection failure),
-  # so they do not fail the job — they are inventoried as evidence with
-  # container attribution, and the runbook documents the known set.
+  # ATTEMPT: other outbound tries are inventoried with container
+  # attribution. Use the installed firewall rules and counters as drop
+  # evidence; the capture alone establishes only the absence of replies.
   attempts="$(count_packets "$pcap" "(${ATTEMPT_BPF_V4}) or (${ATTEMPT_BPF_V6})")"
   if [ "$attempts" != "0" ]; then
     {
-      echo "# Attempted (and blocked) egress inventory — capture '${name}'"
-      echo "# ${attempts} packet(s); every one was dropped by the seal (zero replies observed)."
+      echo "# Captured egress-attempt inventory — capture '${name}'"
+      echo "# ${attempts} packet(s); zero public replies observed. See firewall counters for drop evidence."
       echo
       echo "## Container IP map"
       container_ip_map
@@ -226,9 +221,9 @@ assert_clean() {
       sudo tcpdump -r "$pcap" -nn "(${ATTEMPT_BPF_V4}) or (${ATTEMPT_BPF_V6})" 2>/dev/null
     } > "${ART_DIR}/${name}.attempts.txt"
     chmod a+r "${ART_DIR}/${name}.attempts.txt" 2>/dev/null || true
-    echo "capture-egress: WARN — ${attempts} attempted-egress packet(s) were blocked by the seal."
+    echo "capture-egress: WARN — ${attempts} attempted-egress packet(s) captured; consult firewall counters for drop evidence."
     echo "capture-egress: inventory written to ${ART_DIR}/${name}.attempts.txt (artifact)."
-    echo "capture-egress: PASS — zero SUCCESSFUL egress in '${name}' (attempts blocked + inventoried)"
+    echo "capture-egress: PASS — no outside DNS attempts or public replies in '${name}'; other attempts inventoried."
     return 0
   fi
 

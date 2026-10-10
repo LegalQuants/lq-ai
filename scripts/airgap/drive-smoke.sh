@@ -7,8 +7,9 @@
 # provider=ollama-local, tier=1, with nothing routed at any cloud tier.
 #
 # This runs while deny-egress.sh has the compose bridge sealed and
-# capture-egress.sh is recording, so a passing run means the journey
-# completed with zero packets leaving the deployment.
+# capture-egress.sh is recording. A passing run means the journey
+# completed under the installed policy; the workflow separately checks
+# the packet evidence for outside DNS attempts and public replies.
 #
 # Model choice: the smoke requests `ollama-local/<model>` via the
 # gateway's raw provider/model passthrough (D0, gateway/app/router.py),
