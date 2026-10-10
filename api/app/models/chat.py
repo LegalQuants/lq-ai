@@ -206,7 +206,7 @@ class Message(Base):
             name="fk_messages_autonomous_session_id",
         ),
         nullable=True,
-        index=False,  # partial unique index created in migration 0070
+        index=False,  # partial unique index created in migration 0073
     )
     """ADR 0038 D1: set only on a ``kind='run'`` assistant message. It links
     the message to the root autonomous session of a governed run. Run records

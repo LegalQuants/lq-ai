@@ -1,7 +1,7 @@
 """Governed runs hosted in a chat thread, and registry profiles (ADR 0038 D1, D3).
 
-Revision ID: 0070
-Revises: 0069
+Revision ID: 0073
+Revises: 0072
 
 Additive on a 0.8.0 database, which already carries the orchestration tables.
 
@@ -21,8 +21,8 @@ matching 0067's refusal to drop retained orchestration records.
 
 from alembic import op
 
-revision = "0070"
-down_revision = "0069"
+revision = "0073"
+down_revision = "0072"
 branch_labels = None
 depends_on = None
 
@@ -61,7 +61,7 @@ def downgrade() -> None:
              OR EXISTS (SELECT 1 FROM orchestration_roots
                         WHERE profile NOT IN ('demonstration', 'model_demo_v1'))
           THEN
-            RAISE EXCEPTION '0070 downgrade requires removing chat-hosted runs and registry-profile runs first';
+            RAISE EXCEPTION '0073 downgrade requires removing chat-hosted runs and registry-profile runs first';
           END IF;
         END $$;
         ALTER TABLE orchestration_roots DROP CONSTRAINT ck_orchestration_planning;

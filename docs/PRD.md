@@ -2233,7 +2233,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Model field offers autocomplete with the actual provider's model list when the provider is selected; the field remains free-text-editable; one Cypress E2E covers the admin Edit-alias modal exercising the autocomplete.
 
-#### DE-404 — Minimize the panes of the matter workspace
+#### DE-406 — Minimize the panes of the matter workspace
 
 **Status:** Open. Raised by the maintainer on 2026-10-09 while using New harness (ADR 0038, proposed) in a matter chat.
 
@@ -2245,7 +2245,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Each side pane of a matter chat can be minimized and restored with the pointer and with the keyboard; the thread takes the freed width; the state is still there after a reload; `workspace_layout` either has an effect that the settings page describes or is gone from it; a failed file is still signalled while its pane is minimized; component tests cover the states, and the behaviour is checked in a browser at a laptop width.
 
-#### DE-405 — Better recall for a run's knowledge-base search
+#### DE-407 — Better recall for a run's knowledge-base search
 
 **Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 7.
 
@@ -2257,7 +2257,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** On a fixed set of questions over the test knowledge base, the share of searches that return a relevant passage is measured before and after and reported; a withheld passage is still withheld and counted; an embedding call, if built, appears in the run's receipts with its cost and tier, and a run whose allowance cannot fund it searches by keyword and says so.
 
-#### DE-406 — Move the resource routes and the chat path onto the access module
+#### DE-408 — Move the resource routes and the chat path onto the access module
 
 **Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 11. Depends on ADR 0038 D8, which is not built.
 
@@ -4048,7 +4048,7 @@ and none is implemented.
   plan tool's arguments (ADR 0038, ruling 6). A sub-agent's are sent back to the model on
   its next turn, so restoring them needs the request path to rewrite them too.
 - A query embedding for the knowledge-base search, which would be a priced, tier-bound
-  model call. Now the second step of DE-405.
+  model call. Now the second step of DE-407.
 - Sources and connectors in runs, including case-law, authority and MCP tools.
 - Library skills assigned to sub-agents by the orchestrator (ADR 0035 D3).
 - Keeping and showing a model's reasoning text.

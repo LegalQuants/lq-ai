@@ -569,6 +569,7 @@ _BACKEND_PURPOSES = (
     "judge_authority_content",
     "judge_treatment",
     "tabular_extraction",
+    "tabular_bulk_op",
     "playbook_executor",
     "playbook_easy_extract",
     "autonomous_executor",

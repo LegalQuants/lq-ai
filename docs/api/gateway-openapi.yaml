@@ -1246,15 +1246,15 @@ components:
             keeps a closed set and records the label as sent when it is one of
             `chat`, `embedding`, `judge_paraphrase`, `judge_case_content`,
             `judge_authority_content`, `judge_treatment`,
-            `tabular_extraction`, `playbook_executor`,
+            `tabular_extraction`, `tabular_bulk_op`, `playbook_executor`,
             `playbook_easy_extract`, `autonomous_executor` or
             `orchestration_run`. Unset records `chat`. A value outside the set
             is not an error: it is recorded as `chat`, so a caller cannot add
             a label by sending a string. A label must also fit the column.
             The field is stripped from the outbound provider body.
 
-            Every label other than `chat`, `embedding` and `judge_paraphrase`
-            is ADR 0038 (proposed): the set was widened on an unmerged
+            Every label other than `chat`, `embedding`, `judge_paraphrase`
+            and `tabular_bulk_op` is ADR 0038 (proposed): the set was widened on an unmerged
             implementation branch, and before that those labels recorded
             `chat`. `orchestration_run` is what a governed run's model calls
             record; `autonomous_executor` is a legacy single autonomous

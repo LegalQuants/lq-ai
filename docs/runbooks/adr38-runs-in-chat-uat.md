@@ -34,15 +34,15 @@ and none of this build is recorded. The earlier stand-alone page, as released in
 Use a dedicated, disposable deployment, a user with Autonomous mode enabled, and an
 admin account. Do not test on a deployment whose data you cannot lose.
 
-**Migrations.** Apply 0070 to 0073 (after 0069) by rebuilding `api`, `arq-worker` and
+**Migrations.** Apply 0073 to 0076 (after 0072) by rebuilding `api`, `arq-worker` and
 `ingest-worker` together, so no sibling runs on an old revision. Rebuild `web` too: it
 serves a pre-built bundle, so a UI change does not appear until it is rebuilt. Never run
 host-side `alembic upgrade` against a running development database; it desyncs the stack.
 Check the migrations on a throwaway `pgvector/pgvector:pg16` container instead. Never use
 `docker compose down -v`. Each of the four migrations refuses to downgrade while the rows it
-introduced are retained: 0070 chat-hosted runs and registry-profile runs, 0071 closed runs
-and effects, 0072 runs that belong to no matter, 0073 runs that completed without a plan. Keep
-a deployment that has used this feature at 0073 until a reviewed export and removal plan
+introduced are retained: 0073 chat-hosted runs and registry-profile runs, 0074 closed runs
+and effects, 0075 runs that belong to no matter, 0076 runs that completed without a plan. Keep
+a deployment that has used this feature at 0076 until a reviewed export and removal plan
 exists. A 0.8.0 run that is in flight when the branch is deployed stops at its next
 admission and stays readable; complete or halt runs first.
 
@@ -318,7 +318,7 @@ browser.
 - `api/tests/autonomous/orchestration/test_runs_in_chat.py`: a run as one turn in the
   thread, delivery into its message, later turns, idempotent send, each refusal,
   isolation between owners, and the receipts and routing-log rows.
-- `test_runs_in_chat_migration.py`: upgrading a release database through 0070 to 0073, and
+- `test_runs_in_chat_migration.py`: upgrading a release database through 0073 to 0076, and
   refusing a lossy downgrade.
 - `test_new_harness.py`, `test_new_harness_guards.py`, `test_new_harness_turn.py` and
   `test_new_harness_turn_guards.py`: the prompt files and their pins, the opening message

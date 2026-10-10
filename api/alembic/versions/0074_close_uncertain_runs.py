@@ -1,7 +1,7 @@
 """Closing an uncertain run without a retry (ADR 0038 D6).
 
-Revision ID: 0071
-Revises: 0070
+Revision ID: 0074
+Revises: 0073
 
 ADR 0035 D5 stands: an effect with an uncertain outcome is never repeated, and
 its reservation is retained. This revision adds the terminal states an owner
@@ -20,8 +20,8 @@ Downgrade refuses while a closed run or effect is retained.
 
 from alembic import op
 
-revision = "0071"
-down_revision = "0070"
+revision = "0074"
+down_revision = "0073"
 branch_labels = None
 depends_on = None
 
@@ -64,7 +64,7 @@ def downgrade() -> None:
           IF EXISTS (SELECT 1 FROM orchestration_roots WHERE status = 'closed')
              OR EXISTS (SELECT 1 FROM orchestration_effects WHERE status = 'closed')
           THEN
-            RAISE EXCEPTION '0071 downgrade requires removing closed runs first';
+            RAISE EXCEPTION '0074 downgrade requires removing closed runs first';
           END IF;
         END $$;
         ALTER TABLE orchestration_effects DROP CONSTRAINT orchestration_effects_check;

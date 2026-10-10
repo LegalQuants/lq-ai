@@ -134,7 +134,7 @@ fails the plan, and so does a reply that writes the plan out as text, or the too
 JSON, in place of calling the tool (stop reason `plan_not_handed_over`); neither is shown
 as an answer. An answer longer than 16,384 characters is cut and marked. The answer is
 delivered whatever the planning call cost within the root's whole allocation; a charge past
-that halts the run when the call settles, as for any effect. Migration 0073 lets a run end
+that halts the run when the call settles, as for any effect. Migration 0076 lets a run end
 `completed` with no plan revision.
 
 **The amendment to ADR 0035, in its words.** Ratifying this ADR makes the three changes
@@ -172,7 +172,7 @@ D5.
 **A chat outside a matter.** *Authorization path; needs security review.* A chat need not
 be in a matter (the API calls a matter a project). ADR 0035 D1 gives every root an
 active project, so this amends it; the words are with the amendment above. Migration
-0072 lets
+0075 lets
 `orchestration_roots.project_id` be null. Such a run has no terms of its own. With no
 document from a matter it is not privileged and its inference-tier floor is the profile's.
 It may read the owner's files wherever they are filed, and it then takes on the terms of
@@ -646,7 +646,7 @@ Closing ends it without synthesis, keeps retained work inspectable, converts the
 reservation into a charge, writes an audit row and releases the allowance. Nothing is
 retried. Like halt, closing stays reachable after opt-out or a switched-off profile. Only
 an uncertain run can be closed. Until then the composer names the run that is blocking a
-new one. Migration 0071 adds the `closed` state.
+new one. Migration 0074 adds the `closed` state.
 
 ### D7 — New harness stays experimental until its stated limits close; replacing the chat-completion path needs its own decision
 
@@ -680,7 +680,7 @@ turns. These limits of the branch must close first.
   that (D1). The plan cannot propose matter documents; the owner supplies them.
 - **Knowledge-base search is by keyword only, and the owner does not pick the knowledge
   bases.** A search finds a passage only when it holds every word of the query. A run lists
-  every knowledge base attached to its matter, at most 16 (D5, rulings 7 and 9; DE-405).
+  every knowledge base attached to its matter, at most 16 (D5, rulings 7 and 9; DE-407).
 - **A quotation is checked only when it carries its marker, `"words" (Source: [N])`.**
   Markdown emphasis around the quotation marks is accepted (ruling 2). Emphasis written
   inside the quotation marks is not removed, so such a quotation is looked up with those
@@ -832,7 +832,7 @@ together.
 **Order.** It is a precondition for tracks C2 to C7 adding run tools, so that no tool is
 written against the scattered checks. It is not a condition of C1's acceptance. It lands
 as its own reviewed change: the module with the run engine moved onto it first, then the
-resource routes and the chat path one file at a time (ruling 11, DE-406).
+resource routes and the chat path one file at a time (ruling 11, DE-408).
 
 ## Rulings on the open questions
 
@@ -876,7 +876,7 @@ branch as it is, and the item is marked **not built**.
    written `EN_12345`. The orchestrator's prompt now tells the model to keep a
    placeholder as written in a plan; until 2026-10-10 it told the model to write none.
 7. **Knowledge-base search** stays keyword only for C1, as a stated limit. Looser matching
-   and a query embedding are deferred as DE-405.
+   and a query embedding are deferred as DE-407.
 8. **A direct answer when documents are selected** is allowed, as built.
 9. **Which knowledge bases a run lists**: all that are attached to the matter, at most
    16, without the owner picking, as built.
@@ -893,7 +893,7 @@ branch as it is, and the item is marked **not built**.
     of this ruling. Not built: stopping a running run when its owner's role changes.
 11. **The order of D8.** The run engine moves onto the access module first. The resource
     routes and the chat path may follow later and do not hold back a C2 to C7 run tool;
-    that move is deferred as DE-406.
+    that move is deferred as DE-408.
 
 ## Alternatives
 
@@ -930,10 +930,10 @@ branch as it is, and the item is marked **not built**.
   numbers and frozen terms). The maintainer looked at each in that order. They are in one
 pull request, followed by one commit for each of the four rulings that needed code.
 - Release 0.8.0 shipped the orchestration tables, so schema changes must upgrade deployed
-  databases. Migrations 0070 to 0073 are additive on a 0.8.0 database: 0070 adds the `run`
+  databases. Migrations 0073 to 0076 are additive on a 0.8.0 database: 0073 adds the `run`
   message kind and the message-to-session link, and turns the profile column's enumerated
-  check into a pattern check validated against the registry; 0071 adds the `closed` state;
-  0072 lets a run have no project; 0073 lets a run complete with no plan revision. Each
+  check into a pattern check validated against the registry; 0074 adds the `closed` state;
+  0075 lets a run have no project; 0076 lets a run complete with no plan revision. Each
   downgrade refuses while the data it would break is retained.
 - The changes touch authorization, audit and the gateway, and are routed to security
   review. The items that need it are the gateway changes (the truthful purpose label, the

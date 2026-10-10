@@ -1080,7 +1080,7 @@ async def test_a_direct_answer_must_be_the_planning_calls_own_reply_and_no_other
     assert (await read(api, value["root_id"]))["answered_directly"] is True
 
 
-# --- 7. Migration 0073, as the running schema has it -------------------------
+# --- 7. Migration 0076, as the running schema has it -------------------------
 
 WITHOUT_A_PLAN = ["planning", "uncertain", "halted", "failed", "expired", "closed", "completed"]
 NEEDS_A_PLAN = ["awaiting_approval", "queued", "running", "waiting_children", "rejected"]

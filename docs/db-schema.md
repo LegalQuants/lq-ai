@@ -408,11 +408,11 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 ```
 
-#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0070; ADR 0038 proposed)
+#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0073; ADR 0038 proposed)
 
 The sketch above does not show `messages.kind`. Migration 0020 added it, with
 `chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
-[0070](../api/alembic/versions/0070_runs_in_chat.py) changes `messages` as below.
+[0073](../api/alembic/versions/0073_runs_in_chat.py) changes `messages` as below.
 It is implemented on an unmerged branch, and
 [ADR 0038](adr/0038-skill-backed-orchestration-profile.md) is proposed, not
 ratified.
@@ -446,7 +446,7 @@ CREATE UNIQUE INDEX uq_messages_autonomous_session
   leaves `content` empty, and history replay skips assistant messages with no
   content.
 - Downgrade refuses while any message has `kind = 'run'` or a session link;
-  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-to-0073-adr-0038-proposed).
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0073-to-0076-adr-0038-proposed).
 
 ### `inference_routing_log` FK closure (Task C3)
 
@@ -1380,14 +1380,16 @@ calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
 | `judge_authority_content` | The same judge for other authority sources |
 | `judge_treatment` | Case-law treatment-layer judge |
 | `tabular_extraction` | Tabular Review cell extraction |
+| `tabular_bulk_op` | Tabular Review bulk operations: redline reports and summary memos |
 | `playbook_executor` | Playbook executor |
 | `playbook_easy_extract` | Easy Playbook extraction |
 | `autonomous_executor` | A legacy single autonomous session's model calls |
 | `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
 
-Only `chat`, `embedding` and `judge_paraphrase` were in the set before ADR 0038
-(proposed). The other labels were already sent by the backend and recorded as
-`chat`; recording them as themselves is implemented on an unmerged branch. Two
+Only `chat`, `embedding`, `judge_paraphrase` and `tabular_bulk_op` were in the set
+before ADR 0038 (proposed). The other labels were already sent by the backend and
+recorded as `chat`; recording them as themselves is implemented on an unmerged
+branch. Two
 Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
 `playbook_easy_assemble_describe_tier`, are longer than the 32-character column
 and are not in the set, so those rows still record `chat`.
@@ -1890,10 +1892,10 @@ Revision **0067** includes `profile` (`demonstration` by default, or
 call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
 Sample roots continue to require a current prepared revision and no planning
-snapshot. A root in `planning` cannot reference a prepared revision. Migration 0070
-later replaces the enumerated `profile` check, 0071 adds the `closed` status, 0072
-lets `project_id` be null and 0073 lets a registry run complete without a plan; see
-[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0070-to-0073-adr-0038-proposed).
+snapshot. A root in `planning` cannot reference a prepared revision. Migration 0073
+later replaces the enumerated `profile` check, 0074 adds the `closed` status, 0075
+lets `project_id` be null and 0076 lets a registry run complete without a plan; see
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0073-to-0076-adr-0038-proposed).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -1915,7 +1917,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 
 | Table | Keys and fields | Constraints and lifecycle |
 |---|---|---|
-| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id` (nullable from 0072), unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id` (nullable from 0075), unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
 | `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
@@ -2044,18 +2046,18 @@ A scope ceiling of `0` refuses in the API and is never sent to the gateway.
 An unreadable policy fail-closes: no dispatch, refused audit row with
 `ceiling_source="unresolved"`.
 
-### Governed runs in chat and closing a run (0070 to 0073; ADR 0038 proposed)
+### Governed runs in chat and closing a run (0073 to 0076; ADR 0038 proposed)
 
 Implemented on an unmerged branch; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
 is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
 already carries the orchestration tables. The authoritative DDL for the first two is in
-[`0070_runs_in_chat.py`](../api/alembic/versions/0070_runs_in_chat.py) and
-[`0071_close_uncertain_runs.py`](../api/alembic/versions/0071_close_uncertain_runs.py);
-0072 and 0073 are described further down, each with its file.
-This section names the constraints they replace. The `messages` changes of 0070 are
-described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0070-adr-0038-proposed).
+[`0073_runs_in_chat.py`](../api/alembic/versions/0073_runs_in_chat.py) and
+[`0074_close_uncertain_runs.py`](../api/alembic/versions/0074_close_uncertain_runs.py);
+0075 and 0076 are described further down, each with its file.
+This section names the constraints they replace. The `messages` changes of 0073 are
+described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0073-adr-0038-proposed).
 
-**0070: registry profiles.** The profile is validated against the application's
+**0073: registry profiles.** The profile is validated against the application's
 closed profile registry, so the database keeps only its shape.
 
 | Constraint on `orchestration_roots` | Before | After |
@@ -2068,7 +2070,7 @@ registry profile cannot use it. The registered profiles are `model_demo_v1`, the
 fictional agreement, and `new_harness_v1`, the profile the chat composer offers as the
 experimental New harness model.
 
-**0071: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
+**0074: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
 outcome is never repeated, and its reservation is retained. Closing is the owner's way
 to end such a run without a retry.
 
@@ -2099,8 +2101,8 @@ to `halted`. `closed` is outside the partial unique indexes
 closing releases the owner's single active-run allowance and a closed effect no longer
 blocks its session.
 
-**0072: a run outside a matter.** Authoritative DDL:
-[`0072_runs_outside_a_matter.py`](../api/alembic/versions/0072_runs_outside_a_matter.py).
+**0075: a run outside a matter.** Authoritative DDL:
+[`0075_runs_outside_a_matter.py`](../api/alembic/versions/0075_runs_outside_a_matter.py).
 `orchestration_roots.project_id` becomes nullable. A run started from a chat that is in
 no matter has no project, and neither do its sessions (`autonomous_sessions.project_id`
 was already nullable, and the tree trigger from 0067 compares projects with
@@ -2122,9 +2124,9 @@ a run with no matter takes them on when it reads the file. A profile says
 whether it may start outside a matter (`project_scope = "any"`); New harness may, and
 the fictional profile, which is limited to one dedicated matter, may not.
 
-**0073: a run answered without a plan.** Authoritative DDL:
-[`0073_runs_answered_without_a_plan.py`](../api/alembic/versions/0073_runs_answered_without_a_plan.py).
-`ck_orchestration_planning` is replaced once more. Until 0073 a registry run with no plan
+**0076: a run answered without a plan.** Authoritative DDL:
+[`0076_runs_answered_without_a_plan.py`](../api/alembic/versions/0076_runs_answered_without_a_plan.py).
+`ck_orchestration_planning` is replaced once more. Until 0076 a registry run with no plan
 revision (`current_revision IS NULL`) could end only as `uncertain`, `halted`, `failed`,
 `expired` or `closed`. It may now also end `completed`: the orchestrator answered the
 request by itself, so there is no `orchestration_plans` row, no admission and no child
@@ -2148,9 +2150,9 @@ Of a search step's result, the step note is the only part that a view of the run
 owner's export returns.
 
 **Downgrade.** All four migrations refuse to downgrade while the rows they introduced
-are retained, as 0067 does: 0070 while any message has `kind = 'run'` or a session link,
-or any root has a profile other than `demonstration` and `model_demo_v1`; 0071 while any
-root or effect has status `closed`; 0072 while any root has no project; 0073 while any
+are retained, as 0067 does: 0073 while any message has `kind = 'run'` or a session link,
+or any root has a profile other than `demonstration` and `model_demo_v1`; 0074 while any
+root or effect has status `closed`; 0075 while any root has no project; 0076 while any
 root is `completed` with no plan revision. Nothing is dropped silently; those runs need an
 explicit export and removal first.
 

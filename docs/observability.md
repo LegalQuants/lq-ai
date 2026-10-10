@@ -404,13 +404,14 @@ does a label outside the set. The column is `varchar(32)`, so a label must fit i
 | `judge_authority_content` | The same judge for other authority sources |
 | `judge_treatment` | Case-law treatment-layer judge |
 | `tabular_extraction` | Tabular Review cell extraction |
+| `tabular_bulk_op` | Tabular Review bulk operations: redline reports and summary memos |
 | `playbook_executor` | Playbook executor |
 | `playbook_easy_extract` | Easy Playbook extraction |
 | `autonomous_executor` | A legacy single autonomous session's model calls |
 | `orchestration_run` | A governed run's model calls: planning (which may be the orchestrator's own answer), tasks and the combined answer |
 
-**Proposed, unmerged (ADR 0038 D2).** Only `chat`, `embedding` and `judge_paraphrase` were
-in the set before. The other labels were already sent by the backend and recorded as
+**Proposed, unmerged (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
+`tabular_bulk_op` were in the set before. The other labels were already sent by the backend and recorded as
 `chat`; recording them as themselves, and the chat and message identifiers on a run's
 model calls, are implemented on the branch. Two Easy Playbook assembly labels,
 `playbook_easy_assemble_describe_position` and `playbook_easy_assemble_describe_tier`,

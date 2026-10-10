@@ -261,13 +261,13 @@ increments followed the first build.
 
 | # | Slice | Now |
 |---|---|---|
-| 1 | Bind runs to chat | Built. Migration 0070; `POST /chats/{chat_id}/runs`; `GET /chats/{chat_id}/run-profiles`; delivery writes the bound message in the delivery transaction. Since changed: a chat may be in no matter (migration 0072), and a run may complete with no plan (migration 0073). Tests: `api/tests/autonomous/orchestration/test_runs_in_chat.py`, `test_runs_in_chat_migration.py` |
+| 1 | Bind runs to chat | Built. Migration 0073; `POST /chats/{chat_id}/runs`; `GET /chats/{chat_id}/run-profiles`; delivery writes the bound message in the delivery transaction. Since changed: a chat may be in no matter (migration 0075), and a run may complete with no plan (migration 0076). Tests: `api/tests/autonomous/orchestration/test_runs_in_chat.py`, `test_runs_in_chat_migration.py` |
 | 2 | Visibility | Built. Chat and message identifiers on every run model call (a run writes no tool-call-log row, because neither profile grants an external tool); the run's session audit rows in the receipts feed; `orchestration.job`, `orchestration.run` and `orchestration.effect` spans carrying identifiers and labels only; trace context carried through queued jobs; the worker wired for tracing in both compose files and both recipes. Tests: `test_runs_in_chat.py`, `test_run_tracing.py` |
 | 2g | Gateway purposes | Built. The gateway's closed purpose set lists every label the backend sends that fits the column, including `orchestration_run`. Test: `gateway/tests/test_inference_b4.py` |
 | 3 | Run message in the thread | Redone in increment 1. One column of lines replaces the first build's run panel and progress list. |
 | 4 | Registries | Built. `profiles.py`, `tools.py`; `GET /admin/orchestration/profiles`; the contract test (`test_registry_contract.py`). A profile may now pin engine prompt files in place of skills, and one profile is the composer profile. |
 | 5 | Child tool loop | Built. `loop.py`: native calls on the granted set, one durable effect per turn and per call, refusals recorded, the turn limit, replay from receipts. Sub-agents of New harness also have the knowledge-base search. Tests: `test_tool_loop.py`, `test_contract_versions.py` |
-| 6 | Close an uncertain run | Built. Migration 0071; `POST /autonomous/orchestration/chat-runs/{root_id}/close`. Test: `test_close_uncertain.py` |
+| 6 | Close an uncertain run | Built. Migration 0074; `POST /autonomous/orchestration/chat-runs/{root_id}/close`. Test: `test_close_uncertain.py` |
 | 7 | Real documents | Replaced by New harness, in increments 2 and 3. The first build's documents profile no longer exists. |
 | 8 | Acceptance | The runbook was rewritten for the revised design and no person has followed it. The recorded walkthrough described the first build, was not redone, and was removed from the branch on 2026-10-10 (see "Not done, or not verified"). The stand-alone page's intake form is removed. |
 
@@ -296,7 +296,7 @@ Tests: `web/src/lib/lq-ai/run/__tests__/` (`composer.test.ts`, `harness.test.ts`
 | Pseudonymization | Follows the operator's gateway setting for the routed tier. The fictional profile keeps the earlier rule. |
 | Gateway | A reasoning-effort request field, mapped to `think` by the Ollama adapter; an Ollama tool result named after its call; non-ASCII characters in tool-call arguments sent as themselves. The setting `LQ_AI_NEW_HARNESS_REASONING_EFFORT` ships empty. Tests: `gateway/tests/test_ollama_tool_calls.py`. |
 | Trace read | `GET /autonomous/orchestration/{root_id}/sessions/{session_id}/trace`: each call's system message, opening message and tools, rebuilt and compared with the recorded digest, and each turn's text and tool calls. |
-| A chat outside a matter | Migration 0072. Such a run searches no knowledge base. Since ruling 4 (built 2026-10-10) it reads the owner's files wherever they are filed, under the strictest terms of the matters that hold them; with no document from a matter it is not privileged and has the profile's tier floor. |
+| A chat outside a matter | Migration 0075. Such a run searches no knowledge base. Since ruling 4 (built 2026-10-10) it reads the owner's files wherever they are filed, under the strictest terms of the matters that hold them; with no document from a matter it is not privileged and has the profile's tier floor. |
 
 Tests: `test_new_harness.py`, `test_new_harness_guards.py`, `test_document_runs.py`,
 `test_evidence_counts.py`, `test_registry_contract.py`, `test_contract_versions.py` in
@@ -307,7 +307,7 @@ Tests: `test_new_harness.py`, `test_new_harness_guards.py`, `test_document_runs.
 | Part | Built |
 |---|---|
 | The plan tool | The planning call is offered `propose_plan` and nothing else. One call to it is the plan. More than one call, another tool, or arguments that are not a valid plan fail the plan (`invalid_proposal`). |
-| The direct answer | A complete reply with no call is the orchestrator's own answer. It is delivered with no plan, no task and no approval, and is unverified. Migration 0073. A plan written as text fails the plan (`plan_not_handed_over`). `ChatRunRead.answered_directly` and the run's one "Answered directly" line. |
+| The direct answer | A complete reply with no call is the orchestrator's own answer. It is delivered with no plan, no task and no approval, and is unverified. Migration 0076. A plan written as text fails the plan (`plan_not_handed_over`). `ChatRunRead.answered_directly` and the run's one "Answered directly" line. |
 | Knowledge-base search | The registry tool `search_knowledge_base`. A run in a matter lists the matter's knowledge bases (at most 16), named in the intake and the plan. Keyword only. Passages are shown subject to the file rule. Files a search finds get source numbers in the task's own block, and quotations from them are checked. `ChatRunRead.sources`, a step of kind `knowledge_search`, and the composer's knowledge-base line. |
 | Terms | The run's limits and how its plan is handed over are frozen in its version 3 intake (`terms`). |
 | Prompts | `orchestrator.v2.md` and `subagent.v2.md`. Version 1 of each stays beside them. |
@@ -579,7 +579,7 @@ notes reach a privileged reader through the tree and the trace. It found three s
 ones in the gateway change. Each is fixed or stated above. It is not a maintainer or
 security review.
 
-**Gates on 2026-10-10.** The branch was then rebased onto `main`, twice that day. The
+**Gates on 2026-10-10.** The branch was then rebased onto `main`, three times that day. The
 first rebase, onto `224044cc9`, took in one commit, which changes documents and review
 rules and no code. The second, onto `994ccbade`, took in two more: #701, which changes
 one ADR, and #684, which closes a refused ownership check in `retrieve_chunks` with an
@@ -596,19 +596,47 @@ does not go through that check. It leaves out a knowledge base that is no longer
 owner's, archived or detached, counts it, and writes no such audit row;
 `docs/security/audit-logging.md` now says so.
 
+The third rebase, onto `7ac94dd1a`, took in #637, which adds a ceiling on tool
+egress that an operator and a matter can set. #637 takes migration 0070, so this
+branch's four migrations were renumbered 0071 to 0074 and the first now revises
+0070. Both change `guard.py`, in different places, and the rebase did not conflict
+there. The one conflict was in `docs/db-schema.md`, where each had added a section
+at the same place; both are kept.
+
+The fourth rebase, on 2026-10-11 onto `d185a623b`, took in seven changes. Two of
+them add migrations 0071 and 0072 (#418, #710), so this branch's four moved again,
+to 0073 to 0076, and the first now revises 0072. Two take DE-404 and DE-405 (#710,
+#711), so this branch's three deferred enhancements are now DE-406 to DE-408. Four
+files conflicted. The pinned count of API paths is the sum of both sides, 164, and
+the generated OpenAPI file was regenerated. In `ChatPanel.svelte` both sides' line
+is kept where a chat is selected. #418 adds a purpose label, `tabular_bulk_op`, to
+the gateway's set, which this branch widens: the label is kept in the widened set,
+and the gateway test that pins the list and the three documents that give it now
+include it. The gateway run after this rebase is what found the test's list short.
+
 The suites were run as CI runs them. After the second rebase the whole API suite
 passed with its coverage gate (3,928 passed, 17 skipped; 82.77% against
 80%), and passed again on the commit that refuses the bounded read outside a run
-(3,930 passed, 17 skipped; 82.76%). `ruff` was clean, and so was
+(3,930 passed, 17 skipped; 82.76%), and a third time after the third rebase and
+the renumbering (4,076 passed, 17 skipped; 82.83%). `ruff` was clean, and so was
 `mypy app tests ../script_runner`, which is CI's command and checks the tests too; an
 earlier pass had run `mypy app` alone and missed one error in a test helper, since
 fixed. The gateway suite passed with its gate (1,074 passed, 3 skipped; 90.49% against
 88%). The web suite passed (3,289 passed in 108 files), and `check:lq-ai` gave 0 errors
 and 7 known warnings. The gateway and web suites were run after the first rebase and
 after the last change to this branch's code, tests or prompts. The second rebase
-changes no file under `gateway/` or `web/`, so they were not run again after it. Not
-run: CI's stack smoke workflow, its release-image check and its
-bundled-helper acceptance step, which need Docker images that this pass did not build.
+changes no file under `gateway/` or `web/`, so they were not run again after it; nor
+does the third. The fourth changes files under all three, so all three were run again
+after it, on 2026-10-11: the API suite (4,193 passed, 17 skipped; 82.82%), the
+gateway suite (1,088 passed, 3 skipped; 90.76%) and the web suite (3,360 passed in 112
+files; `check:lq-ai` 0 errors and 7 known warnings), each with `ruff` and `mypy` as
+before. `main` now also has an accessibility job (#712), which scans seven pages in
+two sizes and two themes against a list of known exceptions; it passed on this branch
+(28 states), and its check that a new violation fails the job passed too. Not
+run: CI's stack smoke workflow, its release-image check, its bundled-helper acceptance
+step and the air-gap verification workflow (#711), which need Docker images that this
+pass did not build. The air-gap workflow runs on a change to `docker-compose.yml`,
+which this branch makes.
 
 ### Not done, or not verified
 
