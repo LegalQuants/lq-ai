@@ -50,6 +50,7 @@ from app.autonomous.guard import ToolResult
 from app.clients.gateway import get_gateway_client
 from app.config import get_settings
 from app.errors import ToolTierRefused
+from app.models.chat import Chat
 from app.models.project import Project
 from app.models.tool_call_log import ToolCallLog
 from app.observability_helpers import record_attributes
@@ -224,6 +225,7 @@ async def resolve_tool_egress_ceiling(
     *,
     project_id: UUID | None,
     scope_ceiling: int | None = None,
+    chat_id: UUID | None = None,
 ) -> tuple[int | None, str | None]:
     """Resolve the effective tool-egress ceiling for one governed call.
 
@@ -235,7 +237,7 @@ async def resolve_tool_egress_ceiling(
     never loosen it.  Returns ``(None, None)`` when nothing is set, which
     preserves today's unconstrained behavior.
 
-    Fail-closed: when the Project lookup raises, returns ``(None,
+    Fail-closed: when a recoverable Chat/Project lookup raises, returns ``(None,
     "unresolved")`` instead of falling back to unconstrained — callers MUST
     refuse the call before dispatch (see :func:`governed_tool_invocation`).
     A scope ceiling of ``0`` ("no egress") resolves to ``(0,
@@ -250,6 +252,8 @@ async def resolve_tool_egress_ceiling(
             call is not Project-scoped.  A dangling id (row deleted,
             ``ON DELETE SET NULL`` not yet observed) is treated as no
             Project ceiling.
+        chat_id: Resolve the chat's current project in the same guarded
+            policy-read transaction when set. The caller verifies ownership.
         scope_ceiling: The orchestration ``ExecutionScope.maximum_egress_tier``
             when present; ``None`` otherwise.
 
@@ -264,20 +268,33 @@ async def resolve_tool_egress_ceiling(
         candidates.append((operator_ceiling, "operator"))
     if scope_ceiling is not None:
         candidates.append((scope_ceiling, "execution_scope"))
-    if project_id is not None:
+    if chat_id is not None or project_id is not None:
         try:
-            project_ceiling = await db.scalar(
-                select(Project.max_egress_tier).where(Project.id == project_id)
-            )
-        except Exception:
+            # A statement error aborts a PostgreSQL transaction. Roll back
+            # only these reads so the caller can still persist its refusal
+            # audit and other pending state in the outer transaction.
+            async with db.begin_nested():
+                if chat_id is not None:
+                    project_id = await db.scalar(select(Chat.project_id).where(Chat.id == chat_id))
+                project_ceiling = (
+                    await db.scalar(select(Project.max_egress_tier).where(Project.id == project_id))
+                    if project_id is not None
+                    else None
+                )
+        except Exception as exc:
             log.warning(
-                "resolve_tool_egress_ceiling: project lookup failed — refusing closed",
+                "resolve_tool_egress_ceiling: policy lookup failed — refusing closed",
                 extra={
                     "event": "tool_egress_ceiling_unresolved",
-                    "project_id": str(project_id),
+                    "project_id": str(project_id) if project_id is not None else None,
+                    "chat_id": str(chat_id) if chat_id is not None else None,
+                    "error_type": type(exc).__name__,
                 },
-                exc_info=True,
             )
+            # A failed pre-savepoint flush or lost storage cannot produce a
+            # durable audit. Keep the request failed, never authorize egress.
+            if not db.is_active:
+                raise
             return None, "unresolved"
         if project_ceiling is not None:
             candidates.append((project_ceiling, "project"))
@@ -300,8 +317,8 @@ def resolve_resumed_ceiling(
     the enforced number is identical either way).
 
     An unreadable *current* policy fail-closes to ``(None, "unresolved")`` —
-    no dispatch, refused audit row.  A ``None`` original (proposed while the
-    policy was unreadable) simply lets the current policy govern.
+    no dispatch, refused audit row. A ``None`` original represents an
+    unconstrained or legacy proposal; the current policy governs that case.
 
     Pure function — no DB access — so it is directly unit-testable.
     """

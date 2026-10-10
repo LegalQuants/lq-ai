@@ -734,3 +734,68 @@ async def test_gate_persist_without_master_key_fails_closed(
     stmt = select(ChatPendingToolCall).where(ChatPendingToolCall.chat_id == uuid.UUID(chat_id))
     rows = (await db_session.execute(stmt)).scalars().all()
     assert not rows, f"ChatPendingToolCall row persisted despite missing master key: {rows}"
+
+
+@pytest.mark.parametrize("stream", [True, False])
+async def test_confirmation_persists_effective_original_ceiling(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    stream: bool,
+) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("LQ_AI_TOOL_MAX_EGRESS_TIER", "2")
+    get_settings.cache_clear()
+    try:
+        headers = _h(db_user)
+        project = await client.post(
+            "/api/v1/projects",
+            headers=headers,
+            json={"name": "Proposal ceiling", "max_egress_tier": 4},
+        )
+        assert project.status_code == 201, project.text
+        chat = await client.post(
+            "/api/v1/chats",
+            headers=headers,
+            json={"title": "Proposal", "project_id": project.json()["id"]},
+        )
+        assert chat.status_code == 201, chat.text
+        spec = _make_tool_spec()
+        confirmation = LoopConfirmation(
+            spec=spec,
+            args={"doc_id": "abc123"},
+            tier=3,
+            args_summary="digest",
+            messages=[{"role": "user", "content": "delete the document"}],
+            calls_used=0,
+        )
+        with (
+            patch(
+                "app.api.chats.assemble_allowlist",
+                AsyncMock(return_value=ChatToolAllowlist(specs={spec.function_name: spec})),
+            ),
+            patch("app.api.chats.run_chat_tool_loop", AsyncMock(return_value=confirmation)),
+        ):
+            response = await client.post(
+                f"/api/v1/chats/{chat.json()['id']}/messages",
+                headers=headers,
+                json={"content": "delete the document", "stream": stream},
+            )
+        assert response.status_code == 200, response.text
+        if stream:
+            gates = [
+                frame
+                for frame in _parse_sse_frames(response.content)
+                if frame.get("type") == "tool_confirmation_required"
+            ]
+            assert len(gates) == 1, response.text
+            pending_id = gates[0]["pending_call_id"]
+        else:
+            pending_id = response.json()["pending_tool_call"]["pending_call_id"]
+        pending = await db_session.get(ChatPendingToolCall, uuid.UUID(pending_id))
+        assert pending is not None
+        assert pending.max_egress_tier == 2  # actual handler persisted min(operator, Project)
+    finally:
+        get_settings.cache_clear()

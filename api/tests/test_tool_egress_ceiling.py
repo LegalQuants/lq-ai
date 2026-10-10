@@ -22,7 +22,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError as PydanticValidationError
@@ -235,6 +235,7 @@ async def test_resolve_dangling_project_id_is_not_unresolved(
 @pytest.mark.asyncio
 async def test_resolve_project_lookup_error_fail_closed(operator_ceiling) -> None:
     broken = AsyncMock()
+    broken.begin_nested = MagicMock(return_value=AsyncMock())
     broken.scalar.side_effect = RuntimeError("db gone")
     operator_ceiling(2)
     assert await resolve_tool_egress_ceiling(broken, project_id=uuid.uuid4(), scope_ceiling=5) == (

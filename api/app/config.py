@@ -149,6 +149,18 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "HTTP timeout in seconds for backend to Inference Gateway calls "
+            "(ADR 0027). Must exceed the gateway's adapter timeouts "
+            "(600 seconds by default) so the gateway can report failures first. "
+            "Connection establishment is capped at 10 seconds. "
+            "Restart API and workers after changing this deployment setting."
+        ),
+    )
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the

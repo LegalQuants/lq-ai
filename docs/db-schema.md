@@ -158,7 +158,7 @@ CREATE TABLE projects (
     context_md               TEXT,  -- free-form markdown
     privileged               BOOLEAN NOT NULL DEFAULT FALSE,
     minimum_inference_tier   SMALLINT,
-    max_egress_tier          SMALLINT,  -- 0069: matter-scoped tool-egress ceiling, 1-5, NULL = none
+    max_egress_tier          SMALLINT,  -- 0070: matter-scoped tool-egress ceiling, 1-5, NULL = none
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -166,7 +166,7 @@ CREATE TABLE projects (
     CONSTRAINT chk_projects_tier_range CHECK (
         minimum_inference_tier IS NULL OR (minimum_inference_tier BETWEEN 1 AND 5)
     ),
-    CONSTRAINT chk_projects_max_egress_tier_range CHECK (  -- 0069
+    CONSTRAINT chk_projects_max_egress_tier_range CHECK (  -- 0070
         max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)
     ),
     CONSTRAINT chk_projects_privileged_implies_tier CHECK (
@@ -1241,8 +1241,8 @@ The most consequential table in the schema. Every privilege-affecting action lan
 
 ```sql
 CREATE TABLE audit_log (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    timestamp             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp             TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),  -- wall-clock insert time, not transaction start (0069)
     user_id               UUID REFERENCES users(id) ON DELETE SET NULL,
     action                TEXT NOT NULL,           -- e.g. 'chat.create', 'message.send', 'skill.fork'
     resource_type         TEXT NOT NULL,           -- e.g. 'chat', 'project', 'skill'
@@ -1269,10 +1269,11 @@ CREATE INDEX idx_audit_log_tier ON audit_log(routed_inference_tier, timestamp DE
 
 The audit log is **append-only** at the application layer; the database does not enforce this directly (the maintainer-team can add a trigger if desired).
 
-The shared `audit_action` writer explicitly stamps `clock_timestamp()` at insert
-time. The schema default stays `now()`, but transaction-start timestamps cannot
-order multiple phase/effect events committed together; the writer records when
-each event is written without splitting its atomic transaction.
+The `timestamp` default records wall-clock insert time with `clock_timestamp()`
+(migration 0069). The shared `audit_action` writer uses this default unless the
+caller supplies an explicit timestamp; audit rows still share the caller's
+atomic transaction. Wall-clock values may tie or move backwards if the clock is
+adjusted, so timestamp sorting does not guarantee write order.
 
 **`details` JSONB conventions.**
 
@@ -1284,6 +1285,7 @@ The `details` column carries action-specific payloads. Documented keys by action
 | `user_skill.created` | `slug`, `scope`, `version` | Identifies the created row. `team_id` also present for `scope='team'` rows. |
 | `user_skill.updated` | `slug`, `scope`, `changed_fields`, `version_before`, `version_after` | `changed_fields` is a sorted array of mutated keys; `version_before`/`version_after` present only when `version` changed. `team_id` present for team-scope rows. |
 | `user_skill.deleted` | `slug`, `scope` | Identity of the archived row. |
+| `autonomous_session.tool_call` | `tool`, `outcome` | Retrieval ownership-predicate refusals use `tool='retrieve_chunks'`, `outcome='ownership_denied'` (#494) as the one closing row after `started`, without a duplicate generic `error` row (#656) or raw arguments/results. Ordinary failures retain their generic error audit. Actor and run are in `user_id` and `resource_id`; rows share the caller's transaction. See [audit logging](security/audit-logging.md) for scope and rollback limits. |
 
 ### `inference_routing_log`
 
@@ -1909,9 +1911,9 @@ retains inspection. Account export includes `skill_workspaces.json`. Migration
 0068 refuses downgrade while any workspace remains: export and intentionally
 clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
 
-### Tool-egress ceiling columns (0069, DE-358 item 6 / AG-03)
+### Tool-egress ceiling columns (0070, DE-358 item 6 / AG-03)
 
-Migration 0069 adds the nullable columns behind the API-side matter-scoped
+Migration 0070 adds the nullable columns behind the API-side matter-scoped
 tool-egress ceiling ([ADR 0014 amendment 2026-10-01](adr/0014-gateway-egress-boundary-for-tool-providers.md),
 [ADR 0015 amendment 2026-10-01](adr/0015-governed-tool-calling-model.md)).
 The effective ceiling is the numeric `min()` over the operator default

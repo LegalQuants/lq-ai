@@ -1,7 +1,7 @@
 """Matter-scoped tool-egress ceiling columns (DE-358 item 6 / AG-03, issue #593).
 
-Revision ID: 0069
-Revises: 0068
+Revision ID: 0070
+Revises: 0069
 
 Adds the nullable ceiling inputs and audit columns for the API-side
 tool-egress ceiling:
@@ -23,8 +23,8 @@ backfill and no data loss on downgrade beyond the new columns.
 
 from alembic import op
 
-revision = "0069"
-down_revision = "0068"
+revision = "0070"
+down_revision = "0069"
 branch_labels = None
 depends_on = None
 

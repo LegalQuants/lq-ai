@@ -72,6 +72,7 @@ The Inference Gateway is the security boundary — the only component holding pr
 | Capability | Status | Verification |
 |---|---|---|
 | Inference gateway with provider routing | M1 | `gateway/app/router.py` |
+| API/worker gateway HTTP timeout (ADR 0027): default 900s, operator override `LQ_AI_GATEWAY_TIMEOUT_SECONDS`, connect capped at the shorter of 10s and the configured value; API budget must exceed adapter budgets | post-v0.8.0 | `api/app/config.py`; `api/app/clients/gateway.py`; `.env.example` / `.env.release.example`; both Compose recipes; `cd api && pytest tests/test_gateway_timeout_setting.py` |
 | Anthropic / OpenAI / Ollama provider adapters | M1 | `gateway/app/providers/{anthropic,openai,ollama}.py`; Ollama via `docker compose --profile local` |
 | Azure OpenAI provider adapter | M2 | `gateway/app/providers/azure_openai.py` ([DE-267](PRD.md#9-deferred-enhancements-and-identified-future-work), closed in M2) |
 | Google Vertex AI / AWS Bedrock provider adapters | deferred (community-friendly) | Wire-format specs in PRD §9 (DE-034 / DE-035) |

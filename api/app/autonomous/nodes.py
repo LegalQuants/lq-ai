@@ -41,7 +41,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.audit import autonomous_audit
+from app.autonomous.audit import AuditedRetrievalOwnershipDenied, autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
@@ -266,16 +266,45 @@ async def _run_analysis_loop(
         try:
             validate_action_args(decision.next_intent, decision.args)
             act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
-            observations.append(
-                summarize_observation(decision.next_intent, decision.rationale, act)
-            )
-            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
-        except (
-            Exception
-        ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
+        except AuditedRetrievalOwnershipDenied:
+            # The ownership gate already flushed the closing refusal. Keep
+            # the established nonfatal observation without double-counting it.
+            observations.append(f"{decision.next_intent.value} → failed ({ValueError.__name__})")
+        except Exception as exc:  # validation/dispatch failure is a non-fatal observation
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+            # Close the attempt in the audit trail. The chokepoint writes a
+            # ``started`` row before it dispatches and its closing row only
+            # after the handler returns, so a handler that raises left
+            # ``started`` with nothing after it, and an argument rejected by
+            # validate_action_args left no row at all. Either way the receipt
+            # could not tell a failed call from one still in flight. Counts
+            # and types only (P3): the exception class name, never its text.
+            await autonomous_audit(
+                db,
+                session,
+                "tool_call",
+                tool=str(decision.next_intent),
+                outcome="error",
+                error_type=type(exc).__name__,
+            )
+        else:
+            try:
+                observations.append(
+                    summarize_observation(decision.next_intent, decision.rationale, act)
+                )
+                evidence.extend(
+                    collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1)
+                )
+            except AutonomousBrake:
+                raise
+            except Exception as exc:
+                # Dispatch already succeeded and has its closing audit row.
+                # Keep postprocessing failures non-fatal for the planner.
+                observations.append(
+                    f"{decision.next_intent.value} → postprocessing failed ({type(exc).__name__})"
+                )
         trace.append(
             {
                 "step": str(steps),

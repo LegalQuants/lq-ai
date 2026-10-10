@@ -1279,3 +1279,170 @@ async def test_tampered_envelope_denies_resume_with_structured_error(
         json={"decision": "approve"},
     )
     assert replay.status_code == 409, replay.text
+
+
+# ---------------------------------------------------------------------------
+# Issue #593 — real approve path, proposal/current policy and gateway forwarding
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "original,current,expected,source,allowed",
+    [
+        (5, 2, 2, "project", False),
+        (2, 5, 2, "pending_original", False),
+        (4, 3, 3, "project", True),
+        (None, 3, 3, "project", True),
+        (2, None, 2, "pending_original", False),
+    ],
+)
+async def test_approve_enforces_proposal_and_current_ceiling(
+    client: AsyncClient,
+    db_user: User,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    original: int | None,
+    current: int | None,
+    expected: int,
+    source: str,
+    allowed: bool,
+) -> None:
+    from sqlalchemy import select
+
+    from app.api.chats import _resolve_proposal_ceiling
+    from app.config import get_settings
+    from app.models.chat import Chat
+    from app.models.project import Project
+
+    monkeypatch.delenv("LQ_AI_TOOL_MAX_EGRESS_TIER", raising=False)
+    monkeypatch.delenv("TOOL_MAX_EGRESS_TIER", raising=False)
+    get_settings.cache_clear()
+    try:
+        chat_id, pending_id, _ = await _create_chat_and_pending(
+            db_session, user=db_user, client=client
+        )
+        project = Project(
+            owner_id=db_user.id,
+            name="Resume ceiling",
+            slug=f"resume-{uuid.uuid4().hex}",
+            max_egress_tier=original,
+        )
+        db_session.add(project)
+        await db_session.flush()
+        chat = await db_session.get(Chat, chat_id)
+        chat.project_id = project.id
+        await db_session.flush()
+        pending = await db_session.get(ChatPendingToolCall, pending_id)
+        pending.max_egress_tier = await _resolve_proposal_ceiling(db_session, chat_id=chat_id)
+        assert pending.max_egress_tier == original
+        await db_session.commit()
+
+        # A separate user update between proposal and approval.
+        project.max_egress_tier = current
+        await db_session.commit()
+        spec = _make_tool_spec()
+        call = AsyncMock(return_value={"payload": {"deleted": "abc123"}})
+        with (
+            patch(
+                "app.api.chats.assemble_allowlist",
+                AsyncMock(return_value=ChatToolAllowlist(specs={spec.function_name: spec})),
+            ),
+            patch("app.chat.tool_loop.resolve_provider_tier", AsyncMock(return_value=3)),
+            patch(
+                "app.tools.governance.resolve_provider_cost", AsyncMock(return_value=Decimal("0"))
+            ),
+            patch("app.mcp.service.list_servers", AsyncMock(return_value=[])),
+            patch.object(GatewayClient, "call_tool", call),
+            patch(
+                "app.api.chats.run_chat_tool_loop", AsyncMock(return_value=LoopFinal(text="Done"))
+            ),
+            patch("app.skills.chat_tools.extend_chat_tools", AsyncMock()),
+        ):
+            response = await client.post(
+                f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+                headers=_h(db_user),
+                json={"decision": "approve"},
+            )
+            assert response.status_code == 200, response.text
+            replay = await client.post(
+                f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+                headers=_h(db_user),
+                json={"decision": "approve"},
+            )
+            assert replay.status_code == 409
+        if allowed:
+            call.assert_awaited_once()
+            assert call.await_args.kwargs["max_allowed_tier"] == expected
+        else:
+            call.assert_not_awaited()
+        rows = list(
+            (
+                await db_session.scalars(
+                    select(ToolCallLog).where(
+                        ToolCallLog.chat_id == chat_id,
+                        ToolCallLog.confirmation_state == "approved",
+                        ToolCallLog.outcome.in_(["executed", "refused_tier"]),
+                    )
+                )
+            ).all()
+        )
+        assert len(rows) == 1
+        assert (rows[0].max_allowed_tier, rows[0].ceiling_source) == (expected, source)
+        assert rows[0].outcome == ("executed" if allowed else "refused_tier")
+        await db_session.refresh(pending)
+        assert pending.status == "resolved"
+        assert pending.max_egress_tier == original
+    finally:
+        get_settings.cache_clear()
+
+
+async def test_approve_sql_policy_error_refuses_and_audits(
+    client: AsyncClient, db_user: User, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy import select, text
+
+    chat_id, pending_id, _ = await _create_chat_and_pending(db_session, user=db_user, client=client)
+    scalar = db_session.scalar
+    failed = False
+
+    async def fail_policy_once(statement, *args, **kwargs):
+        nonlocal failed
+        if not failed and "chats.project_id" in str(statement):
+            failed = True
+            await db_session.execute(text("SELECT 1 / 0"))
+        return await scalar(statement, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "scalar", fail_policy_once)
+    spec = _make_tool_spec()
+    call = AsyncMock()
+    with (
+        patch(
+            "app.api.chats.assemble_allowlist",
+            AsyncMock(return_value=ChatToolAllowlist(specs={spec.function_name: spec})),
+        ),
+        patch("app.chat.tool_loop.resolve_provider_tier", AsyncMock(return_value=3)),
+        patch("app.tools.governance.resolve_provider_cost", AsyncMock(return_value=Decimal("0"))),
+        patch("app.mcp.service.list_servers", AsyncMock(return_value=[])),
+        patch.object(GatewayClient, "call_tool", call),
+        patch(
+            "app.api.chats.run_chat_tool_loop", AsyncMock(return_value=LoopFinal(text="Refused"))
+        ),
+        patch("app.skills.chat_tools.extend_chat_tools", AsyncMock()),
+    ):
+        response = await client.post(
+            f"/api/v1/chats/{chat_id}/tool-calls/{pending_id}",
+            headers=_h(db_user),
+            json={"decision": "approve"},
+        )
+    assert response.status_code == 200, response.text
+    assert failed
+    call.assert_not_awaited()
+    row = (
+        await db_session.scalars(
+            select(ToolCallLog).where(
+                ToolCallLog.chat_id == chat_id, ToolCallLog.outcome == "refused_tier"
+            )
+        )
+    ).one()
+    assert row.ceiling_source == "unresolved"
+    assert row.max_allowed_tier is None

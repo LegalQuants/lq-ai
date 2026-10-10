@@ -38,6 +38,24 @@ def test_expand_env_vars_uses_env_when_set(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 @pytest.mark.unit
+def test_expand_env_vars_uses_default_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Shell semantics: ``${VAR:-default}`` falls back when VAR is set but empty,
+    so an env file line ``VAR=`` does not blank out the default."""
+
+    monkeypatch.setenv("LQ_AI_TEST_VAR", "")
+    assert expand_env_vars("${LQ_AI_TEST_VAR:-fallback}") == "fallback"
+    assert expand_env_vars("https://${LQ_AI_TEST_VAR:-host}/v1") == "https://host/v1"
+
+
+@pytest.mark.unit
+def test_expand_env_vars_empty_without_default_stays_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LQ_AI_TEST_VAR", "")
+    assert expand_env_vars("x${LQ_AI_TEST_VAR}y") == "xy"
+
+
+@pytest.mark.unit
 def test_expand_env_vars_yaml_typed_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """``${VAR:-true}`` must produce a real bool, not the string 'true'."""
 

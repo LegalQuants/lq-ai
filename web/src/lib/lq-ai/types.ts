@@ -454,10 +454,18 @@ export type MessageStreamEvent =
 
 export interface SkillInputDef {
 	name: string;
-	type?: 'string' | 'enum' | 'boolean' | 'integer';
+	/**
+	 * Free-form per the corpus (mirrors `SkillInputDef.type` in
+	 * `api/app/skills/schema.py`): `text`, `document`, `enum`, `boolean`,
+	 * `integer`, `structured`, `file`. The form renders a text field for
+	 * anything it does not special-case.
+	 */
+	type?: string | null;
 	required?: boolean;
-	description?: string;
-	enum?: string[];
+	description?: string | null;
+	enum?: string[] | null;
+	/** The authoring guide's spelling of an enum's options; passed through by the api. */
+	values?: string[] | null;
 	default?: unknown;
 }
 
@@ -510,12 +518,9 @@ export interface Skill extends SkillSummary {
 	example_files?: SkillReferenceFile[];
 	script_files?: SkillReferenceFile[];
 	/**
-	 * Parsed inputs from the frontmatter. The OpenAPI sketch surfaces only
-	 * `content_yaml` (the raw frontmatter); we parse it client-side to drive
-	 * the input form. The shape mirrors `docs/skill-authoring-guide.md`.
-	 *
-	 * The backend MAY surface `inputs` as a top-level field in a future
-	 * iteration; for now the LQ.AI shell parses YAML.
+	 * Declared inputs driving the composer's input form: required first,
+	 * then optional. Not part of the `GET /skills/{name}` payload — the chat
+	 * panel fills it from `GET /skills/{name}/inputs` when a skill is attached.
 	 */
 	inputs?: SkillInputDef[];
 	/**

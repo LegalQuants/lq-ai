@@ -31,3 +31,19 @@ export function selectFileIdsForSend(files: FileMeta[]): string[] | undefined {
 		.map((f) => f.id);
 	return ids.length > 0 ? ids : undefined;
 }
+
+/**
+ * Names of the attached files whose text will reach the model on this send.
+ * The backend only injects text for 'ready' files, so only these can stand
+ * in for a skill's required document input.
+ */
+export function readyFileNames(files: FileMeta[]): string[] {
+	return files.filter((f) => f.ingestion_status === 'ready').map((f) => f.filename);
+}
+
+/** Names of the attached files still being ingested (neither ready nor failed). */
+export function processingFileNames(files: FileMeta[]): string[] {
+	return files
+		.filter((f) => f.ingestion_status !== 'ready' && f.ingestion_status !== 'failed')
+		.map((f) => f.filename);
+}

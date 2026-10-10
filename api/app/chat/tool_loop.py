@@ -715,12 +715,9 @@ async def execute_tool(
     if egress_ceiling is not None:
         ceiling, ceiling_source = egress_ceiling
     else:
-        from sqlalchemy import select
-
-        from app.models.chat import Chat
-
-        project_id = await db.scalar(select(Chat.project_id).where(Chat.id == chat_id))
-        ceiling, ceiling_source = await resolve_tool_egress_ceiling(db, project_id=project_id)
+        ceiling, ceiling_source = await resolve_tool_egress_ceiling(
+            db, project_id=None, chat_id=chat_id
+        )
 
     async def _dispatch() -> ToolResult:
         if spec.kind == "skill":

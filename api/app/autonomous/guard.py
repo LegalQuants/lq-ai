@@ -86,7 +86,11 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.audit import autonomous_audit
+from app.autonomous.audit import (
+    AuditedRetrievalOwnershipDenied,
+    audit_retrieval_ownership_denial,
+    autonomous_audit,
+)
 from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
@@ -768,7 +772,9 @@ async def _dispatch(
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
     if intent == ToolIntent.retrieve_chunks:
-        return await _handle_retrieve_chunks(params, db=db, owner_id=session.user_id)
+        return await _handle_retrieve_chunks(
+            params, db=db, owner_id=session.user_id, retrieval_session=session
+        )
 
     if intent in (ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan):
         return await _handle_gateway_inference(
@@ -1424,7 +1430,13 @@ async def _handle_emit_artifact(
     return ToolResult(cost_usd=Decimal("0"), data=data)
 
 
-async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+async def _assert_kb_owned(
+    db: AsyncSession,
+    kb_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    *,
+    retrieval_session: AutonomousSession | None = None,
+) -> None:
     """Reject a model-supplied ``kb_id`` the session owner does not own.
 
     :func:`hybrid_search` and the since-fetch scope only by ``kb_id`` and rely
@@ -1451,10 +1463,20 @@ async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UU
         )
     ).scalar_one_or_none()
     if owned is None:
-        raise ValueError(f"knowledge base {kb_id} is not accessible to this session")
+        message = f"knowledge base {kb_id} is not accessible to this session"
+        if retrieval_session is not None:
+            await audit_retrieval_ownership_denial(db, retrieval_session)
+            raise AuditedRetrievalOwnershipDenied(message)
+        raise ValueError(message)
 
 
-async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+async def _assert_file_owned(
+    db: AsyncSession,
+    file_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    *,
+    retrieval_session: AutonomousSession | None = None,
+) -> None:
     """Reject a model-supplied ``file_id`` the session owner does not own
     (#288, AG-01). See :func:`_assert_kb_owned` for the rationale.
 
@@ -1472,7 +1494,11 @@ async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uui
         )
     ).scalar_one_or_none()
     if owned is None:
-        raise ValueError(f"file {file_id} is not accessible to this session")
+        message = f"file {file_id} is not accessible to this session"
+        if retrieval_session is not None:
+            await audit_retrieval_ownership_denial(db, retrieval_session)
+            raise AuditedRetrievalOwnershipDenied(message)
+        raise ValueError(message)
 
 
 async def _handle_retrieve_chunks(
@@ -1480,6 +1506,7 @@ async def _handle_retrieve_chunks(
     *,
     db: AsyncSession,
     owner_id: uuid.UUID,
+    retrieval_session: AutonomousSession | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_chunks`` — hybrid KB search OR file-scoped OR
     since-scoped fetch.  Zero cost (local retrieval).
@@ -1523,6 +1550,9 @@ async def _handle_retrieve_chunks(
               of chunks whose owning file was attached after ``since``.
 
         db: Active async ORM session.
+        retrieval_session: Internal run context from the chokepoint. Ownership
+            refusals flush an audit row in this run's transaction before raising;
+            direct handler callers without run context retain the same refusal.
 
     Raises:
         ValueError: If no mode applies (none of ``query``, ``file_id``,
@@ -1535,12 +1565,16 @@ async def _handle_retrieve_chunks(
 
     # Mode 2: file-scoped fetch.
     if file_id_raw is not None:
-        await _assert_file_owned(db, uuid.UUID(str(file_id_raw)), owner_id)
+        await _assert_file_owned(
+            db, uuid.UUID(str(file_id_raw)), owner_id, retrieval_session=retrieval_session
+        )
         return await _handle_retrieve_chunks_by_file(file_id_raw, db=db)
 
     # Mode 3: since + kb_id scoped fetch.
     if since_raw is not None and kb_id_raw is not None:
-        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
+        await _assert_kb_owned(
+            db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
+        )
         return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
 
     # Mode 1: query-based hybrid search (existing path — unchanged).
@@ -1560,7 +1594,9 @@ async def _handle_retrieve_chunks(
             "_handle_retrieve_chunks: `query` mode requires `kb_id` so the "
             "search can be scoped to a knowledge base this session owns."
         )
-    await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
+    await _assert_kb_owned(
+        db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
+    )
     return await _handle_retrieve_chunks_query(params, db=db)
 
 

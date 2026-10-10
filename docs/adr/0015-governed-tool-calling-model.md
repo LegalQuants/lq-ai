@@ -100,3 +100,5 @@ D2's tier check compared the provider's data-egress tier against the matter/skil
 - The resolved ceiling is threaded through `execute_tool` → `governed_tool_invocation` → every governed gateway `call_tool` (MCP, authority, research): the same number the API applied is the number the gateway enforces.
 - `tool_call_log` rows carry `max_allowed_tier` + `ceiling_source` (see the 2026-10-01 amendment to [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md)).
 - The Project create/update/read API accepts and returns `max_egress_tier`.
+
+Policy reads include the chat's current Project lookup and are savepoint-isolated so a recoverable SQL error cannot poison refusal auditing. Error diagnostics contain metadata only. A storage outage still prevents dispatch but cannot guarantee persistence while the database is unavailable. New pending proposals are not created when their original policy cannot be resolved.
