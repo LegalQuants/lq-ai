@@ -38,6 +38,24 @@ Logged events at M1 (verified against actual `action=` literals emitted by `api/
 
 All writes go through one helper — `app.audit.audit_action()` in [api/app/audit.py](../../api/app/audit.py) — so every row populates `privilege_marked` / `privilege_basis` consistently and captures `ip_address` / `user_agent` / `request_id` uniformly when a `Request` is available.
 
+Autonomous `retrieve_chunks` ownership refusals write
+`action='autonomous_session.tool_call'` with
+`details={"tool": "retrieve_chunks", "outcome": "ownership_denied"}` (#494).
+The existing predicates reject foreign, unknown, archived KBs and deleted files
+without distinguishing their existence to the agent. Invalid arguments and
+other tool failures do not receive this outcome. It is a refusal signal for
+investigation, not proof of prompt injection. No query, document text, raw
+arguments, results, or exception message is added to the row.
+
+Each ownership refusal has one closing `ownership_denied` row after the initial
+`started` row. The analysis loop recognizes the already-audited refusal and
+continues with its existing `ValueError` observation without adding a generic
+`error` row (#656). Ordinary validation and dispatch errors retain their generic
+failure audit. Rows use the caller's transaction: they persist on its commit
+and disappear on rollback. An audit-write failure remains an
+error and cannot grant access. These rows are not an independent durable
+incident log, and #494 does not add alerts or alter orchestration-scope refusals.
+
 ## What is NOT logged
 
 - **Plaintext message content.** `chat.message_sent` records the chat and message ids in `details`, not the message body. Inference-routing has its own table (`inference_routing_log`) with provider, model, token counts and latency — also without message content, per PRD §4.

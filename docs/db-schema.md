@@ -1281,6 +1281,7 @@ The `details` column carries action-specific payloads. Documented keys by action
 | `user_skill.created` | `slug`, `scope`, `version` | Identifies the created row. `team_id` also present for `scope='team'` rows. |
 | `user_skill.updated` | `slug`, `scope`, `changed_fields`, `version_before`, `version_after` | `changed_fields` is a sorted array of mutated keys; `version_before`/`version_after` present only when `version` changed. `team_id` present for team-scope rows. |
 | `user_skill.deleted` | `slug`, `scope` | Identity of the archived row. |
+| `autonomous_session.tool_call` | `tool`, `outcome` | Retrieval ownership-predicate refusals use `tool='retrieve_chunks'`, `outcome='ownership_denied'` (#494) as the one closing row after `started`, without a duplicate generic `error` row (#656) or raw arguments/results. Ordinary failures retain their generic error audit. Actor and run are in `user_id` and `resource_id`; rows share the caller's transaction. See [audit logging](security/audit-logging.md) for scope and rollback limits. |
 
 ### `inference_routing_log`
 
