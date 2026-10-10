@@ -1149,6 +1149,7 @@ CREATE TABLE user_skills (
     frontmatter_extra JSONB NOT NULL DEFAULT '{}',
     body              TEXT NOT NULL,
     slash_alias       TEXT,                                       -- 0023: chat-composer trigger alias (e.g. '/nda')
+    installation_provenance JSONB,                              -- 0070: immutable installation snapshot
     forked_from       TEXT,                                       -- 0023: source skill slug when created via fork
     archived_at       TIMESTAMPTZ,                                -- soft-delete
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1188,6 +1189,7 @@ CREATE UNIQUE INDEX idx_user_skills_slash_alias_team_active
 |---|---|---|
 | `slash_alias` | 0023 | Optional chat-composer trigger alias. Must match `^/[a-z0-9-]{1,32}$` (enforced by `chk_user_skills_slash_alias_format`). Unique per active owner (partial unique indexes above). `POST` and `PATCH /user-skills` return 422 with `"slash_alias '...' is already used by another of your skills."` on collision. |
 | `forked_from` | 0023 | Slug of the source skill when this row was created via the fork button on the skill detail page. Stored as plain text — the source may be a filesystem-canonical built-in with no DB row (per ADR 0004). Set on create; read-only afterward. |
+| `installation_provenance` | 0070 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
 
 Resolution path during prompt assembly (`/internal/skills/{slug}?user_id=…`): user-scope row for the requesting user wins on slug match; falls through to the filesystem registry otherwise. D8.1's only addition is the `teams` FK target and a middle resolution slot for team-scope rows.
 
