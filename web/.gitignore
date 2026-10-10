@@ -319,3 +319,6 @@ cypress/videos
 cypress/screenshots
 .vscode/settings.json
 .cptr
+
+# Accessibility reports contain synthetic fixture findings only.
+cypress/results

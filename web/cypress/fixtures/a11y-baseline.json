@@ -1,0 +1,1824 @@
+{
+	"schemaVersion": 1,
+	"sourceSha": "7ac94dd1a581b745912d100b19ad23d822de6222",
+	"axeVersion": "4.14.0",
+	"states": [
+		"login/desktop/light",
+		"login/desktop/dark",
+		"login/phone/light",
+		"login/phone/dark",
+		"dashboard/desktop/light",
+		"dashboard/desktop/dark",
+		"dashboard/phone/light",
+		"dashboard/phone/dark",
+		"matters/desktop/light",
+		"matters/desktop/dark",
+		"matters/phone/light",
+		"matters/phone/dark",
+		"new-matter/desktop/light",
+		"new-matter/desktop/dark",
+		"new-matter/phone/light",
+		"new-matter/phone/dark",
+		"knowledge/desktop/light",
+		"knowledge/desktop/dark",
+		"knowledge/phone/light",
+		"knowledge/phone/dark",
+		"skills/desktop/light",
+		"skills/desktop/dark",
+		"skills/phone/light",
+		"skills/phone/dark",
+		"appearance/desktop/light",
+		"appearance/desktop/dark",
+		"appearance/phone/light",
+		"appearance/phone/dark"
+	],
+	"recordedAt": "2026-10-10T15:17:40.220Z",
+	"owner": "@houfu",
+	"reason": "Measured pre-existing noncritical findings on current main; source credit @SaifAlYounan #437",
+	"entries": [
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["p"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".min-h-screen > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["p"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["p"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".min-h-screen > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".min-h-screen > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["p"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["label:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-shell > footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "login/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
+			],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(2) > div:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(4) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".strikethrough"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Enhance Prompt\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Skill Creator\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Knowledge\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"playbooks\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"tabular\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"skills\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"autonomous\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/light",
+			"rule": "link-in-text-block",
+			"impact": "serious",
+			"target": [".lq-text-body-sm > a[href$=\"chats\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(2) > div:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(4) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".strikethrough"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Enhance Prompt\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Skill Creator\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Knowledge\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"playbooks\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"tabular\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"skills\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"autonomous\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/desktop/dark",
+			"rule": "link-in-text-block",
+			"impact": "serious",
+			"target": [".lq-text-body-sm > a[href$=\"chats\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(2) > div:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".strikethrough"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Enhance Prompt\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Skill Creator\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Knowledge\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"playbooks\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"tabular\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"skills\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"autonomous\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/light",
+			"rule": "link-in-text-block",
+			"impact": "serious",
+			"target": [".lq-text-body-sm > a[href$=\"chats\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(2) > div:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["section:nth-child(3) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".strikethrough"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(1) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-label"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Enhance Prompt\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Skill Creator\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[aria-label=\"Knowledge\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"playbooks\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"tabular\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"skills\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "label-content-name-mismatch",
+			"impact": "serious",
+			"target": ["a[href$=\"autonomous\"]"],
+			"count": 1
+		},
+		{
+			"state": "dashboard/phone/dark",
+			"rule": "link-in-text-block",
+			"impact": "serious",
+			"target": [".lq-text-body-sm > a[href$=\"chats\"]"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "matters/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "matters/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".nmm-optional"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".nmm-optional"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".nmm-optional"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".nmm-optional"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "new-matter/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "knowledge/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "skills/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-text-caption"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["strong"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "skills/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/desktop/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/light",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".lq-kbd"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li[role=\"presentation\"]:nth-child(8) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li[role=\"presentation\"]:nth-child(9) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [
+				"li[role=\"presentation\"]:nth-child(10) > .lq-tab[role=\"tab\"][aria-controls=\"lq-main\"] > .lq-tab-label"
+			],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(1)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["span:nth-child(1) > strong"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": ["footer > span:nth-child(2)"],
+			"count": 1
+		},
+		{
+			"state": "appearance/phone/dark",
+			"rule": "color-contrast",
+			"impact": "serious",
+			"target": [".underline"],
+			"count": 1
+		}
+	]
+}

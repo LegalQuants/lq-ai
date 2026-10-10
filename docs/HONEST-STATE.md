@@ -294,6 +294,10 @@ Engineering rigor is measurable, not asserted. Test **file** counts below are ve
 | SLSA Build Level 3 (provenance from an isolated reusable workflow) | landed in the workflow; first verifiable on the release after v0.7.1 | `.github/workflows/build-image.yml`; verify with `--signer-workflow LegalQuants/lq-ai/.github/workflows/build-image.yml` (see the releases README) |
 | Annual third-party pen test + adversarial red-team | committed; not scheduled | First engagements targeted within 90 days of M1 release |
 
+### Accessibility first slice (DE-232)
+
+The dedicated `accessibility.yml` check uses a production frontend with synthetic API responses, separate from the full-stack nightly Cypress workflow introduced by #432 and the broader per-PR deterministic-track work in #706. It covers seven route states × two viewport widths × two explicit theme preferences. Exact pre-existing noncritical fingerprints are tolerated; every new axe A/AA violation fails. Local measurement: 28 browser variants passed with 248 serious fingerprints recorded from main at `7ac94dd1a581b745912d100b19ad23d822de6222`; manual/incomplete checks and broader route coverage remain open. The check has not yet run on GitHub or been added as a required ruleset check. See [the credited implementation plan](contribute/mini-prds/accessibility-pr-gate.md) and [audit scope](compliance/accessibility-audit.md). Source credit: @SaifAlYounan, #437/#386. This supersedes any older “no browser checks” wording only for this new first slice; DE-232 is not complete.
+
 ### 8.1 OpenWebUI fork — inherited TypeScript-check debt
 
 The web frontend is a fork of OpenWebUI (ADR 0001). `npm run check` (full scope) surfaces ~9,359 TypeScript strict-mode signals, all in upstream files inherited at fork time; none in LQ.AI-owned code, none in the (separate Python) gateway. CI scopes the check to LQ.AI code (`npm run check:lq-ai`). Migration tracked as DE-262.
