@@ -900,7 +900,14 @@ class _FakeGateway:
         self._payload = payload
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def call_tool(self, provider: str, op: str, args: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        provider: str,
+        op: str,
+        args: dict[str, Any],
+        *,
+        max_allowed_tier: int | None = None,
+    ) -> dict[str, Any]:
         self.calls.append((provider, op, args))
         return {"payload": self._payload}
 

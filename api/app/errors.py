@@ -394,6 +394,10 @@ class ToolTierRefused(LQAIError):
     ``outcome="refused_tier"`` is written before the raise so the refusal
     is always persisted regardless of how the caller handles the exception.
 
+    Also raised fail-closed when the egress policy could not be read at
+    call time (issue #593): ``ceiling`` is then ``None`` and the audit row
+    carries ``ceiling_source="unresolved"``.
+
     Carries ONLY tier integers — no args or result payload.  Maps to 403
     (the tier ceiling is an authorization boundary, not a server error).
     """
@@ -407,12 +411,18 @@ class ToolTierRefused(LQAIError):
         provider: str,
         tool: str,
         tier: int,
-        ceiling: int,
+        ceiling: int | None,
     ) -> None:
-        message = (
-            f"Tool call refused: provider '{provider}' tool '{tool}' "
-            f"requires tier {tier} but ceiling is {ceiling}"
-        )
+        if ceiling is None:
+            message = (
+                f"Tool call refused: provider '{provider}' tool '{tool}' "
+                f"requires tier {tier} but the egress policy could not be read"
+            )
+        else:
+            message = (
+                f"Tool call refused: provider '{provider}' tool '{tool}' "
+                f"requires tier {tier} but ceiling is {ceiling}"
+            )
         super().__init__(
             message,
             details={"provider": provider, "tool": tool, "tier": tier, "ceiling": ceiling},
