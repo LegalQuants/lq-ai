@@ -6,12 +6,21 @@
 	import {
 		getTabularExecution,
 		cancelTabularExecution,
-		exportTabularExecution
+		exportTabularExecution,
+		previewTabularBulkOpCost,
+		createTabularBulkOp
 	} from '$lib/lq-ai/api/tabular';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
+	import { listSkills, getInputs } from '$lib/lq-ai/api/skills';
+	import SkillInputForm from '$lib/lq-ai/components/SkillInputForm.svelte';
+	import BulkDraftContent from '$lib/lq-ai/components/BulkDraftContent.svelte';
+	import { flattenSkillInputs } from '$lib/lq-ai/chat/skillInputs';
+	import type { SkillSummary, SkillInputDef } from '$lib/lq-ai/types';
 	import TabularGrid from '$lib/lq-ai/components/TabularGrid.svelte';
 	import TabularCitationModal from '$lib/lq-ai/components/TabularCitationModal.svelte';
 	import type {
+		TabularBulkOpKind,
+		TabularBulkOpPreviewResponse,
 		TabularCellResult,
 		TabularExecution
 	} from '$lib/lq-ai/types';
@@ -20,9 +29,14 @@
 		isTerminalStatus,
 		progressFraction,
 		formatProgress,
+		bulkOpKindLabel,
+		bulkOpStatusSummary,
+		bulkOpItemHeading,
+		hasActiveBulkOp,
 		TABULAR_POLL_INTERVAL_MS
 	} from './page-helpers';
 	import { formatTabularStatus, formatCostUsd, skillNameDisplay } from '../page-helpers';
+	import { requiresCostConfirmation } from '../new/page-helpers';
 
 	let execution: TabularExecution | null = null;
 	let loading = true;
@@ -82,7 +96,10 @@
 
 	function scheduleNextPoll(): void {
 		if (!execution) return;
-		if (isTerminalStatus(execution.status)) {
+		// Keep polling while the execution runs OR any bulk op is
+		// non-terminal — the detail response's `bulk_ops` array is the
+		// bulk-op read-side (DE-304 / ADR 0040 D2).
+		if (isTerminalStatus(execution.status) && !hasActiveBulkOp(execution.bulk_ops)) {
 			if (pollTimer) {
 				clearTimeout(pollTimer);
 				pollTimer = null;
@@ -105,12 +122,14 @@
 		}
 	}
 
-	function handleCellOpen(event: CustomEvent<{
-		documentId: string;
-		documentName: string;
-		columnName: string;
-		cell: TabularCellResult | undefined;
-	}>): void {
+	function handleCellOpen(
+		event: CustomEvent<{
+			documentId: string;
+			documentName: string;
+			columnName: string;
+			cell: TabularCellResult | undefined;
+		}>
+	): void {
 		const { documentName, columnName, cell } = event.detail;
 		if (!cell) return;
 		openCell = { documentName, columnName, cell };
@@ -145,7 +164,135 @@
 		}
 	}
 
-	onMount(loadOnce);
+	// DE-304 / ADR 0040 — bulk operations.
+	let bulkOpKind: TabularBulkOpKind = 'redline_rows';
+	let bulkOpColumn = '';
+	let bulkOpSkill = '';
+	let bulkSkills: SkillSummary[] = [];
+	let bulkInputDefs: SkillInputDef[] = [];
+	let bulkSkillInputs: Record<string, unknown> = {};
+	let bulkInputsLoading = false;
+	$: eligibleBulkSkills = bulkSkills.filter((skill) =>
+		bulkOpKind === 'redline_rows'
+			? skill.output_format === 'report'
+			: ['report', 'markdown', 'summary'].includes(skill.output_format ?? '')
+	);
+	let bulkInputRequest = 0;
+	let bulkPreviewRequest = 0;
+	async function loadBulkOpInputs(): Promise<void> {
+		resetBulkOpPreview();
+		bulkInputDefs = [];
+		bulkSkillInputs = {};
+		const request = ++bulkInputRequest;
+		if (!bulkOpSkill) {
+			bulkInputsLoading = false;
+			return;
+		}
+		bulkInputsLoading = true;
+		try {
+			const definitions = await getInputs(bulkOpSkill);
+			if (request !== bulkInputRequest) return;
+			bulkInputDefs = flattenSkillInputs(definitions).filter(
+				(def) => !['file', 'document'].includes(def.type ?? '')
+			);
+		} catch (err) {
+			if (request === bulkInputRequest)
+				bulkOpError = err instanceof Error ? err.message : 'Cannot load skill inputs.';
+		} finally {
+			if (request === bulkInputRequest) bulkInputsLoading = false;
+		}
+	}
+	function changeBulkOpKind(): void {
+		bulkOpSkill = '';
+		loadBulkOpInputs();
+	}
+	function updateBulkSkillInputs(values: Record<string, unknown>): void {
+		bulkSkillInputs = values;
+		resetBulkOpPreview();
+	}
+	let bulkOpPreview: TabularBulkOpPreviewResponse | null = null;
+	let bulkOpPreviewing = false;
+	let bulkOpStarting = false;
+	let bulkOpConfirmed = false;
+	let bulkOpError: string | null = null;
+
+	$: columnNames = execution?.columns.map((c) => c.name) ?? [];
+	$: if (!bulkOpColumn && columnNames.length > 0) bulkOpColumn = columnNames[0];
+	$: bulkOpNeedsConfirm = bulkOpPreview
+		? requiresCostConfirmation(bulkOpPreview.estimated_cost_usd)
+		: false;
+	$: bulkOpRunnable =
+		bulkOpPreview !== null &&
+		!!bulkOpSkill &&
+		!bulkOpStarting &&
+		(!bulkOpNeedsConfirm || bulkOpConfirmed);
+
+	function resetBulkOpPreview(): void {
+		bulkPreviewRequest++;
+		bulkOpPreview = null;
+		bulkOpConfirmed = false;
+		bulkOpError = null;
+	}
+
+	async function previewBulkOp(): Promise<void> {
+		if (!executionId || bulkOpPreviewing) return;
+		bulkOpPreviewing = true;
+		const request = ++bulkPreviewRequest;
+		bulkOpError = null;
+		try {
+			const preview = await previewTabularBulkOpCost(executionId, {
+				kind: bulkOpKind,
+				column_name: bulkOpColumn,
+				skill_name: bulkOpSkill,
+				skill_inputs: bulkSkillInputs
+			});
+			if (request === bulkPreviewRequest) {
+				bulkOpPreview = preview;
+				bulkOpConfirmed = false;
+			}
+		} catch (err) {
+			if (request === bulkPreviewRequest) {
+				bulkOpError = err instanceof LQAIApiError ? err.message : 'Cost preview failed.';
+			}
+		} finally {
+			bulkOpPreviewing = false;
+		}
+	}
+
+	async function startBulkOp(): Promise<void> {
+		if (!executionId || !bulkOpRunnable || !bulkOpPreview) return;
+		bulkOpStarting = true;
+		bulkOpError = null;
+		try {
+			await createTabularBulkOp(executionId, {
+				kind: bulkOpKind,
+				column_name: bulkOpColumn,
+				skill_name: bulkOpSkill,
+				skill_inputs: bulkSkillInputs,
+				skill_content_hash: bulkOpPreview.skill_content_hash,
+				confirmed_cost_usd: bulkOpPreview.estimated_cost_usd
+			});
+			resetBulkOpPreview();
+			// Re-fetch immediately so the new pending op appears and the
+			// poll loop re-arms off its non-terminal status.
+			await loadOnce();
+		} catch (err) {
+			bulkOpError = err instanceof LQAIApiError ? err.message : 'Failed to start bulk operation.';
+		} finally {
+			bulkOpStarting = false;
+		}
+	}
+
+	onMount(() => {
+		loadOnce();
+		listSkills()
+			.then((skills) => {
+				bulkSkills = skills;
+			})
+			.catch((err) => {
+				bulkOpError = err instanceof Error ? err.message : 'Cannot load skills.';
+			});
+	});
 	onDestroy(() => {
 		if (pollTimer) clearTimeout(pollTimer);
 	});
@@ -207,11 +354,7 @@
 		{/if}
 
 		<!-- Status banner -->
-		<div
-			class="lq-tabres__banner"
-			data-status={execution.status}
-			data-testid="lq-tabres-banner"
-		>
+		<div class="lq-tabres__banner" data-status={execution.status} data-testid="lq-tabres-banner">
 			<div class="lq-tabres__banner-row">
 				<span class="lq-tabres__banner-label">Status:</span>
 				<span class="lq-tabres__banner-status" data-testid="lq-tabres-status">
@@ -251,9 +394,9 @@
 				</div>
 			{/if}
 			{#if execution.error_text}
-				<pre class="lq-tabres__banner-error" data-testid="lq-tabres-error-text"
-					>{execution.error_text}</pre
-				>
+				<pre
+					class="lq-tabres__banner-error"
+					data-testid="lq-tabres-error-text">{execution.error_text}</pre>
 			{/if}
 		</div>
 
@@ -267,6 +410,154 @@
 			/>
 		{:else}
 			<div class="lq-tabres__state">No grid to render (empty execution).</div>
+		{/if}
+
+		<!-- Bulk operations (DE-304 / ADR 0040) — completed grids only. -->
+		{#if execution.status === 'completed'}
+			<section class="lq-bulkops" data-testid="lq-bulkops">
+				<h2>Bulk operations</h2>
+				<p class="lq-bulkops__hint">
+					Run a follow-on operation over this grid. Outputs are drafts for attorney review, not
+					final work product.
+				</p>
+				<div class="lq-bulkops__form">
+					<label class="lq-bulkops__radio">
+						<input
+							type="radio"
+							name="bulk-op-kind"
+							value="redline_rows"
+							bind:group={bulkOpKind}
+							on:change={changeBulkOpKind}
+							data-testid="lq-bulkops-kind-redline"
+						/>
+						Draft revisions for a column
+					</label>
+					<label class="lq-bulkops__radio">
+						<input
+							type="radio"
+							name="bulk-op-kind"
+							value="summarize_column"
+							bind:group={bulkOpKind}
+							on:change={changeBulkOpKind}
+							data-testid="lq-bulkops-kind-summarize"
+						/>
+						Summarize a column
+					</label>
+					{#if columnNames.length > 0}
+						<select
+							bind:value={bulkOpColumn}
+							on:change={resetBulkOpPreview}
+							data-testid="lq-bulkops-column"
+							aria-label="Column to process"
+						>
+							{#each columnNames as name}
+								<option value={name}>{name}</option>
+							{/each}
+						</select>
+					{/if}
+					<select
+						bind:value={bulkOpSkill}
+						on:change={loadBulkOpInputs}
+						aria-label="Drafting skill"
+						data-testid="lq-bulkops-skill"
+					>
+						<option value="">Choose a drafting skill</option>
+						{#each eligibleBulkSkills as skill (skill.name)}
+							<option value={skill.name}>{skill.title} · {skill.version}</option>
+						{/each}
+					</select>
+					<button
+						type="button"
+						class="lq-bulkops__btn"
+						data-testid="lq-bulkops-preview"
+						on:click={previewBulkOp}
+						disabled={bulkOpPreviewing || !bulkOpSkill || bulkInputsLoading}
+					>
+						{bulkOpPreviewing ? 'Estimating…' : 'Preview cost'}
+					</button>
+				</div>
+				{#if bulkOpSkill && bulkInputDefs.length > 0}
+					<SkillInputForm
+						skillName={bulkOpSkill}
+						inputs={bulkInputDefs}
+						values={bulkSkillInputs}
+						onChange={updateBulkSkillInputs}
+					/>
+				{/if}
+				{#if bulkOpPreview}
+					<div class="lq-bulkops__preview" data-testid="lq-bulkops-preview-result">
+						<span>
+							{bulkOpPreview.skill_name} · {bulkOpPreview.skill_version} · {bulkOpPreview.calls_count}
+							call(s) · est.
+							{formatCostUsd(bulkOpPreview.estimated_cost_usd)}
+						</span>
+						{#if bulkOpNeedsConfirm}
+							<label class="lq-bulkops__confirm">
+								<input
+									type="checkbox"
+									bind:checked={bulkOpConfirmed}
+									data-testid="lq-bulkops-confirm"
+								/>
+								I confirm this estimated cost.
+							</label>
+						{/if}
+						<button
+							type="button"
+							class="lq-bulkops__btn lq-bulkops__btn--run"
+							data-testid="lq-bulkops-run"
+							on:click={startBulkOp}
+							disabled={!bulkOpRunnable}
+						>
+							{bulkOpStarting ? 'Starting…' : `Run ${bulkOpKindLabel(bulkOpKind)}`}
+						</button>
+					</div>
+				{/if}
+				{#if bulkOpError}
+					<div class="lq-tabres__error" role="alert" data-testid="lq-bulkops-error">
+						{bulkOpError}
+					</div>
+				{/if}
+
+				{#if (execution.bulk_ops ?? []).length > 0}
+					<ul class="lq-bulkops__list" data-testid="lq-bulkops-list">
+						{#each execution.bulk_ops ?? [] as op (op.id)}
+							<li class="lq-bulkops__op" data-status={op.status}>
+								<div class="lq-bulkops__op-head">
+									<a href={`/lq-ai/tabular/bulk-ops/${op.id}`}
+										>{bulkOpKindLabel(op.kind)} · {op.params.column_name}</a
+									>
+									<span
+										class="lq-bulkops__op-status"
+										data-failed={op.status === 'failed' ||
+											(op.results?.summary.failed_items ?? 0) > 0}
+										data-testid="lq-bulkops-op-status"
+									>
+										{bulkOpStatusSummary(op)}
+									</span>
+								</div>
+								{#if op.status === 'failed' && op.error_text}
+									<pre class="lq-tabres__banner-error">{op.error_text}</pre>
+								{/if}
+								{#if op.results}
+									{#each op.results.items as item, i (i)}
+										<details class="lq-bulkops__item" data-status={item.status}>
+											<summary>
+												{bulkOpItemHeading(op, item)}
+												{#if item.status === 'failed'}
+													<span class="lq-bulkops__item-failed" data-testid="lq-bulkops-item-failed"
+														>failed</span
+													>
+												{/if}
+											</summary>
+											<BulkDraftContent {item} />
+										</details>
+									{/each}
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
 		{/if}
 	{/if}
 
@@ -420,5 +711,109 @@
 		border: 1px solid var(--lq-error-border, var(--lq-border));
 		border-radius: 0.375rem;
 		color: var(--lq-error, inherit);
+	}
+
+	/* Bulk operations (DE-304) */
+	.lq-bulkops {
+		padding: 1rem;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
+		border-radius: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.lq-bulkops h2 {
+		margin: 0;
+		font-size: 1.125rem;
+	}
+	.lq-bulkops__hint {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--lq-text-secondary);
+	}
+	.lq-bulkops__form {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.lq-bulkops__radio {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__btn {
+		padding: 0.375rem 0.75rem;
+		border: 1px solid var(--lq-border);
+		border-radius: 0.375rem;
+		background: var(--lq-surface);
+		font-size: 0.8125rem;
+		cursor: pointer;
+	}
+	.lq-bulkops__btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.lq-bulkops__btn--run {
+		font-weight: 600;
+	}
+	.lq-bulkops__preview {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__confirm {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.8125rem;
+	}
+	.lq-bulkops__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.lq-bulkops__op {
+		padding: 0.75rem;
+		background: var(--lq-surface);
+		border: 1px solid var(--lq-border);
+		border-radius: 0.375rem;
+	}
+	.lq-bulkops__op-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.lq-bulkops__op-status {
+		font-size: 0.8125rem;
+		color: var(--lq-text-secondary);
+	}
+	.lq-bulkops__op-status[data-failed='true'] {
+		color: var(--lq-error, #b91c1c);
+		font-weight: 600;
+	}
+	.lq-bulkops__item {
+		margin-top: 0.5rem;
+		border-top: 1px solid var(--lq-border);
+		padding-top: 0.5rem;
+		font-size: 0.875rem;
+	}
+	.lq-bulkops__item summary {
+		cursor: pointer;
+	}
+	.lq-bulkops__item-failed {
+		margin-left: 0.5rem;
+		color: var(--lq-error, #b91c1c);
+		font-weight: 600;
+		font-size: 0.75rem;
+		text-transform: uppercase;
 	}
 </style>
