@@ -1281,7 +1281,7 @@ components:
             expected/primary tier rather than a guarantee.
         provider_type:
           type: string
-          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible]
+          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, bedrock_mantle, ollama, vllm, openai_compatible]
           description: |
             For ``provider_native`` rows: the provider's ``type``
             (``anthropic``, ``ollama``, …). Lets clients group rows
@@ -1384,7 +1384,7 @@ components:
         type:
           type: string
           nullable: true
-          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible, null]
+          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, bedrock_mantle, ollama, vllm, openai_compatible, null]
           description: |
             The provider's adapter type. Null only in the rare race where a
             provider is removed between the write and the status read-back on
@@ -1574,7 +1574,7 @@ components:
         name: {type: string}
         type:
           type: string
-          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible]
+          enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, bedrock_mantle, ollama, vllm, openai_compatible]
         healthy: {type: boolean}
         last_check_at: {type: string, format: date-time}
         models:
@@ -1595,7 +1595,7 @@ components:
               name: {type: string}
               type:
                 type: string
-                enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, ollama, vllm, openai_compatible]
+                enum: [anthropic, openai, vertex, cohere, azure_openai, bedrock, bedrock_mantle, ollama, vllm, openai_compatible]
               base_url: {type: string}
               api_key_env: {type: string}
               tier: {type: integer, enum: [1,2,3,4,5]}
