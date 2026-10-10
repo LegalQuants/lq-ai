@@ -16,7 +16,7 @@ The check appears on every PR, avoiding path-filtered required checks that remai
 
 Each fingerprint retains state, viewport/theme, axe rule, the complete target path (including frame/shadow paths), impact, and a capped count. A new element cannot reuse another element's exception; losing one old violation cannot offset a new one. Critical and unknown-impact findings always fail. New serious, moderate and minor findings fail. Malformed/duplicate entries and incomplete/duplicate state inventories fail.
 
-The initial measurement comes from main at `0f5615227daa81e47168f88b03f96c29e5d6b92b` with axe-core 4.14.0: **230 exact serious fingerprints across 28 state variants**. No critical findings were observed. This replaces the July route/rule observations rather than treating them as current evidence. Metadata records owner, reason, source SHA and capture date.
+The initial measurement comes from main at `3ecf284177b97ff6acdcaff5eda57bee0bf86a98` with axe-core 4.14.0: **230 exact serious fingerprints across 28 state variants**. No critical findings were observed. This replaces the July route/rule observations rather than treating them as current evidence. Metadata records owner, reason, source SHA and capture date.
 
 Subsequent exceptions may only shrink relative to the PR base. Fixed entries are flagged as stale and must be removed or have their count reduced. The job rejects new exceptions/count growth and scanner/matrix changes. An intentional policy change or scanner upgrade needs its own maintainer-reviewed decision and update to these controls, not automatic regeneration to green.
 
@@ -41,9 +41,9 @@ Dependency justification: axe-core supplies the established WCAG rule engine, wh
 
 ## Honest acceptance state
 
-Local evidence: production build passed with the bounded heap; standalone TypeScript and ESLint checks passed; 25 comparison tests passed; 28 browser variants passed; an injected critical unnamed-button finding failed the integrated job as intended. The full frontend suite passed: 864 tests across 88 files.
+Local evidence: production build passed with the bounded heap; standalone TypeScript and ESLint checks passed; 25 comparison tests passed; 28 browser variants passed; an injected critical unnamed-button finding failed the integrated job as intended. The full frontend suite passed: 888 tests across 90 files.
 
-PR #712 reached its first GitHub run: the production build passed, but the initial baseline guard stopped the scanner because main had gained shared-navigation changes after the measurement. The baseline was remeasured on the refreshed base; the guard now tolerates only unrelated base commits with identical production frontend inputs and adopted ancestry. Required-check status has not been changed. Fresh Linux/fork CI evidence remains a prerequisite to claiming that enforcement is active. GitHub-verified cryptographic signatures and DCO trailers are separate requirements for the replacement commits.
+PR #712 reached its first GitHub run: the production build passed, but the initial baseline guard stopped the scanner because main had gained shared-navigation changes after the measurement. A second GitHub run stopped at the same provenance boundary after frontend feature #710 merged into main. The baseline was remeasured on that refreshed base with all 230 fingerprints unchanged; the guard now tolerates only unrelated base commits with identical production frontend inputs and adopted ancestry. Required-check status has not been changed. Fresh Linux/fork CI evidence remains a prerequisite to claiming that enforcement is active. GitHub-verified cryptographic signatures and DCO trailers are separate requirements for the replacement commits.
 
 ## Baseline source provenance
 

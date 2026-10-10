@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"sourceSha": "0f5615227daa81e47168f88b03f96c29e5d6b92b",
+	"sourceSha": "3ecf284177b97ff6acdcaff5eda57bee0bf86a98",
 	"axeVersion": "4.14.0",
 	"states": [
 		"login/desktop/light",
@@ -32,7 +32,7 @@
 		"appearance/phone/light",
 		"appearance/phone/dark"
 	],
-	"recordedAt": "2026-10-10T15:55:34.818Z",
+	"recordedAt": "2026-10-10T16:24:23.410Z",
 	"owner": "@houfu",
 	"reason": "Measured pre-existing noncritical findings on current main; source credit @SaifAlYounan #437",
 	"entries": [
