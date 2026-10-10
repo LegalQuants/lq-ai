@@ -513,7 +513,13 @@ that it can be reviewed apart, and none has had maintainer or security review.
   same request came back with `PERSON_0001` in the plan arguments three times of three
   without the field and with the name three times of three with it; through the
   application, three requests naming a person were all planned, one plan naming the person
-  and two naming nobody. Not done: a test of the streaming path with the field set (that
+  and two naming nobody. An independent read of the documents then found why: the
+  orchestrator's prompt still told the model to write no placeholder in a plan, because
+  the application could not put the value back. That had been untrue since this ruling.
+  The prompt now tells the model to keep a placeholder as written in a plan, and says
+  that a changed or invented one is refused; a test holds it. With that, the same three
+  requests were all planned and all three plans named the person, with no placeholder
+  left (one run each). Not done: a test of the streaming path with the field set (that
   path does not read it).
 
 - **Ruling 10, roles.** Starting a run, approving a plan and rejecting one require a
@@ -575,14 +581,14 @@ security review.
 
 **Gates on 2026-10-10.** The branch was then rebased onto `main` at `224044cc9`, one
 commit past its base, which changes documents and review rules and no code. The suites
-were run as CI runs them. The whole API suite passed with its coverage gate (3,896
+were run as CI runs them. The whole API suite passed with its coverage gate (3,897
 passed, 17 skipped; 82.71% against 80%). `ruff` was clean, and so was
 `mypy app tests ../script_runner`, which is CI's command and checks the tests too; an
 earlier pass had run `mypy app` alone and missed one error in a test helper, since
 fixed. The gateway suite passed with its gate (1,074 passed, 3 skipped; 90.49% against
 88%). The web suite passed (3,289 passed in 108 files), and `check:lq-ai` gave 0 errors
-and 7 known warnings. The API suite ran before the last commits, which change
-documents only. Not run: CI's stack smoke workflow, its release-image check and its
+and 7 known warnings. All three were run again after the last change to code, tests or
+prompts. Not run: CI's stack smoke workflow, its release-image check and its
 bundled-helper acceptance step, which need Docker images that this pass did not build.
 
 ### Not done, or not verified

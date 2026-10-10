@@ -767,8 +767,12 @@ which told the model to copy a person's name into its plan, was sent straight to
 gateway six times: three times without the field the arguments came back holding
 `PERSON_0001`, and three times with it they came back holding the name. Through the
 application, three requests that each named a person were all planned and none was
-refused; one plan named the person and two named nobody. Those are single runs on one
-local model, driven by an agent, and not a rate. Before the change, one development run
+refused; one plan named the person and two named nobody. The orchestrator's prompt
+still told the model to write no placeholder in a plan, which this ruling had made
+wrong. With the prompt corrected to say that a placeholder is kept as written, the same
+three requests were all planned and all three plans named the person, with no
+placeholder left. Those are single runs on one local model, driven by an agent, and not
+a rate. Before the change, one development run
 on such a route had held a placeholder in the plan call's arguments. The alternatives were
 to plan in text on a route that pseudonymizes, which
 makes the orchestrator behave in two ways depending on the route, or to keep refusing; the
