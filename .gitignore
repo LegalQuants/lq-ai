@@ -59,6 +59,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 htmlcov/
+# mutmut (DE-229) working copy — created by `mutmut run` in api/ and gateway/
+mutants/
 
 # Type checking
 .mypy_cache/
