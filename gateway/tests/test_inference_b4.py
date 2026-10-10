@@ -522,9 +522,11 @@ async def test_routing_log_purpose_defaults_to_chat(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("purpose", ["judge_paraphrase", "tabular_bulk_op"])
 @respx.mock
 async def test_routing_log_purpose_judge_paraphrase_propagates(
     client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+    purpose: str,
 ) -> None:
     """M2-E2: ``lq_ai_purpose='judge_paraphrase'`` on the request lands on the row.
 
@@ -551,12 +553,12 @@ async def test_routing_log_purpose_judge_paraphrase_propagates(
         json={
             "model": "smart",
             "messages": [{"role": "user", "content": "judge this"}],
-            "lq_ai_purpose": "judge_paraphrase",
+            "lq_ai_purpose": purpose,
         },
     )
     assert response.status_code == 200
     assert len(recorder.rows) == 1
-    assert recorder.rows[0].purpose == "judge_paraphrase"
+    assert recorder.rows[0].purpose == purpose
 
 
 @pytest.mark.integration

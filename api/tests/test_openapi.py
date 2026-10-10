@@ -156,6 +156,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/cancel",
         # M3-C4a — XLSX/CSV export.
         "/api/v1/tabular/executions/{execution_id}/export",
+        # DE-304 / ADR 0040 — bulk operations (preview + create).
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops",
+        "/api/v1/tabular/bulk-ops",
+        "/api/v1/tabular/bulk-ops/{bulk_op_id}",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
@@ -355,7 +360,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/tool-providers/{provider_type}
     # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
     # Optional persistent skill workspaces add three owner paths (146 -> 149).
-    assert len(actual) == 150
+    # DE-304 / ADR 0040 adds four new paths (150 -> 154):
+    # /api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost
+    # /api/v1/tabular/executions/{execution_id}/bulk-ops
+    assert len(actual) == 154
 
 
 @pytest.mark.unit

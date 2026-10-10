@@ -22,7 +22,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -305,6 +305,141 @@ class TabularPreviewCostResponse(BaseModel):
     no cell is ensemble-verified."""
 
 
+# --- Bulk operations (DE-304 / ADR 0040) -----------------------------------
+
+
+TabularBulkOpKind = Literal["redline_rows", "summarize_column"]
+"""The two v1 bulk operations (ADR 0040 D2). Matches the CHECK
+constraint on ``tabular_bulk_ops.kind`` (migration 0071)."""
+
+TabularBulkOpStatus = Literal["pending", "running", "completed", "failed"]
+"""Lifecycle states for a :class:`TabularBulkOp`. ``completed``
+includes batches with per-item failures (ADR 0040 D4); ``failed`` is
+reserved for whole-batch orchestration crashes."""
+
+
+class TabularBulkOpRequest(BaseModel):
+    """Request body for
+    ``POST /api/v1/tabular/executions/{id}/bulk-ops`` (DE-304 / ADR 0040).
+
+    Replaces the never-wired M3-C4 stub of the same name (which
+    anticipated Decision C-9 sibling rows; ADR 0040 D1 stores bulk-op
+    output in a dedicated ``tabular_bulk_ops`` table instead because
+    the outputs are not grids).
+
+    ``column_name`` is required for both operations and validated against
+    the execution's snapshotted column spec. Instructions come from a
+    selected, immutable skill snapshot. ``confirmed_cost_usd`` is the echo of the
+    ``.../bulk-ops/preview-cost`` response value — persisted for audit,
+    same idiom as :class:`TabularExecutionCreate.confirmed_cost_usd`."""
+
+    kind: TabularBulkOpKind
+    column_name: str
+    skill_name: str = Field(min_length=1, max_length=128)
+    skill_inputs: dict[str, Any] = Field(default_factory=dict)
+    skill_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed_cost_usd: Decimal | None = None
+
+
+class TabularBulkOpPreviewRequest(BaseModel):
+    """Request body for
+    ``POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost``.
+
+    Same shape as :class:`TabularBulkOpRequest` minus the
+    ``confirmed_cost_usd`` echo — preview produces the cost;
+    confirmation echoes it back on the subsequent create call."""
+
+    kind: TabularBulkOpKind
+    column_name: str
+    skill_name: str = Field(min_length=1, max_length=128)
+    skill_inputs: dict[str, Any] = Field(default_factory=dict)
+
+
+class TabularBulkOpPreviewResponse(BaseModel):
+    """Response from the bulk-op cost preview.
+
+    ``calls_count`` is the number of gateway calls the op will make
+    (one per grid row for ``redline_rows``; one for
+    ``summarize_column``). ``estimated_cost_usd`` = ``calls_count`` x
+    the rolling-average per-call cost over recent
+    ``purpose='tabular_bulk_op'`` routing-log rows (conservative
+    cold-start default before calibration; ADR 0040 D3)."""
+
+    kind: TabularBulkOpKind
+    calls_count: int
+    per_call_cost_usd: Decimal
+    estimated_cost_usd: Decimal
+    skill_name: str | None = None
+    skill_version: str | None = None
+    skill_content_hash: str | None = None
+
+
+class TabularBulkOpSourceRow(BaseModel):
+    """Selected-column evidence coverage, generated from the saved grid."""
+
+    document_name: str
+    value: str | None = None
+    status: Literal["available", "missing"]
+
+
+class TabularBulkOpItem(BaseModel):
+    """One item in a bulk op's results.
+
+    ``redline_rows`` produces one item per parent grid row (in grid-row
+    order); ``summarize_column`` produces a single item with
+    ``document_id = None`` (the memo spans the whole grid). Failed
+    items carry ``status='failed'`` + ``error`` and are rendered as
+    failures — the report never silently omits failed rows (C-10)."""
+
+    document_id: uuid.UUID | None = None
+    document_name: str | None = None
+    status: Literal["completed", "failed"]
+    output_text: str | None = None
+    error: str | None = None
+    cost_usd: Decimal | None = None
+    finish_reason: str | None = None
+    source_rows: list[TabularBulkOpSourceRow] = Field(default_factory=list)
+
+
+class TabularBulkOpSummary(BaseModel):
+    """Honesty counters for a bulk op's results panel."""
+
+    total_items: int
+    failed_items: int
+
+
+class TabularBulkOpResults(BaseModel):
+    """Shape persisted in ``tabular_bulk_ops.results`` once terminal."""
+
+    schema_version: str
+    items: list[TabularBulkOpItem]
+    summary: TabularBulkOpSummary
+
+
+class TabularBulkOpResponse(BaseModel):
+    """Wire shape for one bulk op — embedded in
+    :class:`TabularExecutionResponse.bulk_ops` (ADR 0040 D2: the detail
+    endpoint and available through independent owner-scoped reads)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    execution_id: uuid.UUID | None
+    source_execution_id: uuid.UUID
+    provenance: dict[str, Any]
+    user_id: uuid.UUID
+    kind: TabularBulkOpKind
+    status: TabularBulkOpStatus
+    params: dict[str, str | None]
+    results: TabularBulkOpResults | None = None
+    confirmed_cost_usd: Decimal | None = None
+    cost_actual_usd: Decimal | None = None
+    error_text: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class TabularExecutionResponse(BaseModel):
     """Wire shape returned by every tabular execution endpoint
     (``POST /execute``, ``GET /executions/{id}``, etc.)."""
@@ -335,6 +470,12 @@ class TabularExecutionResponse(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    bulk_ops: list[TabularBulkOpResponse] = Field(default_factory=list)
+    """Bulk operations run over this execution, recent-first (DE-304 /
+    ADR 0040 D2). Embedded here — rather than behind a dedicated GET —
+    because the detail endpoint is what the UI already polls, so the
+    results panel gets live progress for free."""
+
 
 class TabularExecutionSummary(BaseModel):
     """Compact wire shape for the list endpoint
@@ -358,29 +499,20 @@ class TabularExecutionSummary(BaseModel):
     completed_at: datetime | None = None
 
 
-class TabularBulkOpRequest(BaseModel):
-    """Request body for
-    ``POST /api/v1/tabular/executions/{id}/bulk-op`` (M3-C4).
-
-    Per Decision C-9, bulk ops spawn sibling execution rows rather
-    than mutating the original grid. The sibling carries
-    ``parent_execution_id`` set to this execution's ID."""
-
-    op: Literal["redline", "summarize"]
-    column_name: str
-    skill_name_override: str | None = None
-    """Override the default skill used for the operation. Default for
-    ``redline`` is ``nda-review`` (or skill matched to the parent
-    execution's skill family); default for ``summarize`` is the
-    deployment-configured summary skill."""
-
-
 __all__ = [
     "CellConfidence",
     "CellResult",
     "Citation",
     "ColumnSpec",
+    "TabularBulkOpItem",
+    "TabularBulkOpKind",
+    "TabularBulkOpPreviewRequest",
+    "TabularBulkOpPreviewResponse",
     "TabularBulkOpRequest",
+    "TabularBulkOpResponse",
+    "TabularBulkOpResults",
+    "TabularBulkOpStatus",
+    "TabularBulkOpSummary",
     "TabularExecutionCreate",
     "TabularExecutionResponse",
     "TabularExecutionStatus",

@@ -1419,7 +1419,7 @@ def _correlation_ids(
 # Known values for the ``inference_routing_log.purpose`` column. Values
 # outside this set fall back to ``'chat'`` in :func:`_purpose_from_request`
 # so an arbitrary caller can't pollute the column with free-form strings.
-_KNOWN_PURPOSES = frozenset({"chat", "judge_paraphrase", "embedding"})
+_KNOWN_PURPOSES = frozenset({"chat", "judge_paraphrase", "embedding", "tabular_bulk_op"})
 
 
 def _purpose_from_request(chat_request: ChatCompletionRequest) -> str:
