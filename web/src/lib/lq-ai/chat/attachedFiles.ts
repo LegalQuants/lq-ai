@@ -1,6 +1,6 @@
 /** Pure helpers for chat-attached files (PR #316 review follow-ups). No Svelte, no network. */
 
-import type { FileMeta } from '../types';
+import type { FileMeta, MessageCompleteFrame } from '../types';
 
 /**
  * Maximum chat-attached files per message send. Mirrors
@@ -39,6 +39,21 @@ export function hasAppliedProcessingFile(
 ): boolean {
 	if (!appliedFileIds) return false;
 	return processingFileIds.some((id) => appliedFileIds.includes(id));
+}
+
+/** Check the visible chat at completion time, since the user may switch mid-stream. */
+export function createProcessingFileWarningHandler(
+	processingFileIds: string[],
+	getActiveChatId: () => string | null | undefined,
+	showWarning: (warning: string) => void
+): (frame: MessageCompleteFrame) => void {
+	return (frame) => {
+		if (frame.message.chat_id !== getActiveChatId()) return;
+		if (!hasAppliedProcessingFile(processingFileIds, frame.applied_file_ids)) return;
+		showWarning(
+			'An attached file was still processing when sent. It was accepted for this turn, but its contents may not have been available for this response.'
+		);
+	};
 }
 
 /**

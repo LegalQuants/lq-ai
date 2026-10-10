@@ -150,7 +150,7 @@
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
 	import {
 		canAttachChatFile,
-		hasAppliedProcessingFile,
+		createProcessingFileWarningHandler,
 		processingFileNames,
 		readyFileNames,
 		selectFileIdsForSend
@@ -671,6 +671,13 @@
 		processingFileIds: string[] = []
 	): Promise<void> {
 		let assistantId = assistantId0;
+		const warnForProcessingFile = createProcessingFileWarningHandler(
+			processingFileIds,
+			() => $activeChatStore?.id,
+			(warning) => {
+				attachmentWarning = warning;
+			}
+		);
 		await consumeMessageStream(body, {
 			onStart: (frame) => {
 				// Reconcile the optimistic draft id with the persisted id on the
@@ -702,10 +709,7 @@
 			},
 			onComplete: (frame) => {
 				streamingMessageId = null;
-				if (hasAppliedProcessingFile(processingFileIds, frame.applied_file_ids)) {
-					attachmentWarning =
-						'An attached file was still processing when sent. It was accepted for this turn, but its contents may not have been available for this response.';
-				}
+				warnForProcessingFile(frame);
 				messagesStore.update(($m) =>
 					$m.map((m) =>
 						m.id === assistantId
