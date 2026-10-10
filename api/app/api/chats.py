@@ -148,6 +148,7 @@ from app.security.encryption import (
     encrypt_payload_envelope,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.tools.governance import resolve_resumed_ceiling, resolve_tool_egress_ceiling
 from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -384,6 +385,21 @@ async def _load_visible_chat(
             details={"chat_id": str(chat_id)},
         )
     return row
+
+
+async def _resolve_proposal_ceiling(db: AsyncSession, *, chat_id: uuid.UUID) -> int | None:
+    """Resolve the egress ceiling to stamp on a pending tool-call row.
+
+    Issue #593: a proposed call records the policy in force at proposal
+    time; the approve path re-resolves and executes under
+    ``min(original, current)``. Returns ``None`` only when unconstrained.
+    An unreadable policy refuses proposal creation: a new NULL must never
+    erase the distinction between an unset policy and a failed lookup.
+    """
+    ceiling, source = await resolve_tool_egress_ceiling(db, project_id=None, chat_id=chat_id)
+    if source == "unresolved":
+        raise Conflict("Tool confirmation could not resolve egress policy; please retry.")
+    return ceiling
 
 
 async def _load_visible_project_for_chat(
@@ -2213,6 +2229,18 @@ async def resume_tool_call(
                 #   the actual approved execution, stamped confirmation_state=
                 #   "approved" / outcome="executed".  This is the authoritative
                 #   record that the tool ran with user approval.
+                #
+                # Issue #593: re-resolve the CURRENT egress policy and execute
+                # under min(proposal-time ceiling, current ceiling).  An
+                # unreadable current policy fail-closes inside
+                # governed_tool_invocation (ceiling_source="unresolved":
+                # no dispatch, refused audit row).
+                current_ceiling, current_source = await resolve_tool_egress_ceiling(
+                    db, project_id=None, chat_id=cid
+                )
+                egress_ceiling = resolve_resumed_ceiling(
+                    pending.max_egress_tier, current_ceiling, current_source
+                )
                 try:
                     result = await execute_tool(
                         db,
@@ -2226,6 +2254,7 @@ async def resume_tool_call(
                         chat_id=cid,
                         request_id=request_id,
                         confirmation_state="approved",
+                        egress_ceiling=egress_ceiling,
                     )
                     # Update the gate row's confirmation_state to "approved"
                     # (the confirmation-REQUEST lifecycle: pending_confirmation →
@@ -2374,6 +2403,8 @@ async def resume_tool_call(
                     ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                    # Issue #593: proposal-time egress ceiling (see above).
+                    max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=cid),
                 )
                 db.add(pending_row2)
                 await db.flush()
@@ -3263,6 +3294,10 @@ async def _non_streaming_response(
                 ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                # Issue #593: proposal-time egress ceiling; the approve path
+                # re-resolves current policy and executes under
+                # min(original, current).
+                max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
             )
             db.add(pending_row)
             await db.flush()
@@ -3593,6 +3628,8 @@ async def _stream_response(
                         ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                        # Issue #593: proposal-time egress ceiling (see above).
+                        max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
                     )
                     db.add(pending_row)
                     await db.flush()

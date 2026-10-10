@@ -120,6 +120,7 @@ def _serialize_project(project: Project) -> dict[str, Any]:
         "slug": project.slug,
         "description": project.description,
         "minimum_inference_tier": project.minimum_inference_tier,
+        "max_egress_tier": project.max_egress_tier,
         "privileged": project.privileged,
         "archived_at": project.archived_at.isoformat() if project.archived_at else None,
         "created_at": project.created_at.isoformat() if project.created_at else None,

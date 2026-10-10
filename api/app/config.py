@@ -455,6 +455,33 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
 
+    # ----- Tool-egress ceiling (issue #593) -----
+    # Operator-wide default ceiling for governed tool egress, tiers 1
+    # (most private) to 5 (least private). Unset (None) means no operator
+    # ceiling — existing deployments keep today's unconstrained behavior
+    # until an operator opts in. A Project-level max_egress_tier can only
+    # tighten this default, never loosen it; the effective ceiling is
+    # min() over the values that are set (see
+    # app.tools.governance.resolve_tool_egress_ceiling).
+    tool_max_egress_tier: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description=(
+            "Operator default ceiling for tool egress tiers (1-5). Unset "
+            "disables the operator ceiling. Operator-overridable via "
+            "LQ_AI_TOOL_MAX_EGRESS_TIER."
+        ),
+        validation_alias=AliasChoices("LQ_AI_TOOL_MAX_EGRESS_TIER", "TOOL_MAX_EGRESS_TIER"),
+    )
+
+    @field_validator("tool_max_egress_tier", mode="before")
+    @classmethod
+    def empty_tool_egress_ceiling(cls, value: object) -> object:
+        # Compose forwards an unset optional value as an empty string.
+        # Only that blank means unset; invalid nonblank values still fail.
+        return None if value == "" else value
+
     # Optional skill data/tools. Bundled execution is confined to a separately
     # configured local broker; no command or host-process fallback exists.
     skill_workspaces_enabled: bool = Field(

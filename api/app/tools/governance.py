@@ -42,12 +42,16 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult
 from app.clients.gateway import get_gateway_client
+from app.config import get_settings
 from app.errors import ToolTierRefused
+from app.models.chat import Chat
+from app.models.project import Project
 from app.models.tool_call_log import ToolCallLog
 from app.observability_helpers import record_attributes
 
@@ -216,6 +220,121 @@ async def resolve_provider_name_by_type(
     return _provider_type_to_name.get(type_str)
 
 
+async def resolve_tool_egress_ceiling(
+    db: AsyncSession,
+    *,
+    project_id: UUID | None,
+    scope_ceiling: int | None = None,
+    chat_id: UUID | None = None,
+) -> tuple[int | None, str | None]:
+    """Resolve the effective tool-egress ceiling for one governed call.
+
+    Composes the operator default (``settings.tool_max_egress_tier``), the
+    Project's ``max_egress_tier`` column, and an orchestration scope ceiling
+    (``ExecutionScope.maximum_egress_tier``).  Tiers run 1 (most private) to
+    5 (least private), so the most restrictive ceiling is ``min()`` over the
+    values that are set — a Project can only tighten the operator default,
+    never loosen it.  Returns ``(None, None)`` when nothing is set, which
+    preserves today's unconstrained behavior.
+
+    Fail-closed: when a recoverable Chat/Project lookup raises, returns ``(None,
+    "unresolved")`` instead of falling back to unconstrained — callers MUST
+    refuse the call before dispatch (see :func:`governed_tool_invocation`).
+    A scope ceiling of ``0`` ("no egress") resolves to ``(0,
+    "execution_scope")``; the tier check in :func:`governed_tool_invocation`
+    refuses before dispatch, so ``0`` is never sent to the gateway (which
+    rejects ``max_allowed_tier < 1``).
+
+    Args:
+        db: An open :class:`~sqlalchemy.ext.asyncio.AsyncSession`.
+        project_id: The chat's current ``project_id`` (chat path) or the
+            session's ``project_id`` (autonomous path); ``None`` when the
+            call is not Project-scoped.  A dangling id (row deleted,
+            ``ON DELETE SET NULL`` not yet observed) is treated as no
+            Project ceiling.
+        chat_id: Resolve the chat's current project in the same guarded
+            policy-read transaction when set. The caller verifies ownership.
+        scope_ceiling: The orchestration ``ExecutionScope.maximum_egress_tier``
+            when present; ``None`` otherwise.
+
+    Returns:
+        ``(ceiling, source)`` where ``source`` is one of ``"operator"``,
+        ``"project"``, ``"execution_scope"``, ``"unresolved"``, or ``None``
+        when no ceiling applies.
+    """
+    candidates: list[tuple[int, str]] = []
+    operator_ceiling = get_settings().tool_max_egress_tier
+    if operator_ceiling is not None:
+        candidates.append((operator_ceiling, "operator"))
+    if scope_ceiling is not None:
+        candidates.append((scope_ceiling, "execution_scope"))
+    if chat_id is not None or project_id is not None:
+        try:
+            # A statement error aborts a PostgreSQL transaction. Roll back
+            # only these reads so the caller can still persist its refusal
+            # audit and other pending state in the outer transaction.
+            async with db.begin_nested():
+                if chat_id is not None:
+                    project_id = await db.scalar(select(Chat.project_id).where(Chat.id == chat_id))
+                project_ceiling = (
+                    await db.scalar(select(Project.max_egress_tier).where(Project.id == project_id))
+                    if project_id is not None
+                    else None
+                )
+        except Exception as exc:
+            log.warning(
+                "resolve_tool_egress_ceiling: policy lookup failed — refusing closed",
+                extra={
+                    "event": "tool_egress_ceiling_unresolved",
+                    "project_id": str(project_id) if project_id is not None else None,
+                    "chat_id": str(chat_id) if chat_id is not None else None,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            # A failed pre-savepoint flush or lost storage cannot produce a
+            # durable audit. Keep the request failed, never authorize egress.
+            if not db.is_active:
+                raise
+            return None, "unresolved"
+        if project_ceiling is not None:
+            candidates.append((project_ceiling, "project"))
+    if not candidates:
+        return None, None
+    ceiling, source = min(candidates, key=lambda item: item[0])
+    return ceiling, source
+
+
+def resolve_resumed_ceiling(
+    original: int | None,
+    current_ceiling: int | None,
+    current_source: str | None,
+) -> tuple[int | None, str | None]:
+    """Compose the proposal-time and approve-time ceilings for a resumed call.
+
+    Issue #593: approval re-resolves the current policy and executes under
+    ``min(original, current)`` across the ceilings that are set.  The binding
+    side is tagged ``"pending_original"`` (ties also resolve to the original —
+    the enforced number is identical either way).
+
+    An unreadable *current* policy fail-closes to ``(None, "unresolved")`` —
+    no dispatch, refused audit row. A ``None`` original represents an
+    unconstrained or legacy proposal; the current policy governs that case.
+
+    Pure function — no DB access — so it is directly unit-testable.
+    """
+    if current_source == "unresolved":
+        return None, "unresolved"
+    candidates: list[tuple[int, str]] = []
+    if original is not None:
+        candidates.append((original, "pending_original"))
+    if current_ceiling is not None and current_source is not None:
+        candidates.append((current_ceiling, current_source))
+    if not candidates:
+        return None, None
+    ceiling, source = min(candidates, key=lambda item: item[0])
+    return ceiling, source
+
+
 async def governed_tool_invocation(
     db: AsyncSession,
     *,
@@ -225,6 +344,7 @@ async def governed_tool_invocation(
     intent: ToolIntent | None,
     provider_tier: int,
     max_allowed_tier: int | None,
+    ceiling_source: str | None = None,
     estimated_cost: Decimal,
     dispatch: Callable[[], Awaitable[ToolResult]],
     span: Any | None = None,
@@ -263,6 +383,12 @@ async def governed_tool_invocation(
             via :func:`resolve_provider_tier` before this call.
         max_allowed_tier: The ceiling this caller is operating under.
             ``None`` means unconstrained (no tier check performed).
+        ceiling_source: Which policy bound this call — ``"operator"``,
+            ``"project"``, ``"execution_scope"``, ``"pending_original"``,
+            or ``"unresolved"``; ``None`` when no ceiling applied.  Written
+            to the ``tool_call_log`` audit row.  ``"unresolved"`` means the
+            egress policy could not be read: the call is refused before
+            dispatch (fail closed) and the refusal is audited.
         estimated_cost: Pre-computed cost estimate in USD; recorded on
             the audit row as-is — the helper never re-estimates.
         dispatch: Zero-argument async callable that performs the actual
@@ -302,6 +428,38 @@ async def governed_tool_invocation(
         listed in ``denied_on``) or ``outcome="error"`` (all other
         exceptions) and flushing.
     """
+    # ── Fail closed: egress policy unreadable ───────────────────────────────
+    # resolve_tool_egress_ceiling returns source "unresolved" when the
+    # Project lookup raised.  Refuse before dispatch and persist the
+    # refusal — never fall back to unconstrained.
+    if ceiling_source == "unresolved":
+        row = ToolCallLog(
+            origin=origin,
+            provider=provider,
+            tool=tool,
+            tier=provider_tier,
+            max_allowed_tier=None,
+            ceiling_source="unresolved",
+            intent=str(intent) if intent is not None else None,
+            confirmation_state=confirmation_state,
+            outcome="refused_tier",
+            cost_usd=None,
+            args_digest=args_digest,
+            request_id=request_id,
+            user_id=user_id,
+            chat_id=chat_id,
+            message_id=message_id,
+            session_id=session_id,
+        )
+        db.add(row)
+        await db.flush()
+        raise ToolTierRefused(
+            provider=provider,
+            tool=tool,
+            tier=provider_tier,
+            ceiling=None,
+        )
+
     # ── D-a2 tier check ────────────────────────────────────────────────────
     if max_allowed_tier is not None and provider_tier > max_allowed_tier:
         row = ToolCallLog(
@@ -309,6 +467,8 @@ async def governed_tool_invocation(
             provider=provider,
             tool=tool,
             tier=provider_tier,
+            max_allowed_tier=max_allowed_tier,
+            ceiling_source=ceiling_source,
             intent=str(intent) if intent is not None else None,
             confirmation_state=confirmation_state,
             outcome="refused_tier",
@@ -345,6 +505,8 @@ async def governed_tool_invocation(
         provider=provider,
         tool=tool,
         tier=provider_tier,
+        max_allowed_tier=max_allowed_tier,
+        ceiling_source=ceiling_source,
         intent=str(intent) if intent is not None else None,
         confirmation_state=confirmation_state,
         outcome="pending",
