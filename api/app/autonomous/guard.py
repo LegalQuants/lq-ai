@@ -1601,8 +1601,10 @@ async def _handle_retrieve_chunks(
         )
         if "max_chars" in params:
             # Mode 2b: a bounded read of the file's canonical text (ADR 0038
-            # D4/D5). Reached only through the orchestration boundary, which
-            # has already rechecked selection and project attachment.
+            # D4/D5). In a governed run the orchestration boundary has already
+            # rechecked selection and project attachment. A session that is
+            # not a governed run reaches it on the ownership check above
+            # alone, as it does the whole-file fetch below.
             return await _handle_read_document_text(
                 file_id_raw,
                 offset=int(params.get("offset", 0)),
