@@ -3,7 +3,9 @@
 # Proves, in CI, the claim no surveyed self-hosted project proves (see
 # docs/security/air-gap-verification.md): the compose stack — in Mode 2
 # (`--profile local`) — boots and serves a real login -> chat -> Tier-1
-# response with ZERO packets leaving the deployment network.
+# response with no observed public-source replies and no direct DNS
+# attempts outside the stack. Docker DNS upstream forwarding is isolated
+# separately by a DNS-only Compose override, verified before the journey.
 #
 # Mechanism (scripts/airgap/*.sh are the single source of truth and the
 # local-reproduction path):
@@ -15,6 +17,8 @@
 #      override) so the SHIPPED topology is what gets certified —
 #      GitHub-hosted ubuntu runners allow sudo iptables, and DOCKER-USER
 #      only affects container traffic, never the runner's own network.
+#      A DNS-only override preserves service discovery while preventing
+#      Docker from forwarding external lookups through the host resolver.
 #   3. A tcpdump canary on the bridge records any non-private-destination
 #      packet — catching even ATTEMPTS the seal drops (telemetry an app
 #      would silently tolerate as a connection error).
@@ -66,7 +70,29 @@ env:
   AIRGAP_MODEL: llama3.2:1b
 
 jobs:
+  dns-regression:
+    name: DNS isolation regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install test tools
+        run: |
+          python -m pip install pytest==9.1.1
+          sudo apt-get update -qq
+          sudo apt-get install -y jq shellcheck tcpdump
+      - name: Lint harness and run resolver regressions
+        env:
+          AIRGAP_DOCKER_TESTS: "1"
+        run: |
+          shellcheck scripts/airgap/*.sh
+          python -m pytest -q scripts/airgap/tests
+
   airgap-verify:
+    needs: dns-regression
     name: Sealed-network install + Tier-1 smoke
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -123,6 +149,11 @@ jobs:
           docker compose exec -T ollama ollama pull "$AIRGAP_MODEL"
           docker compose exec -T ollama ollama list
 
+      - name: Configure container-only DNS isolation
+        run: |
+          ./scripts/airgap/seal-dns.sh configure airgap-artifacts/dns-seal.compose.yml
+          echo "COMPOSE_FILE=docker-compose.yml:airgap-artifacts/dns-seal.compose.yml" >> "$GITHUB_ENV"
+
       - name: Seal the compose bridge (deny all egress)
         run: ./scripts/airgap/deny-egress.sh seal
 
@@ -136,6 +167,11 @@ jobs:
         # was built pre-seal; a build here would mean the seal window
         # missed something.
         run: docker compose --profile local up -d --wait --wait-timeout 900 --no-build --force-recreate
+
+      - name: Verify DNS policy and service discovery
+        run: |
+          ./scripts/airgap/seal-dns.sh verify
+          docker compose exec -T gateway python - < scripts/airgap/check-dns.py
 
       - name: Drive login -> chat -> Tier-1 response
         run: ./scripts/airgap/drive-smoke.sh
@@ -197,6 +233,39 @@ jobs:
           ./scripts/airgap/capture-egress.sh stop negative
           ./scripts/airgap/capture-egress.sh assert-attempts negative
 
+      - name: DNS negative control — blocked attempts must fail acceptance
+        run: |
+          ./scripts/airgap/capture-egress.sh start dns-negative
+          docker compose exec -T gateway python - <<'PY'
+          import socket
+          # UDP emits a real DNS request; TCP exercises the connection path.
+          query = bytes.fromhex("123401000001000000000000076578616d706c6503636f6d0000010001")
+          with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+              sock.settimeout(3)
+              sock.sendto(query, ("1.1.1.1", 53))
+              try:
+                  sock.recv(4096)
+              except TimeoutError:
+                  pass
+              else:
+                  raise RuntimeError("external UDP DNS escaped the seal")
+          try:
+              socket.create_connection(("1.1.1.1", 53), timeout=3).close()
+          except OSError:
+              pass
+          else:
+              raise RuntimeError("external TCP DNS escaped the seal")
+          PY
+          ./scripts/airgap/capture-egress.sh stop dns-negative
+          ./scripts/airgap/capture-egress.sh assert-dns-attempts dns-negative
+          if ./scripts/airgap/capture-egress.sh assert-clean dns-negative > airgap-artifacts/dns-negative.verdict.txt 2>&1; then
+            echo 'DNS negative control incorrectly passed acceptance' >&2
+            exit 1
+          fi
+
+          cat airgap-artifacts/dns-negative.verdict.txt
+          grep -F 'DNS attempt(s) outside the stack subnet' airgap-artifacts/dns-negative.verdict.txt
+
       - name: Collect failure diagnostics
         if: failure()
         run: |
@@ -209,6 +278,14 @@ jobs:
             ./scripts/airgap/deny-egress.sh status
           } > airgap-artifacts/state.txt 2>&1 || true
           docker compose logs --no-color > airgap-artifacts/compose-logs.txt 2>&1 || true
+
+      - name: Stop captures and remove network rules
+        if: always()
+        run: |
+          for capture in sealed negative dns-negative; do
+            ./scripts/airgap/capture-egress.sh stop "$capture" || true
+          done
+          ./scripts/airgap/deny-egress.sh unseal
 
       - name: Upload pcaps and diagnostics
         # The (empty) sealed pcap + the (non-empty) negative pcap are

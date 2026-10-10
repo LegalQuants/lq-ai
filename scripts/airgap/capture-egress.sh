@@ -37,11 +37,16 @@
 # below treats only genuinely-local noise — multicast/broadcast — as
 # benign.)
 #
+# DNS is stricter than the general attempt inventory: a UDP/TCP port-53
+# packet aimed outside the stack subnet fails even without any reply.
+# seal-dns.sh covers Docker's loopback/host-forwarding path separately.
+#
 # Usage:
 #   capture-egress.sh start <name>            # begin capture -> airgap-artifacts/<name>.pcap
 #   capture-egress.sh stop <name>             # flush + stop
-#   capture-egress.sh assert-clean <name>     # fail if ANY suspect packet was captured
+#   capture-egress.sh assert-clean <name>     # fail on outside DNS attempts or replies
 #   capture-egress.sh assert-attempts <name>  # fail if NO suspect packet was captured
+#   capture-egress.sh assert-dns-attempts <name> # require a deliberate DNS attempt
 #
 # Env:
 #   AIRGAP_NETWORK       compose network to watch (default lq-ai_default)
@@ -86,6 +91,17 @@ BREACH_BPF_V6='ip6 and
     not src host ::1'
 SUSPECT_BPF="(${ATTEMPT_BPF_V4}) or (${ATTEMPT_BPF_V6}) or (${BREACH_BPF_V4}) or (${BREACH_BPF_V6})"
 
+dns_bpf() {
+  local subnet subnets filter
+  subnets="$(docker network inspect "$NETWORK" --format '{{range .IPAM.Config}}{{.Subnet}}{{"\n"}}{{end}}')"
+  [ -n "$subnets" ] || { echo 'capture-egress: network has no subnets' >&2; return 1; }
+  filter='(udp or tcp) and dst port 53 and not dst net 127.0.0.0/8 and not dst host ::1'
+  while IFS= read -r subnet; do
+    filter+=" and not dst net ${subnet}"
+  done <<< "$subnets"
+  echo "$filter"
+}
+
 resolve_iface() {
   # Same derivation as deny-egress.sh: br-<first 12 chars of network id>.
   local net_id
@@ -101,7 +117,8 @@ resolve_iface() {
 pcap_path() { echo "${ART_DIR}/$1.pcap"; }
 
 start() {
-  local name="$1" iface pcap
+  local name="$1" iface pcap dns_filter
+  dns_filter="$(dns_bpf)"
   iface="$(resolve_iface)"
   mkdir -p "$ART_DIR"
   pcap="$(pcap_path "$name")"
@@ -112,7 +129,7 @@ start() {
   #   default, which cannot write into the workspace; keep root and fix
   #   ownership at `stop` instead.
   # shellcheck disable=SC2024  # sudo applies to tcpdump; the redirect target is ours
-  sudo tcpdump -i "$iface" -nn -U -Z root -w "$pcap" "$SUSPECT_BPF" \
+  sudo tcpdump -i "$iface" -nn -U -Z root -w "$pcap" "(${SUSPECT_BPF}) or (${dns_filter})" \
     >"${ART_DIR}/${name}.tcpdump.log" 2>&1 &
   # Give tcpdump a beat to attach, then verify it is actually running —
   # a typo'd filter or interface dies instantly and would otherwise
@@ -165,9 +182,22 @@ container_ip_map() {
 }
 
 assert_clean() {
-  local name="$1" pcap breaches attempts
+  local name="$1" pcap breaches attempts dns_filter dns_attempts
   pcap="$(pcap_path "$name")"
   [ -f "$pcap" ] || { echo "capture-egress: ${pcap} missing" >&2; return 1; }
+
+  # A blocked query can disclose a name even when there is no reply.
+  # Reject DNS attempts before the generic blocked-connection inventory.
+  dns_filter="$(dns_bpf)"
+  dns_attempts="$(count_packets "$pcap" "$dns_filter")"
+  if [ "$dns_attempts" != "0" ]; then
+    echo "capture-egress: FAIL — ${dns_attempts} DNS attempt(s) outside the stack subnet" >&2
+    # shellcheck disable=SC2024 # sudo reads the pcap; our user owns the report.
+    sudo tcpdump -r "$pcap" -nn "$dns_filter" > "${ART_DIR}/${name}.dns-attempts.txt" 2>/dev/null
+    container_ip_map >> "${ART_DIR}/${name}.dns-attempts.txt"
+    head -n 50 "${ART_DIR}/${name}.dns-attempts.txt" >&2
+    return 1
+  fi
 
   # BREACH: any packet sourced from a non-private address = a reply got
   # back in = egress SUCCEEDED past the seal. Hard failure, always.
@@ -220,13 +250,24 @@ assert_attempts() {
   echo "capture-egress: PASS — negative control recorded ${n} blocked egress packet(s); canary is live"
 }
 
+assert_dns_attempts() {
+  local name="$1" pcap n dns_filter
+  pcap="$(pcap_path "$name")"
+  [ -f "$pcap" ] || { echo "capture-egress: ${pcap} missing" >&2; return 1; }
+  dns_filter="$(dns_bpf)"
+  n="$(count_packets "$pcap" "$dns_filter")"
+  [ "$n" != "0" ] || { echo 'capture-egress: FAIL — DNS control captured nothing' >&2; return 1; }
+  echo "capture-egress: DNS control recorded ${n} outside DNS attempt(s)"
+}
+
 case "${1:-}" in
   start) start "${2:?usage: $0 start <name>}" ;;
   stop) stop "${2:?usage: $0 stop <name>}" ;;
   assert-clean) assert_clean "${2:?usage: $0 assert-clean <name>}" ;;
   assert-attempts) assert_attempts "${2:?usage: $0 assert-attempts <name>}" ;;
+  assert-dns-attempts) assert_dns_attempts "${2:?usage: $0 assert-dns-attempts <name>}" ;;
   *)
-    echo "usage: $0 {start|stop|assert-clean|assert-attempts} <name>" >&2
+    echo "usage: $0 {start|stop|assert-clean|assert-attempts|assert-dns-attempts} <name>" >&2
     exit 2
     ;;
 esac

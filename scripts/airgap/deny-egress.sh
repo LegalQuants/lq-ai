@@ -25,12 +25,10 @@
 # match `-i <bridge>` (traffic FROM containers); host->container
 # published-port traffic arrives with RFC1918 addresses either way.
 #
-# Known limitation (documented in the runbook): Docker's embedded DNS
-# resolves names via the HOST's resolver from the host network
-# namespace, so name resolution from sealed containers may still
-# succeed. The seal blocks the subsequent connection, and the tcpdump
-# canary (capture-egress.sh) records the attempt. A physical air gap
-# has no resolver at all.
+# DNS needs two controls: seal-dns.sh prevents Docker's embedded resolver
+# from forwarding through host DNS; this chain also blocks direct UDP/TCP
+# DNS outside the stack subnet, including private upstream resolvers.
+# Apply the DNS-only Compose override before fresh boot.
 #
 # Usage:
 #   deny-egress.sh seal     # install the guard (idempotent)
@@ -82,7 +80,19 @@ seal() {
   # Create-or-flush the chain so re-running `seal` is idempotent and
   # never stacks duplicate rules.
   sudo iptables -N "$CHAIN" 2>/dev/null || sudo iptables -F "$CHAIN"
-  local dst
+  # Service discovery stays inside Docker's embedded resolver. Only an
+  # in-stack DNS server may receive direct port-53 traffic; never let the
+  # broad RFC1918 allowlist admit a private upstream DNS relay.
+  local dst subnet subnets
+  subnets="$(docker network inspect "$NETWORK" --format '{{range .IPAM.Config}}{{.Subnet}}{{"\n"}}{{end}}')"
+  [ -n "$subnets" ] || { echo 'deny-egress: network has no subnets' >&2; return 1; }
+  while IFS= read -r subnet; do
+    [[ "$subnet" == *:* ]] && continue
+    sudo iptables -A "$CHAIN" -d "$subnet" -p udp --dport 53 -j RETURN
+    sudo iptables -A "$CHAIN" -d "$subnet" -p tcp --dport 53 -j RETURN
+  done <<< "$subnets"
+  sudo iptables -A "$CHAIN" -p udp --dport 53 -j DROP
+  sudo iptables -A "$CHAIN" -p tcp --dport 53 -j DROP
   for dst in "${ALLOWED_DST[@]}"; do
     sudo iptables -A "$CHAIN" -d "$dst" -j RETURN
   done
@@ -98,18 +108,27 @@ seal() {
 
   # IPv6: compose networks here are IPv4-only, but if the daemon has
   # IPv6 enabled a v6 DOCKER-USER chain exists — mirror the seal so v6
-  # can't become a bypass. Skipped silently when docker never created
-  # the chain (ip6tables still exits 0 on -L of a missing chain on some
-  # hosts, hence the explicit guard).
+  # can't become a bypass. A missing chain is acceptable only when the
+  # tested network has no IPv6 subnet; otherwise fail closed.
   if sudo ip6tables -L DOCKER-USER >/dev/null 2>&1; then
     sudo ip6tables -N "$CHAIN" 2>/dev/null || sudo ip6tables -F "$CHAIN"
+    while IFS= read -r subnet; do
+      [[ "$subnet" != *:* ]] && continue
+      sudo ip6tables -A "$CHAIN" -d "$subnet" -p udp --dport 53 -j RETURN
+      sudo ip6tables -A "$CHAIN" -d "$subnet" -p tcp --dport 53 -j RETURN
+    done <<< "$subnets"
+    sudo ip6tables -A "$CHAIN" -p udp --dport 53 -j DROP
+    sudo ip6tables -A "$CHAIN" -p tcp --dport 53 -j DROP
     # Unique-local + link-local are the v6 analogue of RFC1918/loopback.
     sudo ip6tables -A "$CHAIN" -d fc00::/7 -j RETURN
     sudo ip6tables -A "$CHAIN" -d fe80::/10 -j RETURN
     sudo ip6tables -A "$CHAIN" -d ::1/128 -j RETURN
     sudo ip6tables -A "$CHAIN" -j DROP
     sudo ip6tables -C DOCKER-USER -i "$iface" -j "$CHAIN" 2>/dev/null \
-      || sudo ip6tables -I DOCKER-USER 1 -j "$CHAIN"
+      || sudo ip6tables -I DOCKER-USER 1 -i "$iface" -j "$CHAIN"
+  elif [[ "$subnets" == *:* ]]; then
+    echo 'deny-egress: cannot seal an IPv6 network without a DOCKER-USER chain' >&2
+    return 1
   fi
 
   echo "deny-egress: sealed. Rules:"

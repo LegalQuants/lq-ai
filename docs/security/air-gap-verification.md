@@ -2,7 +2,13 @@
 
 > **Status:** AI-drafted, pending maintainer + security review (roadmap 3.5, DE-032 + DE-233). The CI job described here is the authoritative artifact; if this document and the workflow disagree, the workflow wins.
 
-LQ.AI's Mode 2 (`docker compose --profile local`) is the air-gap-capable deployment: local Ollama inference at Tier 1, no provider keys, no outbound calls. Most self-hosted projects document air-gap support; in our survey of the ecosystem (GitLab, Mattermost, Sentry, k3s, Ollama), **none proves it in CI**. LQ.AI does: the [`airgap-verify` workflow](../../.github/workflows/airgap-verify.yml) seals the deployment network, boots the stack from scratch inside the seal, drives a real user journey, and publishes packet-capture evidence on every run.
+LQ.AI's Mode 2 (`docker compose --profile local`) uses local Ollama inference at
+Tier 1 without provider keys. The proposed
+[`airgap-verify` workflow](../../.github/workflows/airgap-verify.yml) restricts the
+deployment network, boots the stack fresh, drives a login/chat journey and
+publishes packet-capture evidence. The DNS regression suite and the full manual
+verification sequence passed locally on Linux arm64 (2026-10-10). Hosted Ubuntu
+CI acceptance and security review are still pending.
 
 This page explains exactly what that proof covers, how to reproduce it, what an air-gapped operator must pre-fetch, and — following the strongest structural idea in GitLab's and Mattermost's offline docs — an explicit list of what does **not** work air-gapped.
 
@@ -13,14 +19,38 @@ This page explains exactly what that proof covers, how to reproduce it, what an 
 On every run (weekly, on demand, and on PRs touching the compose topology, gateway config, or the harness), the job:
 
 1. **Builds and fetches everything while the network is open** — the four locally-built images (`api`, `gateway`, `web`, plus worker tags of the api image), the four digest-pinned third-party images (`pgvector`, `redis`, `rustfs`, `ollama`), and one Ollama model.
-2. **Seals the compose bridge** — an iptables `DOCKER-USER` chain drops every packet leaving the bridge whose destination is not RFC1918/loopback ([`scripts/airgap/deny-egress.sh`](../../scripts/airgap/deny-egress.sh)).
-3. **Starts an egress canary** — tcpdump on the bridge records any packet with a non-private destination, so even *attempts* the seal drops (tolerated-failure telemetry) are evidence ([`scripts/airgap/capture-egress.sh`](../../scripts/airgap/capture-egress.sh)).
-4. **Boots the full stack fresh, under the seal** — every first-boot path runs offline: Alembic migrations, gateway config seeding from `gateway.yaml.example`, RustFS object-store setup (ADR 0036), first-run admin bootstrap.
-5. **Drives a real user journey** — bootstrap-password login → forced password rotation → chat creation → a message routed to `ollama-local` → non-empty assistant response ([`scripts/airgap/drive-smoke.sh`](../../scripts/airgap/drive-smoke.sh)). It then asserts the gateway's `inference_routing_log` recorded the turn as `routed_provider='ollama-local'`, `routed_inference_tier=1`, with **zero** non-refused rows at any other tier.
-6. **Asserts zero *successful* egress** — a hard failure on any packet from a non-private *source* (a reply from outside means the seal leaked). Outbound *attempts* the seal dropped do not fail the run: upstream components (base images, the web UI, Ollama) try phone-home connections at boot exactly as they would in a true air gap, where those connections simply fail. Every attempt is inventoried — with per-container attribution — into `sealed.attempts.txt` in the evidence artifact and echoed in the job summary, so the operator knows precisely which components will experience connection timeouts on an air-gapped site. The first live run recorded 24 blocked attempt packets from three containers and zero replies.
-7. **Runs a negative control** — from inside the sealed gateway container (the one component that legitimately egresses in cloud mode), a TCP connect to a fixed public IP and an HTTPS request to `https://api.anthropic.com` must both **fail**, and the blocked attempts must **appear** in a second capture. This proves the seal blocks and the canary sees — a clean pcap cannot be a mis-wired no-op. No provider key is involved; unreachability of the cloud endpoint is the whole proof.
+2. **Isolates container DNS before fresh boot** — a generated DNS-only Compose
+   override sets each service's external DNS upstream to its own `127.0.0.1`.
+   Docker's embedded resolver still answers internal service names. It cannot
+   forward external names to host DNS; the runner's resolver is untouched.
+3. **Seals the compose bridge** — an iptables `DOCKER-USER` chain drops DNS
+   outside the stack subnet before the private-address allowlist. Other packets
+   outside RFC1918/loopback are dropped as before
+   ([`scripts/airgap/deny-egress.sh`](../../scripts/airgap/deny-egress.sh)).
+4. **Starts an egress canary** — tcpdump on the bridge records direct DNS
+   attempts outside the stack, public destinations and public-source replies
+   ([`scripts/airgap/capture-egress.sh`](../../scripts/airgap/capture-egress.sh)).
+5. **Boots the full stack fresh, under the seal** — every first-boot path runs offline: Alembic migrations, gateway config seeding from `gateway.yaml.example`, RustFS object-store setup (ADR 0036), first-run admin bootstrap.
+6. **Drives a real user journey** — bootstrap-password login → forced password rotation → chat creation → a message routed to `ollama-local` → non-empty assistant response ([`scripts/airgap/drive-smoke.sh`](../../scripts/airgap/drive-smoke.sh)). It then asserts the gateway's `inference_routing_log` recorded the turn as `routed_provider='ollama-local'`, `routed_inference_tier=1`, with **zero** non-refused rows at any other tier.
+7. **Asserts no direct outside DNS attempts or public-source replies** — fail on
+   any UDP/TCP port-53 attempt outside the stack subnet, even without a reply,
+   or on a packet from a non-private source. DNS failures produce
+   `sealed.dns-attempts.txt` with packet evidence and a container IP map.
+   Other observed outbound attempts remain inventoried in `sealed.attempts.txt`.
+   Loopback lookups handled by Docker's embedded resolver are covered by the
+   DNS upstream policy and resolver controls, rather than the bridge capture.
+   An absence of replies alone does not prove that every outbound packet was
+   dropped; the connection claim also depends on the installed firewall rules.
+8. **Runs a connection negative control** — from inside the sealed gateway container (the one component that legitimately egresses in cloud mode), a TCP connect to a fixed public IP and an HTTPS request to `https://api.anthropic.com` must both **fail**, and the blocked attempts must **appear** in a second capture. This proves the seal blocks and the canary sees — a clean pcap cannot be a mis-wired no-op. No provider key is involved; unreachability of the cloud endpoint is the whole proof.
 
-Both pcaps (the sealed one — attempts only, zero replies — and the non-empty negative one) plus the `sealed.attempts.txt` inventory upload as the `airgap-evidence` workflow artifact — the audit trail for procurement conversations.
+The DNS controls additionally check internal service names and fresh external
+queries over both UDP and TCP. A separate `dns-negative.pcap` contains deliberate
+direct public-DNS attempts: those must be blocked, captured, and rejected by the
+same `assert-clean` acceptance check. A fast regression job exercises the resolver
+against a controlled DNS server and checks synthetic captures without booting the
+application stack. `dns-seal.compose.yml` is included in the evidence artifact.
+
+Both connection pcaps (the sealed one — attempts only, zero replies — and the non-empty negative one) plus the `sealed.attempts.txt` inventory upload as the `airgap-evidence` workflow artifact — the audit trail for procurement conversations.
 
 **Known attempted-egress sources (blocked under the seal; expect connection timeouts, not breakage, on a real air-gapped site):** the sealed boot surfaces phone-home attempts from upstream components — version/update checks and telemetry from the web UI and third-party base images. None of these are LQ.AI code paths (the api's only egress door is the gateway; the gateway's egress is provider-config-driven and Tier 1 is local). The per-run inventory in the evidence artifact is the authoritative, current list; if a new LQ.AI-authored component ever appears in it, that is a regression to treat as a bug.
 
@@ -30,7 +60,12 @@ Honesty about scope, per the project's conservative posture:
 
 - **Not the transfer step.** CI builds images on the connected side of the fence; it proves the artifact set is *sufficient* once present, not the operator's media-transfer procedure (§3 covers that).
 - **Not the ingestion pipeline offline.** The smoke covers login → chat → Tier-1 inference. Document ingestion has its own first-run downloads (§4) and is not yet exercised under the seal.
-- **DNS side channel.** Docker's embedded DNS resolves names via the *host's* resolver from the host network namespace, so name resolution from sealed containers may still succeed in CI; the seal blocks the subsequent connection and the canary records the attempt. A physical air gap has no resolver at all — this makes the CI environment slightly *more* permissive than reality, which is the safe direction for a proof (nothing can pass in CI that would fail on a real air gap for network reasons, only vice versa).
+- **Explicit DNS test policy.** The bridge topology, service images, ports and
+  application configuration stay unchanged, but the test overrides DNS upstream
+  selection. It certifies operation with external DNS unavailable, not the
+  operator's ordinary DNS configuration. DNS-over-HTTPS/TLS and private proxies
+  are not independently classified by this port-53 assertion; the existing
+  connection seal and its documented allowlist still apply.
 - **Not the pinned-alias models.** The smoke routes to a small CPU-viable model via the gateway's raw `ollama-local/<model>` passthrough so the shipped `gateway.yaml.example` is used byte-identical. Tier derivation comes from the provider entry, not the model name, so the air-gap property is model-independent — but the qwen3.5 models the `local*` aliases pin are not themselves exercised in CI.
 
 ---
@@ -48,16 +83,23 @@ docker compose --profile local pull postgres redis rustfs ollama
 docker compose --profile local up -d --wait ollama
 docker compose exec ollama ollama pull llama3.2:1b
 
+./scripts/airgap/seal-dns.sh configure airgap-artifacts/dns-seal.compose.yml
+export COMPOSE_FILE=docker-compose.yml:airgap-artifacts/dns-seal.compose.yml
+trap './scripts/airgap/capture-egress.sh stop sealed || true; ./scripts/airgap/deny-egress.sh unseal' EXIT
 ./scripts/airgap/deny-egress.sh seal
 ./scripts/airgap/capture-egress.sh start sealed
 docker compose --profile local up -d --wait --no-build --force-recreate
+./scripts/airgap/seal-dns.sh verify
+docker compose exec -T gateway python - < scripts/airgap/check-dns.py
 ./scripts/airgap/drive-smoke.sh
 ./scripts/airgap/capture-egress.sh stop sealed
 ./scripts/airgap/capture-egress.sh assert-clean sealed
 ./scripts/airgap/deny-egress.sh unseal   # when done
+unset COMPOSE_FILE
+trap - EXIT
 ```
 
-Requires `sudo` for iptables/tcpdump; `jq`, `curl`, `openssl` for the smoke driver. The smoke assumes a **fresh database** (it reads the first-run admin password from the api logs) — don't run it against a dev stack you care about, and never `docker compose down -v` a stack you care about to get one.
+Requires Docker Compose 2.24.4+ (`!override` replaces existing DNS upstreams), `sudo` for iptables/tcpdump; `jq`, `curl`, `openssl` for the harness. The regression suite additionally uses Python/pytest and Docker. The smoke assumes a **fresh database** (it reads the first-run admin password from the api logs) — don't run it against a dev stack you care about, and never `docker compose down -v` a stack you care about to get one.
 
 ### Non-Linux / declarative alternative: `internal: true`
 
