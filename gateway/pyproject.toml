@@ -71,7 +71,7 @@ dependencies = [
     # sessions are stateful, so the connection holder must speak MCP. This is
     # the official MCP SDK — not reasonably hand-rollable (it implements the
     # full JSON-RPC-over-SSE session + auth handshake). Client-only use here.
-    "mcp>=1.28,<2",
+    "mcp>=1.28,<3",
     # starlette is pinned explicitly rather than left to fastapi's resolver.
     # History: this cap was originally <1.4 because mcp pulls sse-starlette,
     # whose 3.4.x line requires starlette 1.x, which conflicted with the
