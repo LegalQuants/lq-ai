@@ -6,16 +6,18 @@
  * ChatPanel-slash-detect.test.ts header). ChatPanel wires these into the
  * attach affordance and the send payload.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
 	MAX_CHAT_ATTACHED_FILES,
 	canAttachChatFile,
+	createProcessingFileWarningHandler,
+	hasAppliedProcessingFile,
 	processingFileNames,
 	readyFileNames,
 	selectFileIdsForSend
 } from '../chat/attachedFiles';
-import type { FileMeta, IngestionStatus } from '../types';
+import type { FileMeta, IngestionStatus, MessageCompleteFrame } from '../types';
 
 function meta(id: string, status?: IngestionStatus): FileMeta {
 	return {
@@ -88,6 +90,74 @@ describe('selectFileIdsForSend', () => {
 		const ids = selectFileIdsForSend(files);
 		expect(ids).toHaveLength(16);
 		expect(ids).not.toContain('bad');
+	});
+});
+
+describe('hasAppliedProcessingFile', () => {
+	it('detects a file that was still ingesting when the backend accepted it', () => {
+		expect(hasAppliedProcessingFile(['pending-id'], ['ready-id', 'pending-id'])).toBe(true);
+	});
+
+	it('does not warn when no still-ingesting file was applied', () => {
+		expect(hasAppliedProcessingFile(['pending-id'], ['ready-id'])).toBe(false);
+		expect(hasAppliedProcessingFile(['pending-id'], undefined)).toBe(false);
+	});
+});
+
+describe('processing attachment warning ownership', () => {
+	const complete: MessageCompleteFrame = {
+		type: 'complete',
+		lq_ai_message_id: 'message-a',
+		message: {
+			id: 'message-a',
+			chat_id: 'chat-a',
+			role: 'assistant',
+			content: 'Answer',
+			created_at: '2026-10-11T00:00:00Z'
+		},
+		applied_file_ids: ['pending-id']
+	};
+
+	it("does not show chat A's warning after switching to chat B before completion", () => {
+		let activeChatId: string | null = 'chat-a';
+		const showWarning = vi.fn();
+		const onComplete = createProcessingFileWarningHandler(
+			['pending-id'],
+			() => activeChatId,
+			showWarning
+		);
+
+		// The callback was created for A's send, but its stream completes in B.
+		activeChatId = 'chat-b';
+		onComplete(complete);
+		expect(showWarning).not.toHaveBeenCalled();
+	});
+
+	it('still warns when the completing turn belongs to the visible chat', () => {
+		const showWarning = vi.fn();
+		const onComplete = createProcessingFileWarningHandler(
+			['pending-id'],
+			() => 'chat-a',
+			showWarning
+		);
+
+		onComplete(complete);
+		expect(showWarning).toHaveBeenCalledOnce();
+		expect(showWarning.mock.calls[0][0]).toContain('its contents may not have been available');
+	});
+
+	it('does not warn when there is no active chat or no applied processing file', () => {
+		const showWarning = vi.fn();
+		createProcessingFileWarningHandler(['pending-id'], () => null, showWarning)(complete);
+		createProcessingFileWarningHandler(
+			['pending-id'],
+			() => 'chat-a',
+			showWarning
+		)({
+			...complete,
+			applied_file_ids: ['ready-id']
+		});
+		expect(showWarning).not.toHaveBeenCalled();
 	});
 });
 
