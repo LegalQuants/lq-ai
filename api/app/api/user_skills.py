@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +44,7 @@ from app.models.audit import AuditLog
 from app.models.team import Team, TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
+from app.skills.schema import LQAIFrontmatter
 
 router = APIRouter(prefix="/user-skills", tags=["user-skills"])
 
@@ -247,13 +248,35 @@ def _validate_tags(tags: list[str]) -> list[str]:
     return out
 
 
-def _validate_frontmatter_extra(extra: dict[str, Any]) -> dict[str, Any]:
-    """Reject pathologically large extension blobs.
+# The ``lq_ai:`` keys that participate in table-mode authoring (DE-297).
+# When any of them appear in ``frontmatter_extra``, that subset is
+# re-validated through :class:`app.skills.schema.LQAIFrontmatter` — the
+# SAME model the built-in loader parses SKILL.md frontmatter with — so a
+# user-authored table skill can never persist a shape the built-in path
+# would reject (zero columns, blank query, tier outside 1-5, …).
+# Restricted to this subset (rather than validating the whole dict) so
+# unrelated free-form extension keys keep their documented
+# "arbitrary JSON" contract.
+_TABLE_MODE_EXTRA_KEYS = frozenset(
+    {"output_format", "columns", "minimum_inference_tier", "ensemble_verification"}
+)
 
-    Keys/values are arbitrary JSON; the only guard at this layer is a
-    serialized-size ceiling so a runaway client can't burn a JSONB
-    page on a single row. The Pydantic ``dict[str, Any]`` typing
-    already rejects non-dict bodies.
+
+def _validate_frontmatter_extra(extra: dict[str, Any]) -> dict[str, Any]:
+    """Reject pathologically large extension blobs and invalid table specs.
+
+    Keys/values are arbitrary JSON; the guards at this layer are:
+
+    * a serialized-size ceiling so a runaway client can't burn a JSONB
+      page on a single row (the Pydantic ``dict[str, Any]`` typing
+      already rejects non-dict bodies); and
+    * DE-297 table-mode parity — when the extra block carries any of
+      the ``lq_ai`` authoring keys (``output_format`` / ``columns`` /
+      ``minimum_inference_tier`` / ``ensemble_verification``), that
+      subset must validate through the same ``LQAIFrontmatter`` schema
+      the filesystem loader applies to built-ins. This is what makes a
+      user-authored ``output_format: table`` skill runnable by the
+      Tabular workflow instead of a stored-but-broken row.
     """
 
     import json  # local — only this validator needs it
@@ -267,6 +290,20 @@ def _validate_frontmatter_extra(extra: dict[str, Any]) -> dict[str, Any]:
                 "serialized ceiling for a single user skill"
             ),
         )
+
+    table_subset = {k: v for k, v in extra.items() if k in _TABLE_MODE_EXTRA_KEYS}
+    if table_subset:
+        try:
+            LQAIFrontmatter.model_validate(table_subset)
+        except ValidationError as exc:
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in err['loc']) or 'frontmatter_extra'}: {err['msg']}"
+                for err in exc.errors()
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=f"frontmatter_extra is not a valid skill spec: {problems}",
+            ) from None
     return extra
 
 

@@ -29,12 +29,16 @@ information leakage), matching the M3-A6 Easy Playbook posture.
 Column-spec resolution
 ----------------------
 
-Either ``skill_name`` (resolved at execution start from the live
-:class:`SkillRegistry` by reading the skill's
-``lq_ai.columns``) OR ``columns`` (ad-hoc spec) is required. The
-resolved column list is snapshotted onto the row at request time
-(Decision C-1 snapshotting posture: re-rendering the grid a week
-later must be honest about what was actually run).
+Either ``skill_name`` OR ``columns`` (ad-hoc spec) is required. A
+``skill_name`` resolves through the D8.1b stack (DE-297): the caller's
+user-scope shadow first, then the newest team-scope shadow, then the
+live :class:`SkillRegistry` built-in. User/team rows carry their column
+spec in ``frontmatter_extra`` (validated at create/PATCH time against
+the same ``LQAIFrontmatter`` schema built-ins parse with); built-ins
+carry it in ``lq_ai.columns``. The resolved column list is snapshotted
+onto the row at request time (Decision C-1 snapshotting posture:
+re-rendering the grid a week later must be honest about what was
+actually run).
 
 Cost-preview shape
 ------------------
@@ -57,6 +61,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -66,6 +71,8 @@ from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.models.document import Document, DocumentChunk
 from app.models.tabular import TabularExecution
+from app.models.user import User
+from app.models.user_skill import UserSkill
 from app.schemas.tabular import (
     Citation,
     ColumnSpec,
@@ -77,6 +84,7 @@ from app.schemas.tabular import (
     TabularResults,
 )
 from app.skills.registry import MutableSkillRegistry
+from app.skills.schema import LQAIFrontmatter
 from app.tabular.cost import estimate_tabular_execution_cost
 from app.workers.queue import enqueue_tabular_execution_job
 
@@ -111,17 +119,72 @@ def _registry(request: Request) -> MutableSkillRegistry:
     return holder
 
 
-def _resolve_columns(
+def _bake_skill_ensemble(
+    columns: list[ColumnSpec], skill_ensemble: bool | None
+) -> list[ColumnSpec]:
+    """Bake the skill-level ``ensemble_verification`` fallback into each
+    column at the single resolution point (Decision C-1 snapshotting
+    posture) so both preview-cost and execute see a consistent snapshot.
+
+    A column that didn't declare its own value (None) inherits the
+    skill-level value; an explicit True/False per column is left
+    untouched.
+    """
+
+    if skill_ensemble is not None:
+        for col in columns:
+            if col.ensemble_verification is None:
+                col.ensemble_verification = skill_ensemble
+    return columns
+
+
+def _columns_from_user_skill_row(row: UserSkill, *, skill_name: str) -> list[ColumnSpec]:
+    """Resolve a user/team-scope row's ``frontmatter_extra`` to columns.
+
+    DE-297 — the user-skill half of table-mode hydration. Parses the
+    extension keys through the same :class:`LQAIFrontmatter` model the
+    built-in loader uses, so both sources apply identical validation
+    (tier bounds, non-empty name/query). Create/PATCH already reject
+    invalid shapes; the re-parse here guards legacy rows written before
+    that validation landed — those surface as a 400, never a 500.
+    """
+
+    extra = dict(row.frontmatter_extra or {})
+    try:
+        lq = LQAIFrontmatter.model_validate(extra)
+    except ValidationError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"skill {skill_name!r} has an invalid column spec; re-save it "
+                "from the skill editor before running a tabular review"
+            ),
+        ) from None
+    if not lq.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"skill {skill_name!r} has no columns (not a table-mode skill)",
+        )
+    resolved = [ColumnSpec.model_validate(col.model_dump()) for col in lq.columns]
+    return _bake_skill_ensemble(resolved, lq.ensemble_verification)
+
+
+async def _resolve_columns(
     request: Request,
+    db: AsyncSession,
     *,
+    user: User,
     skill_name: str | None,
     ad_hoc: list[ColumnSpec] | None,
 ) -> tuple[str | None, list[ColumnSpec]]:
     """Resolve the request's column spec to (skill_name, columns).
 
     Either ``skill_name`` OR ``ad_hoc`` must be supplied. When
-    ``skill_name`` is given, look up the registered skill's
-    ``lq_ai.columns`` and snapshot the list. When ``ad_hoc`` is
+    ``skill_name`` is given, resolve it through the D8.1b stack —
+    the caller's user-scope shadow, then the newest accessible
+    team-scope shadow, then the registered built-in (DE-297: user/team
+    rows carry their spec in ``frontmatter_extra``; built-ins in
+    ``lq_ai.columns``) — and snapshot the list. When ``ad_hoc`` is
     given, use it directly. Both-or-neither is a 400.
 
     Returns the resolved skill_name (None for ad-hoc) + a non-empty
@@ -142,6 +205,17 @@ def _resolve_columns(
         )
 
     if skill_name:
+        # Local import (matches app/api/internal.py) — the shadow
+        # loaders + resolution order live in skills.py; importing here
+        # keeps the tabular → skills edge one-way and explicit.
+        from app.api.skills import _load_team_shadow, _load_user_shadow
+
+        shadow = await _load_user_shadow(db, user_id=user.id, slug=skill_name)
+        if shadow is None:
+            shadow = await _load_team_shadow(db, user_id=user.id, slug=skill_name)
+        if shadow is not None:
+            return skill_name, _columns_from_user_skill_row(shadow, skill_name=skill_name)
+
         record = _registry(request).current().get(skill_name)
         if record is None:
             raise HTTPException(status_code=404, detail=f"skill {skill_name!r} not found")
@@ -155,18 +229,9 @@ def _resolve_columns(
         # skill-side fields the wire schema doesn't honor are
         # stripped consistently.
         resolved = [ColumnSpec.model_validate(col.model_dump()) for col in skill_columns]
-        # Bake the skill-level ensemble_verification fallback into each
-        # column at this single resolution point (Decision C-1
-        # snapshotting posture) so both preview-cost and execute see a
-        # consistent snapshot. A column that didn't declare its own
-        # value (None) inherits the skill-level value; an explicit
-        # True/False per column is left untouched.
-        skill_ensemble = record.frontmatter.lq_ai.ensemble_verification
-        if skill_ensemble is not None:
-            for col in resolved:
-                if col.ensemble_verification is None:
-                    col.ensemble_verification = skill_ensemble
-        return skill_name, resolved
+        return skill_name, _bake_skill_ensemble(
+            resolved, record.frontmatter.lq_ai.ensemble_verification
+        )
 
     # ad_hoc branch — the request-validation min_length=1 on columns
     # in TabularExecutionCreate already covers the empty case.
@@ -242,13 +307,15 @@ async def preview_tabular_cost(
     Authorization is the router-level ``get_active_user`` gate — any
     authenticated caller may preview costs against their own document
     selection. The document-ownership check is enforced at execute
-    time; preview doesn't load the documents.
+    time; preview doesn't load the documents. ``user`` also drives the
+    DE-297 skill-name resolution (the caller's user/team shadows take
+    precedence over a built-in at the same slug).
     """
 
-    _ = user  # gate-only; no per-user logic on preview
-
-    _, columns = _resolve_columns(
+    _, columns = await _resolve_columns(
         request,
+        db,
+        user=user,
         skill_name=body.skill_name,
         ad_hoc=body.columns,
     )
@@ -306,8 +373,10 @@ async def create_tabular_execution(
     if len(documents) != len(body.document_ids):
         raise HTTPException(status_code=404, detail="one or more documents not found")
 
-    resolved_skill_name, columns = _resolve_columns(
+    resolved_skill_name, columns = await _resolve_columns(
         request,
+        db,
+        user=user,
         skill_name=body.skill_name,
         ad_hoc=body.columns,
     )
