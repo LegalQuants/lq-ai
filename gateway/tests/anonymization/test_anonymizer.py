@@ -319,3 +319,113 @@ def test_pseudonymize_returns_result_with_fresh_mapper() -> None:
 
     assert result.text == "PERSON_0001 signed."
     assert result.mapper.reverse() == {"PERSON_0001": "John Smith"}
+
+
+# ---------------------------------------------------------------------------
+# Pseudonym-domain remapping — LOCATION → ADDRESS, US_BANK_NUMBER →
+# ACCOUNT_NUMBER (``docs/security/anonymization.md``, "Enabled
+# recognizers"). The remap lives in ``PSEUDONYM_DOMAINS`` and applies at
+# assign time in ``pseudonymize_into``; rehydration is token-only so the
+# round-trip must hold unchanged.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_pseudonymize_into_location_maps_to_address_domain() -> None:
+    """A LOCATION span substitutes as ADDRESS_NNNN, never LOCATION_NNNN."""
+
+    text = "Send notice to 123 Main St, New York, NY 10001 before closing."
+    entity = "123 Main St, New York, NY 10001"
+    start = text.index(entity)
+    spans = [_Span("LOCATION", start, start + len(entity))]
+
+    out = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize_into(text, PseudonymMapper())
+
+    assert "ADDRESS_0001" in out
+    assert "LOCATION" not in out
+
+
+@pytest.mark.unit
+def test_pseudonymize_into_us_bank_number_maps_to_account_number_domain() -> None:
+    """A US_BANK_NUMBER span substitutes as ACCOUNT_NUMBER_NNNN."""
+
+    text = "Wire the settlement to account 8529301174 by Friday."
+    entity = "8529301174"
+    start = text.index(entity)
+    spans = [_Span("US_BANK_NUMBER", start, start + len(entity))]
+
+    out = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize_into(text, PseudonymMapper())
+
+    assert "ACCOUNT_NUMBER_0001" in out
+    assert "US_BANK_NUMBER" not in out
+
+
+@pytest.mark.unit
+def test_remapped_domain_round_trips_byte_for_byte() -> None:
+    """Remapping before assign is invisible to rehydration.
+
+    ``PseudonymMapper.reverse()`` discards the entity-type half of the
+    key, so rehydrate only ever matches literal tokens the mapper
+    minted. A LOCATION span pseudonymized under the ADDRESS domain must
+    restore byte-for-byte.
+    """
+
+    text = "The deposition happens at 400 Court Street, Brooklyn tomorrow."
+    entity = "400 Court Street, Brooklyn"
+    start = text.index(entity)
+    spans = [_Span("LOCATION", start, start + len(entity))]
+    anonymizer = Anonymizer(analyzer=_StubAnalyzer(spans))
+    mapper = PseudonymMapper()
+
+    substituted = anonymizer.pseudonymize_into(text, mapper)
+    restored = anonymizer.rehydrate(substituted, mapper)
+
+    assert substituted != text
+    assert restored == text
+
+
+@pytest.mark.unit
+def test_remapped_domains_have_independent_counters() -> None:
+    """ADDRESS and ACCOUNT_NUMBER count independently; raw labels never appear."""
+
+    text = "Refund account 8529301174 and mail notice to 123 Main St, Albany."
+    account = "8529301174"
+    address = "123 Main St, Albany"
+    spans = [
+        _Span("US_BANK_NUMBER", text.index(account), text.index(account) + len(account)),
+        _Span("LOCATION", text.index(address), text.index(address) + len(address)),
+    ]
+    mapper = PseudonymMapper()
+
+    out = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize_into(text, mapper)
+
+    assert "ACCOUNT_NUMBER_0001" in out
+    assert "ADDRESS_0001" in out
+    counts = mapper.entity_counts()
+    assert counts.get("ADDRESS") == 1
+    assert counts.get("ACCOUNT_NUMBER") == 1
+    assert "LOCATION" not in counts
+    assert "US_BANK_NUMBER" not in counts
+
+
+@pytest.mark.unit
+def test_unmapped_entity_types_pass_through_unchanged() -> None:
+    """Types outside the remap table keep their label, custom types included.
+
+    Pins the promise in ``docs/security/anonymization.md`` ("Adding a
+    new entity type"): a custom ``CLIENT_CODE`` recognizer yields
+    ``CLIENT_CODE_0001`` with no further configuration.
+    """
+
+    text = "John Smith opened matter CLIENT-A123 for review."
+    person = "John Smith"
+    code = "CLIENT-A123"
+    spans = [
+        _Span("PERSON", text.index(person), text.index(person) + len(person)),
+        _Span("CLIENT_CODE", text.index(code), text.index(code) + len(code)),
+    ]
+
+    out = Anonymizer(analyzer=_StubAnalyzer(spans)).pseudonymize_into(text, PseudonymMapper())
+
+    assert "PERSON_0001" in out
+    assert "CLIENT_CODE_0001" in out
