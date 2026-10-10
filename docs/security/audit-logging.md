@@ -56,6 +56,18 @@ and disappear on rollback. An audit-write failure remains an
 error and cannot grant access. These rows are not an independent durable
 incident log, and #494 does not add alerts or alter orchestration-scope refusals.
 
+A governed run reaches `retrieve_chunks` in two further ways (ADR 0038 D4 and
+D5). The bounded read of one file's text sits behind the same file predicate
+as the whole-file read, and a refusal there writes the same row. In a run, the
+orchestration boundary checks the file against the run's selection before
+that predicate is reached, and its refusal is a scope refusal. The keyword
+search of the knowledge bases an approved plan lists does not refuse. A
+knowledge base that is no longer the owner's, is archived, or is no longer
+attached to the run's matter is left out of the search; the step's result
+gives how many were listed and how many were searched; and no
+`ownership_denied` row is written. The model does not name the knowledge
+bases in that call: they come from the approved plan.
+
 ## What is NOT logged
 
 - **Plaintext message content.** `chat.message_sent` records the chat and message ids in `details`, not the message body. Inference-routing has its own table (`inference_routing_log`) with provider, model, token counts and latency — also without message content, per PRD §4.

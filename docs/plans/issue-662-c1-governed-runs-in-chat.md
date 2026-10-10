@@ -579,16 +579,30 @@ notes reach a privileged reader through the tree and the trace. It found three s
 ones in the gateway change. Each is fixed or stated above. It is not a maintainer or
 security review.
 
-**Gates on 2026-10-10.** The branch was then rebased onto `main` at `224044cc9`, one
-commit past its base, which changes documents and review rules and no code. The suites
-were run as CI runs them. The whole API suite passed with its coverage gate (3,897
-passed, 17 skipped; 82.71% against 80%). `ruff` was clean, and so was
+**Gates on 2026-10-10.** The branch was then rebased onto `main`, twice that day. The
+first rebase, onto `224044cc9`, took in one commit, which changes documents and review
+rules and no code. The second, onto `994ccbade`, took in two more: #701, which changes
+one ADR, and #684, which closes a refused ownership check in `retrieve_chunks` with an
+`ownership_denied` audit row (#494). #684 changes the line of `guard.py` where this
+branch adds the bounded document read, and the rebase conflicted there. It is resolved
+as main's audited check followed by the bounded read, and a test holds that order
+(`api/tests/autonomous/test_bounded_read_ownership_audit.py`): with the check left
+unaudited, three of its four cases fail. The knowledge-base search this branch adds
+does not go through that check. It leaves out a knowledge base that is no longer the
+owner's, archived or detached, counts it, and writes no such audit row;
+`docs/security/audit-logging.md` now says so.
+
+The suites were run as CI runs them. After the second rebase the whole API suite
+passed with its coverage gate (3,928 passed, 17 skipped; 82.77% against
+80%). `ruff` was clean, and so was
 `mypy app tests ../script_runner`, which is CI's command and checks the tests too; an
 earlier pass had run `mypy app` alone and missed one error in a test helper, since
 fixed. The gateway suite passed with its gate (1,074 passed, 3 skipped; 90.49% against
 88%). The web suite passed (3,289 passed in 108 files), and `check:lq-ai` gave 0 errors
-and 7 known warnings. All three were run again after the last change to code, tests or
-prompts. Not run: CI's stack smoke workflow, its release-image check and its
+and 7 known warnings. The gateway and web suites were run after the first rebase and
+after the last change to this branch's code, tests or prompts. The second rebase
+changes no file under `gateway/` or `web/`, so they were not run again after it. Not
+run: CI's stack smoke workflow, its release-image check and its
 bundled-helper acceptance step, which need Docker images that this pass did not build.
 
 ### Not done, or not verified
