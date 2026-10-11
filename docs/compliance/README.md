@@ -14,6 +14,7 @@ The Compliance Alignment Pack is a set of documents mapping LQ.AI's design, arch
 | **GDPR** — General Data Protection Regulation | Stub | `gdpr-alignment.md` (M1) |
 | **HIPAA** — Security Rule and Privacy Rule | Stub | `hipaa-alignment.md` (M2) |
 | **FedRAMP Moderate** | Stub | `fedramp-alignment.md` (M2) |
+| **OWASP Top 10 for LLM Applications (2025)** — AI-application security risks | Drafted (AI-drafted, pending professional review) | [`owasp-llm-top10.md`](owasp-llm-top10.md) |
 
 Each document follows a consistent format: control reference, applicability to LQ.AI deployments, the project's design or operational response, and pointers to the relevant PRD sections, code modules, or operational guidance.
 
