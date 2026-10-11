@@ -308,28 +308,34 @@ class ChatCompletionRequest(BaseModel):
     Stripped from the outbound provider body."""
 
     lq_ai_restore_tool_arguments: bool = False
-    """Ask the response path to restore pseudonyms in tool-call arguments.
+    """The caller holds its tool arguments as originals: restore them, and cover its tool text.
 
-    By default the anonymization middleware restores a reply's text and
-    leaves ``tool_calls[].function.arguments`` as the model wrote them.
+    A caller sets this when it acts on the arguments of the calls the model
+    makes, a search query or a note's text for instance, and keeps them as the
+    owner's own text. It asks for two things, which belong together.
+
+    On the way back. By default the anonymization middleware restores a reply's
+    text and leaves ``tool_calls[].function.arguments`` as the model wrote them.
     When this is true and the request was pseudonymized, a non-streaming
-    response also has the pseudonyms in each call's arguments replaced by
-    the originals (see
-    :func:`app.anonymization.middleware.post_anonymize_response`).
+    response also has the pseudonyms in each call's arguments replaced by the
+    originals (see :func:`app.anonymization.middleware.post_anonymize_response`).
+    It has no effect on a request that was not pseudonymized, and none on the
+    streaming path.
 
-    It changes only what the gateway returns to its caller. Nothing more is
-    sent to a provider, and the field itself is stripped from the outbound
-    body. It has no effect on a request that was not pseudonymized, and
-    none on the streaming path.
-
-    A caller sets it for a call whose tool arguments it will act on, such as
-    a search query or a note's text, and holds them as the originals. Sent
-    back on a later turn, as part of the conversation, they are pseudonymized
-    again with the rest of the request: the request path rewrites the
+    On the way out. What the caller holds and sends back on a later turn, the
     arguments of an assistant message's ``tool_calls`` and the content of a
-    ``tool`` message like any other content, so nothing the caller holds
-    leaves with the original names in it. The backend sets it on every call
-    of a governed run that is offered tools, on a route that pseudonymizes
+    ``tool`` message (the string values of its JSON), is pseudonymized with the
+    rest of the request, and a name the detector found anywhere in the request
+    is replaced wherever else it stands in that tool text. Member names, numbers
+    and the tool schemas are not rewritten, and the detector recognises what it
+    recognises: the claim is that no recognised entity leaves, not that none can.
+
+    Without it, tool messages and tool-call arguments are sent exactly as the
+    caller sent them. That is the right default for ordinary chat, whose research
+    tools return published sources and whose follow-up calls need the real values.
+
+    The field is stripped from the outbound body. The backend sets it on every
+    call of a governed run that is offered tools, on a route that pseudonymizes
     (ADR 0038 D7)."""
 
 

@@ -50,11 +50,15 @@ What B4 added on top of B3
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
+import functools
 import json
 import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Final
 
 from fastapi import APIRouter, Depends, Request, status
@@ -322,6 +326,25 @@ def _backend(request: Request) -> BackendClient:
     if pre_built is not None:
         return pre_built
     return get_backend_client()
+
+
+# The detector is CPU-bound and every request shares one spaCy pipeline. The
+# request pre-pass therefore runs on a single worker thread: the event loop stays
+# free for other requests while a long tool result is analysed (a document read
+# of tens of thousands of characters takes seconds). One thread keeps two
+# requests' passes from overlapping; the bound-tool path still analyses on the
+# loop's thread, so the engine's own lock (``_ANALYSIS_LOCK``) is what keeps that
+# one apart from this.
+_PRE_PASS: Final = ThreadPoolExecutor(max_workers=1, thread_name_prefix="anonymization-pre")
+
+
+async def _pre_anonymize(**kwargs: Any) -> PseudonymMapper | None:
+    """Run :func:`pre_anonymize_request` on the pre-pass thread, in this request's context."""
+
+    context = contextvars.copy_context()
+    return await asyncio.get_running_loop().run_in_executor(
+        _PRE_PASS, functools.partial(context.run, pre_anonymize_request, **kwargs)
+    )
 
 
 def _anonymizer(request: Request) -> Anonymizer:
@@ -683,7 +706,7 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     # ``None`` when any skip condition fires (master disabled / tier
     # outside apply_at_tiers / privileged chat / per-request opt-out).
     anonymizer = _anonymizer(request)
-    anon_mapper: PseudonymMapper | None = pre_anonymize_request(
+    anon_mapper: PseudonymMapper | None = await _pre_anonymize(
         chat_request=chat_request,
         config=config.anonymization,
         routed_tier=primary.routed_inference_tier,
@@ -771,8 +794,10 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
                 response=result.response,
                 mapper=anon_mapper,
                 anonymizer=anonymizer,
-                # Opt-in, for a call whose tool arguments the caller reads and
-                # never sends back to a model (a governed run's plan).
+                # Opt-in, for a caller that holds its tool arguments as
+                # originals (a governed run). The same opt-in is what put its
+                # tool text under the pre-pass, so what it holds and sends back
+                # is pseudonymized again on the way out.
                 restore_tool_arguments=chat_request.lq_ai_restore_tool_arguments,
             )
 

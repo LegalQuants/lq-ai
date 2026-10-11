@@ -1229,19 +1229,22 @@ components:
             written as JSON or sent as UTF-8, and when nothing in them is
             a pseudonym of this request.
 
-            The field changes only what the gateway returns to its
-            caller. It is stripped from the outbound provider body, and
-            it has no effect on a request that was not pseudonymized or
-            on the streaming path. A caller sets it for a call whose tool
-            arguments it acts on, such as a search query or a note, and
-            holds them as the originals. Sent back on a later turn they are
-            pseudonymized again with the rest of the request: the request
-            path rewrites the string values of a `tool` message's JSON
-            content and of the arguments of an assistant message's
-            `tool_calls`, like any other content, so nothing the caller
-            holds leaves with the original names in it. The backend sets it
-            on every call of a governed run that is offered tools, on a
-            route that pseudonymizes (ADR 0038 D7).
+            The field is stripped from the outbound provider body, and it has
+            no effect on a request that was not pseudonymized or, for the
+            restore, on the streaming path. A caller sets it when it holds the
+            arguments of the calls the model makes as the originals, such as a
+            search query or a note. It then also puts that caller's tool text
+            under the request pseudonymization: the string values of a `tool`
+            message's JSON content and of the arguments of an assistant
+            message's `tool_calls` are rewritten with the rest of the request,
+            and a name the detector found anywhere in the request is replaced
+            wherever else it stands in that tool text. Member names, numbers
+            and the tool schemas are not rewritten, and the detector
+            recognises what it recognises. Without the field, tool messages
+            and tool-call arguments are sent as the caller sent them, which is
+            what ordinary chat's research tools need. The backend sets it on
+            every call of a governed run that is offered tools, on a route
+            that pseudonymizes (ADR 0038 D7).
         lq_ai_purpose:
           type: string
           description: |

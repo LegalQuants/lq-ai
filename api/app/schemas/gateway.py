@@ -205,16 +205,19 @@ class ChatCompletionRequest(BaseModel):
     which is the right behavior for non-user-bearing callers."""
 
     lq_ai_restore_tool_arguments: bool | None = None
-    """Ask the gateway to restore pseudonyms in the reply's tool-call arguments.
+    """This application holds the call's tool arguments as originals (ADR 0038 D7).
 
     ``None`` (the default) leaves the field out of the request body, so every
     call that does not ask is sent exactly as it was before the field existed,
     also to a gateway that does not know it.
 
     The gateway restores a reply's text and, by default, returns a tool
-    call's arguments as the model wrote them. Set only for a call whose
-    arguments this application reads and never sends back to a model: a
-    governed run's planning call, whose one tool is terminal (ADR 0038 D7).
+    call's arguments as the model wrote them. Set for a governed run's call
+    that is offered tools, on a route that pseudonymizes, it restores the
+    arguments of the calls the reply makes, and it pseudonymizes the tool text
+    this application sends back with the conversation, the earlier calls'
+    arguments and the tool results, so what is held does not leave as such.
+    Ordinary chat does not set it, and its tool text is sent as it is.
     Mirrors
     :attr:`gateway.app.providers.openai_schema.ChatCompletionRequest.lq_ai_restore_tool_arguments`."""
 

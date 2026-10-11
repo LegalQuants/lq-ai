@@ -135,10 +135,9 @@ class ProfileAvailability(BaseModel):
     # The inference tier the pinned route resolves to for this chat, and whether
     # calls on it are pseudonymized by the gateway. Known once the route is
     # priced; null otherwise. For a profile that follows the operator's setting
-    # this is that setting's effect at the routed tier. It is about message
-    # text: the gateway does not rewrite a tool result, so document text a task
-    # reads goes to the model as written, and it does not rewrite tool-call
-    # arguments.
+    # this is that setting's effect at the routed tier. It covers the whole
+    # request: the gateway also rewrites what a task reads (a tool result) and the
+    # arguments of earlier tool calls for a run, which holds them as originals.
     routed_tier: int | None = None
     pseudonymized: bool | None = None
     reasoning_effort: str | None = None

@@ -101,6 +101,7 @@ def _make_request(
     anonymize: bool = True,
     privileged: bool = False,
     skill_inputs: dict[str, dict[str, object]] | None = None,
+    holds_tool_arguments: bool = False,
 ) -> ChatCompletionRequest:
     return ChatCompletionRequest(
         model="smart",
@@ -108,6 +109,10 @@ def _make_request(
         anonymize=anonymize,
         lq_ai_privileged=privileged,
         lq_ai_skill_inputs=skill_inputs or {},
+        # The caller holds its tool arguments as originals (a governed run): the
+        # same opt-in that gets them restored on the way back covers its tool
+        # text on the way out.
+        lq_ai_restore_tool_arguments=holds_tool_arguments,
     )
 
 
@@ -265,7 +270,9 @@ def _tool_call(arguments: str, *, call_id: str = "call_1", name: str = "save_not
 
 
 def _pseudonymized(messages: list[ChatCompletionMessage], **kwargs: object) -> tuple:
-    req = _make_request(messages=messages, **kwargs)
+    """A request from a caller that holds its tool arguments as originals, pseudonymized."""
+
+    req = _make_request(messages=messages, **{"holds_tool_arguments": True, **kwargs})
     mapper = pre_anonymize_request(
         chat_request=req,
         config=_CONFIG,
@@ -449,6 +456,7 @@ def test_pre_anonymize_sends_tool_content_as_stored_where_nothing_is_pseudonymiz
             ChatCompletionMessage(role="assistant", tool_calls=[_tool_call(arguments)]),
             ChatCompletionMessage(role="tool", content="John Smith signed."),
         ],
+        holds_tool_arguments=True,
         **kwargs,
     )
 
@@ -479,7 +487,7 @@ def test_a_tool_loop_round_trips_through_the_gateway_with_the_originals_kept_by_
 
     anonymizer = Anonymizer(analyzer=_NameAnalyzer(_PEOPLE))
     task = ChatCompletionMessage(role="user", content="What did John Smith agree with Acme Ltd?")
-    first_req = _make_request(messages=[task.model_copy()])
+    first_req = _make_request(messages=[task.model_copy()], holds_tool_arguments=True)
     first_mapper = pre_anonymize_request(
         chat_request=first_req, config=_CONFIG, routed_tier=4, anonymizer=anonymizer
     )
@@ -504,7 +512,8 @@ def test_a_tool_loop_round_trips_through_the_gateway_with_the_originals_kept_by_
             ChatCompletionMessage(
                 role="tool", tool_call_id="call_1", content='{"passage": "Jane Doe signed."}'
             ),
-        ]
+        ],
+        holds_tool_arguments=True,
     )
     second_mapper = pre_anonymize_request(
         chat_request=second_req, config=_CONFIG, routed_tier=4, anonymizer=anonymizer
@@ -521,6 +530,157 @@ def test_a_tool_loop_round_trips_through_the_gateway_with_the_originals_kept_by_
     for message in second_req.messages:
         assert "John Smith" not in repr(message) and "Acme Ltd" not in repr(message)
         assert "Jane Doe" not in repr(message)
+
+
+@pytest.mark.unit
+def test_pre_anonymize_leaves_tool_text_alone_for_a_caller_that_does_not_hold_its_arguments() -> (
+    None
+):
+    """Ordinary chat's research tools return published sources and repeat what they return.
+
+    Their follow-up calls need the real values and the chat loop does not ask for its
+    arguments to be restored, so pseudonymizing tool text there would break the call. The
+    rest of the request is pseudonymized as it always was.
+    """
+
+    arguments = '{"query": "John Smith"}'
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(role="user", content="User: Jane Doe."),
+            ChatCompletionMessage(role="assistant", tool_calls=[_tool_call(arguments)]),
+            ChatCompletionMessage(role="tool", content='{"passage": "John Smith signed."}'),
+        ],
+        holds_tool_arguments=False,
+    )
+
+    mapper = pre_anonymize_request(
+        chat_request=req,
+        config=_CONFIG,
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=_NameAnalyzer(_PEOPLE)),
+    )
+
+    assert mapper is not None
+    assert req.messages[0].content == "User: PERSON_0001."
+    assert req.messages[1].tool_calls is not None
+    assert req.messages[1].tool_calls[0]["function"]["arguments"] == arguments
+    assert req.messages[2].content == '{"passage": "John Smith signed."}'
+
+
+@pytest.mark.unit
+def test_a_name_found_once_is_replaced_in_the_tool_text_the_detector_missed_it_in() -> None:
+    """The detector's weakest input is a short isolated string; the request knows the name.
+
+    The task says it in a sentence, where the detector finds it. The search query that
+    repeats it, and the result that repeats the query, are not in any sentence, and the
+    detector (a keyed stub here, which finds nothing in them) misses it. Having found the
+    name, the request replaces it in the tool text, and only there.
+    """
+
+    task = "Does Okonkwo owe an indemnity?"
+    analyzer = _StubAnalyzer({task: [_Span("PERSON", 5, 12)]})
+    query = '{"query": "Okonkwo indemnity"}'
+    result = json.dumps({"query": "Okonkwo indemnity", "passages": ["Okonkwo agreed."]})
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(role="user", content=task),
+            ChatCompletionMessage(role="assistant", tool_calls=[_tool_call(query)]),
+            ChatCompletionMessage(role="tool", content=result),
+            # Prose the detector missed stays as the detector left it: only tool text is swept.
+            ChatCompletionMessage(role="assistant", content="Okonkwo again."),
+        ],
+        holds_tool_arguments=True,
+    )
+
+    mapper = pre_anonymize_request(
+        chat_request=req, config=_CONFIG, routed_tier=4, anonymizer=Anonymizer(analyzer=analyzer)
+    )
+
+    assert mapper is not None
+    assert req.messages[0].content == "Does PERSON_0001 owe an indemnity?"
+    assert req.messages[1].tool_calls is not None
+    sent = req.messages[1].tool_calls[0]["function"]["arguments"]
+    assert json.loads(sent) == {"query": "PERSON_0001 indemnity"}
+    assert json.loads(req.messages[2].content or "") == {
+        "query": "PERSON_0001 indemnity",
+        "passages": ["PERSON_0001 agreed."],
+    }
+    assert req.messages[3].content == "Okonkwo again."
+
+
+@pytest.mark.unit
+def test_the_sweep_replaces_whole_tokens_only_and_not_short_originals() -> None:
+    task = "Ask Smith and Li about it."
+    analyzer = _StubAnalyzer({task: [_Span("PERSON", 4, 9), _Span("PERSON", 14, 16)]})
+    result = json.dumps({"text": "Smith, Smithson, Blacksmith, Li, Lin and SmithCo."})
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(role="user", content=task),
+            ChatCompletionMessage(role="tool", content=result),
+        ],
+        holds_tool_arguments=True,
+    )
+
+    pre_anonymize_request(
+        chat_request=req, config=_CONFIG, routed_tier=4, anonymizer=Anonymizer(analyzer=analyzer)
+    )
+
+    # "Smith" as a whole token goes, inside another word it stays; "Li" is shorter than
+    # three characters and is not swept at all.
+    assert json.loads(req.messages[1].content or "") == {
+        "text": "PERSON_0001, Smithson, Blacksmith, Li, Lin and SmithCo."
+    }
+
+
+@pytest.mark.unit
+def test_pre_anonymize_walks_arguments_that_arrive_as_an_object_not_a_string() -> None:
+    req, _ = _pseudonymized(
+        [
+            ChatCompletionMessage(
+                role="assistant",
+                tool_calls=[
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "save_note",
+                            "arguments": {"content": "John Smith signed.", "n": 3},
+                        },
+                    }
+                ],
+            )
+        ]
+    )
+
+    assert req.messages[0].tool_calls is not None
+    assert req.messages[0].tool_calls[0]["function"]["arguments"] == {
+        "content": "PERSON_0001 signed.",
+        "n": 3,
+    }
+
+
+@pytest.mark.unit
+def test_a_document_of_thousands_of_strings_costs_one_analysis_and_still_loses_the_name() -> None:
+    """A result of many short strings is given to the detector as one text."""
+
+    calls: list[str] = []
+
+    class Counting(_NameAnalyzer):
+        def analyze(self, *, text: str, language: str = "en", **kwargs: object) -> list[_Span]:
+            calls.append(text)
+            return super().analyze(text=text, language=language)
+
+    many = json.dumps({"rows": ["John Smith"] + ["row"] * 5_000})
+    anonymizer = Anonymizer(analyzer=Counting(_PEOPLE))
+    req = _make_request(
+        messages=[ChatCompletionMessage(role="tool", content=many)], holds_tool_arguments=True
+    )
+
+    pre_anonymize_request(chat_request=req, config=_CONFIG, routed_tier=4, anonymizer=anonymizer)
+
+    assert len(calls) == 1
+    assert "John Smith" not in (req.messages[0].content or "")
+    assert json.loads(req.messages[0].content or "")["rows"][0] == "PERSON_0001"
 
 
 @pytest.mark.unit
