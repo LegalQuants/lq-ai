@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session_factory
 from app.models import (
+    AutonomousSession,
     Chat,
     File,
     KnowledgeBase,
@@ -53,11 +54,12 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
     Order matters because most owner FKs are ``ON DELETE RESTRICT`` (a
     deliberate posture so a stray user delete doesn't quietly nuke
     business data). We walk the graph: KB-files (cascade via KB
-    delete), KBs, chats (messages cascade), projects (project_files/
-    skills cascade), files (documents/chunks/kb_files cascade), then
-    user_export_jobs (cascade on user delete) and finally the user
-    row itself (sessions cascade; audit_log + inference_routing_log
-    SET NULL).
+    delete), KBs, chats (messages cascade), files (documents/chunks/
+    kb_files cascade), autonomous sessions (orchestration runs cascade;
+    a run's project FK is RESTRICT), projects (project_files/skills
+    cascade), then user_export_jobs (cascade on user delete) and
+    finally the user row itself (sessions cascade; audit_log +
+    inference_routing_log SET NULL).
     """
 
     # Delete export-job bytes first so we don't orphan stored ZIPs.
@@ -108,6 +110,15 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
     # Files — RESTRICT FK on owner; documents/chunks + project_files +
     # remaining kb_files cascade. The bytes are already gone above.
     await session.execute(delete(File).where(File.owner_id == user.id))
+
+    # Orchestration runs — ``orchestration_roots.project_id`` is RESTRICT, and the
+    # tree trigger refuses to null an orchestrated session's project, so a run
+    # kept in one of the user's matters would stop the project delete below and
+    # leave the user, whose files' bytes are already gone, undeleted. Deleting
+    # the user's sessions cascades each root with its plans, admissions,
+    # accounts, effects, child sessions and checkpoints. Chats are gone, so no
+    # run message is left pointing at one.
+    await session.execute(delete(AutonomousSession).where(AutonomousSession.user_id == user.id))
 
     # Projects — RESTRICT FK on owner; project_files/skills cascade,
     # chats.project_id is SET NULL (already moot since chats are gone).
