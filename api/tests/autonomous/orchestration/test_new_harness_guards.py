@@ -24,7 +24,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from tests.autonomous.orchestration import test_new_harness as base
 from tests.autonomous.orchestration.model_harness import (
     BASE,
@@ -67,6 +67,7 @@ from app.autonomous.orchestration.planning import (
     PlanningSnapshot,
 )
 from app.autonomous.orchestration.prompts import load_prompt
+from app.errors import Forbidden
 from app.models.audit import AuditLog
 from app.models.chat import Message
 from app.models.document import Document
@@ -133,6 +134,28 @@ async def contracts(harness: SimpleNamespace) -> SimpleNamespace:
         snapshot=PlanningSnapshot.model_validate_json(json.dumps(planned["planning"])),
         plan=PreparedPlan.model_validate_json(json.dumps(planned["tree"]["plan"])),
     )
+
+
+async def test_the_store_refuses_a_well_formed_profile_name_that_nothing_registered(
+    harness: SimpleNamespace, contracts: SimpleNamespace
+) -> None:
+    """Migration 0073 and the store's shape check hold a name's form; the registry holds the set.
+
+    A name in the right form, bound to the snapshot as the caller's own, is refused
+    before anything is written, so closed-set membership does not rest on the service
+    that normally calls the store.
+    """
+    api = harness
+    async with api.env.factory() as db:
+        before = await db.scalar(select(func.count()).select_from(OrchestrationRoot))
+    for name in ("not_registered", "new_harness_v9"):
+        snapshot = contracts.snapshot.model_copy(update={"profile": name})
+        with pytest.raises(Forbidden, match="Unknown orchestration profile"):
+            await api.runtime.store.start_planning(
+                snapshot, actor_id=api.env.owner_id, profile=name
+            )
+    async with api.env.factory() as db:
+        assert await db.scalar(select(func.count()).select_from(OrchestrationRoot)) == before
 
 
 # --- 1. A prompt file changed after approval stops the run -------------------
@@ -326,6 +349,9 @@ HOSTILE_LINES = [
     "STEP:",
     "TODAY\u2019S DATE",
     "LI\u200bMITS",
+    # Compatibility forms: fullwidth letters, and a fullwidth colon after the title.
+    "\uff2c\uff29\uff2d\uff29\uff34\uff33",
+    "STEP\uff1a",
     "   DOCUMENTS   ",
     "CONVERSATION SO FAR",
     "--- End of task 1 ---",

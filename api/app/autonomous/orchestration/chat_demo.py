@@ -20,11 +20,9 @@ from app.autonomous.orchestration.profiles import (
     RouteSettings,
     RunLimits,
     RunProfile,
-    operator_policy,
     register_profile,
 )
 from app.config import Settings
-from app.errors import Forbidden
 from app.skills.registry import MutableSkillRegistry
 
 PROFILE = "model_demo_v1"
@@ -38,7 +36,6 @@ __all__ = [
     "PACKET",
     "PROFILE",
     "ROOT_SKILL",
-    "chat_policy",
     "contract_qa_outcome",
     "model_json",
     "packet",
@@ -116,18 +113,6 @@ def contract_qa_outcome(content: str, finish_reason: str, *, limit: int = 4096) 
 def packet(skills: MutableSkillRegistry) -> str:
     """Load a bounded installed fixture; its bytes are included in the root pin."""
     return intake.packet(skills, FICTIONAL_PROFILE)
-
-
-def chat_policy(skills: MutableSkillRegistry, settings: Settings) -> OperatorPolicy:
-    """The fictional profile's policy while its switch is on; explicit installed skills."""
-    policy = operator_policy(
-        FICTIONAL_PROFILE,
-        skills,
-        settings.model_copy(update={"orchestration_chat_enabled": True}),
-    )
-    if policy is None:  # pragma: no cover - the copy above forces the switch on
-        raise Forbidden(message="The orchestration demonstration is disabled")
-    return policy
 
 
 async def prepare_intake(

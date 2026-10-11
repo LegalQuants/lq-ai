@@ -37,6 +37,7 @@ Everything here is pure. Nothing reads the clock, the database or a setting.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
@@ -71,8 +72,14 @@ _NOT_LETTERS = re.compile(r"[^A-Za-z ]+")
 
 
 def _letters(line: str) -> str:
-    """A line reduced to its letters and single spaces, case kept."""
-    return " ".join(_NOT_LETTERS.sub("", line).split())
+    """A line reduced to its letters and single spaces, case kept.
+
+    Compatibility forms are folded first (NFKC), so a title spelled with fullwidth
+    letters reads as the title. NFKC does not map look-alikes from other scripts, such
+    as a Cyrillic capital O, so those still pass as ordinary text: the layout guard is
+    for honesty, and nothing that is enforced reads it back.
+    """
+    return " ".join(_NOT_LETTERS.sub("", unicodedata.normalize("NFKC", line)).split())
 
 
 # Compared by letters, so `## LIMITS`, `**LIMITS**`, `LIMITS:` and a title with an

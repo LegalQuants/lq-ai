@@ -49,6 +49,7 @@ from app.autonomous.orchestration.outcomes import (
     topic_coverage,
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
+from app.autonomous.orchestration.profiles import require_profile
 from app.autonomous.orchestration.reading import selection_terms
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
@@ -550,6 +551,10 @@ class OrchestrationStore:
             profile,
         ):
             raise ValidationError(message="Planning profile is invalid")
+        # The database and the check above hold only a profile's shape (migration 0073);
+        # the closed set is the registry's, so a well-formed name that nothing registered
+        # never becomes a root, whoever the caller is.
+        require_profile(profile)
         selected = {document.file_id for document in snapshot.documents}
         if not set(attach_file_ids) <= selected:
             raise ValidationError(message="Only selected documents can be attached for a run")
