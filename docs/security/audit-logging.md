@@ -71,11 +71,13 @@ The read then sits behind the same file predicate as the whole-file read,
 and a refusal there writes the same `ownership_denied` row.
 
 The keyword search does not refuse a knowledge base that has lapsed. One
-that is no longer the owner's, is archived, or is no longer
-attached to the run's matter is left out of the search; the step's result
-gives how many were listed and how many were searched; and no
-`ownership_denied` row is written. The model does not name the knowledge
-bases in that call: they come from the approved plan.
+that the owner archived, or that is no longer attached to the run's matter, is
+left out of the search by the owner's own act; no row is written for it. One
+that has become another owner's, or no longer exists, is also left out, and the
+call writes one `ownership_denied` row (the same row the other retrieval modes
+write: no identifier, no query) and goes on with the rest. The step's result
+gives how many were listed and how many were searched. The model does not name
+the knowledge bases in that call: they come from the approved plan.
 
 ## What is NOT logged
 

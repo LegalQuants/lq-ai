@@ -1460,6 +1460,26 @@ async def test_a_knowledge_base_withdrawn_after_approval_is_not_searched_and_the
         "completed",
         "completed",
     )
+    # One the owner archived has lapsed by the owner's own act, so no row. One that is
+    # now someone else's is what the ownership predicates are for: one row for each of the
+    # two calls that listed it, and the search went on with the rest.
+    async with api.env.factory() as db:
+        denied = (
+            await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.resource_id == run.child,
+                    AuditLog.action == "autonomous_session.tool_call",
+                )
+            )
+        ).all()
+    outcomes = [row.details["outcome"] for row in denied if row.details]
+    assert outcomes.count("ownership_denied") == (0 if how == "archived" else 2)
+    # The row holds no identifier and no query.
+    assert all(
+        "annual leave" not in json.dumps(row.details)
+        and str(withdrawn) not in json.dumps(row.details)
+        for row in denied
+    )
 
 
 async def test_a_deleted_file_and_a_file_that_is_not_ready_are_not_returned(

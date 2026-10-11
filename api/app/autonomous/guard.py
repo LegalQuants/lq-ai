@@ -1599,7 +1599,9 @@ async def _handle_retrieve_chunks(
     """
     if "kb_ids" in params:
         # Mode 1b: a governed run's keyword search of several knowledge bases.
-        return await _handle_search_knowledge_bases(params, db=db, owner_id=owner_id)
+        return await _handle_search_knowledge_bases(
+            params, db=db, owner_id=owner_id, retrieval_session=retrieval_session
+        )
 
     file_id_raw = params.get("file_id")
     since_raw = params.get("since")
@@ -1714,6 +1716,7 @@ async def _handle_search_knowledge_bases(
     *,
     db: AsyncSession,
     owner_id: uuid.UUID,
+    retrieval_session: AutonomousSession | None = None,
 ) -> ToolResult:
     """Mode 1b: keyword search over the knowledge bases a run's plan lists.
 
@@ -1726,7 +1729,11 @@ async def _handle_search_knowledge_bases(
 
     * each knowledge base is still the owner's, not archived and still
       attached to the run's matter. One that is not is not searched, and the
-      result says how many were;
+      result says how many were. One the owner archived or detached has lapsed
+      by the owner's own act and leaves no audit row; one that belongs to
+      someone else, or no longer exists, is what the ownership predicates are
+      for, so the call writes one ``ownership_denied`` row and goes on with the
+      rest;
     * a passage is withheld, and counted, unless its file is the owner's own
       and not deleted, and when its file is held by another matter and not by
       this one (:mod:`app.autonomous.orchestration.reading`).
@@ -1776,6 +1783,21 @@ async def _handle_search_knowledge_bases(
             )
         ).all()
     ]
+    left_out = set(listed) - set(current)
+    if left_out and retrieval_session is not None:
+        theirs = left_out - set(
+            (
+                await db.scalars(
+                    select(KnowledgeBase.id).where(
+                        KnowledgeBase.id.in_(left_out), KnowledgeBase.owner_id == owner_id
+                    )
+                )
+            ).all()
+        )
+        if theirs:
+            # The cross-tenant tripwire the other retrieval modes give. No id and no
+            # query goes in the row.
+            await audit_retrieval_ownership_denial(db, retrieval_session)
     found: list[tuple[uuid.UUID, Any]] = []
     failed = 0
     for kb_id in current:
