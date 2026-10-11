@@ -11,9 +11,7 @@ what the owner is offered and what a run may read cannot drift apart.
   they are filed, and takes on the terms of every matter that holds one of
   them (ADR 0038, ruling 4).
 
-A matter holds a file when it uploaded it, when it attached it, or when the
-file is in a knowledge base the matter has attached (:func:`held_through_a_knowledge_base`).
-A file that a matter holds carries that matter's inference-tier floor and
+For the terms a run takes on, a matter holds a file when it uploaded it, when it attached it, or when the file is in a knowledge base the matter has attached (:func:`held_through_a_knowledge_base`). The candidate check for a run in a matter (:func:`filed_in_another_matter`) and the knowledge-base search's own passage check deliberately count upload and attachment only, so a file that another matter holds only through a knowledge base is still offered to a run in a matter (an open point). A file that a matter holds carries that matter's inference-tier floor and
 privilege flag, and they go with the file. A run with no matter has no terms
 of its own, so it runs under the strictest of its documents' matters: the
 lowest floor any of them sets, and privileged if any of them is

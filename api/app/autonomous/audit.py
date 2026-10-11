@@ -1,8 +1,11 @@
 """Closed-enum audit wrapper for the autonomous executor (M4-A3.1).
 
-All autonomous-session audit writes flow through :func:`autonomous_audit`
-rather than calling :func:`~app.audit.audit_action` directly. This
-gives us one place to:
+The autonomous-session audit writes of the engine flow through
+:func:`autonomous_audit` rather than calling :func:`~app.audit.audit_action`
+directly. (Two API routes, a halt request and ``run-now``, also write a row of
+their own that carries the request's IP, user agent and request id; they pass
+the session's project, so it is marked the same way.) This gives us one place
+to:
 
 * Enforce the closed event set (assertion at call time rather than a
   string scattered across call sites).
@@ -58,7 +61,11 @@ def run_privilege(planning_snapshot: dict[str, Any] | None) -> dict[str, Any]:
     run is not privileged, so the row is marked as any other.
     """
     scope = planning_snapshot.get("root") if isinstance(planning_snapshot, dict) else None
-    if isinstance(scope, dict) and scope.get("privileged") is True:
+    return _run_marking(isinstance(scope, dict) and scope.get("privileged") is True)
+
+
+def _run_marking(privileged: bool) -> dict[str, Any]:
+    if privileged:
         return {"privilege_marked": True, "privilege_basis": RUN_PRIVILEGE_BASIS}
     return {}
 
@@ -134,13 +141,14 @@ async def autonomous_audit(
     # start; any other has nothing to mark it from.
     marking: dict[str, Any] = {"project_id": session.project_id}
     if session.project_id is None:
-        marking = run_privilege(
-            await db.scalar(
-                select(OrchestrationRoot.planning_snapshot).where(
-                    OrchestrationRoot.session_id == session.root_session_id
-                )
+        # Only the one recorded flag is read, not the whole snapshot, which this
+        # query runs for on every row of every session that has no matter.
+        privileged = await db.scalar(
+            select(OrchestrationRoot.planning_snapshot["root"]["privileged"].as_boolean()).where(
+                OrchestrationRoot.session_id == session.root_session_id
             )
         )
+        marking = _run_marking(privileged is True)
 
     await audit_action(
         db,

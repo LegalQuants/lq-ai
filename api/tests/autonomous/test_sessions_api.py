@@ -25,6 +25,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
+from app.models.project import Project
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -155,6 +156,50 @@ async def test_halt_writes_audit_row(
     )
     # Expect exactly 2 rows: one from autonomous_audit + one from audit_action.
     assert len(rows) == 2
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("privileged", [True, False])
+async def test_halt_rows_of_a_session_in_a_matter_are_marked_from_the_matter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    user_a: User,
+    privileged: bool,
+) -> None:
+    """Both rows a halt writes, the engine's and the route's, follow the matter's privilege.
+
+    The route's own row (it carries the request's IP, user agent and request id) is
+    written by ``audit_action`` and had no project, so it was never marked.
+    """
+    project = Project(
+        owner_id=user_a.id,
+        name="A matter",
+        slug=f"halt-{uuid.uuid4().hex[:8]}",
+        privileged=privileged,
+        minimum_inference_tier=1 if privileged else None,
+    )
+    db_session.add(project)
+    await db_session.flush()
+    sess = await _make_session(db_session, user=user_a)
+    sess.project_id = project.id
+    await db_session.flush()
+
+    await client.post(f"/api/v1/autonomous/sessions/{sess.id}/halt", headers=_bearer(user_a))
+
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog)
+                .where(AuditLog.action == "autonomous_session.halt_requested")
+                .where(AuditLog.resource_id == str(sess.id))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 2
+    assert all(row.privilege_marked is privileged for row in rows)
+    assert all((row.privilege_basis is not None) is privileged for row in rows)
 
 
 @pytest.mark.integration
