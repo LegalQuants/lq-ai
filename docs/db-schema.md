@@ -414,7 +414,7 @@ The sketch above does not show `messages.kind`. Migration 0020 added it, with
 `chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
 [0073](../api/alembic/versions/0073_runs_in_chat.py) changes `messages` as below.
 It is implemented, and
-[ADR 0038](adr/0038-skill-backed-orchestration-profile.md) is proposed, not
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not
 ratified.
 
 ```sql
@@ -2047,7 +2047,7 @@ An unreadable policy fail-closes: no dispatch, refused audit row with
 
 ### Governed runs in chat and closing a run (0073 to 0076; ADR 0038 proposed)
 
-Implemented; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
+Implemented; [ADR 0038](adr/0038-governed-runs-in-chat.md)
 is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
 already carries the orchestration tables. The authoritative DDL for the first two is in
 [`0073_runs_in_chat.py`](../api/alembic/versions/0073_runs_in_chat.py) and

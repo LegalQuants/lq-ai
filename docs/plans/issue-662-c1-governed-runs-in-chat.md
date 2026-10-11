@@ -1,6 +1,6 @@
 # Governed runs in chat: build plan for #662 C1
 
-**Status:** Proposed. [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md)
+**Status:** Proposed. [ADR 0038](../adr/0038-governed-runs-in-chat.md)
 is not ratified. This plan was superseded in part on 2026-10-07 and 2026-10-08 (see the
 note below). An implementation of the revised design exists and is
 described under [Implementation status](#implementation-status). It has had no
@@ -251,7 +251,7 @@ Unnumbered; the maintainer allocates identifiers.
 Recorded 2026-10-09 on an implementation branch built on `91973fd80` (the v0.9.0 release
 commit). Unreviewed, and ahead of ratification. Both profile switches default
 to off. The branch follows the revised design in
-[ADR 0038](../adr/0038-skill-backed-orchestration-profile.md), not the ten slices above as
+[ADR 0038](../adr/0038-governed-runs-in-chat.md), not the ten slices above as
 they are written. The slice table below says what became of each slice, and three
 increments followed the first build.
 
@@ -353,7 +353,7 @@ These were needed to build. Each is open for review and cheap to change.
 ### Choices made while building the revised design
 
 These were written on 2026-10-09, before the maintainer ruled. He ruled on all of them
-that day ([ADR 0038](../adr/0038-skill-backed-orchestration-profile.md#rulings-on-the-open-questions)).
+that day ([ADR 0038](../adr/0038-governed-runs-in-chat.md#rulings-on-the-open-questions)).
 "Built after the maintainer's rulings" below says what then changed: the quotation
 pattern, the file rule, the plan's placeholders and the roles on runs. Where a point
 here differs from that section, that section is the present state.
@@ -403,7 +403,7 @@ here differs from that section, that section is the present state.
   provider is pseudonymized as one request, in every role, and between the backend's own
   agents nothing is. For a caller that holds its tool arguments as originals, which a run is, the gateway now rewrites a tool message's JSON string values and the arguments of an assistant message's earlier calls, with the one mapper, and replaces a name it found anywhere in the request wherever else it stands in that tool text, and restores
   placeholders in a reply's text and, on the caller's request, in a call's arguments. A
-  governed run's calls that are offered tools make that request on a route that
+  governed run's calls that are offered tools or carry earlier tool text make that request on a route that
   pseudonymizes, so a note, a stated reason or a search query is held with the name in it
   and is pseudonymized again when the conversation goes out. What the gateway does is
   pinned in `gateway/tests/anonymization/test_middleware.py`. Ordinary chat is unchanged:
@@ -497,7 +497,7 @@ that it can be reviewed apart, and none has had maintainer or security review.
   the string values of each tool call's JSON arguments, whole tokens only, in one pass,
   and returns anything it will not rewrite exactly as sent
   (`gateway/app/anonymization/middleware.py`). The field is stripped from the outbound
-  body. The application first set it on a planning call that is offered the plan tool where the route binding expects pseudonymization. It now sets it on every call of a run that is offered tools where the binding expects pseudonymization (the plan tool, a task's tools); it is part of that binding and of the call's identity, and the run boundary refuses it on a call with no route binding. The same opt-in puts the run's tool results and earlier call arguments under the request pseudonymization, which is what makes restoring a task's arguments safe. The refusal of a plan that
+  body. The application first set it on a planning call that is offered the plan tool where the route binding expects pseudonymization. It now sets it on every call of a run that is offered tools or carries earlier tool calls and results where the binding expects pseudonymization (the plan tool, a task's tools, a task's last turn); it is part of that binding and of the call's identity, and the run boundary refuses it on a call with no route binding. The same opt-in puts the run's tool results and earlier call arguments under the request pseudonymization, which is what makes restoring a task's arguments safe. The refusal of a plan that
   still carries a placeholder is kept. Tests: the restore step alone, the gateway against
   a mocked provider with and without the opt-in and for a request that was not
   pseudonymized, the adapter's stripped fields, the binding's form and match, the
@@ -673,9 +673,10 @@ which this branch makes.
   Under ADR 0034, accepted on 2026-10-04, security review means maintainer review
   with the security-path checklist applied; the project has no separate security team.
   The DE-294 handoff rules are implemented as tests, not reviewed.
-- **No ratification.** ADR 0038 is Proposed. The direct answer, and a run in a chat that
-  is in no matter, amend ADR 0035 D1 and D2, which are Accepted. ADR 0038 D1 gives the
-  words, and they are ratified with it.
+- **No ratification.** ADR 0038 is Proposed. The direct answer, a run in a chat that
+  is in no matter, and the selection of a file a knowledge-base search finds amend ADR 0035
+  D1, D2 and D3, which are Accepted. ADR 0038 D1 gives the words, and they are ratified
+  with it.
 - **Choices inside the rulings.** The maintainer ruled on all eleven of the ADR's open
   questions. Rulings 4, 6 and 10 were built on choices he has not ruled on, which the
   ADR lists under each. D8, the access module, is proposed and not built.

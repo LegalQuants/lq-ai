@@ -17,7 +17,7 @@ for, or that the answer is correct or complete. Before New harness is described 
 live, a person must accept it on a configured provider; see
 [Evidence and sign-off](#evidence-and-sign-off).
 
-**Status.** [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md) is Proposed,
+**Status.** [ADR 0038](../adr/0038-governed-runs-in-chat.md) is Proposed,
 not ratified. The implementation has had no maintainer or security review. Both
 profile switches default to off. The direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and
 D2, which are Accepted; ADR 0038 D1 gives the words, and they are ratified with it.
@@ -307,6 +307,13 @@ Written from the code and its tests. No person or browser has followed these thr
 | UAT-53 | As a member, start a run and leave its plan waiting for approval. Have an operator change that user's role to `viewer`. As that user, open the chat, try to approve, then halt the run. | The run and its trace can still be read. Approving and rejecting are refused. Halting works, and so does closing an uncertain run: both only narrow what runs. | |
 | UAT-54 | As a user with the `auditor` role, and again as an admin, read another owner's run by its root id: `GET /api/v1/autonomous/orchestration/chat-runs/<root id>`, `GET /api/v1/autonomous/orchestration/<root id>/tree` and one session's trace. Then try to approve it, and to read one of its working files. | Each read returns the run, including prompt text, what each model wrote, each task's findings and the text of a saved note. Each read writes one audit row naming the reader and the owner (`run_viewed` or `run_trace_viewed`). Approving is refused. The working-file route answers as if the file did not exist (ADR 0038, ruling 10). | |
 
+**Stopping a run that is already executing when its owner is made read-only.** Not built
+(ADR 0038 D1). A role change does not stop an approved run. Setting `autonomous_enabled` to
+false on the owner's account does: the run is refused at its next admission. The owner
+sets it in their own preferences; no admin route sets it for another user, so an operator
+who needs it done without the owner sets it in the database. The owner can halt their run
+in either case.
+
 ## Automated checks
 
 These use real Postgres, the store, the guard, the worker and checkpoint paths with a
@@ -375,5 +382,5 @@ live. Record the provider and model used for UAT-06 to UAT-29.
 - Configured-provider run for New harness: **pending**. Provider/model: ______
 - Branch commit: ______ Accepted cases: ______ Defects / deferred cases: ______
 - Maintainer review: **pending**. Security review: **pending**. ADR 0038 ratification,
-  which carries the amendment to ADR 0035 D1 and D2: **pending**.
+  which carries the amendment to ADR 0035 D1, D2 and D3: **pending**.
 - Production enablement: **not approved by this UAT**.

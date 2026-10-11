@@ -75,14 +75,15 @@ production enablement remains a separate decision.
 
 ## Proposed: governed runs in chat (ADR 0038 pending)
 
-[ADR 0038](../adr/0038-skill-backed-orchestration-profile.md) proposes an orchestrator
+[ADR 0038](../adr/0038-governed-runs-in-chat.md) proposes an orchestrator
 model in the main chat, "New harness": an experimental entry in the model picker. It
 answers a request that needs nothing read, or plans the request as one to four tasks that
 the owner approves and that approved sub-agents carry out, with tools to read the
 documents the owner selected and to search the matter's knowledge bases by keyword. A chat
-need not be in a matter. The ADR is not ratified. Its direct answer, and a run in a chat
-that is in no matter, amend ADR 0035 D1 and D2, which are Accepted; ADR 0038 D1 gives the
-words, and they are ratified with it.
+need not be in a matter. The ADR is not ratified. Its direct answer, a run in a chat
+that is in no matter, and the selection of a file a knowledge-base search finds amend ADR
+0035 D1, D2 and D3, which are Accepted; ADR 0038 D1 gives the words, and they are ratified
+with it.
 The requirements below are implemented, pending
 ratification and review; they are in no release, and both profile switches default to off.
 The accepted scope above stands for released software.

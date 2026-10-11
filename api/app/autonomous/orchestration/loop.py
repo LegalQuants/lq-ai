@@ -12,7 +12,8 @@ is ``topic:t<turn>:c<index>``. The loop holds no state of its own: it is replaye
 from the first turn, each completed effect returns its stored receipt, and the
 conversation is rebuilt byte for byte. Nothing completed is repeated.
 
-This amends ADR 0020 D1 for run children only. The root keeps its fixed sequence.
+ADR 0020 D1's closed-choice planner governs matter sessions and does not reach a run
+child (ADR 0038 D4). The root keeps its fixed sequence.
 """
 
 from __future__ import annotations

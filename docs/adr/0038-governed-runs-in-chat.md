@@ -3,20 +3,25 @@
 **Status:** Proposed (2026-09-23; rewritten 2026-10-06; rewritten again 2026-10-09, after
 the maintainer redirected C1 on 2026-10-07 and 2026-10-08; D8 added 2026-10-09; the maintainer's
 rulings on the open questions recorded 2026-10-09; rulings 2, 4, 6 and 10 built
-2026-10-10). Nothing in it is ratified.
+2026-10-10; text brought to the code after the security review, 2026-10-12). Nothing in
+it is ratified.
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
-**Amends:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md) for run
-sub-agents only, as stated in D4. Amends ADR 0035 D1 and D2, in the words given in D1
-below: a root may answer without a batch, and a root may belong to no project. ADR 0035
-stays Accepted and its text is unchanged until this ADR is ratified.
+**Amends:** ADR 0035 D1, D2 and D3, in the words given in D1 below: a root may answer
+without a batch, a root may belong to no project, and a file a keyword search finds is
+selected by the plan's approval. ADR 0035 stays Accepted and its text is unchanged until
+this ADR is ratified.
+**Records, and does not amend:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md)
+governs a matter session's closed-choice planner. It does not reach a run sub-agent,
+which D4 bounds by its plan's grants.
 **Touches:** [ADR 0011](0011-transparency-first-model-selection.md): its model picker now
 holds one entry that is not a provider model (D1).
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563) and track C1 of
 [#662](https://github.com/LegalQuants/lq-ai/issues/662).
 
-The file keeps its original name so that existing links resolve. The orchestrator is no
-longer skill-backed (D3).
+The file was named `0038-skill-backed-orchestration-profile.md` until 2026-10-12. The
+orchestrator is no longer skill-backed (D3), so the file now carries the title's name; no
+document on main linked to the old one.
 
 ## Context
 
@@ -137,7 +142,7 @@ delivered whatever the planning call cost within the root's whole allocation; a 
 that halts the run when the call settles, as for any effect. Migration 0076 lets a run end
 `completed` with no plan revision.
 
-**The amendment to ADR 0035, in its words.** Ratifying this ADR makes the three changes
+**The amendment to ADR 0035, in its words.** Ratifying this ADR makes the four changes
 below to ADR 0035 and no other. Until then ADR 0035 stands as written, and it carries a
 note that points here.
 
@@ -161,13 +166,23 @@ In ADR 0035 D1, "Each manual root belongs to an owner and active project." becom
 > allows a root with none. A root with no project has no project's terms of its own;
 > ADR 0038 D5 states the terms it runs under.
 
+In ADR 0035 D3, "Ownership does not authorize unselected documents." becomes:
+
+> Ownership does not authorize unselected documents. A file is selected when the owner
+> names it in the request, and also when the owner approves a plan that grants a keyword
+> search of the knowledge bases its intake names: a file such a search finds is read only
+> after it is checked again, at the read, to be the owner's, not deleted, and not held
+> by another matter unless this matter holds it too.
+
 The barrier ADR 0035 D2 protects is the admission of work (children, tools, document
 reads, spend past the planning allowance), and a direct answer admits none of it. What
 changes is that a model's text reaches the owner without a plan approved first, as it
 does in an ordinary chat turn. Only New harness answers this way; the fictional profile
 plans in text, and a reply of its that is not a plan fails as before. The third change
 is what "A chat outside a matter" below needs; the rule for such a root's terms is in
-D5.
+D5. The fourth, in D3, is what the knowledge-base search needs: it reads files the owner
+did not name one by one, and approving the plan, which names the knowledge bases, is the
+selection (D5).
 
 **A chat outside a matter.** *Authorization path; needs security review.* A chat need not
 be in a matter (the API calls a matter a project). ADR 0035 D1 gives every root an
@@ -216,7 +231,21 @@ session's trace (the pinned prompts, the opening messages, what each model wrote
 answer). This follows the existing rule for receipts and ledgers (`is_privileged_reader`),
 and each such read writes one audit row naming the reader and the owner
 (`auditor.run_viewed`, `auditor.run_trace_viewed`). It is wider than that rule was: until
-now a privileged reader saw records about a chat, not its text. They cannot approve,
+now a privileged reader saw records about a chat, not its text. In an ordinary chat a
+privileged reader gets the evidence layer only (the citation ledger and the passages it
+cites, sources, citations, the autonomous-session ledger and the receipts feed, whose
+message events carry the message's id, kind, role and token counts and never its text).
+A run's read returns the run as its owner sees it: the request, the thread excerpt the
+plan was made from, the plan, each task's findings and notes, the answer, and on the trace
+each call's prompt and arguments and what each model wrote (the trace does not hold the
+document text a read returned, D2). The maintainer ruled that this is what ruling
+10 means and kept it; a narrower read, a projection of the evidence layer, was considered
+and not chosen. The auditor role's definition has to say so
+(`docs/superpowers/specs/2026-07-02-cross-user-auditor-role-design.md`, and the PRD), and
+`docs/security/audit-logging.md` states what is built. The `auditor.*` rows are not
+privilege-marked, for any resource, because the helper that writes them passes no matter;
+that is as in canon and a follow-up if a privileged matter's run read should be marked.
+They cannot approve,
 reject, halt or close it, and the route that serves a working file refuses them. That
 route protects less than it sounds: a task's findings are its outcome in the tree, and the
 text of a note a task saved is the arguments of its `save_note` call, which the trace
@@ -227,7 +256,13 @@ a missing run gets. The receipt page will open for them with its controls drawn;
 control then fails.
 
 Not built: stopping an approved run at its next admission when its owner's role becomes
-read-only. Today only the Autonomous opt-in is rechecked there (D8).
+read-only. Of the owner's account, only the Autonomous opt-in is rechecked there (D8),
+and the matter and the run's data terms are rechecked as well (D5). The lever is
+`autonomous_enabled` on the owner's account: when it is false, the next admission refuses
+the run. The owner sets it in their own preferences, and no admin route sets it for
+another user, so an operator who needs a run to stop without the owner sets it in the
+database. The owner's halt stays available either way. The maintainer chose to name this
+lever and not to build the role check.
 
 **Preconditions.** The owner's Autonomous opt-in and a role that may act (above); an
 operator-enabled profile whose route
@@ -407,9 +442,11 @@ use (ADR 0035 D2). Destructive and confirmation-required tools cannot be registe
 runs (ADR 0015 D4). Each call is recorded with its tool, outcome, cost and the model's
 stated reason. Arguments and results are not copied into audit rows (ADR 0016 P3).
 
-This amends ADR 0020 D1 for run sub-agents: native tool calls within the granted set
-replace the closed-choice planner contract. The set stays closed, as in the chat tool loop
-(ADR 0015 D1). The orchestrator's combine step is one call that is offered no tool.
+ADR 0020 D1 describes a matter session's closed-choice planner and is not amended. Neither
+ADR 0020 nor ADR 0035 says whether it reaches a run sub-agent, so this ADR records that
+it does not: a run sub-agent uses native tool calls within the set its plan grants, as
+the server decides (ADR 0035 D3), in place of a closed-choice contract. The set stays
+closed, as in the chat tool loop (ADR 0015 D1). The orchestrator's combine step is one call that is offered no tool.
 
 **Two tool-calling changes in the gateway.** *Security boundary; needs security review.*
 The Ollama adapter names a tool result after the call it answers, taking the name from the
@@ -494,8 +531,10 @@ applied at intake, at every admission while the run is live, and at each read.
 - A run outside any matter reads the owner's own, undeleted files, wherever they are
   filed (ruling 4). It has no terms of its own, so it runs under the strictest terms of
   the matters that hold its selected documents: the lowest floor any of them sets, and
-  privileged if any of them is. An archived matter still counts. With no document from a
-  matter the run is not privileged and its floor is the profile's.
+  privileged if any of them is. An archived matter still counts. A matter holds a file by
+  upload, by attachment, or because a knowledge base the matter has attached holds it; the
+  last route counts for the terms. With no document from a matter the run is not
+  privileged and its floor is the profile's.
 
 For a run outside a matter the terms are taken from the server's records when the request
 is accepted, never from the request. The store works them out again at every admission and
@@ -503,7 +542,14 @@ compares them with the run's: the run's floor may not be weaker, and it carries 
 privilege flag exactly when one of those matters is privileged. So a matter whose floor
 tightens, a matter that becomes privileged or stops being so, and a selected file that is
 filed in a stricter matter each stop the run before its next call, as a change to a
-matter's policy stops a run in that matter. A floor that becomes weaker does not stop it;
+matter's policy stops a run in that matter. The run's audit rows carry the same terms. A
+row written for a run outside any matter is marked privileged, with the basis `run terms: a
+selected file is held by a privileged matter`, when the run took on privileged terms at
+intake. The rows the engine writes for the run's sessions are marked from the matter the
+session belongs to, as are the two rows the halt and run-now routes write for a session
+that is not a governed run. A governed run's halt is the `orchestration.halted` row,
+marked as above. Rows written
+before this change are not marked retroactively. A floor that becomes weaker does not stop it;
 the run keeps the floor it was approved under. A request whose pinned route cannot
 meet the terms is refused before anything is stored, and the refusal says that a selected
 document's matter is the reason.
@@ -531,8 +577,11 @@ on. Where the selected files come from matters with different terms, the stricte
 An earlier answer is withheld from a later run that lacks its terms; an independent
 review found that it was otherwise shown, and the alternative of carrying the terms
 forward with the thread was not built. And a run in one matter is unchanged: it still
-does not read a file that only another matter holds, and it applies its own matter's
-terms and no other's. So for a file that two matters hold, a run in one of them applies
+does not read a file that only another matter holds by upload or attachment, and it
+applies its own matter's terms and no other's. A file that another matter holds only
+through a knowledge base it has attached is still offered to a run in a matter, and the
+knowledge-base search's own passage check counts upload and attachment only. Closing that
+refuses files that are selectable today, so it is a ruling and not part of this decision. So for a file that two matters hold, a run in one of them applies
 that matter's terms, while a run outside any matter applies the stricter of the two; the
 heading above is exact only for the second. Ordinary chat remains looser than both: it reads any file the owner owns and
 applies no matter's terms to it.
@@ -583,7 +632,9 @@ one registry tool, `search_knowledge_base`, by keyword.
   the task has left to read.
 - Each search rechecks, in the same transaction and before reading, that a listed
   knowledge base is still the owner's, not archived and still attached to the matter. One
-  that is not is not searched, and that never ends the run.
+  that is not is not searched, and that never ends the run. One that has become another
+  owner's also writes an `ownership_denied` audit row; one row covers the whole search call,
+however many knowledge bases changed hands.
 - A search that fails for one knowledge base is counted and skipped. The call completes
   and tells the model how many knowledge bases were listed, searched, failed, and how many
   passages were withheld. A failed search never ends the run.
@@ -614,16 +665,33 @@ refused, so a setting changed after the request was accepted is not applied sile
 fictional profile keeps the earlier rule. Where the setting applies none at the routed
 tier, text is sent as written and the composer says so.
 
-What is pseudonymized is message text: the request, the thread, the task text a sub-agent
-receives, and the model's own earlier text. Document text that a task reads, and passages
-that a search returns, return to the model as a tool result, which the gateway does not
-rewrite (PRD Decision M2-1, so that quotations can be checked against the source).
-Tool-call arguments are not rewritten on the way to the model, and a sub-agent's are not
-restored on the way back, so a note, a stated reason or a search query can carry a
-placeholder. The one exception is the plan: the gateway restores the placeholders in the
-arguments of the planning call's `propose_plan` call (D7). A call's
-`anonymization_applied` flag covers message text only. The composer states this where it
-says a route is pseudonymized.
+What is pseudonymized is what leaves the gateway for a provider, as one request: the
+request, the thread, the task text a sub-agent receives, the model's own earlier text, the
+document text a task reads, the passages a search returns, and the arguments of the tool
+calls the model made earlier. The backend does not rewrite any of it on the way between
+its own agents, from the orchestrator to a task and back. A run holds its tool arguments
+as the owner's own words, says so to the gateway with `lq_ai_restore_tool_arguments` (D7),
+and the gateway covers them: the string values of each tool result and of each earlier
+call's arguments are pseudonymized by the same mapper as the message text, so one name is
+the same placeholder in the task, in a call and in a result, and the model sees the request
+and the document alike. The arguments of the calls a reply makes are put back on the way
+in, so a search runs on the real name and a note, a stated reason or a plan is stored as
+the owner's text. The detector reads each string alone and is weakest on a short one such
+as a query, so a name it found anywhere in the request is also replaced wherever else it
+stands as a whole token in that tool text. Quotations are checked against the originals the
+application holds, not against what the model was shown.
+
+Ordinary chat is not changed by this. Its retrieval context is exempt (PRD Decision M2-1,
+DE-269), and its tool loop sends back what the model called with nothing to restore a
+placeholder in it, so the gateway does not rewrite either. The same document therefore goes
+to a provider as stored from an ordinary chat and with names replaced from a run, on the
+same route. That is the one place pseudonymization is not yet consistent, and it is an open
+question below. What the detector does not recognise still goes out: an organisation name
+(DE-397), and it reads a file name as an address, so a task can see `URL_0001` where a file
+name was. A call's `anonymization_applied` flag records that the middleware ran. For a
+run's call it also means the tool text was covered, and for an ordinary chat's call it does
+not. The composer says what a run's pseudonymization covers where it says a route is
+pseudonymized.
 
 **Handoff.** Document text, search results, task results, the thread and the request are
 data. None of them can change a task, its tools or its limits. Those are enforced in code
@@ -690,11 +758,16 @@ turns. These limits of the branch must close first.
 - **A plan is strict.** A plan with any member beyond `tasks`, or a task with any extra
   field, fails as `invalid_proposal`. On one local model, one plan call in six added a
   `request` member before the tool's description told the model to add nothing else.
-- **Pseudonymization covers message text, and the plan's arguments on the way back** (D5).
-  On a route that pseudonymizes, a sub-agent's
-  note, stated reason or search query can carry a placeholder, and the model sees the
-  request with names replaced and a document with names as written, so the two can fail
-  to match and a search on a name finds little.
+- **Pseudonymization misses what the detector does not recognise, and costs time** (D5).
+  An organisation name is not replaced (DE-397). A file name can be read as an address and
+  replaced by `URL_0001`. The detector took about 1.35 s for one value of 41,000
+  characters on the real model, and a task's tool loop sends every earlier tool result
+  again on each turn, so a late turn reads again everything read so far, up to the run's
+  input limit. The pass runs on one worker thread, off the event loop, and the detector is
+  not shown to be safe under concurrent use, so it never runs two analyses at once. A
+  bound-tool analysis that arrives while a pass is running waits for it, on the event
+  loop's thread. A tool result with more than 2,000 string values is read once, as text.
+  Ordinary chat's retrieval context and tool loop are not covered (D5, DE-269).
 - **The wording of the assembled messages is not frozen with the run's terms.** A run's
   limits are frozen at intake (D3); the wording of the messages that state them still comes
   from the code at the time of each call. An upgrade that changes that wording in the
@@ -735,15 +808,21 @@ parser still sees what the model wrote. The field changes only what the gateway 
 its caller. It is stripped from the outbound body, and it does nothing on a request that
 was not pseudonymized or on the streaming path.
 
-The application sets the field on one call: a planning call that is offered the plan tool,
-where the route binding expects pseudonymization. `propose_plan` is terminal, so its
-arguments are read by the application and never sent back to a model. A sub-agent's tool
-call is different: it is echoed back to the model on the next turn inside an assistant
-message, which the request path does not pseudonymize, so a restored name would then leave
-as written. The run boundary refuses the field on any call that is not a bound planning
-call, and the field is part of the route binding and so of the call's identity. It is
-absent from every other call, in its identity and in the request sent, so a gateway that
-does not know the field is sent nothing new by them.
+The field means that the caller holds its tool arguments as originals. The application sets
+it on every bound call that is offered tools or carries earlier tool calls and results,
+where the route binding expects pseudonymization: the planning call and each task's
+calls, including a task's last turn, which is offered no tool and still carries what the
+task read. A sub-agent's tool call is
+echoed back to the model on the next turn inside an assistant message, and a tool result
+comes back as a tool message. When the field is set, the gateway's request path
+pseudonymizes both (D5), by the mapper of that request, so what was restored for the
+application leaves again with names replaced. The field therefore governs two things: that
+the arguments of the calls a reply makes are restored, and that the tool text of the
+request is covered. The run boundary refuses the field on any call that is not bound, and
+the field is part of the route binding and so of the call's identity. It is absent from a
+call that is offered no tools and carries none, such as the combining call, and from every
+call that is not pseudonymized: on a route that does not pseudonymize, and for a run that
+is privileged. A caller that does not set it, which is ordinary chat, is unchanged.
 
 The refusal stays as a second line. A plan from a pseudonymized call that still carries
 something shaped like a placeholder (one the model altered or invented, which is in no
@@ -779,9 +858,10 @@ makes the orchestrator behave in two ways depending on the route, or to keep ref
 maintainer chose the gateway change.
 
 **Not built:** a query embedding for the search (it would be a priced, tier-bound model
-call with its own binding); restoring placeholders in a sub-agent's tool-call arguments;
-case-law, authority and MCP tools for a run; and the orchestrator reading or
-searching by itself.
+call with its own binding); case-law, authority and MCP tools for a run; the orchestrator
+reading or searching by itself; and stopping a run when its owner's role changes. For that
+last one, setting the owner's `autonomous_enabled` to false stops a run at its next
+admission, and nothing else does.
 
 ### D8 — Who may read what is decided in one place, and a run tool cannot read around it
 
@@ -859,7 +939,8 @@ branch as it is, and the item is marked **not built**.
    then takes on that matter's inference-tier floor and privilege flag. This replaces the
    rule that such a run reads only files filed in no matter. **Built** as its own change
    (D1, D5): the terms are set at intake from the server's records and worked out again
-   at every admission. Built on three choices the maintainer has not ruled on: where the
+   at every admission. A file counts as held by a matter also through a knowledge base the
+   matter has attached. Built on three choices the maintainer has not ruled on: where the
    files' matters differ, the strictest terms apply (the lowest floor, and privileged if
    any is); an earlier answer written under stricter terms is not shown to a later run
    that lacks them; and a run in one matter still does not read a file that only another
@@ -867,8 +948,16 @@ branch as it is, and the item is marked **not built**.
 5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
 6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
    restores reply text. **Built** as its own change (D7): an opt-in request field, set by
-   the application on a pseudonymized planning call only. It is a change to the security
-   boundary and has had no security review. The refusal (`plan_has_placeholders`) is kept
+   the application on every bound call that is offered tools or carries earlier tool
+   calls and results, on a route that pseudonymizes, and no longer on the planning call
+   only. The same field makes the
+   gateway pseudonymize a tool message and the arguments of earlier tool calls (D5, D7),
+   which the maintainer ruled on 2026-10-11: what leaves the gateway is pseudonymized as
+   one request, and data between the backend's own agents is not cleaned. On 2026-10-12
+   the maintainer chose to scope it to a caller that holds its arguments as originals, a
+   run, and to state ordinary chat's tool loop and retrieval context as a limit. It is a change
+   to the security boundary. It has had an independent read, described in the pull request, during the fixes to
+   this branch, and no security review. The refusal (`plan_has_placeholders`) is kept
    as a second line, for a placeholder the gateway did not assign. Built on one choice the
    maintainer has not ruled on: the refusal looks for the shape anywhere in the plan,
    also inside a longer run of characters, so on a route that pseudonymizes it also
@@ -887,7 +976,9 @@ branch as it is, and the item is marked **not built**.
     has not ruled on: an auditor cannot start, approve or reject either, because the
     role is read-only by definition; the cross-owner read is given to an admin as well
     as an auditor, as the existing rule for receipts does; that read includes the
-    answer's text, which the trace cannot leave out; and the working-file route stays
+    answer's text, which the trace cannot leave out, and in an ordinary chat a privileged
+    reader gets no message text. The maintainer confirmed on 2026-10-12 that the whole run
+    is what the ruling meant; and the working-file route stays
     owner-only, although the tree and the trace already show a task's findings and the
     notes it saved (D1). Whether a privileged reader should see those is the open part
     of this ruling. Not built: stopping a running run when its owner's role changes.
@@ -939,15 +1030,29 @@ pull request, followed by one commit for each of the four rulings that needed co
   review. The items that need it are the gateway changes (the truthful purpose label, the
   reasoning-effort request field and its mapping to Ollama's `think`, naming a tool result
   after the call it answers, sending non-ASCII characters in tool-call arguments as
-  themselves, and restoring placeholders in tool-call arguments on request), the rule for a
-  run outside a matter, including a matter's file read on that matter's terms (D1, D5),
-  the roles on runs and the cross-owner read (D1), pseudonymization following the
-  operator's setting (D5), and the knowledge-base search (D5).
+  themselves, and restoring placeholders in tool-call arguments on request), the request
+  path's pseudonymization of a tool message and of an assistant message's tool-call
+  arguments for a caller that sets the same opt-in, with the sweep of names already
+  replaced and the pass that runs off the event loop on one thread (D5, D7), the rule for a
+  run outside a matter, including a matter's file read on that matter's terms and the
+  privilege marking of a run's audit rows (D1, D5), the roles on runs and the cross-owner
+  read (D1), pseudonymization following the operator's setting (D5), and the
+  knowledge-base search (D5). The independent read described in the pull request
+  is not the security review.
+- Open for the maintainer: ordinary chat's tool loop and retrieval context are still not
+  pseudonymized (PRD Decision M2-1, DE-269). It is the one place the rule that what leaves
+  the gateway is pseudonymized is not yet true, and whether to promote DE-269, or to let the
+  ordinary non-streaming tool loop hold its arguments as originals and set the same
+  opt-in, is the maintainer's. Also open: that a running run is not stopped by a change of
+  its owner's role (D1), that a run in a matter can still be offered a file that another
+  matter holds only through a knowledge base (D5), and that `auditor.*` audit rows are not
+  privilege-marked (D1).
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.
 - ADR 0011's model picker now holds one entry that is not a provider model (D1).
 - ADR 0035's text is unchanged until this ADR is ratified. D1 gives the words that then
-  change in its D1 and D2, and ADR 0035 carries a note that points here.
+  change in its D1, D2 and D3, and ADR 0035 carries a note that points here. ADR 0020 D1
+  is not changed; its note records that it does not reach a run sub-agent (D4).
 - PRD §3.1 and §3.10, the feature PRD, the OpenAPI sketches, the schema document,
   HONEST-STATE and the observability guide change with the code.
 - Not decided here: sources and connectors in runs; helpers and persistent workspaces on
