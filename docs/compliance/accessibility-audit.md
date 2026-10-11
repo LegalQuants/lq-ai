@@ -22,6 +22,14 @@ A passing run means no new axe violations under the exact measured exception pol
 
 Incomplete axe checks remain manual follow-ups. The initial measurement included incomplete `label-content-name-mismatch` and `color-contrast` checks; these are not converted to passes or hidden by the baseline. A green automated check is neither a keyboard audit nor an assistive-technology audit.
 
+The dashboard also checks the recent-chat and recent-matter loading messages for text contrast in
+all four viewport/theme variants. Synthetic activity responses are held until that check completes;
+the full dashboard audit then waits for the recent-activity region's `aria-busy` state to clear.
+This prevents scans from measuring loading nodes while they are being removed (axe can report those
+detached nodes as `:root`). The loading text uses `--lq-text-secondary` (`#4b5563` on white, about
+7.56:1) instead of `--lq-text-tertiary` (`#9ca3af`, about 2.53:1). Existing exact exceptions are
+unchanged; this is a targeted loading-state repair, not a claim that all dashboard text meets AA.
+
 ## Uncovered and unaudited surfaces
 
 Matter workspace, knowledge detail/ingest states, skill editing, tabular review, playbooks, autonomous surfaces, admin/learn pages and the inherited OpenWebUI shell remain outside this seven-state slice. Filled-data, error/loading and other dialog states also remain uncovered unless explicitly listed. Coverage expansion continues under #386/DE-232; the broader general Cypress on-PR work is #706.

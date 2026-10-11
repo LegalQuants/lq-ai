@@ -27,7 +27,11 @@ const preferences = {
 	provenance_pills: 'always',
 	autonomous_enabled: false
 };
-function fixtures() {
+function fixtures(dashboard = false) {
+	let releaseActivity!: () => void;
+	const activityReady = new Promise<void>((resolve) => {
+		releaseActivity = resolve;
+	});
 	const reads: Record<string, unknown> = {
 		'/api/config': { name: 'LQ.AI', features: { enable_websocket: false } },
 		'/api/version': { version: '0.11.0' },
@@ -46,8 +50,10 @@ function fixtures() {
 		'/api/v1/users/user/settings': { ui: {} },
 		'/api/v1/models': { data: [] }
 	};
-	cy.intercept('**/api/**', (req) => {
+	cy.intercept('**/api/**', async (req) => {
 		const path = new URL(req.url).pathname.replace(/\/$/, '');
+		// Hold the synthetic reads until loading contrast has been checked, without a timing guess.
+		if (dashboard && (path === '/api/v1/chats' || path === '/api/v1/projects')) await activityReady;
 		if (req.method === 'GET' && Object.hasOwn(reads, path))
 			req.reply({ statusCode: 200, body: reads[path] });
 		else if (req.method === 'POST' && path === '/api/v1/auths/update/timezone')
@@ -57,6 +63,7 @@ function fixtures() {
 			throw new Error(`Unexpected API request: ${req.method} ${path}`);
 		}
 	});
+	return releaseActivity;
 }
 describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', () => {
 	for (const state of states)
@@ -64,7 +71,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 			for (const theme of themes) {
 				const id = `${state.id}/${viewport.id}/${theme}`;
 				it(id, () => {
-					fixtures();
+					const releaseActivity = fixtures(state.id === 'dashboard');
 					cy.viewport(viewport.width, viewport.height);
 					cy.visit(state.path, {
 						onBeforeLoad(win) {
@@ -92,6 +99,36 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					if ('dialog' in state) {
 						cy.contains('button', '+ New matter').first().click();
 						cy.get('[role="dialog"]').should('be.visible');
+					}
+					if (state.id === 'dashboard') {
+						cy.get('[data-testid="lq-ai-recent-activity"] p')
+							.filter(':contains("Loading…")')
+							.should('have.length', 2)
+							.then(($loading) => {
+								cy.injectAxe();
+								cy.window().then(async (win) => {
+									await win.document.fonts.ready;
+									const axe = (win as unknown as { axe: typeof import('axe-core') }).axe;
+									const result = await axe.run($loading.toArray(), {
+										runOnly: { type: 'rule', values: ['color-contrast'] }
+									});
+									expect(result.violations, `loading text contrast in ${id}`).to.deep.equal([]);
+									expect(result.incomplete, `unresolved loading contrast in ${id}`).to.deep.equal(
+										[]
+									);
+									expect(
+										result.passes.find((rule) => rule.id === 'color-contrast')?.nodes
+									).to.have.length(2);
+								});
+							});
+						cy.then(releaseActivity);
+						// A heading does not establish that RecentActivity's async reads have settled.
+						// Scanning removed loading nodes can turn their selectors into :root.
+						cy.get('[data-testid="lq-ai-recent-activity"]').should(
+							'have.attr',
+							'aria-busy',
+							'false'
+						);
 					}
 					cy.document().then(async (doc) => {
 						await doc.fonts.ready;
