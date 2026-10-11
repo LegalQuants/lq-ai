@@ -905,3 +905,45 @@ a.site-title {
   border-start-start-radius: var(--ec-brdRad);
   border-start-end-radius: var(--ec-brdRad);
 }
+
+/* Explanatory regions remain complete in source and machine exports. */
+.lq-details { border: 1px solid var(--sl-color-hairline); border-radius: 0.5rem; padding: 0.8rem 1rem; margin: 1.25rem 0; }
+.lq-details > summary { cursor: pointer; font-weight: 600; line-height: 1.5; }
+.lq-details[open] > summary { margin-bottom: 1rem; }
+.lq-details :is(p, li) { overflow-wrap: anywhere; }
+
+/* Build-rendered diagrams have no client runtime. Stored theme preference
+   switches static variants; picture sources change layout at mobile widths. */
+.lq-diagram { max-width: 100%; margin: 1.5rem 0; padding: 1rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; }
+.lq-diagram figcaption { margin: 0 0 0.75rem; font-size: 1.125rem; line-height: 1.4; }
+.lq-diagram picture { display: block; }
+.lq-diagram picture img { display: block; width: auto; max-width: 100%; height: auto; margin-inline: auto; }
+.lq-diagram .lq-diagram-description { font-size: 1rem; line-height: 1.6; margin: 1rem 0; }
+.lq-diagram .lq-diagram-dark { display: none; }
+:root[data-theme='dark'] .lq-diagram .lq-diagram-light { display: none; }
+:root[data-theme='dark'] .lq-diagram picture.lq-diagram-dark { display: block; }
+:root[data-theme='dark'] .lq-diagram a.lq-diagram-dark { display: inline; }
+.lq-diagram-actions { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.75rem 1.5rem; font-size: 0.95rem; }
+.lq-diagram-actions a { color: var(--lq-page-accent, var(--sl-color-text-accent)); }
+.lq-diagram-actions details { min-width: 0; max-width: 100%; }
+.lq-diagram-actions summary { cursor: pointer; }
+.lq-diagram-actions pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; font-size: 0.8rem; }
+@media (max-width: 40rem) { .lq-diagram { padding: 0.75rem; } }
+
+/* Real product captures are presentation assets, added by the site transform.
+   Keep the original pixels; open the full-size image to inspect small UI text. */
+.sl-markdown-content .lq-product-screens { max-width: 54rem; margin: 1.75rem 0; }
+.sl-markdown-content .lq-product-screens .lq-product-title { margin: 0 0 0.75rem; font-size: 1.125rem; }
+.sl-markdown-content .lq-product-screens figure { margin: 0; padding: 0; }
+.sl-markdown-content .lq-product-shot > a { display: block; border: 1px solid var(--sl-color-hairline); border-radius: 0.5rem; overflow: hidden; }
+.sl-markdown-content .lq-product-shot img { display: block; width: 100%; height: auto; margin: 0; }
+.sl-markdown-content .lq-product-shot figcaption { margin: 0.75rem 0; font-size: 1rem; line-height: 1.6; }
+.sl-markdown-content .lq-product-qualification { display: block; margin-top: 0.5rem; }
+.sl-markdown-content .lq-product-shot figcaption a { white-space: normal; text-underline-offset: 0.2em; }
+.sl-markdown-content .lq-product-screens .lq-product-note { max-width: 44rem; margin: 0.75rem 0; font-size: 0.875rem; line-height: 1.6; }
+.sl-markdown-content .lq-product-setup { padding: 0; border: 0; margin: 1rem 0 0; }
+.sl-markdown-content .lq-product-setup > summary { cursor: pointer; font-size: 1rem; line-height: 1.6; padding-block: 0.5rem; }
+.sl-markdown-content .lq-product-setup[open] > summary { margin-bottom: 0.75rem; }
+.sl-markdown-content .lq-product-setup figure + figure { margin-top: 1.5rem; }
+.sl-markdown-content .lq-product-shot > a:focus-visible,
+.sl-markdown-content .lq-product-setup > summary:focus-visible { outline: 3px solid var(--lq-accent); outline-offset: 4px; }

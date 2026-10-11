@@ -41,6 +41,7 @@
 
   /* No sidebar, so the reading column can be a little wider. */
   --sl-content-width: 52rem;
+  --sl-sidebar-width: 15.5rem;
 
   /* The header is two rows: brand / search / buttons, then the pathway tabs.
      The landing page sets --lq-tabs-row to 0 (routeData.mjs): no tabs there. */

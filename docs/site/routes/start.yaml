@@ -1,3 +1,12 @@
+- route: overview
+  source: docs/start/what-is-lq-ai.md
+  title: What is LQ.AI?
+  description: Understand the workspace, decide whether it fits, and try a fictional document before using real material.
+  kind: explanation
+  audience: [evaluator, operator, agent]
+  status: draft
+  sources: [README.md, docs/PRD.md, docs/HONEST-STATE.md]
+
 - route: start/is-it-for-you
   source: docs/start/is-it-for-you.md
   title: Is LQ.AI right for your team?

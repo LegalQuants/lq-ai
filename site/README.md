@@ -66,10 +66,43 @@ focus through the header. See the header comment in the file for the options.
 
 ## Environment
 
+### Product screenshots
+
+Product screenshots are part of the **site transformation**. The canonical
+guides remain plain repository Markdown. Keep real browser captures in
+`site/public/product/`, and their alt text, captions, capture revision, and
+placement rules in `site/product-captures/screenshots.json`. Do not add copied
+guide text, screenshot paths, or site components to the canonical documents.
+
+`scripts/lib/product-screenshots.mjs` matches the owning source file, route, and
+exact heading, then adds the captures after that section's first paragraph.
+The sync uses the same metadata for full guides, the selected landing-page
+introduction, and the Markdown exports. An agent gets every image description,
+qualification, and image link, including captures that the human page puts
+inside a native disclosure. Missing assets or renamed headings fail the build.
+
+Capture and refresh instructions live in `site/product-captures/README.md`.
+Captures use fictional material and retain the original UI pixels. They load
+lazily, reserve their dimensions, scale to the reading column, and link to the
+full-size image. No screenshot gallery runtime or model call runs during a
+site build.
+
+The A/B/C comparison builds share these captures and canonical guides. Build A
+with `SITE_LAYOUT=classic`, B with `SITE_LAYOUT=pathways SITE_EXPERIENCE=cards`,
+and C with `SITE_LAYOUT=pathways SITE_EXPERIENCE=explore` (the experience default).
+B retains Iris's card landing and top pathway tabs; C uses the persistent sidebar,
+search composer and adjacent reader. B's introduction is selected from the same
+canonical overview as C. The classic homepage, both pathway homepages, quickstart,
+tier explanation and table-mode skill section project the relevant captures.
+
+### Build variables
+
 | Variable | Default | What it sets |
 |---|---|---|
 | `SITE_URL` | `https://legalquants.github.io` | Astro's `site` — the origin in canonical URLs, the sitemap and the machine surface. |
 | `SITE_BASE` | `/lq-ai/` | Astro's `base` — the path the site is served under. |
+| `SITE_LAYOUT` | `classic` | Classic documentation (A) or `pathways` navigation (B/C). |
+| `SITE_EXPERIENCE` | `explore` | Within pathways, `cards` preserves B and `explore` selects C. |
 | `DOCS_SITE_DIR` | `../docs/site` | Where page sources are read from. The test suite points it at `test/fixtures/docs-site/`. |
 | `SYNC_OUT_ROOT` | the `site/` root | Where the sync writes `src/content/docs/`, `public/_repo/` and `.sync-manifest.json`. |
 | `DIST_DIR` | `dist` | What the machine surface and both checks read. |
@@ -447,3 +480,101 @@ until those are cleared:
 ```bash
 rm -rf .astro dist node_modules/.astro node_modules/.vite && npm run build
 ```
+
+## Source-backed Explore and agent tasks
+
+### LiquidUI interaction layer
+
+The Explore experience uses persistent navigation from `src/pathways.mjs`,
+rendered by `components/pathways/Sidebar.astro`. Starlight supplies the native
+mobile popover and focus behavior. Explore renders every introductory answer,
+diagram, screenshot, status badge, and source link as ordinary static HTML.
+
+`DocsSearch.astro` and `scripts/docs-search.ts` adapt Iris's composer to the
+existing Pagefind index. Search runs on this origin, loads the engine on demand,
+and presents matching excerpts with preview, full-guide, Markdown, and status
+links. Queries and results live in the current page session. Command/Ctrl K
+focuses the composer. No model request or additional ranking engine is used.
+
+After Astro and the machine exports finish, `scripts/gen-reader-assets.mjs`
+extracts each full page's compiled article and metadata into a small registry
+and one lazy JSON asset per guide/navigation page under `dist/_reader/`.
+Cheerio 1.0.0 is an explicitly pinned build dependency, matching the version
+already installed through the site's QA tooling. A real HTML parser preserves
+nested callouts, code, tables, pictures, captions, and accessibility references;
+regular-expression extraction would make that preservation unreliable. It is
+not shipped to browsers and introduces no additional transitive packages.
+
+`GuideReader.astro` and `scripts/guide-reader.ts` load those current assets.
+Wide screens use an adjacent pane; narrower screens use a native modal. Real
+guide permalinks remain the navigation contract: modified clicks and Open full
+guide use the complete page, and reload at a preview URL opens that same page.
+Back/Forward restores previews; closing restores Explore and its search state.
+Cancelled or superseded guide lookups cannot reopen an old preview.
+Each visited guide retains its scroll and disclosures; All documentation also
+retains its title filter. Preview headings and accessibility references get
+their own IDs, while links retain the original public section anchors.
+
+The reader preserves source/status metadata and direct Markdown links. It uses
+the full page's styles and wraps code as the full page does. Its own copy buttons
+replace Expressive Code's page initializer. Diagram layout follows the actual
+reading-column width, so opening a pane does not squeeze a wide drawing into
+unreadable text. Unsupported active content fails preview generation rather
+than silently removing instructions.
+
+Playback is an explicit opt-in. `scripts/tour-playback.ts` highlights and visits
+the three source-backed answers; it never removes content or search results.
+Pause, resume, and replay retain context, and reduced-motion settings suppress
+animated scrolling. Every answer and all guide links remain usable without
+JavaScript; the enhanced search and reader fall back to ordinary navigation.
+
+Iris's design/code attribution and the original license are retained under
+`third-party/iris-liquidui/`. `docs.js` from the ZIP is not a source dependency.
+Changing a repository guide rebuilds its full page, preview, search index, and
+agent Markdown in the same build.
+
+`test/reader-cancellation.test.mjs` exercises the actual TypeScript reader
+controller with a deferred first registry lookup. It uses esbuild already
+installed by Astro to compile that controller for the Node test runner.
+
+The sync resolves `docs/site/_data/explore.yaml` and `journeys.yaml` against the
+canonical Markdown route registry. It writes generated answer fragments under
+`src/content/explore/` and normalized Markdown/view data under `src/generated/`.
+Neither directory is committed. Astro renders the answer collection; the
+quickstart navigation reads the same resolved journey data.
+
+Postbuild writes `tasks.json` with direct Markdown URLs and prerequisite, step,
+alternative, and verification heading references. `llms.txt` adds goal discovery
+and Markdown links. The pathways landing, pathway pages, and All documentation
+also receive text twins; the 404 page is excluded from the text corpus. Exported
+alternatives keep their labels and complete instructions independently of what
+a human has expanded. MDX component examples in code fences are preserved.
+
+Run `npm test` for source-selection, disclosure, export, and route regressions,
+then `SITE_LAYOUT=pathways npm run check` for the complete site gates. Inspect
+the introduction and quickstart in a browser, including opening optional details
+and following the text links. The introduction and quickstart include static diagrams compiled from the
+canonical Markdown. The LiquidUI interaction layer above adds local search,
+optional playback, and the adjacent guide reader; a complete guided fictional
+document walkthrough remains a later increment.
+
+## Build-time diagram rendering
+
+`npm run diagrams` runs after sync and before Astro. It renders Mermaid fences
+with `accTitle` and a one-line `accDescr`, using the existing Puppeteer/Chrome
+tooling. The build uses Mermaid 11.15.0, exactly pinned to match the web app's
+locked version. This build dependency provides graph parsing, layout, labels,
+and accessible SVG output; maintaining a separate graph renderer would duplicate
+that substantial work. Mermaid is not imported into browser components.
+
+The renderer uses a local bundle, blocks network requests, and keeps strict
+Mermaid settings. It writes assets under `public/_diagrams/` and caches them in
+`.diagram-cache/`, keyed by source, theme, and renderer version. Both directories
+are ignored by Git. A sync resets the generated HTML inputs; repeating the
+diagram step reuses the saved pre-diagram inputs safely. The normalized machine
+Markdown and generated navigation text are never replaced with SVG markup.
+
+Chrome must be available for an uncached render, as it already is for the
+layout/accessibility gates. The renderer follows those tools' local sandbox
+settings and existing CI launch settings. Check the diagrams in desktop/mobile
+and light/dark views, then run the full site gates.

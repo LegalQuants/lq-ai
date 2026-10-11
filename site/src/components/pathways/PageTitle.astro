@@ -19,6 +19,8 @@ import StatusBadge from '../StatusBadge.astro';
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES, pathwayOf } from '../../pathways.mjs';
 import { KIND_LABELS } from '../../../scripts/lib/routes.mjs';
+import views from '../../generated/views.json';
+import { SITE_EXPERIENCE } from '../../../scripts/lib/paths.mjs';
 
 const PAGE_TITLE_ID = '_top';
 
@@ -31,6 +33,9 @@ const isLanding = route === NAV_ROUTES.landing;
 const isHub = route.startsWith('pathways/');
 const isNavPage = isLanding || isHub || route === NAV_ROUTES.all;
 const pathway = pathwayOf(route);
+const journey = SITE_EXPERIENCE === 'explore' && views.tasks.find((task) => task.route === route);
+const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase()
+  .replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s/g, '-');
 ---
 
 {
@@ -58,9 +63,9 @@ const pathway = pathwayOf(route);
         </nav>
       )}
       <h1 id={PAGE_TITLE_ID}>{title}</h1>
-      {kind && <Eyebrow text={KIND_LABELS[kind]} as="p" class="lq-page-title__kind" />}
+      {kind && <div data-pagefind-ignore><Eyebrow text={KIND_LABELS[kind]} as="p" class="lq-page-title__kind" /></div>}
       {(status || audience?.length) && (
-        <div class="lq-page-title__meta">
+        <div class="lq-page-title__meta" data-pagefind-ignore>
           {status && <StatusBadge status={status} />}
           {audience?.length ? (
             <ul class="lq-page-title__audience" aria-label="Written for">
@@ -71,11 +76,28 @@ const pathway = pathwayOf(route);
           ) : null}
         </div>
       )}
+      <nav class="lq-text-links" aria-label="Text documentation" data-pagefind-ignore>
+        <a href={`${base}${route}.md`}>Read as Markdown</a>
+        <a href={`${base}llms.txt`}>Docs for agents</a>
+      </nav>
+      {journey && (
+        <nav class="lq-journey" aria-label="Steps in this guide" data-pagefind-ignore>
+          <a href={sectionHref(journey.before.heading)}>Before you start</a>
+          <ol>{journey.steps.map((step) => <li><a href={sectionHref(step.heading)}>{step.label}</a></li>)}</ol>
+          <a href={sectionHref(journey.verification.heading)}>Check that it worked</a>
+        </nav>
+      )}
     </div>
   )
 }
 
 <style>
+  .lq-text-links { display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: 0.95rem; margin-top: 0.75rem; }
+  .lq-text-links a, .lq-journey a { color: var(--lq-page-accent); }
+  .lq-journey { margin-top: 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; }
+  .lq-journey ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 1.5rem; list-style: none; padding: 0; margin: 0.75rem 0; }
+  .lq-journey a { text-underline-offset: 0.2em; }
+  @media (max-width: 40rem) { .lq-journey ol { grid-template-columns: 1fr; } }
   /* Unlayered on purpose: these render inside .sl-markdown-content, and
      theme.css's unlayered prose rules would beat any layered style. */
   .lq-pw-title {

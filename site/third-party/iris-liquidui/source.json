@@ -1,0 +1,31 @@
+{
+  "edition": "LiquidUI standalone, 4 October 2026",
+  "contributor": "Iris",
+  "license": "Apache-2.0",
+  "archive": "lq-ai-liquidui-chat-standalone.zip",
+  "archiveSha256": "3e10d418063db55761d66b0d084712652304944efcbc8fa88d2b6e704b92e356",
+  "contributedFileHashes": {
+    "index.html": "1070abf71ac4fa2c080291fdb124f0bb6c85943915e66eeb7c1a33fadf0ba8ef",
+    "style.css": "c627b16e2a204a7ed2cf59aaeca9c294751c8a396c6864cb2f4c77a21f55841a",
+    "theme.js": "f8fae79ea1f9b9dd11326b7a0701e7d6d915405e40404ac95fab000c2ca95ecd",
+    "app.js": "01bf8aeff12c598c40e964b5e6973ef9720e4cd28eb5a1f6a4ad930f112e1bde",
+    "docs.js": "45397268125dbb64ea83ee929968029c4d9630c250dc8cfaf003fe2ee7d66090",
+    "pathways.js": "b300e18b823dcda941ae152707751195eff232c1865426c7c84a8f99b18b1cc4",
+    "README.md": "4ea63a34056c37c4540267c7b09bda3272df557f1f888d9771ccc7e001ced24c",
+    "RELEASE-NOTES.txt": "4318c34539b6047d3703f2dd346878d52c3b65daff66abbf7a8ea4172be6d15f",
+    "LICENSE": "26bad6f65b8731c4e0f76fe7dedf835abe9ccb8948724f24c7e0943e3c9fbcbc",
+    "assets/187d4af65439.png": "fbf12643f0543c15e9ba84e8190f292202cddd13b464660fc1a0646480014e7f",
+    "assets/1aebb084e0de.png": "73ed8e094018edc978b31d2bc79a8f122730b2d8b8688741461b2259deeaef06",
+    "assets/2a9d737de173.png": "58a91fe28e67c993d9a3b46d3140d23c0e6370cdeb517c694af9f30b8411bb83",
+    "assets/5c26954cef27.png": "fb3085912d7450848dc295a1e9b789404d10eb3bbfd2f5e4e32b5c42a668fed7",
+    "assets/91c06d73505b.png": "9a0e4744693419bee8a6f77f059a756f65b2b9536875890a40280d1a38a25978",
+    "assets/aa9e2a5fa896.png": "68fcd1f2a8a162a52fb7cedf5cb4890ac0a0ddcdc1e4b91f2af16875292ccf7a",
+    "assets/cfdb803bf671.png": "c63b3ff2e9ab24963114981c1729a674ee8b61cf3cc7f2950c8768f958112331",
+    "assets/d5d6f515ad40.png": "fced0ff7cbc7bb4c712d96a4ce16b2ffd293328d874c3bddc633a90c91f01eaf",
+    "assets/e887e45323c5.png": "bab28f626a871635f74094aff621825cc9eb86fcdb33563f3484bd2098588fcc",
+    "assets/ef98839c9e66.png": "e218532908d86b234ceb87779058b66102cba61dd5631d5974f895dcef0da6fe",
+    "assets/source-sans-OFL.txt": "09746787287a289323b0ec3cff4d1a4a801331b82b7207c1e186f5d26619a392",
+    "assets/source-sans.woff2": "707229357fb90c9c5da177826aac06c6da031f569a9a520bfa7fcca5cd03355a"
+  },
+  "integration": "Interaction design adapted into Astro and small browser scripts; current repo sources, Pagefind, and build-generated guide assets replace the packaged corpus and fixed answers."
+}

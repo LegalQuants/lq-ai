@@ -1,25 +1,30 @@
 ---
 /**
- * The pathways landing: one line on what LQ.AI is, then the four pathways as
- * large colour cards (title and arrow only). Desktop alternates wide and narrow
- * cards (5/7 then 7/5 of a 12-column grid); phones stack them.
- *
- * The introduction is Iris's text from her UI review (lq-docs-v2), verbatim.
+ * Iris's pathways and palette with a source-backed three-question introduction.
+ * Guide content is selected at sync time; this component only renders navigation.
  */
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES } from '../../pathways.mjs';
+import GuidedIntro from './GuidedIntro.astro';
+import DocsSearch from './DocsSearch.astro';
+import GuideReader from './GuideReader.astro';
+import '../../styles/explore.css';
 
 const { pathways } = Astro.props;
 const base = import.meta.env.BASE_URL;
 ---
 
-<section class="lq-landing-intro" aria-label="About LQ.AI">
-  <p>
-    LQ.AI is an AI workspace for legal teams that runs on computers you control. Chat with your
-    documents, create and attach customised workflows, or use our prepacked skills. You choose
-    whether to connect a cloud AI service or use a model running on your own computers.
-  </p>
-</section>
+<div data-lq-explore class="lq-explore">
+<GuidedIntro />
+<DocsSearch />
+
+<div class="lq-landing-next">
+  <a href={withBase(base, 'start/quickstart')}>Try a fictional document</a>
+  <a href={withBase(base, 'start/is-it-for-you')}>Decide whether it fits</a>
+  <a href={`${base}llms.txt`}>Docs for agents</a>
+</div>
+
+<h2>Find the guide you need</h2>
 
 <nav class="lq-landing-grid" aria-label="Documentation pathways">
   {
@@ -33,32 +38,26 @@ const base = import.meta.env.BASE_URL;
     ))
   }
 </nav>
+<GuideReader />
+</div>
+<script>
+  import '../../scripts/explore';
+</script>
 
 <style>
   /* Unlayered on purpose: these render inside .sl-markdown-content, and
      theme.css's unlayered prose rules would beat any layered style. */
-  .lq-landing-intro {
-    max-width: 56rem;
-    margin: 0 0 1.875rem;
-  }
-
-  .lq-landing-intro p {
-    margin: 0;
-    font-size: clamp(1.125rem, 1.5vw, 1.3125rem);
-    line-height: 1.65;
-    color: var(--sl-color-gray-3);
-    text-wrap: pretty;
-  }
-
   .lq-landing-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     gap: 18px;
   }
+  .lq-landing-next { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; }
+  .lq-landing-next a { border: 1px solid var(--sl-color-hairline); border-radius: 0.5rem; padding: 0.75rem 1rem; }
 
   .lq-landing-card {
     grid-column: span 5;
-    min-height: 238px;
+    min-height: 145px;
     padding: 30px 34px;
     border-radius: 12px;
     display: flex;
@@ -88,12 +87,12 @@ const base = import.meta.env.BASE_URL;
   }
 
   .lq-landing-card:nth-child(n + 3) {
-    min-height: 202px;
+    min-height: 145px;
   }
 
   .lq-landing-card strong {
     max-width: 90%;
-    font-size: clamp(1.75rem, 3vw, 2.6875rem);
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
     font-weight: 600;
     line-height: 1.08;
     letter-spacing: -0.025em;

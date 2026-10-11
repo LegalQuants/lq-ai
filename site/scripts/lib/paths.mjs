@@ -20,6 +20,7 @@
  * | `SITE_BASE`     | `/lq-ai/`            | the deployed base path               |
  * | `SITE_URL`      | `https://legalquants.github.io` | the deployed origin       |
  * | `SITE_LAYOUT`   | `classic`            | `pathways`: Iris's four-pathway UI   |
+ * | `SITE_EXPERIENCE` | `explore`          | `cards`: B; `explore`: C             |
  * | `SITE_COMPARE`  | empty                | `<label>|<url>`: a compare banner    |
  *
  * `REPO_ROOT` is deliberately *not* overridable: includes, `sources:` entries
@@ -94,6 +95,13 @@ export const SITE_LAYOUT = (() => {
   if (raw !== 'classic' && raw !== 'pathways') {
     throw new Error(`SITE_LAYOUT must be "classic" or "pathways", not "${raw}"`);
   }
+  return raw;
+})();
+
+/** Keep B's cards/tabs and C's search/reader independently rebuildable. */
+export const SITE_EXPERIENCE = (() => {
+  const raw = process.env.SITE_EXPERIENCE || 'explore';
+  if (!['cards', 'explore'].includes(raw)) throw new Error('SITE_EXPERIENCE must be "cards" or "explore"');
   return raw;
 })();
 

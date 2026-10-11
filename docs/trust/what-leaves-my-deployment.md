@@ -3,6 +3,37 @@
 The answer depends on which services you enable and where they run. Keeping uploaded files on
 your own computer does not keep every use of their contents there.
 
+## Data boundary summary
+
+You control the computers running LQ.AI, access to the deployment, and its configuration. A cloud model can receive your question and document content; storing files locally does not keep every use of their contents local.
+
+```mermaid
+flowchart LR
+    %% portrait-flat
+    accTitle: Review every route across the data boundary
+    accDescr: Documents and application records live in your environment, but LQ.AI can send content along separately configured routes. Model and tool requests go through the gateway; email and monitoring have their own enabled routes. Check the chat provider, document-search provider, research or connectors, and exports separately. Choosing local chat does not settle the other routes.
+    subgraph controlled["Your environment"]
+        direction TB
+        workspace["LQ.AI and stored documents"]
+        local["Local chat model"]
+    end
+    subgraph outside["External endpoints, when enabled"]
+        direction TB
+        cloud["Chat provider"]
+        search["Embedding provider"]
+        tools["Research and connectors"]
+        exports["Email and monitoring"]
+    end
+    %% portrait-stack: workspace local cloud search tools exports
+    workspace --> local
+    workspace --> cloud
+    workspace --> search
+    workspace -.-> tools
+    workspace -.-> exports
+```
+
+Local inference is available, but the chat model, document-search model, fallback models, and other enabled connections must each be checked. Security depends on the deployment and on which services you enable. Read the [full data accounting](#when-you-ask-a-cloud-ai-service) for those connections and their limitations.
+
 ## When you ask a cloud AI service
 
 The request can include your question, document passages, skill instructions, supporting files
@@ -78,11 +109,13 @@ service and its address — picking a local chat model does not by itself settle
   first-class streaming or export path as of this commit — the PRD names SIEM streaming via
   syslog or webhook as a future capability, but the shipped path is an operator-run
   `pg_dump --table=audit_log` against their own Postgres (`docs/security/audit-logging.md`).
-- **Downloads.** The first document you upload triggers Docling to download roughly 700 MB of
-  layout and OCR models from Hugging Face, unless they're already cached in the `ingest-hf-cache`
-  / `ingest-easyocr-cache` volumes — see [Use AI without an internet connection](../operate/air-gapped.md)
-  for how to avoid or pre-seed that download, and for the Ollama model pull, which is a separate,
-  operator-run step.
+- **Downloads.** Installation downloads application dependencies and container images. For PDFs,
+  PyMuPDF produces the canonical text; the optional Docling pass, controlled by
+  `lq_ai_docling_enabled`, can also attempt to load model files (`api/app/pipeline/parsers.py`).
+  Text/Markdown uploads follow a separate direct-text parser, so uploading any first document is
+  not a universal model-download trigger. Review the enabled parser and its caches before using
+  an isolated network — see [Use AI without an internet connection](../operate/air-gapped.md).
+  Pulling local model weights is a separate, operator-run step.
 
 ## Where API keys are handled
 

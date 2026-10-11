@@ -2,11 +2,34 @@
 
 You can install LQ.AI, sign in and upload a test document without an AI-service key. Start there, then connect a model when you're ready to ask questions.
 
-LQ.AI is self-hosted: everything below runs in Docker containers on your machine. The Inference Gateway is the only component that talks to the outside world — inference requests, and, if an operator enables them, case-law/research and connector (MCP) tool calls; tool connectors are off by default ([`docs/HONEST-STATE.md` §5.5](HONEST-STATE.md)). The README has a shorter version of these same steps; this page adds the explanation, the exact values, and the troubleshooting for each one.
+LQ.AI is self-hosted: everything below runs in Docker containers on your machine. The Inference Gateway handles model requests and enabled research/connector tool calls. Other configured services, such as email notifications and monitoring, can have their own outbound connections; review [what information leaves the deployment](trust/what-leaves-my-deployment.md). The README has a shorter version of these same steps; this page adds the explanation, the exact values, and the troubleshooting for each one.
 
 If you run into trouble, jump to [Troubleshooting](#troubleshooting) at the end. If your problem isn't covered there, file a GitHub issue with the `quickstart` label and we'll add it.
 
 ---
+
+## Before you start
+
+Use a fictional document for this first installation. You need Git and Docker with Docker Compose, internet access for the initial downloads/build, and someone responsible for maintaining the deployment. You can sign in and check document extraction before connecting an AI service. AI answers and knowledge-base search need their own model configuration.
+
+```mermaid
+flowchart TB
+    accTitle: Check the app first, then check the AI workflow
+    accDescr: First get the files, set the secrets, start the app, sign in, and upload a fictional document. These steps do not require an AI provider key. A ready document confirms extraction. Then configure the models needed for the task, ask a test question, and inspect the answer and its sources; extraction alone does not verify AI output.
+    subgraph setup["Install and check the app"]
+        direction LR
+        files["Get the files"] --> secrets["Set four secrets"]
+        secrets --> start["Start the app"]
+        start --> signin["Sign in"]
+        signin --> upload["Upload a fictional document"]
+    end
+    subgraph ai["Configure models and check the output"]
+        direction LR
+        models["Connect the models you need"] --> ask["Ask a test question"]
+        ask --> review["Inspect the answer and its sources"]
+    end
+    setup -->|ready confirms extraction| ai
+```
 
 ## 1. Get the files
 
@@ -20,12 +43,14 @@ cp .env.example .env
 
 The commands ahead build the app from source, so allow time and disk space for both the build and the image downloads.
 
+<!-- docsite:optional -->
 ### Details
 
 - **A provider key isn't required yet.** You can bring the stack up, sign in and upload a test document with no AI-provider key set at all — only the four secrets in [Step 2](#2-set-four-secrets) are required. A key is only needed once you want the app to actually call a model — see [Step 6](#6-connect-an-ai-model).
 - **What you don't need at all:** any pre-existing legal-AI experience, or a working knowledge of LangGraph, OpenWebUI, or any of the other components.
 - **Timing.** About 15 minutes once the stack is up. The first `docker compose up` itself takes longer — it **builds** the application images (`api`, `gateway`, `web`, and the workers) as well as pulling the infrastructure images, so how long it takes depends on your hardware, Docker's build cache, and your network speed. Subsequent runs reuse the images and start in seconds.
 - **Network.** The initial `docker compose up` needs a connection to pull and build images. If you go on to use a cloud provider (Mode 1), every chat request — and the default `embedding` alias used for knowledge-base search — also needs a connection for the whole demo, not just the first boot. Only Mode 2 (local Ollama, once fully set up — see [Step 6](#6-connect-an-ai-model)) runs offline after setup.
+<!-- /docsite:optional -->
 
 ## 2. Set four secrets
 
@@ -41,10 +66,12 @@ python -c 'import secrets; print(secrets.token_urlsafe(32))'
 python -c 'import secrets; print(secrets.token_urlsafe(64))'
 ```
 
+<!-- docsite:optional -->
 ### Details
 
 - **`OBJECT_STORE_SECRET_KEY`** is the root secret for the bundled S3-compatible object store, `rustfs` (it replaced the earlier MinIO service; ADR 0036). The legacy name `MINIO_ROOT_PASSWORD` is still accepted as a fallback for existing installs, but a new install should set `OBJECT_STORE_SECRET_KEY`.
 - Provider keys aren't limited to `.env`. Once `LQ_AI_GATEWAY_MASTER_KEY` is set, an admin can add, rotate, and revoke keys at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway — no restart. The `.env` path here is the simplest for a first run. See [`gateway.yaml.example`](../gateway.yaml.example).
+<!-- /docsite:optional -->
 
 ## 3. Start the app
 
@@ -62,6 +89,7 @@ docker compose logs api 2>&1 | grep "First-run admin password"
 
 Save the password — you'll use it in the next step.
 
+<!-- docsite:optional -->
 ### Details
 
 - First run brings up the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` — plus one one-shot init container, `rustfs-init`, that exits once it finishes. `postgres`, `redis` and `rustfs` are pulled; `gateway`, `api`, `web` and the two background workers are **built** from your checkout, so the first start does real build work, not just downloads. (The local-Ollama `--profile local` and Slack/Teams `--profile slack` / `--profile teams` services are opt-in Compose profiles, not part of a plain first start.)
@@ -71,22 +99,26 @@ Save the password — you'll use it in the next step.
   - LQ.AI shell: <http://localhost:3000/lq-ai>
   - API documentation: <http://localhost:8000/docs>
   - Inference Gateway: <http://localhost:8001/docs>
+<!-- /docsite:optional -->
 
 ## 4. Sign in
 
 Open <http://localhost:3000/lq-ai>. Use `admin@lq.ai` and the password from the previous step, then set a permanent password when prompted. The home page then shows a **Getting started** checklist of five tasks, ticking off as you do them: **Log in & rotate password**, **Run a skill on a document**, **Try Enhance Prompt**, **Attach a knowledge base**, and **Save a prompt as a skill**. Tasks that ask the AI for a result need a connected model (Step 6).
 
+<!-- docsite:optional -->
 ### Details
 
 - The LQ.AI chat shell lives at `/lq-ai` per [ADR 0009](adr/0009-web-lq-ai-shell-coexistence.md); the upstream OpenWebUI shell at `/` is preserved untouched and isn't the canonical experience for this walkthrough.
 - **Forgot to copy the bootstrap password?** Type any password and submit. While the deployment is still in fresh-install state, the login screen surfaces an inline hint with the exact log command above and a one-click copy button (M3-0.1 / DE-283). The hint hides itself once you've set your permanent password.
 - The default admin email is `admin@lq.ai`. It comes from a backend setting read only on the very first boot; the shipped `docker-compose.yml` doesn't pass a value for it into the `api` container, and the container doesn't read your `.env` for it either, so setting it in `.env` alone has no effect. To change it before the first start, add `FIRST_RUN_ADMIN_EMAIL: <email>` to the `api` service's `environment:` block — e.g. in a `docker-compose.override.yml`.
 - **Admin tip — Settings → Models.** Once signed in as an admin, a **Settings** link in the top-right of the shell opens the model alias editor at `/lq-ai/admin/models`, where you can edit the `smart` / `fast` / `budget` / `local` / `embedding` aliases without restarting the gateway. Edits write `gateway.yaml` atomically and hot-reload the gateway in process; in-flight requests finish on the prior config. See [ADR 0010](adr/0010-gateway-config-hot-reload.md).
+<!-- /docsite:optional -->
 
 ## 5. Upload a test document
 
 Open **Matters** in the sidebar (`/lq-ai/matters`) — the shell calls Projects "matters" — and click **+ New matter**. Give it an obvious test name, then open the matter, click **+ New Chat**, then click **+ Files** and upload a short Markdown or plain-text file containing made-up information. Wait for its status to become `ready`. That confirms the app extracted the text; document search and AI answers need their own model settings (Step 6).
 
+<!-- docsite:optional -->
 ### Details
 
 - A matter (Project) is more than a folder for a file: it's a matter-scoped container for chats, files, skills, playbooks, and a free-form context document scoped to a single matter. Chats inside it automatically inherit its attachments and context.
@@ -96,12 +128,15 @@ Open **Matters** in the sidebar (`/lq-ai/matters`) — the shell calls Projects 
   - **Description:** `Northbrook–Acme NDA review for potential business relationship`
   - **Context document:** a sentence or two on who the parties are and where things stand — chats in the matter inherit this automatically.
 - **Privileged flag.** Leave it off for a test matter. For a privileged matter, ticking **Attorney-client privileged** requires you to also set a minimum Inference Tier floor — the form won't submit without one — and marks every chat in the matter as privileged in the audit log. See [PRD §3.11](PRD.md#311-projects-m1) for the full mechanics.
+<!-- /docsite:optional -->
 
 ## 6. Connect an AI model
 
 LQ.AI has connections for Anthropic, OpenAI (or any OpenAI-compatible endpoint), Azure OpenAI, and Ollama (for a fully local setup). Choose a configured model name in the app. Ollama lets you run a model on your own computer — starting its Docker profile doesn't by itself switch the app to that model: check the chat model, its backup choices, and the document-search (embedding) model too.
 
 ### Details: a cloud provider key (Mode 1)
+
+Applicable when you have chosen a supported cloud provider and are ready for that service to receive the request content.
 
 Add a key to `.env` — the relevant lines:
 
@@ -117,7 +152,11 @@ ANTHROPIC_API_KEY=sk-ant-...your-key-here...
 - The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; a different provider's output will be similar in shape but may differ in calibration nuance.
 - `gateway.yaml.example` also carries example entries for Google Vertex and AWS Bedrock, but no adapter ships for those provider types yet — a key for them won't route anything.
 
-### Details: local Ollama (Mode 2, offline once set up)
+<a id="details-local-ollama-mode-2-offline-once-set-up"></a>
+
+### Details: local Ollama (Mode 2)
+
+Applicable when you want the chat model to run on infrastructure you control. Check document-search and fallback settings separately; local chat alone does not establish that the whole workflow is offline.
 
 ```bash
 docker compose --profile local up -d
@@ -130,6 +169,18 @@ docker compose exec ollama ollama pull qwen3.5:9b   # a few GB — pull before t
 - Operators running Ollama on the host (rather than in the Compose stack) set `OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env` and skip `--profile local`. Nothing in the profile itself blocks egress — if you need that guarantee, isolate the network at the deployment layer.
 
 ---
+
+## Check that it worked
+
+Check each result separately:
+
+- **Installation:** the long-running services are Up; services with health checks report healthy. The completed `rustfs-init` container may show as exited.
+- **Access:** you can sign in at `/lq-ai` and have changed the initial password.
+- **Extraction:** your fictional document reaches `ready`. This confirms text extraction, not a successful AI answer or knowledge-base search.
+- **Model use:** after configuring the appropriate models, ask a test question and confirm you receive a result. Check the displayed Inference Tier against your intended arrangement.
+- **Sources:** when testing a document-based answer, open its cited source and check the passage yourself.
+
+Return to [Troubleshooting](#troubleshooting) if a check fails.
 
 ## Add your organization's background
 

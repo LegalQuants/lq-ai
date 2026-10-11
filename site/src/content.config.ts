@@ -1,4 +1,5 @@
 import { defineCollection, z } from 'astro:content';
+import { glob } from 'astro/loaders';
 import { docsLoader } from '@astrojs/starlight/loaders';
 import { docsSchema } from '@astrojs/starlight/schema';
 
@@ -25,6 +26,13 @@ export const AUDIENCES = [
 export const STATUSES = ['draft', 'reviewed'] as const;
 
 export const collections = {
+  explore: defineCollection({
+    loader: glob({ pattern: '**/*.md', base: './src/content/explore' }),
+    schema: z.object({ title: z.string(), order: z.number(), route: z.string(), url: z.string(),
+      status: z.enum(STATUSES), sources: z.array(z.string()),
+      checkedAgainst: z.object({ sha: z.string(), date: z.string() }),
+    }),
+  }),
   docs: defineCollection({
     loader: docsLoader(),
     schema: docsSchema({

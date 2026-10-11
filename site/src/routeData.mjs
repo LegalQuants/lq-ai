@@ -6,8 +6,8 @@
  * default (classic, no-banner) build never runs it.
  *
  * In the pathways layout (`SITE_LAYOUT=pathways`):
- *   - there is no sidebar: the header's pathway tabs and the pathway pages are
- *     the navigation (Iris's design), so `hasSidebar` is off on every page;
+ *   - C's persistent sidebar uses the four pathways with Starlight's responsive
+ *     popover; B's cards experience retains the top pathway tabs;
  *   - each page takes the accent of the pathway it sits in, set as one custom
  *     property the theme reads (`--lq-page-accent`);
  *   - Previous / Next follow the pathway reading order instead of the classic
@@ -16,7 +16,7 @@
 import { defineRouteMiddleware } from '@astrojs/starlight/route-data';
 import { getCollection } from 'astro:content';
 
-import { SITE_COMPARE, SITE_LAYOUT } from '../scripts/lib/paths.mjs';
+import { SITE_COMPARE, SITE_EXPERIENCE, SITE_LAYOUT } from '../scripts/lib/paths.mjs';
 import { OVERVIEW_ROUTE, pathwayOf, readingOrder } from './pathways.mjs';
 import { withBase } from './namespaces.mjs';
 
@@ -68,7 +68,7 @@ export const onRequest = defineRouteMiddleware(async (context) => {
 
   if (SITE_LAYOUT !== 'pathways') return;
 
-  route.hasSidebar = false;
+  route.hasSidebar = SITE_EXPERIENCE === 'explore';
 
   const pathway = pathwayOf(id);
   const isLanding = id === '';
@@ -77,7 +77,7 @@ export const onRequest = defineRouteMiddleware(async (context) => {
   // `:root:root` outranks the theme's own `:root` rules, whatever order the
   // stylesheets load in.
   const declarations = [`--lq-page-accent:var(--lq-tone-${pathway?.tone ?? 'a'})`];
-  if (isLanding) declarations.push('--lq-tabs-row:0px');
+  if (isLanding || SITE_EXPERIENCE === 'explore') declarations.push('--lq-tabs-row:0px');
   if (isNavPage) declarations.push('--sl-content-width:77.5rem');
   route.head.push({
     tag: 'style',

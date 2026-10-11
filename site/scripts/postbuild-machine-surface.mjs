@@ -26,6 +26,7 @@ import path from 'node:path';
 
 import { DIST_DIR, MANIFEST_PATH, OUT_ROOT, canonicalUrl } from './lib/paths.mjs';
 import { parsePage, reduceMdx } from './lib/markdown.mjs';
+import { taskIndex, markdownUrl } from './lib/views.mjs';
 
 const SITE_NAME = 'LQ.AI documentation';
 
@@ -51,6 +52,9 @@ function header(page) {
     `description: ${oneLine(page.description)}`,
     `url: ${canonicalUrl(page.route)}`,
     `checked-against: ${page.sha}${page.date ? ` (${page.date})` : ''}`,
+    `status: ${page.status ?? 'draft'}`,
+    `kind: ${page.contentKind ?? page.kind}`,
+    `sources: ${(page.sources ?? []).join(', ')}`,
   ].join('\n');
 }
 
@@ -58,7 +62,7 @@ function header(page) {
 const twinPath = (route) => path.join(DIST_DIR, route ? `${route}.md` : 'index.md');
 
 function markdownFor(page) {
-  const file = path.join(OUT_ROOT, page.contentFile);
+  const file = path.join(OUT_ROOT, page.markdownFile ?? page.contentFile);
   if (!existsSync(file)) return null;
   const { content } = parsePage(readFileSync(file, 'utf8'));
   return page.isMdx ? reduceMdx(content) : content.trim();
@@ -80,7 +84,7 @@ async function main() {
   }
 
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
-  const pages = manifest.pages ?? [];
+  const pages = [...(manifest.pages ?? []), ...(manifest.navigation ?? [])];
 
   const missing = [];
   const written = [];
@@ -112,14 +116,21 @@ async function main() {
     manifest.namespaces?.find((entry) => entry.dir === dir)?.label ?? 'Entry';
 
   const llms = [`# ${SITE_NAME}`, '', `> ${SITE_SUMMARY}`, ''];
+  const tasks = taskIndex(manifest.views ?? { tasks: [] });
+  if (tasks.tasks.length) {
+    llms.push('## Find instructions by goal', '');
+    for (const task of tasks.tasks) llms.push(`- [${task.title}](${task.markdownUrl}): prerequisites, steps, applicable alternatives, and verification.`);
+    llms.push('', 'The structured task index is [tasks.json](./tasks.json).', '');
+  }
   for (const [namespace, group] of byNamespace) {
     llms.push(`## ${labelOf(namespace)}`, '');
     for (const page of group) {
-      llms.push(`- [${oneLine(page.title)}](${canonicalUrl(page.route)}): ${oneLine(page.description)}`);
+      llms.push(`- [${oneLine(page.title)}](${canonicalUrl(page.route)}): ${oneLine(page.description)} [Markdown](${markdownUrl(page.route)})`);
     }
     llms.push('');
   }
   await writeFile(path.join(DIST_DIR, 'llms.txt'), `${llms.join('\n').trimEnd()}\n`, 'utf8');
+  await writeFile(path.join(DIST_DIR, 'tasks.json'), `${JSON.stringify(tasks, null, 2)}\n`, 'utf8');
 
   // --- llms-full.txt ---------------------------------------------------------
   await writeFile(

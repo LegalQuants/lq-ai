@@ -1,0 +1,40 @@
+/* LiquidUI interaction layer. The existing palette and full guide renderer own
+   typography, diagrams, callouts, tables, and screenshot presentation. */
+.main-frame:has([data-lq-explore]) { height:100dvh; overflow:auto; }
+main:has([data-lq-explore]) { padding-bottom:8rem; }
+.lq-docs-composer:not([hidden]) { position:fixed; bottom:1rem; inset-inline-start:calc(var(--sl-content-inline-start,0px) + var(--sl-nav-pad-x)); inset-inline-end:calc(var(--lq-reader-offset,0px) + var(--sl-nav-pad-x)); max-width:54rem; margin-inline:auto; z-index:20; box-shadow:0 0 0 0.5rem var(--sl-color-bg); }
+.lq-docs-composer[hidden] { display:none; }
+.lq-search-turn { margin:1.5rem 0; padding:1rem 1.25rem; border:1px solid var(--sl-color-hairline); border-radius:1rem; background:var(--lq-color-hover); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+.lq-search-turn h3 { margin:0 0 1rem; font-size:1.125rem; overflow-wrap:anywhere; }
+.sl-markdown-content .lq-search-matches { list-style:none; margin:0; padding:0; }
+.lq-search-matches li { margin:0; padding:1rem 0; border-top:1px solid var(--sl-color-hairline); }
+.lq-match-title { font-weight:650; }
+.lq-search-matches p { font-size:1rem; line-height:1.6; }
+.lq-match-links { display:flex; align-items:center; flex-wrap:wrap; gap:0.75rem 1rem; font-size:0.9rem; }
+.lq-guide-reader { position:fixed; inset:1rem; margin:auto; width:min(48rem,calc(100% - 2rem)); height:calc(100dvh - 2rem); max-width:none; max-height:none; padding:0; border:1px solid var(--sl-color-hairline); border-radius:1rem; color:var(--sl-color-text); background:var(--sl-color-bg); overflow:hidden; z-index:calc(var(--sl-z-index-navbar) + 1); --sl-color-text-accent:var(--lq-page-accent); --sl-color-bg-accent:var(--lq-page-accent); }
+.lq-guide-reader[open] { display:flex; flex-direction:column; }
+.lq-guide-reader::backdrop { background:rgba(0,0,0,0.45); }
+.lq-reader-toolbar { position:static; display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0.75rem 1.25rem; min-height:4.5rem; border-bottom:1px solid var(--sl-color-hairline); flex-shrink:0; }
+.lq-reader-toolbar h2 { margin:0; padding:0; border:0; font-size:1.25rem; line-height:1.4; }
+.lq-reader-toolbar button { width:44px; height:44px; flex-shrink:0; border:1px solid var(--sl-color-hairline); border-radius:50%; color:var(--sl-color-text); background:var(--sl-color-bg); font-size:1.75rem; cursor:pointer; }
+.lq-reader-links { display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; padding:0.75rem 1.25rem; font-size:1rem; border-bottom:1px solid var(--sl-color-hairline); flex-shrink:0; }
+.lq-reader-scroll { flex:1; min-height:0; overflow:auto; overflow-anchor:none; padding:1.25rem; overscroll-behavior:contain; outline:none; }
+[data-lq-reader-status]:empty { display:none; }
+[data-lq-reader-meta] { margin-bottom:1rem; }
+[data-lq-reader-sources] { margin-top:2rem; }
+.lq-guide-reader .sl-markdown-content { font-size:1.125rem; overflow-wrap:anywhere; }
+.lq-guide-reader .lq-all { display:block; }
+.lq-guide-reader .lq-all-rail { position:static; display:flex; flex-direction:row; flex-wrap:wrap; border:0; }
+.lq-guide-reader .lq-all-group ul, .lq-guide-reader .lq-pathway-links { grid-template-columns:1fr; }
+.lq-guide-reader [id] { scroll-margin-top:1rem; }
+[data-lq-reader-filter] { display:block; width:100%; font:inherit; padding:0.6rem 0.75rem; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; background:var(--sl-color-bg); color:var(--sl-color-text); margin:0.5rem 0 1rem; }
+[data-lq-reader-filter][hidden] { display:none; }
+.lq-reader-copy { display:block; margin:1rem 0 0.5rem auto; padding:0.5rem 0.75rem; min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; font:inherit; font-size:0.9rem; background:var(--sl-color-bg); color:var(--sl-color-text); }
+.lq-guide-reader :is(button,a,input):focus-visible { outline:3px solid var(--sl-color-text-accent); outline-offset:3px; }
+@media (min-width:78rem) {
+  .lq-reader-wide { --lq-reader-offset:min(44vw,40rem); }
+  .lq-reader-wide .main-frame { margin-inline-end:var(--lq-reader-offset); }
+  .lq-reader-wide .page > header.header { width:calc(100% - var(--lq-reader-offset)); }
+  .lq-guide-reader { inset:0 0 0 auto; margin:0; width:min(44vw,40rem); height:100dvh; border:0; border-inline-start:1px solid var(--sl-color-hairline); border-radius:0; }
+}
+@media (max-width:40rem) { .lq-guide-reader { inset:0.5rem; width:calc(100% - 1rem); height:calc(100dvh - 1rem); } .lq-reader-toolbar,.lq-reader-links,.lq-reader-scroll { padding-inline:1rem; } }

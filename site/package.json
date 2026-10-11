@@ -10,8 +10,8 @@
   },
   "scripts": {
     "sync": "node scripts/sync-content.mjs",
-    "dev": "npm run sync && astro dev",
-    "build": "npm run sync && astro build && node scripts/postbuild-machine-surface.mjs",
+    "dev": "npm run sync && npm run diagrams && astro dev",
+    "build": "npm run sync && npm run diagrams && astro build && node scripts/postbuild-machine-surface.mjs && node scripts/gen-reader-assets.mjs",
     "preview": "astro preview",
     "test": "node --test test/*.test.mjs",
     "check:links": "node scripts/check-internal-links.mjs",
@@ -23,7 +23,8 @@
     "check:docs-links": "python3 ../docs/audits/check_doc_links.py $(find ../docs/site -name README.md -prune -o \\( -name '*.md' -o -name '*.mdx' \\) -print) $(node scripts/list-manifest-sources.mjs)",
     "check:single-source": "node scripts/check-single-source.mjs",
     "check": "npm test && npm run check:single-source && npm run build && npm run check:links && npm run check:orphans && npm run check:tables && npm run check:contrast && npm run check:a11y && npm run check:docs-links",
-    "astro": "astro"
+    "astro": "astro",
+    "diagrams": "node scripts/render-diagrams.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.0",
@@ -31,7 +32,9 @@
     "sharp": "0.35.4"
   },
   "devDependencies": {
+    "cheerio": "1.0.0",
     "gray-matter": "4.0.3",
+    "mermaid": "11.15.0",
     "pa11y-ci": "4.1.1",
     "yaml": "2.9.1"
   }

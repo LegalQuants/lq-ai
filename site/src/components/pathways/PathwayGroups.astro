@@ -84,7 +84,7 @@ const base = import.meta.env.BASE_URL;
 
   /* Out-ranks theme.css's ruled prose h2 (0,3,0): Astro's scoping adds no
      specificity, so the selector has to carry it. */
-  .sl-markdown-content .lq-pathway .lq-pathway-group > summary > h2 {
+  :global(.sl-markdown-content) .lq-pathway .lq-pathway-group > summary > h2 {
     margin: 0;
     padding: 0;
     border: 0;

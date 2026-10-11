@@ -20,7 +20,7 @@ describe('pathways map', () => {
   it('keeps her four pathways, in her order', () => {
     assert.deepEqual(
       PATHWAYS.map((p) => p.title),
-      ['What is LQAI', 'How to install', 'Security & privacy', 'Contribute']
+      ['Getting started', 'How to install', 'Security & privacy', 'Contribute']
     );
   });
 

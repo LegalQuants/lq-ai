@@ -10,6 +10,26 @@ A browser, the Word add-in, or a Slack/Teams bridge sends requests to the API, w
 
 ---
 
+## How LQ.AI answers a question
+
+When you ask a question, the app sends it to the application API. If you attach a knowledge base, the system retrieves relevant passages before asking a model. The model request goes through the Inference Gateway, which applies the configured routing and privacy rules.
+
+```mermaid
+flowchart TB
+    accTitle: How a question reaches a model
+    accDescr: The app sends the question and chosen context to the application API. The API assembles the request using document storage and retrieval, then sends model requests through the Inference Gateway. The configured route selects a local or cloud model; these are alternative routes. The answer returns through the gateway and API to the app.
+    app["LQ.AI app"] -->|Question and context| api["Application API"]
+    records["`Documents
+and records`"] <-->|Read and store| api
+    api -->|Assembled request| gateway["Inference Gateway"]
+    gateway -->|Local route| local["Local model"]
+    gateway -->|Cloud route| cloud["Cloud model"]
+```
+
+Document storage and retrieval support this flow within the deployment. The document-search model can have a different provider from the chat model: choosing local chat does not by itself make document search local. Other enabled connections also need their own review. See [what information leaves the deployment](trust/what-leaves-my-deployment.md) for the full accounting.
+
+This is a simplified request flow. The [full system diagram](#system-diagram) includes storage, workers, optional integrations, and capability limits.
+
 ## System diagram
 
 ```mermaid

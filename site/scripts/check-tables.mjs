@@ -94,7 +94,10 @@ function routesFromLlmsTxt() {
     process.exit(1);
   }
   const links = text.match(/\]\((https?:[^)]+)\)/g) ?? [];
-  const pathnames = links.map((m) => new URL(m.slice(2, -1)).pathname);
+  // llms.txt also links text twins for agents. The visual gate visits HTML
+  // routes, not the browser's plain-text display of those twins.
+  const pathnames = links.map((m) => new URL(m.slice(2, -1)).pathname)
+    .filter((pathname) => pathname.endsWith('/'));
   return [...new Set(pathnames)].sort();
 }
 

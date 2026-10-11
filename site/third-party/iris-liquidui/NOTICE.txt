@@ -1,0 +1,15 @@
+LiquidUI design and interaction attribution
+
+The pathways shell, guided-conversation presentation, search composer,
+adjacent/modal reader, preserved reading state, and playback interaction are
+adapted from Iris's LiquidUI standalone edition of 4 October 2026, supplied
+in lq-ai-liquidui-chat-standalone.zip.
+
+The contributed application is licensed under Apache License 2.0; its license
+is retained in this directory. The original captured documentation corpus,
+copied pathway map, search ranking, and fixed answer strings are not shipped
+by this integration. Current repository documents, the existing pathway map,
+Pagefind, and the shared Astro rendering pipeline supply those functions.
+
+The site retains its existing Source Sans 3 font and its accompanying SIL Open
+Font License under site/src/assets/fonts/. No additional font is imported.

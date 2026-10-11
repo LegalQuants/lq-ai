@@ -216,7 +216,11 @@ site/node_modules/
 site/dist/
 site/.astro/
 site/src/content/docs/
+site/src/content/explore/
+site/src/generated/
 site/public/_repo/
+site/public/_diagrams/
+site/.diagram-cache/
 site/.sync-manifest.json
 # Design-QA screenshots (site/scripts/screenshot.mjs). A local look, not an artifact.
 site/.screens/

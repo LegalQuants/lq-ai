@@ -29,7 +29,7 @@ const base = import.meta.env.BASE_URL;
               <h3>{group.title}</h3>
               <ul>
                 {group.pages.map((page) => (
-                  <li>
+                  <li data-lq-filter-entry>
                     <a href={withBase(base, page.route)}>{page.title}</a>
                   </li>
                 ))}
@@ -92,7 +92,7 @@ const base = import.meta.env.BASE_URL;
   }
 
   /* Out-ranks theme.css's ruled prose h2 (0,3,0); see PathwayGroups. */
-  .sl-markdown-content .lq-all .lq-all-pathway > h2 {
+  :global(.sl-markdown-content) .lq-all .lq-all-pathway > h2 {
     margin: 0 0 0.9rem;
     padding: 0;
     border: 0;

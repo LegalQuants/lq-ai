@@ -152,6 +152,20 @@ export function firstH1(text) {
  * is removed rather than shown as markup an agent would have to parse.
  */
 export function reduceMdx(text) {
+  // Component examples inside fenced code are documentation, not live MDX.
+  let chunk = '';
+  const out = [];
+  for (const entry of scanLines(text)) {
+    if (entry.inFence) {
+      if (chunk) { out.push(reduceMdxChunk(chunk)); chunk = ''; }
+      out.push(entry.line);
+    } else chunk += `${entry.line}\n`;
+  }
+  if (chunk) out.push(reduceMdxChunk(chunk));
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function reduceMdxChunk(text) {
   let out = String(text);
 
   // `import { CardGrid } from '@astrojs/starlight/components';`
@@ -178,10 +192,78 @@ export function reduceMdx(text) {
     return description ? `- ${link} — ${description}` : `- ${link}`;
   });
 
-  // Remaining component tags carry no text of their own.
+  // Alternatives must retain their labels in text; removing just the tags
+  // turns mutually exclusive procedures into an ambiguous sequence.
+  out = out.replace(/<TabItem\b([^>]*)>/g, (_match, attrs) => {
+    const label = /\blabel\s*=\s*(?:"([^"]+)"|'([^']+)')/.exec(attrs);
+    if (!label) throw new Error('TabItem needs a literal label for Markdown export');
+    return `\n\n### ${label[1] ?? label[2]}\n\n`;
+  });
+
+  // Remaining supported component tags carry no text of their own.
   out = out.replace(/<\/?(?:CardGrid|Card|Tabs|TabItem|Aside|Steps|Badge|Icon)\b[^>]*>/g, '');
+  const unsupported = /<\/?([A-Z][\w.]*)\b/.exec(out);
+  if (unsupported) throw new Error(`Unsupported Markdown export component: ${unsupported[1]}`);
 
   return out.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Select one uniquely named heading and its subtree, ignoring fenced examples. */
+export function selectSection(text, heading) {
+  const lines = scanLines(text);
+  const matches = lines.flatMap((entry, index) =>
+    isHeading(entry) && entry.line.trim() === heading ? [index] : []
+  );
+  if (matches.length !== 1) {
+    throw new Error(`heading ${JSON.stringify(heading)} has ${matches.length} matches; expected exactly one`);
+  }
+  const start = matches[0];
+  const level = /^(#+)/.exec(lines[start].line.trim())[1].length;
+  let end = start + 1;
+  while (end < lines.length) {
+    if (isHeading(lines[end]) && /^(#+)/.exec(lines[end].line.trim())[1].length <= level) break;
+    end++;
+  }
+  return {
+    label: heading.replace(/^#+\s+/, ''),
+    markdown: lines.slice(start + 1, end).map((entry) => entry.line).join('\n').trim(),
+  };
+}
+
+const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** Native human disclosures; machine text keeps every heading and explanation. */
+export function optionalDetails(text, { html = false } = {}) {
+  const output = [];
+  let block = null;
+  let start;
+  const flush = () => {
+    const content = block.map((entry) => entry.line).join('\n').trim();
+    const heading = block.find((entry) => isHeading(entry));
+    if (!heading) throw new Error(`optional region at line ${start} needs a heading`);
+    if (block.some((entry) => !entry.inFence &&
+      /\[!(?:CAUTION|WARNING|IMPORTANT)\]|:::\s*(?:danger|caution)|:::note\[Professional duty\]|\*\*Professional duty\*\*/i.test(entry.line))) {
+      throw new Error(`critical caution in optional region at line ${start}`);
+    }
+    if (html) {
+      const label = escapeHtml(heading.line.replace(/^\s*#+\s+/, ''));
+      output.push(`<details class="lq-details">\n<summary>Read more: ${label}</summary>\n\n${content}\n\n</details>`);
+    } else output.push(content);
+    block = null;
+  };
+  scanLines(text).forEach((entry, index) => {
+    if (!entry.inFence && entry.line.trim() === '<!-- docsite:optional -->') {
+      if (block) throw new Error(`nested optional region at line ${index + 1}`);
+      block = []; start = index + 1;
+    } else if (!entry.inFence && entry.line.trim() === '<!-- /docsite:optional -->') {
+      if (!block) throw new Error(`unexpected optional close at line ${index + 1}`);
+      flush();
+    } else if (block) block.push(entry);
+    else output.push(entry.line);
+  });
+  if (block) throw new Error(`unclosed optional region at line ${start}`);
+  return output.join('\n');
 }
 
 /**

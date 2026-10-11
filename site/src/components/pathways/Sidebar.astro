@@ -1,0 +1,24 @@
+---
+/** Iris's persistent pathways, using the repository's single navigation map. */
+import { NAV_ROUTES, PATHWAYS, pathwayOf } from '../../pathways.mjs';
+import { withBase } from '../../namespaces.mjs';
+const base = import.meta.env.BASE_URL;
+const route = String(Astro.locals.starlightRoute.id ?? '').replace(/\/+$/, '');
+const current = pathwayOf(route);
+---
+<div class="lq-pathway-sidebar" data-lq-pathways data-base={base}>
+  <a class="lq-side-link" data-route="" data-tone="a" href={base} aria-current={route === '' ? 'page' : undefined}>Explore</a>
+  {PATHWAYS.map((p) => <a class="lq-side-link" data-pathway={p.id} data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))} aria-current={route === NAV_ROUTES.pathway(p.id) ? 'page' : current?.id === p.id ? 'true' : undefined}>{p.title}</a>)}
+  <a class="lq-side-link lq-side-all" data-route="all" href={withBase(base, NAV_ROUTES.all)} aria-current={route === 'all' ? 'page' : undefined}>All documentation</a>
+  <a class="lq-side-agents" href={`${base}llms.txt`}>Docs for agents</a>
+</div>
+<style>
+  .lq-pathway-sidebar { display:flex; flex-direction:column; gap:0.5rem; min-height:100%; padding-bottom:1rem; }
+  .lq-side-link { display:block; padding:1rem; border-radius:0.5rem; font-size:1.125rem; line-height:1.4; color:var(--sl-color-text); text-decoration:none; }
+  .lq-side-link:hover { background:var(--lq-color-hover); }
+  .lq-pathway-sidebar a.lq-side-link[aria-current] { font-weight:650; background:var(--lq-tone-a); color:var(--sl-color-text-invert); border-inline-start:0; }
+  .lq-pathway-sidebar a.lq-side-link[data-tone='b'][aria-current] { background:var(--lq-tone-b); }
+  .lq-pathway-sidebar a.lq-side-link[data-tone='c'][aria-current] { background:var(--lq-tone-c); }
+  .lq-side-all { margin-top:1rem; }
+  .lq-side-agents { margin-top:auto; padding:1rem; font-size:0.95rem; color:var(--sl-color-text-accent); text-underline-offset:0.2em; }
+</style>

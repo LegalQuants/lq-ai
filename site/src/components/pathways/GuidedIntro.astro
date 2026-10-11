@@ -1,0 +1,54 @@
+---
+import { getCollection, render } from 'astro:content';
+import { withBase } from '../../namespaces.mjs';
+import Stamp from '../Stamp.astro';
+import StatusBadge from '../StatusBadge.astro';
+
+const base = import.meta.env.BASE_URL;
+const questions = await Promise.all((await getCollection('explore'))
+  .sort((a, b) => a.data.order - b.data.order)
+  .map(async (entry) => ({ entry, ...(await render(entry)) })));
+---
+
+<section class="lq-introduction" aria-label="A short introduction to LQ.AI">
+  <div class="lq-intro-controls">
+    <button type="button" data-lq-tour-play aria-pressed="false" hidden>Play introduction</button>
+    <span data-lq-tour-status role="status" aria-live="polite"></span>
+  </div>
+  {questions.map(({ entry, Content }) => (
+    <section class="lq-answer" data-lq-tour-step aria-labelledby={`question-${entry.id}`}>
+      <h2 id={`question-${entry.id}`}>{entry.data.title}</h2>
+      <div class="lq-answer-reply"><span class="lq-docs-avatar" aria-hidden="true">LQ</span><div class="lq-answer-body"><Content /></div></div>
+      <div class="lq-answer-links">
+        <a href={withBase(base, entry.data.route)}>Read the full guide</a>
+        <a href={`${base}${entry.data.route}.md`}>Markdown</a>
+        <StatusBadge status={entry.data.status} />
+      </div>
+      <details class="lq-answer-sources">
+        <summary>Sources for this explanation</summary>
+        <Stamp checkedAgainst={entry.data.checkedAgainst} sourceFiles={entry.data.sources} />
+      </details>
+    </section>
+  ))}
+</section>
+
+<style>
+  .lq-introduction { max-width: 54rem; margin: 0 0 2.5rem; }
+  .lq-intro-controls { display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; font-size:0.95rem; margin-bottom:1.5rem; }
+  .lq-intro-controls button { min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:1.5rem; color:var(--sl-color-text); background:var(--sl-color-bg); padding:0.5rem 1rem; font:inherit; cursor:pointer; }
+  .lq-intro-controls button[hidden] { display:none; }
+  .lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+  :global(.sl-markdown-content) .lq-introduction .lq-answer > h2 { margin:0 0 1rem auto; padding:0.85rem 1.1rem; width:fit-content; max-width:100%; font-size:1.25rem; line-height:1.4; border:0; border-radius:1rem; background:var(--lq-card-c); color:var(--lq-card-ink); }
+  .lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.75rem; }
+  .lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:50%; font-size:0.75rem; font-weight:650; background:var(--lq-tone-a); color:var(--sl-color-text-invert); }
+  .lq-answer-body { max-width:54rem; min-width:0; border-radius:1rem; padding:1rem 1.25rem; background:var(--lq-color-hover); }
+  .lq-answer-body :global(p) { font-size: 1.125rem; line-height: 1.65; }
+  .lq-answer-body :global(p:not(.lq-diagram-description)) { max-width: 44rem; }
+  .lq-answer-links { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
+  .lq-answer-links a { font-size: 1rem; text-underline-offset: 0.2em; }
+  .lq-answer-sources { margin-top: 1rem; font-size: 0.875rem; }
+  .lq-answer-sources summary { cursor: pointer; width: fit-content; padding: 0.25rem 0; }
+  .lq-answer-sources[open] summary { margin-bottom: 0.75rem; }
+  .lq-answer[data-tour-active] { outline:2px solid var(--sl-color-text-accent); outline-offset:0.5rem; border-radius:0.75rem; }
+  @media (max-width:40rem) { .lq-answer-reply { grid-template-columns:1fr; } .lq-docs-avatar { display:none; } .lq-answer-body { padding:0.75rem; } }
+</style>

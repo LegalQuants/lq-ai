@@ -16,9 +16,10 @@ import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 import { getCollection } from 'astro:content';
 
 import Landing from '../components/pathways/Landing.astro';
+import CardsLanding from '../components/pathways/CardsLanding.astro';
 import PathwayGroups from '../components/pathways/PathwayGroups.astro';
 import AllDocs from '../components/pathways/AllDocs.astro';
-import { SITE_LAYOUT } from '../../scripts/lib/paths.mjs';
+import { SITE_EXPERIENCE, SITE_LAYOUT } from '../../scripts/lib/paths.mjs';
 import { NAV_ROUTES, PATHWAYS, expandPathways } from '../pathways.mjs';
 
 export function getStaticPaths() {
@@ -52,7 +53,7 @@ const pathway = pathways.find((p) => p.id === pathwayId);
 const frontmatter =
   view === 'landing'
     ? {
-        title: 'Getting started',
+        title: SITE_EXPERIENCE === 'cards' ? 'Getting started' : 'Explore LQ.AI',
         description:
           'LQ.AI documentation: what LQ.AI is, how to install it, security and privacy, and how to contribute.',
       }
@@ -65,7 +66,7 @@ const frontmatter =
   frontmatter={{ ...frontmatter, template: 'splash', pagefind: false, editUrl: false }}
   headings={[]}
 >
-  {view === 'landing' && <Landing pathways={pathways} />}
+  {view === 'landing' && (SITE_EXPERIENCE === 'cards' ? <CardsLanding pathways={pathways} /> : <Landing pathways={pathways} />)}
   {view === 'pathway' && <PathwayGroups pathway={pathway} />}
   {view === 'all' && <AllDocs pathways={pathways} />}
 </StarlightPage>

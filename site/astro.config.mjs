@@ -18,12 +18,12 @@ import { rehypeLqTablesSatteri } from './scripts/lib/rehype-lq-tables.mjs';
  * Astro and the build scripts cannot drift apart: the sync writes links with
  * the same base Astro serves them under.
  */
-import { SITE_BASE, SITE_COMPARE, SITE_LAYOUT, SITE_URL } from './scripts/lib/paths.mjs';
+import { SITE_BASE, SITE_COMPARE, SITE_EXPERIENCE, SITE_LAYOUT, SITE_URL } from './scripts/lib/paths.mjs';
 
 /**
  * `SITE_LAYOUT=pathways` builds Iris's four-pathway UI from the same pages:
  * its own header and page title, a second stylesheet after theme.css, and
- * route middleware that turns the sidebar off (src/routeData.mjs). The
+ * route middleware selecting B's tabs or C's sidebar (src/routeData.mjs). The
  * classic layout is untouched unless a compare banner is asked for.
  */
 const PATHWAYS = SITE_LAYOUT === 'pathways';
@@ -115,6 +115,7 @@ export default defineConfig({
       // "Built with Starlight" is off; the footer carries the project's own line.
       credits: false,
       components: {
+        ...(PATHWAYS && SITE_EXPERIENCE === 'explore' ? { Sidebar: './src/components/pathways/Sidebar.astro' } : {}),
         Header: PATHWAYS
           ? './src/components/pathways/Header.astro'
           : './src/components/Header.astro',
@@ -128,7 +129,9 @@ export default defineConfig({
       locales: {
         root: { label: 'English', lang: 'en' },
       },
-      sidebar,
+      sidebar: existsSync(contentDir + 'overview.md')
+        ? [{ label: 'What is LQ.AI?', link: '/overview/' }, ...sidebar]
+        : sidebar,
     }),
   ],
 });

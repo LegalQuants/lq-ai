@@ -51,13 +51,16 @@ import {
   PUBLIC_REPO_DIR,
   REPO_ROOT,
   SITE_BASE,
+  SITE_EXPERIENCE,
   SITE_LAYOUT,
   SITE_URL,
   SKIP_PAGES,
   repoPath,
   withBase,
 } from './lib/paths.mjs';
-import { OVERVIEW_ROUTE } from '../src/pathways.mjs';
+import { OVERVIEW_ROUTE, PATHWAYS, expandPathways } from '../src/pathways.mjs';
+import { resolveViews } from './lib/views.mjs';
+import { addProductScreenshots, productScreenshots, renderScreenshots, SCREENSHOTS_CONFIG, validateScreenshots } from './lib/product-screenshots.mjs';
 import { head, stampFor } from './lib/git.mjs';
 import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
@@ -70,8 +73,9 @@ import {
   serializePage,
   sliceBetweenHeadings,
   stripFrontmatter,
+  optionalDetails,
 } from './lib/markdown.mjs';
-import { loadRouteManifests, KIND_LABELS, ROUTES_DIRNAME } from './lib/routes.mjs';
+import { loadRouteManifests, KIND_LABELS } from './lib/routes.mjs';
 import { NAMESPACES } from '../src/namespaces.mjs';
 
 import * as adrIndex from './gen-adr-index.mjs';
@@ -193,10 +197,19 @@ function generatorContext() {
 
 async function main() {
   const startedAt = Date.now();
+  validateScreenshots(productScreenshots);
+  const entries = loadRouteManifests({ report });
+  const explicitOverview = entries.some((entry) => entry.route === OVERVIEW_ROUTE);
+  const generatedDir = path.join(OUT_ROOT, 'src', 'generated');
+  const exploreDir = path.join(OUT_ROOT, 'src', 'content', 'explore');
 
   await rm(CONTENT_DIR, { recursive: true, force: true });
+  await rm(generatedDir, { recursive: true, force: true });
+  await rm(exploreDir, { recursive: true, force: true });
   await rm(PUBLIC_REPO_DIR, { recursive: true, force: true });
   await mkdir(CONTENT_DIR, { recursive: true });
+  await mkdir(generatedDir, { recursive: true });
+  await mkdir(exploreDir, { recursive: true });
 
   const skipped = [];
   const all = await pageFiles();
@@ -211,6 +224,9 @@ async function main() {
   // 1. Frontmatter first — the route map has to exist before any link maps.
   const authored = [];
   for (const rel of authoredPaths) {
+    // The canonical overview is a mapped page. The classic root hub is not
+    // another copy of it in the pathways layout.
+    if (explicitOverview && SITE_LAYOUT === 'pathways' && routeFor(rel) === '') continue;
     const raw = await readFile(path.join(DOCS_SITE_DIR, rel), 'utf8');
     let parsed;
     try {
@@ -227,7 +243,7 @@ async function main() {
     // The pathways layout serves its own landing at `/`, so the entry page
     // moves to `overview/`. Only where it is written and served changes:
     // `relPath` stays the source path, so links to it still resolve.
-    const moved = SITE_LAYOUT === 'pathways' && routeFor(rel) === '';
+    const moved = !explicitOverview && SITE_LAYOUT === 'pathways' && routeFor(rel) === '';
     authored.push({
       kind: 'authored',
       relPath: rel,
@@ -300,8 +316,7 @@ async function main() {
   // duplicate route, a source mapped twice; what is left needs the rest of
   // the route table, which is what the loop below checks as it builds each
   // page.
-  const routesDir = path.join(DOCS_SITE_DIR, ROUTES_DIRNAME);
-  const routeEntries = loadRouteManifests({ routesDir, report });
+  const routeEntries = entries;
   const knownRoutes = new Set([...authored, ...generated].map((page) => page.route));
 
   const mapped = [];
@@ -462,6 +477,7 @@ async function main() {
   });
 
   const manifest = [];
+  const resolvedPages = [];
   const missingIntros = [];
 
   for (const page of pages) {
@@ -607,6 +623,18 @@ async function main() {
       }
     }
 
+    let machineBody;
+    let canonicalBody;
+    try {
+      canonicalBody = optionalDetails(body);
+      const captureOptions = { route: page.route, sources: [page.sourcePath, ...resolvedSources].filter(Boolean) };
+      machineBody = addProductScreenshots(canonicalBody, captureOptions);
+      body = addProductScreenshots(optionalDetails(body, { html: true }), { ...captureOptions, html: true });
+    } catch (error) {
+      report({ level: 'error', ...where, message: error.message });
+      continue;
+    }
+
     // 4g. Frontmatter the build owns.
     const data = { ...page.data };
     data.checkedAgainst = { sha: stamp.sha, date: stamp.date };
@@ -615,6 +643,9 @@ async function main() {
     const target = path.join(CONTENT_DIR, page.outPath ?? page.relPath);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, serializePage(data, body), 'utf8');
+    const markdownFile = path.join(generatedDir, 'markdown', page.route ? `${page.route}.md` : 'index.md');
+    await mkdir(path.dirname(markdownFile), { recursive: true });
+    await writeFile(markdownFile, machineBody, 'utf8');
 
     manifest.push({
       route: page.route,
@@ -629,11 +660,69 @@ async function main() {
       audience: data.audience ?? [],
       page: page.sourcePath ?? null,
       contentFile: path.relative(OUT_ROOT, target).split(path.sep).join('/'),
+      markdownFile: path.relative(OUT_ROOT, markdownFile).split(path.sep).join('/'),
+      contentKind: data.kind ?? 'explanation',
       isMdx: page.relPath.endsWith('.mdx'),
       sha: stamp.sha,
       date: stamp.date,
       sources: stamp.sourceFiles.filter(Boolean),
     });
+    // Source selectors still read the canonical prose. Site-owned captures are
+    // added independently to each selected view and its text export.
+    resolvedPages.push({ ...manifest.at(-1), markdown: canonicalBody });
+  }
+
+  let views = { schemaVersion: 1, questions: [], tasks: [] };
+  try {
+    views = resolveViews({ dataDir: path.join(DOCS_SITE_DIR, '_data'), pages: resolvedPages });
+  } catch (error) {
+    report({ level: 'error', page: 'docs/site/_data', line: 1, message: error.message });
+  }
+  await writeFile(path.join(generatedDir, 'views.json'), `${JSON.stringify(views, null, 2)}\n`);
+  const cardsIntro = (views.questions.find((question) => question.id === 'what-is-lq-ai')?.markdown ?? '').split(/\n\s*\n/)[0];
+  const overviewCapture = productScreenshots.placements.find((placement) => placement.route === 'overview');
+  await writeFile(path.join(generatedDir, 'cards-landing.json'), `${JSON.stringify({
+    intro: cardsIntro, gallery: renderScreenshots(overviewCapture, { html: true }),
+  }, null, 2)}\n`);
+  for (const [order, question] of views.questions.entries()) {
+    await writeFile(path.join(exploreDir, `${question.id}.md`), serializePage({
+      title: question.label, order, route: question.route, url: question.url,
+      status: question.status, sources: question.sources,
+      checkedAgainst: { sha: question.sha, date: question.date },
+    }, addProductScreenshots(question.markdown, { route: question.route, sources: question.sources, heading: question.heading, html: true })));
+  }
+
+  // Navigation has a text surface too. These files are not in the docs
+  // collection: [...lqnav].astro owns their HTML routes.
+  const navigation = [];
+  if (SITE_LAYOUT === 'pathways') {
+    const groups = expandPathways(resolvedPages.map((page) => page.route));
+    const byRoute = new Map(resolvedPages.map((page) => [page.route, page]));
+    const links = (routes) => routes.map((route) => `- [${byRoute.get(route)?.title ?? route}](${withBase(route)})`).join('\n');
+    const groupText = (pathway) => pathway.groups.map((group) => `## ${group.title}\n\n${links(group.pages)}`).join('\n\n');
+    const navSources = [...new Set(views.questions.flatMap((question) => question.sources))];
+    const pathwayLinks = PATHWAYS.map((p) => `- [${p.title}](${withBase(`pathways/${p.id}`)})`).join('\n');
+    if (SITE_EXPERIENCE === 'cards' && !cardsIntro) throw new Error('cards landing needs the canonical what-is-lq-ai introduction');
+    const cardsMarkdown = SITE_EXPERIENCE === 'cards' ? cardsIntro + '\n\n## Find a guide\n\n' + pathwayLinks + '\n\n' +
+      renderScreenshots(overviewCapture) : undefined;
+    const outputs = [
+      { route: '', title: SITE_EXPERIENCE === 'cards' ? 'Getting started' : 'Explore LQ.AI', markdown: SITE_EXPERIENCE === 'cards' ? cardsMarkdown : views.questions.map((question) =>
+        `## ${question.label}\n\n${addProductScreenshots(question.markdown, { route: question.route, sources: question.sources, heading: question.heading })}\n\n[Read the full guide](${withBase(question.route)})`
+      ).join('\n\n') + '\n\n## Find a guide\n\n' + pathwayLinks },
+      { route: 'all', title: 'All documentation', markdown: groups.map((p) => `# ${p.title}\n\n${groupText(p)}`).join('\n\n') },
+      ...groups.map((p) => ({ route: `pathways/${p.id}`, title: p.title, markdown: groupText(p) })),
+    ];
+    for (const output of outputs) {
+      const file = path.join(generatedDir, 'navigation', output.route ? `${output.route}.md` : 'index.md');
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, output.markdown, 'utf8');
+      const navigationSources = ['site/src/pathways.mjs', ...(output.route === '' ? ['docs/site/_data/explore.yaml', SCREENSHOTS_CONFIG, ...navSources] : [])];
+      const stamp = stampFor('', navigationSources);
+      navigation.push({ ...output, description: 'Source-backed introduction and direct documentation links.',
+        status: 'draft', kind: 'navigation', contentKind: 'navigation', audience: ['agent', 'evaluator', 'operator'],
+        namespace: '', sources: stamp.sourceFiles, sha: stamp.sha, date: stamp.date,
+        contentFile: path.relative(OUT_ROOT, file).split(path.sep).join('/'), isMdx: false });
+    }
   }
 
   // 5. Images the links asked for.
@@ -655,6 +744,8 @@ async function main() {
         head: head(),
         namespaces: NAMESPACES,
         pages: manifest,
+        navigation,
+        views,
       },
       null,
       2

@@ -1,37 +1,22 @@
 ---
 /**
- * Header for the pathways layout (Iris's UI review, lq-docs-v2).
- *
- * One grid: the LQ.AI wordmark, search, and three icon buttons on the first
- * row; the four pathway tabs on the second. On the landing page the tabs are
- * left out — the landing's cards are the same four links, larger.
- *
- *   - All documentation — a link to the sitemap page (`/all/`).
- *   - Dark mode — a toggle button. It writes Starlight's own theme key, so the
- *     choice survives a reload exactly as the classic theme select's does.
- *   - Reduced motion — a toggle button that overrides the system setting and
- *     remembers the choice (`lq-motion`; applied before paint by routeData).
- *
- * Each button has a fixed accessible name and states its setting with
- * `aria-pressed`; the tooltip repeats the name for sighted mouse and keyboard
- * users and is hidden from assistive technology so the name is not read twice.
- * Buttons are 44×44 px (WCAG 2.5.5).
- *
- * Search stays Starlight's Pagefind: a static index on this origin, so a query
- * never leaves the site.
+ * Shared pathways header. Explore's search link focuses the persistent composer;
+ * full guides retain Starlight's Pagefind modal. C uses sidebar navigation,
+ * while B retains the top pathway tabs. Preferences use the existing site keys.
  */
 import Search from 'virtual:starlight/components/Search';
 import config from 'virtual:starlight/user-config';
 
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES, PATHWAYS, pathwayOf } from '../../pathways.mjs';
+import { SITE_EXPERIENCE } from '../../../scripts/lib/paths.mjs';
 
 const { id, siteTitleHref } = Astro.locals.starlightRoute;
 const base = import.meta.env.BASE_URL;
 const route = String(id ?? '').replace(/\/+$/, '');
-const current = pathwayOf(route);
 const isLanding = route === NAV_ROUTES.landing;
 const isAll = route === NAV_ROUTES.all;
+const current = pathwayOf(route);
 
 const shouldRenderSearch =
   config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
@@ -40,7 +25,7 @@ const shouldRenderSearch =
 <div class="lq-pw-header">
   <a class="lq-pw-brand" href={siteTitleHref} translate="no">LQ.AI</a>
 
-  <div class="lq-pw-search print:hidden">{shouldRenderSearch && <Search />}</div>
+  <div class="lq-pw-search print:hidden">{isLanding && SITE_EXPERIENCE === 'explore' ? <a class="lq-explore-search" href="#lq-docs-question">Search documentation</a> : shouldRenderSearch && <Search />}</div>
 
   <div class="lq-pw-actions print:hidden">
     <a
@@ -70,31 +55,16 @@ const shouldRenderSearch =
       <span class="lq-pw-tip" aria-hidden="true">Reduced motion</span>
     </button>
   </div>
-
-  {
-    !isLanding && (
-      <nav class="lq-pw-tabs print:hidden" aria-label="Documentation pathways">
-        <ul>
-          {PATHWAYS.map((p) => {
-            const href = withBase(base, NAV_ROUTES.pathway(p.id));
-            const onHub = route === NAV_ROUTES.pathway(p.id);
-            const inside = current?.id === p.id;
-            return (
-              <li>
-                <a
-                  href={href}
-                  data-tone={p.tone}
-                  aria-current={onHub ? 'page' : inside ? 'true' : undefined}
-                >
-                  {p.title}
-                </a>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-    )
-  }
+  {!isLanding && SITE_EXPERIENCE === 'cards' && (
+    <nav class="lq-pw-tabs print:hidden" aria-label="Documentation pathways">
+      <ul>{PATHWAYS.map((p) => (
+        <li><a href={withBase(base, NAV_ROUTES.pathway(p.id))} data-tone={p.tone}
+          aria-current={route === NAV_ROUTES.pathway(p.id) ? 'page' : current?.id === p.id ? 'true' : undefined}>
+          {p.title}
+        </a></li>
+      ))}</ul>
+    </nav>
+  )}
 </div>
 
 <script>
@@ -161,6 +131,9 @@ const shouldRenderSearch =
     grid-area: search;
     min-width: 0;
   }
+
+  .lq-explore-search { display:block; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; padding:0.65rem 1rem; color:var(--sl-color-text); text-decoration:none; font-size:1rem; }
+  .lq-explore-search:hover { background:var(--lq-color-hover); }
 
   .lq-pw-actions {
     grid-area: actions;

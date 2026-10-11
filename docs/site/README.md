@@ -200,6 +200,59 @@ Never write a root-absolute link (`/trust/…`), a hard-coded base
 configuration. A plain repository URL that happens to contain
 `github.com/LegalQuants/lq-ai/…` is not a hard-coded base and is fine.
 
+## Introductory answers and task guides
+
+`_data/explore.yaml` selects complete, uniquely named Markdown sections from
+mapped guide routes. It contains question IDs and source selectors; answer text
+stays in the owning document. The build generates the `explore` content
+collection, and Astro renders it with the same Markdown processor as the guides.
+Links to sections in an answer still point to that answer's full guide.
+
+`_data/journeys.yaml` selects the prerequisites, numbered steps, applicable
+alternatives, and verification section for a task. All referenced headings must
+exist exactly once outside code fences. Each alternative must state
+"Applicable when" in its source. The quickstart outline and agent task index
+are projections of these selectors, not separately maintained instructions.
+
+To make an explanatory region optional in the human page, surround it with
+`<!-- docsite:optional -->` and `<!-- /docsite:optional -->`. The region must
+contain a heading. Nesting, missing markers, and critical caution blocks fail
+the build. The page uses a native disclosure control; Markdown exports retain
+the complete heading and explanation. Required actions and model/data warnings
+stay outside optional regions.
+
+Both the human and text surface must be checked when editing a source selector.
+The source files, status, and checked-against metadata follow the selected text.
+New view and journey formats use `schemaVersion: 1`; unknown keys are errors.
+
+## Diagrams
+
+Write a fenced `mermaid` definition in the canonical Markdown document. Add
+`accTitle: ...` and a one-line `accDescr: ...` inside the definition. These are
+the diagram's title and complete text explanation; both are required to opt
+into rendering. Unannotated Mermaid examples remain code.
+
+For a branching flowchart that is too wide on a phone, add a comment such as
+`%% portrait-stack: cloud search tools` inside its subgraph. The named nodes
+must already be declared. The portrait renderer adds invisible rank constraints
+to stack them; the authored visible connections remain unchanged.
+For a compound diagram whose boxes still produce a wide layout, add
+`%% portrait-flat`. In the narrow-screen view, single-level labelled subgraphs
+become group labels on nodes with plain, quoted rectangular labels. Other
+node shapes are rejected for this opt-in projection. Group membership, node IDs,
+and visible connections are retained; the full source remains unchanged.
+
+The build turns annotated definitions into local SVG assets in light and dark
+themes. For flowcharts, a narrow-screen variant changes layout direction while
+retaining the same nodes, connections, and meaning. Readers get a diagram,
+description, full-size link, and expandable source. Agent Markdown retains the
+original definition and description, never an SVG-only replacement.
+
+Diagram configuration, click directives, active SVG, and remote SVG resources
+are rejected. Malformed definitions fail the build with the generated page and
+line. Keep caveats in the source prose/description as well as any visual labels;
+color alone must not communicate a privacy boundary or prerequisite.
+
 ## What the build adds
 
 - The **stamp**: "Checked against `<sha>` · <date>" and the list of sources,

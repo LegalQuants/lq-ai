@@ -21,7 +21,7 @@
 export const PATHWAYS = [
   {
     id: 'about',
-    title: 'What is LQAI',
+    title: 'Getting started',
     tone: 'a',
     groups: [
       {
@@ -49,6 +49,7 @@ export const PATHWAYS = [
           'skills/coverage/practice-area/litigation',
           'skills/coverage/practice-area/privacy',
           'skills/coverage/jurisdiction/agnostic',
+          'skills/coverage/jurisdiction/global',
           'skills/coverage/jurisdiction/eu',
           'skills/coverage/jurisdiction/regime-aware',
           'skills/coverage/jurisdiction/us',
