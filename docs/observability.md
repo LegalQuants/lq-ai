@@ -31,7 +31,7 @@ Transport is OTLP/HTTP for all signals.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Master switch. Sets the base URL for all signals (traces + metrics when [DE-301](PRD.md#de-301--otel-meterprovider-for-metrics-export-otel-deepening-de-c) lands). OTel initializes iff this OR a per-signal endpoint is set. Example: `http://otel-collector:4318`. | unset — no OTel |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Per-signal override for traces. Takes precedence over the master endpoint for trace export. Useful when splitting traces and metrics to different backends. | unset |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Per-signal override for metrics (relevant once DE-301 lands). | unset |
-| `OTEL_SERVICE_NAME` | Resource attribute `service.name` attached to every span. | `lq-ai-api` (api service), `lq-ai-gateway` (gateway service). On the ADR 0038 branch the Compose files and both recipes also set `lq-ai-arq-worker` for the `arq-worker` service; see [Governed runs](#orchestrationjob--orchestrationrun--orchestrationeffect). |
+| `OTEL_SERVICE_NAME` | Resource attribute `service.name` attached to every span. | `lq-ai-api` (api service), `lq-ai-gateway` (gateway service). Under ADR 0038 the Compose files and both recipes also set `lq-ai-arq-worker` for the `arq-worker` service; see [Governed runs](#orchestrationjob--orchestrationrun--orchestrationeffect). |
 | `OTEL_RESOURCE_ATTRIBUTES` | Arbitrary `key=value,key=value` pairs appended to the resource. Use for deployment environment, region, or cluster tags. Example: `deployment.environment=production,k8s.cluster.name=prod-east`. | unset |
 | `OTEL_TRACES_SAMPLER` | Sampler name per the OTel SDK. The SDK default is `parentbased_always_on` (sample everything). For production, use `parentbased_traceidratio` and set `OTEL_TRACES_SAMPLER_ARG=0.1` (10% head sampling). | `parentbased_always_on` |
 | `OTEL_TRACES_SAMPLER_ARG` | Sampler argument. For `parentbased_traceidratio`, the sampling ratio (0.0–1.0). | `1.0` |
@@ -413,7 +413,7 @@ does a label outside the set. The column is `varchar(32)`, so a label must fit i
 **Proposed (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
 `tabular_bulk_op` were in the set before. The other labels were already sent by the backend and recorded as
 `chat`; recording them as themselves, and the chat and message identifiers on a run's
-model calls, are implemented on the branch. Two Easy Playbook assembly labels,
+model calls, are implemented. Two Easy Playbook assembly labels,
 `playbook_easy_assemble_describe_position` and `playbook_easy_assemble_describe_tier`,
 are longer than the column and are not in the set, so those rows still record `chat`. The
 set is `_KNOWN_PURPOSES` in `gateway/app/api/inference.py`. Chat and message identifiers
@@ -539,8 +539,7 @@ or `gateway/` implements it. The `telemetry:` block in `gateway.yaml.example`, w
 and read by no code. The `LANGFUSE_*` variables in `.env.example` and the Compose files
 are read by no code either, so setting them has no effect. Trace export is controlled only
 by the `OTEL_*` variables in [§1](#1-environment-variable-matrix). Spans, audit rows and
-routing-log rows carry identifiers, counts and labels, not prompt or document text, and a
-span that records a failure keeps its class and never its message. Under
+routing-log rows carry identifiers, counts and labels, not prompt or document text, and the autonomous, tabular, orchestration and citation spans record a failure's class and never its message (the other spans still record it). Under
 ADR 0038 (proposed), a run's owner can read how each call was set up and
 what the model wrote back through the trace read described under
 [the governed-run spans](#orchestrationjob--orchestrationrun--orchestrationeffect); that read draws on the run's own records and is

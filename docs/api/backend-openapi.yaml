@@ -5508,9 +5508,12 @@ paths:
         (``plan_not_handed_over``). This amends ADR 0035 D1 and is not ratified.
 
         On a route that pseudonymizes, the gateway replaces a name in message
-        text with a placeholder and puts it back in a reply's text. For the
-        planning call it is also asked to put its placeholders back in the
-        plan tool's arguments. A placeholder it did not assign cannot be
+        text with a placeholder and puts it back in a reply's text. A run
+        holds its tool arguments as originals, so every call that is offered
+        tools is asked to put the placeholders back in the arguments of the
+        calls it makes (the plan tool's, and a task's), and the gateway
+        pseudonymizes the run's tool results and earlier call arguments with
+        the rest of the request. A placeholder it did not assign cannot be
         restored by it or by any later call, so a plan from a pseudonymized
         call that still carries one fails with ``plan_has_placeholders`` and
         nothing runs. The orchestrator's own answer is reply text and is
@@ -5588,10 +5591,10 @@ paths:
         limit, the document limits (``min_documents``, ``max_documents``) and the
         tools the profile grants. Once the route is priced it also reports
         ``routed_tier``, the inference tier the pinned route resolves to for this
-        chat, ``pseudonymized``, whether the gateway pseudonymizes message text
-        on that route (document text a task reads is returned to the model as
-        a tool result, which the gateway does not rewrite, and a task's
-        tool-call arguments are not rewritten either), ``reasoning_effort`` when the
+        chat, ``pseudonymized``, whether the gateway pseudonymizes the run's
+        requests on that route (message text, and for a run the tool results a
+        task reads and the arguments of earlier tool calls),
+        ``reasoning_effort`` when the
         operator set one, ``answers_directly`` (true where the orchestrator may
         answer a request that needs nothing read by itself, with no plan and no
         approval), and

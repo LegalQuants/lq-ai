@@ -42,8 +42,7 @@ Check the migrations on a throwaway `pgvector/pgvector:pg16` container instead. 
 introduced are retained: 0073 chat-hosted runs and registry-profile runs, 0074 closed runs
 and effects, 0075 runs that belong to no matter, 0076 runs that completed without a plan. Keep
 a deployment that has used this feature at 0076 until a reviewed export and removal plan
-exists. A 0.8.0 run that is in flight when the branch is deployed stops at its next
-admission and stays readable; complete or halt runs first.
+exists. A 0.8.0 run that is in flight when this build is deployed stops at its next admission and stays readable; complete or halt runs first.
 
 **Skills.** New harness is instructed by engine prompt files and needs no skill. The 0.8.0
 profile, kept as a test fixture, uses the built-in skills `contract-qa` and
@@ -152,8 +151,7 @@ The composer shows the result of this rule before any planning is paid for. The 
   synthesis".
 - The planner is told the funded number, and a proposal with more tasks fails as an
   unfunded plan.
-- Release 0.8.0 gave a task one unit, so on a priced route this branch funds fewer tasks at
-  the same `LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD`.
+- Release 0.8.0 gave a task one unit, so on a priced route this build funds fewer tasks at the same `LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD`.
 
 Record the composer's figures (model, total cap, planning allowance, per-task allowance and
 the number of tasks) with the results below.
@@ -162,7 +160,7 @@ the number of tasks) with the results below.
 
 Run the cases in order; some use the run of an earlier case. The Result column is for the
 tester; a case is not accepted until a person has filled it in. Quoted interface wording is
-what the web components on the branch show at the time of writing. If the wording differs,
+what the web components of this build show at the time of writing. If the wording differs,
 record the difference; it does not fail the case on its own.
 
 Some cases depend on what the model chooses: UAT-15 (a follow-up), UAT-19 and UAT-20 (a
@@ -274,7 +272,7 @@ Pseudonymization follows the gateway's setting, so this section starts with an o
 
 | ID | Action | Expected result / evidence | Result |
 |---|---|---|---|
-| UAT-40 | Open "Limits and tools" and read the Pseudonymization row. Then do the operator step: in the gateway configuration set `anonymization.enabled: true` and put the route's inference tier (the strip's Route row shows it) in `anonymization.apply_at_tiers` (the example file has `[3, 4, 5]`; a local model at tier 1 needs `1` added), restart the gateway, and reload the chat. Read the row again. | Before the step the row reads "Text is sent to the model as written: the operator's setting applies no pseudonymization at this route's tier.", and runs are not refused for it. After the step the row reads "On the way to the model, the gateway replaces what it recognises as a personal name or an identifier with a placeholder, in your request, this chat’s messages, the plan and the text of the documents a task reads, and puts it back in what the model writes. That includes the plan. A plan that still carries a placeholder, one the gateway did not assign, is refused and nothing runs. It does not recognise everything, and a miss is not reported. Organisation names are not replaced." Record any difference in its wording. | |
+| UAT-40 | Open "Limits and tools" and read the Pseudonymization row. Then do the operator step: in the gateway configuration set `anonymization.enabled: true` and put the route's inference tier (the strip's Route row shows it) in `anonymization.apply_at_tiers` (the example file has `[3, 4, 5]`; a local model at tier 1 needs `1` added), restart the gateway, and reload the chat. Read the row again. | Before the step the row reads "Text is sent to the model as written: the operator's setting applies no pseudonymization at this route's tier.", and runs are not refused for it. After the step the row reads "On the way to the model, the gateway replaces what it recognises as a personal name or an identifier with a placeholder, in your request, this chat’s messages, the plan and what a task reads, and puts it back in what the model writes. That includes the plan. A plan that still carries a placeholder, one the gateway did not assign, is refused and nothing runs. It does not recognise everything, and a miss is not reported. Organisation names are not replaced." Record any difference in its wording. | |
 | UAT-41 | Send a request that names a fictional person who appears in a selected document, for example "What does the agreement say about payments to Maria Okafor?" Repeat it twice. If a run ends with no plan, open the plan's line (test id `lq-ai-run-noplan`), wait for "How this run was set up" to load, and read it, "What the model wrote" and "Receipts". | Record, for each attempt, which of these happens. The gateway puts the placeholders it assigned back into the plan's arguments (ADR 0038, ruling 6), so (b) is what is expected and (a) should be rare. **(a) The run fails after its first call because the plan still carried a placeholder,** one the gateway did not assign in that call, for example a token the model altered or made up. The status reads "The run failed" with the detail "The plan carried a placeholder that stands for a name or an identifier. This route is pseudonymized. The gateway puts back the placeholders it assigned, and this one was not among them, so the plan was refused. Nothing ran. Send the request again." The plan's line reads "No plan was produced · The plan carried a placeholder that stands for a name or an identifier." and opens. "How this run was set up" shows the orchestrator's system prompt, an opening message whose section REQUEST holds your words with the name as you wrote it (the application sent that text and the gateway replaced the name afterwards), `propose_plan` among the tools offered, and the line "Rebuilt from this run's records. It matches the digest recorded when the call was sent." "What the model wrote" shows "No text; the model asked for tools." if the model wrote no text, then one `propose_plan` call whose arguments hold a token shaped like `PERSON_0001` where the name would be. That token is why the plan was refused. "Receipts" shows one step, "Asked the model how to respond", and no task step. **(b) The model produces a plan.** Read the plan card, every task line, each task's "Files", the stated reasons, "What the model wrote" (the plan's arguments and any search query) and the answer, and record every place where a token shaped like `PERSON_0001` is visible. The plan's arguments are restored and a plan that still carries one is refused, so none is expected in the plan card: it shows the name as you wrote it, or names nobody. A task's notes, stated reasons and search queries are a sub-agent's tool-call arguments, which the gateway restores as well, so none is expected there either; record any token you see, since one the gateway did not assign stays as the model wrote it. The answer shows names as written, not placeholders. **(c) The run fails because the model wrote its plan out as text.** The name does not cause this; record it if it happens, with the text. The status reads "The run failed" with the detail "The model wrote its plan out as text instead of handing it over, so there is no plan to approve. Nothing ran. Send the request again." The plan's line reads "No plan was produced · The model wrote its plan out as text instead of handing it over, so there is no plan to approve." and opens. "How this run was set up" shows `propose_plan` among the tools offered, so the model had the tool. "What the model wrote" shows the text of its reply, which is a plan written out (for example a JSON object with a `tasks` member, or the call spelled out with the name `propose_plan`), and no tool call. "Receipts" shows one step, "Asked the model how to respond". ADR 0038 D7 and ruling 6 describe this; record the outcome even if it matches. | |
 | UAT-42 | After a run from UAT-41 that used the name, send "Shorten that." | If the model answers directly, as in UAT-19, the answer shows the name as written and no placeholder, because the orchestrator's own answer is reply text and is restored. Record any placeholder you see. | |
 
@@ -358,7 +356,7 @@ do not establish live inference or human acceptance.
 The first build's recorded walkthrough was made on 2026-10-06, before the design
 changed, and was removed from the branch on 2026-10-10. A walkthrough of this build has
 not been recorded. Agents have run New harness on a scripted provider and on local models, which
-is not human acceptance. Record the branch commit, the provider and model, the composer's
+is not human acceptance. Record the commit under test, the provider and model, the composer's
 figures, run and message identifiers, the model-dependent outcomes (the cases listed at the
 head of the acceptance script) and any failed attempts. Keep provider secrets out of the record.
 

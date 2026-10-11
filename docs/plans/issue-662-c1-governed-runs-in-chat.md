@@ -249,7 +249,7 @@ Unnumbered; the maintainer allocates identifiers.
 ## Implementation status
 
 Recorded 2026-10-09 on an implementation branch built on `91973fd80` (the v0.9.0 release
-commit). Unmerged, unreviewed, and ahead of ratification. Both profile switches default
+commit). Unreviewed, and ahead of ratification. Both profile switches default
 to off. The branch follows the revised design in
 [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md), not the ten slices above as
 they are written. The slice table below says what became of each slice, and three
@@ -401,8 +401,7 @@ here differs from that section, that section is the present state.
   stored, as retrieved text does in ordinary chat. That was an inconsistency, and the
   maintainer ruled that the gateway is where the rule applies: what leaves it for a
   provider is pseudonymized as one request, in every role, and between the backend's own
-  agents nothing is. The gateway now rewrites a tool message's JSON string values and the
-  arguments of an assistant message's earlier calls, with the one mapper, and restores
+  agents nothing is. For a caller that holds its tool arguments as originals, which a run is, the gateway now rewrites a tool message's JSON string values and the arguments of an assistant message's earlier calls, with the one mapper, and replaces a name it found anywhere in the request wherever else it stands in that tool text, and restores
   placeholders in a reply's text and, on the caller's request, in a call's arguments. A
   governed run's calls that are offered tools make that request on a route that
   pseudonymizes, so a note, a stated reason or a search query is held with the name in it
@@ -498,9 +497,7 @@ that it can be reviewed apart, and none has had maintainer or security review.
   the string values of each tool call's JSON arguments, whole tokens only, in one pass,
   and returns anything it will not rewrite exactly as sent
   (`gateway/app/anonymization/middleware.py`). The field is stripped from the outbound
-  body. The application sets it on a planning call that is offered the plan tool where the
-  route binding expects pseudonymization; it is part of that binding and of the call's
-  identity, and the run boundary refuses it on any other call. The refusal of a plan that
+  body. The application first set it on a planning call that is offered the plan tool where the route binding expects pseudonymization. It now sets it on every call of a run that is offered tools where the binding expects pseudonymization (the plan tool, a task's tools); it is part of that binding and of the call's identity, and the run boundary refuses it on a call with no route binding. The same opt-in puts the run's tool results and earlier call arguments under the request pseudonymization, which is what makes restoring a task's arguments safe. The refusal of a plan that
   still carries a placeholder is kept. Tests: the restore step alone, the gateway against
   a mocked provider with and without the opt-in and for a request that was not
   pseudonymized, the adapter's stripped fields, the binding's form and match, the
@@ -595,8 +592,7 @@ chokepoint now refuses it there before the ownership check, and the whole-file r
 is unchanged; `test_document_runs.py` and the last case of that file hold both.
 The knowledge-base search this branch adds
 does not go through that check. It leaves out a knowledge base that is no longer the
-owner's, archived or detached, counts it, and writes no such audit row;
-`docs/security/audit-logging.md` now says so.
+owner's, archived or detached, counts it, and writes no audit row when the owner archived or detached it. One that has become another owner's, or no longer exists, writes one `ownership_denied` row and the search goes on; `docs/security/audit-logging.md` says so.
 
 The third rebase, onto `7ac94dd1a`, took in #637, which adds a ceiling on tool
 egress that an operator and a matter can set. #637 takes migration 0070, so this
@@ -671,8 +667,7 @@ which this branch makes.
   sign-out, were not exercised.
 - **No security review.** The changes touch authorization, audit and
   `gateway/**`. Five are on a security path: the gateway changes (a reasoning-effort
-  field, two Ollama tool-call fixes, and restoring placeholders in the plan tool's
-  arguments); the rule for a run outside a matter, including a matter's file read on
+  field, two Ollama tool-call fixes, and an opt-in that restores placeholders in the arguments of the calls a reply makes and puts a run's tool text under the request pseudonymization); the rule for a run outside a matter, including a matter's file read on
   that matter's terms; the roles on runs and the cross-owner read with its audit row;
   pseudonymization following the operator's setting; and the knowledge-base search.
   Under ADR 0034, accepted on 2026-10-04, security review means maintainer review
@@ -707,14 +702,12 @@ Each applies whether or not `LQ_AI_NEW_HARNESS_ENABLED` is on, unless it says so
   deployment's own history. Pre-flight estimates and confirmation thresholds can change.
 - **With an OTLP endpoint set, the arq worker now exports spans** for every job (before,
   only the API and the gateway did), under the service name
-  `LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME`. A span that records a failure keeps the
-  exception's class and never its message.
+  `LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME`. The autonomous, tabular, orchestration and citation spans record a failure's class and never its message; other spans, such as the playbook and skill spans, still record it.
 - **The shared citation pattern accepts emphasis after a closing quotation mark** and
   closes a curly quotation at the nearest opening quote (see `docs/citation-engine.md`).
   This applies to ordinary chat as well.
 - **Where the operator's gateway setting pseudonymizes at a route's tier, a governed run's
-  tool results and tool-call arguments are pseudonymized with the rest of the request.**
-  Ordinary chat is unchanged.
+  tool results and tool-call arguments are pseudonymized with the rest of the request (the run asks for this with `lq_ai_restore_tool_arguments`).** Ordinary chat is unchanged.
 
 ## Evidence and limits
 
