@@ -213,7 +213,8 @@ class ChatCompletionRequest(BaseModel):
 
     The gateway restores a reply's text and, by default, returns a tool
     call's arguments as the model wrote them. Set for a governed run's call
-    that is offered tools, on a route that pseudonymizes, it restores the
+    that is offered tools or carries earlier tool calls and results, on a
+    route that pseudonymizes, it restores the
     arguments of the calls the reply makes, and it pseudonymizes the tool text
     this application sends back with the conversation, the earlier calls'
     arguments and the tool results, so what is held does not leave as such.

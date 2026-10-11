@@ -1243,8 +1243,9 @@ components:
             recognises what it recognises. Without the field, tool messages
             and tool-call arguments are sent as the caller sent them, which is
             what ordinary chat's research tools need. The backend sets it on
-            every call of a governed run that is offered tools, on a route
-            that pseudonymizes (ADR 0038 D7).
+            every call of a governed run that is offered tools or carries
+            earlier tool calls and results, on a route that pseudonymizes
+            (ADR 0038 D7).
         lq_ai_purpose:
           type: string
           description: |

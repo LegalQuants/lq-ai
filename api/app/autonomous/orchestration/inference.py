@@ -235,9 +235,10 @@ class InferenceRoutes:
     ) -> InferenceBinding:
         """Bind one request to the pinned route as the gateway is configured now.
 
-        Where a call that is offered tools will be pseudonymized, the binding
-        asks the gateway to restore the pseudonyms in the arguments of the
-        calls it makes. The run holds what its agents wrote as the owner's own
+        Where a call that is offered tools, or that carries earlier tool calls
+        and results, will be pseudonymized, the binding asks the gateway to
+        restore the pseudonyms in the arguments of the calls it makes and to
+        cover the tool text it carries. The run holds what its agents wrote as the owner's own
         text, so a search runs on the name that was asked about and a note is
         kept with the name in it. The gateway pseudonymizes the conversation on
         every request, the earlier calls' arguments and the tool results
@@ -306,6 +307,13 @@ class InferenceRoutes:
             # report exactly this, or the call is refused as untrusted, and the
             # gateway revision pinned at intake stops a setting changed mid-run.
             expected = wanted and available
+            # A task's last turn is offered no tool, yet it carries every earlier call
+            # and result, which the gateway covers only for a caller that says it holds
+            # them as originals. So a call that carries tool text says so too.
+            carries_tool_text = any(
+                isinstance(m, dict) and (m.get("role") == "tool" or bool(m.get("tool_calls")))
+                for m in messages
+            )
             estimated = input_bytes + 48 * len(messages)  # per-message plus completion framing
             routing = {
                 "provider": {
@@ -332,7 +340,7 @@ class InferenceRoutes:
                 gateway_revision=config["configuration_revision"],
                 anonymization_expected=expected,
                 tools_offered=bool(tools),
-                restore_tool_arguments=bool(tools) and expected,
+                restore_tool_arguments=(bool(tools) or carries_tool_text) and expected,
             )
         except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError):
             raise Forbidden(

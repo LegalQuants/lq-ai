@@ -335,8 +335,8 @@ class ChatCompletionRequest(BaseModel):
     tools return published sources and whose follow-up calls need the real values.
 
     The field is stripped from the outbound body. The backend sets it on every
-    call of a governed run that is offered tools, on a route that pseudonymizes
-    (ADR 0038 D7)."""
+    call of a governed run that is offered tools or carries earlier tool calls
+    and results, on a route that pseudonymizes (ADR 0038 D7)."""
 
 
 # --- Chat completion response -------------------------------------------------

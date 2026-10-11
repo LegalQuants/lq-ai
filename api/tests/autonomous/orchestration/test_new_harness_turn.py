@@ -337,6 +337,40 @@ async def test_a_pseudonymized_call_offered_tools_asks_the_gateway_to_restore_th
         assert ("lq_ai_restore_tool_arguments" in body) is asks
 
 
+@pytest.mark.parametrize("pseudonymized", [True, False])
+async def test_a_last_turn_offered_no_tool_still_covers_the_tool_text_it_carries(
+    harness: SimpleNamespace, pseudonymized: bool
+) -> None:
+    """A task that uses every tool turn is asked for its answer with none offered.
+
+    That request still carries every earlier call and result, and the gateway
+    covers tool text only for a caller that says it holds its arguments as
+    originals. Found by an independent read of the ADR: the field was left off
+    this turn, so what the task had read went out as stored.
+    """
+    api = harness
+    if not pseudonymized:
+        api.gateway.config["anonymization"] = {"enabled": True, "apply_at_tiers": []}
+    api.gateway.child_script = [
+        [tool_call("save_note", {"name": "note.md", "content": "x", "reason": "Keep it."})]
+    ]
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE)
+    await run_to_completion(api, value)
+
+    def carries_tool_text(request: Any) -> bool:
+        return any(m.role == "tool" or getattr(m, "tool_calls", None) for m in request.messages)
+
+    last_turns = [r for r in api.gateway.requests if not r.tools and carries_tool_text(r)]
+    assert last_turns, "no task reached its tool-less last turn"
+    for request in last_turns:
+        assert request.lq_ai_restore_tool_arguments is (True if pseudonymized else None)
+    # The combining call carries no tool text and never asks.
+    combine = [r for r in api.gateway.requests if not r.tools and not carries_tool_text(r)]
+    assert combine
+    assert all(r.lq_ai_restore_tool_arguments is None for r in combine)
+
+
 async def test_a_plan_whose_placeholders_the_gateway_restored_is_planned_with_the_names(
     harness: SimpleNamespace,
 ) -> None:
