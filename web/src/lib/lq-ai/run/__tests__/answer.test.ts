@@ -450,7 +450,7 @@ describe('a link is drawn only for http, https and mailto', () => {
 			['a tab', '\t'],
 			['a no-break space', ' '],
 			['a line separator', ' '],
-			['a byte order mark', '﻿'],
+			['a byte order mark', '\uFEFF'],
 			['an ideographic space', '　']
 		];
 		const ADDRESSES = ['https://ok.example', 'HTTP://ok.example/a?b=1', 'mailto:a@b.co'];

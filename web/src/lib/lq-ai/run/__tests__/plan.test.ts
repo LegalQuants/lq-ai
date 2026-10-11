@@ -612,10 +612,10 @@ describe('the knowledge bases the tasks of a plan may search', () => {
 			copy.tree!.plan.knowledge_bases = [
 				{ knowledge_base_id: 'a', name: '  Travel, Expenses  ' },
 				{ knowledge_base_id: 'b', name: '' },
-				{ knowledge_base_id: 'c', name: '‮evil' }
+				{ knowledge_base_id: 'c', name: '\u202Eevil' }
 			];
 		});
-		expect(view(odd).knowledgeBases!.names).toEqual(['Travel, Expenses', '‮evil']);
+		expect(view(odd).knowledgeBases!.names).toEqual(['Travel, Expenses', '\u202Eevil']);
 	});
 
 	it('does not share the list it was given', () => {

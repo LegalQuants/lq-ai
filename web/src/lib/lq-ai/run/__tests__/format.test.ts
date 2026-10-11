@@ -27,10 +27,10 @@ describe('namedLineText', () => {
 	});
 
 	it('hands the names back as they are, with nothing added to them', () => {
-		const names = ['<img src=x onerror=alert(1)>', 'a, b', '‮evil'];
+		const names = ['<img src=x onerror=alert(1)>', 'a, b', '\u202Eevil'];
 		const text = namedLineText({ lead: 'L: ', names, tail: '.' });
 		expect(text).toBe(`L: ${names.join(', ')}.`);
-		expect(names).toEqual(['<img src=x onerror=alert(1)>', 'a, b', '‮evil']);
+		expect(names).toEqual(['<img src=x onerror=alert(1)>', 'a, b', '\u202Eevil']);
 	});
 });
 

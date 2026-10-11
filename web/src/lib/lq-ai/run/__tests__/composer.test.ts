@@ -957,8 +957,8 @@ describe('the line about the knowledge bases a task may search', () => {
 	});
 
 	it('keeps each name as one item as it was written, apart from the spaces around it', () => {
-		const parts = knowledgeBasesLineParts(named('  Travel, Expenses ', '', '‮evil'))!;
-		expect(parts.names).toEqual(['Travel, Expenses', '‮evil']);
+		const parts = knowledgeBasesLineParts(named('  Travel, Expenses ', '', '\u202Eevil'))!;
+		expect(parts.names).toEqual(['Travel, Expenses', '\u202Eevil']);
 		expect(parts.lead).not.toMatch(/[<>]/);
 		expect(parts.tail).not.toMatch(/[<>]/);
 	});

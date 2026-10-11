@@ -2503,7 +2503,7 @@ describe('the line about the knowledge bases a task may search, beside the docum
 	});
 
 	it('keeps a name that reorders text inside its own element, with the names around it outside', () => {
-		const flip = '‮evil';
+		const flip = '\u202Eevil';
 		const html = line({
 			knowledge_bases: [
 				{ knowledge_base_id: 'a', name: 'Travel' },
@@ -2626,11 +2626,11 @@ describe('the plan card, for a plan whose tasks may search knowledge bases', () 
 		const odd = structuredClone(AWAITING);
 		odd.tree!.plan.knowledge_bases = [
 			{ knowledge_base_id: 'a', name: 'Travel, Expenses' },
-			{ knowledge_base_id: 'b', name: '‮evil' }
+			{ knowledge_base_id: 'b', name: '\u202Eevil' }
 		];
 		const html = card(odd);
-		expect(html).toContain('<bdi>Travel, Expenses</bdi>, <bdi>‮evil</bdi>.</p>');
-		expect(html.split('‮')).toHaveLength(2);
+		expect(html).toContain('<bdi>Travel, Expenses</bdi>, <bdi>\u202Eevil</bdi>.</p>');
+		expect(html.split('\u202E')).toHaveLength(2);
 	});
 
 	it('puts it on the plan, in no fold of its own, while the plan waits for the owner: open, before the tasks', () => {
