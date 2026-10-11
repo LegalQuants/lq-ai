@@ -724,7 +724,7 @@ describe('what the route does to the text', () => {
 			'and puts it back in what the model writes. That includes the plan. A plan that still carries a placeholder, one the gateway did not assign, is refused and nothing runs. It does not recognise everything'
 		);
 		// What a task reads goes the same way: the gateway rewrites it like the request.
-		expect(text).toContain('the plan and the text of the documents a task reads');
+		expect(text).toContain('the plan and what a task reads');
 		// It must not read as a guarantee (docs/security/anonymization.md): the layer misses
 		// things silently, and organisation names are never replaced (PRD DE-397).
 		expect(text).toContain('It does not recognise everything, and a miss is not reported.');

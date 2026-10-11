@@ -14,7 +14,7 @@
  * italic) mid-quote. Cross-element citations degrade gracefully to the
  * sidecar chip without an inline marker.
  */
-import { iterCitationMarkers, matchMarkerState, citationTooltip } from './state';
+import { CITATION_REGEX, iterCitationMarkers, matchMarkerState, citationTooltip } from './state';
 import type { Citation } from '../types';
 
 export interface DecorateCitationsParams {
@@ -141,9 +141,15 @@ export function decorateCitationsInline(
 	};
 }
 
+// The one pattern, without its `g` flag: a global regex remembers where it stopped,
+// so `test` on it gives a different answer on a second call.
+const MARKER_PROBE = new RegExp(CITATION_REGEX.source, 's');
+
 /** Cheap probe: does the rendered prose contain ANY citation marker? */
 function nodeContainsAnyMarker(root: HTMLElement): boolean {
 	const text = root.textContent ?? '';
-	// Don't run the full regex iterator; a single test suffices.
-	return /(?:"[^"]+?"|“[^”]+?”)\s*\(Source:\s*\[\d+\]\)/s.test(text);
+	// Don't run the full regex iterator; a single test suffices. It is the same pattern
+	// as the extraction's, so what is decorated, emphasis included, and how long the
+	// scan takes cannot drift from it.
+	return MARKER_PROBE.test(text);
 }

@@ -6,6 +6,7 @@
  * rendering of the resulting visual states is covered separately
  * via Playwright (M2-C2 Decision D).
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
 	CITATION_REGEX,
@@ -228,6 +229,19 @@ describe('CITATION_REGEX + iterCitationMarkers', () => {
 		const text = 'He said “no, and then “no compete” (Source: [1]).';
 		const markers = Array.from(iterCitationMarkers(text));
 		expect(markers.map((m) => m.quote)).toEqual(['no compete']);
+	});
+
+	it('has one copy of the pattern: the inline decorator uses it and carries none of its own', () => {
+		// The decorator's cheap probe was a third copy, with the old curly body (quadratic)
+		// and no emphasis, so an emphasised quotation was not styled until one was verified.
+		const source = readFileSync(
+			new URL('../citations/decorate-inline.ts', import.meta.url),
+			'utf8'
+		);
+		expect(source).toContain('CITATION_REGEX.source');
+		expect(source).not.toMatch(/“\[\^”\]/);
+		// No regular expression of its own for the marker (the header comment still names it).
+		expect(source).not.toMatch(/\\\(Source:/);
 	});
 
 	it('scans a reply full of unclosed curly quotes in linear time', () => {

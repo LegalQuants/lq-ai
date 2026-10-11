@@ -298,8 +298,8 @@ export function routeText(profile: ProfileAvailability): string | null {
 //   (`plan_has_placeholders`) and nothing runs.
 export const PSEUDONYMIZED_TEXT =
 	'On the way to the model, the gateway replaces what it recognises as a personal name or ' +
-	'an identifier with a placeholder, in your request, this chat’s messages, the plan and the ' +
-	'text of the documents a task reads, and puts it back in what the model writes. ' +
+	'an identifier with a placeholder, in your request, this chat’s messages, the plan and ' +
+	'what a task reads, and puts it back in what the model writes. ' +
 	'That includes the plan. A plan that still carries a placeholder, one the gateway did not ' +
 	'assign, is refused and nothing runs. It does not recognise everything, and a miss is not ' +
 	'reported. Organisation names are not replaced.';
