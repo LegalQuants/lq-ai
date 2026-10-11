@@ -1551,10 +1551,9 @@ describe('the strip above the composer, in its fold of limits and tools', () => 
 			'It does not recognise everything, and a miss is not reported.'
 		);
 		page(html, 'pseudonymized').shows('Organisation names are not replaced.');
-		page(html, 'pseudonymized').shows(
-			'The text of a document that a task reads, and of a passage that a search returns, is sent as written, so that quotations can be checked.'
-		);
-		// The sentence the person read before knowledge bases could be searched is gone.
+		page(html, 'pseudonymized').shows('the plan and the text of the documents a task reads');
+		// The sentences the person read before the gateway rewrote what a task reads are gone.
+		page(html, 'pseudonymized').hides('is sent as written');
 		page(html, 'pseudonymized').hides('so that its quotations can be checked');
 	});
 

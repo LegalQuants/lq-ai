@@ -368,9 +368,6 @@ class GuardedEffects:
                     view.scope,
                     params["messages"],
                     offered or None,
-                    # The plan tool is terminal: its arguments are read here
-                    # and never sent back to a model, so they may be restored.
-                    plan_tool=intent == ToolIntent.plan and bool(plan_tools),
                 )
             if view.planning and binding.gateway_revision != view.planning.gateway_revision:
                 raise Forbidden(message="Gateway configuration changed; start a new approved run")
@@ -382,7 +379,8 @@ class GuardedEffects:
                 params["reasoning_effort"] = binding.policy.reasoning_effort
             if binding.restore_tool_arguments:
                 # Part of the binding, so of the call's identity. Absent
-                # for every call that is not a pseudonymized plan call.
+                # for a call offered no tools, and where the route does not
+                # pseudonymize.
                 params["lq_ai_restore_tool_arguments"] = True
             view = await self.store.execution_view(claim)
         return await self._call(

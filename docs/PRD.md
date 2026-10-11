@@ -2896,6 +2896,8 @@ If the source-document corpus contains entities the operator considers sensitive
 
 **Acceptance criteria:** Spot-check empirical study comparing model output quality on Option A vs M2-1 for at least three skills (NDA Review, MSA Review SaaS, DPA Checklist Review); cross-conversation pseudonym stability decision documented or filed as DE-XXX; audit-log shape extended if needed; `docs/security/anonymization.md` and `docs/citation-engine.md` updated to reflect Option A as the new default; existing M2-B3 / M2-C3 / M2-D2 round-trip tests passing with the new shape.
 
+**Update (governed runs, ADR 0038 branch).** A governed run does not follow M2-1: the gateway pseudonymizes what a task reads, with the rest of the request, wherever the operator's setting applies pseudonymization at the route's tier (the text of a `tool` message and the arguments of earlier tool calls; [anonymization.md](security/anonymization.md)). Ordinary chat is unchanged, and the retrieval context stays un-pseudonymized. How this affects the citation checks and the answers of a run has not been measured; UAT-41 records what is seen, and it is the first evidence this entry can use.
+
 #### DE-270 — Cryptography review: Fernet vs modern AEAD
 
 **Priority:** P3 · **Effort:** S
@@ -4044,9 +4046,6 @@ and none is implemented.
   LLM-tracing sink at the gateway. That sink is not implemented: the `telemetry` block in
   the gateway configuration is read by no code. It should serve ordinary turns and runs
   alike. The [observability guide](observability.md#6-whats-not-yet-shipped) says so.
-- Restoring placeholders in a sub-agent's tool-call arguments. The gateway restores the
-  plan tool's arguments (ADR 0038, ruling 6). A sub-agent's are sent back to the model on
-  its next turn, so restoring them needs the request path to rewrite them too.
 - A query embedding for the knowledge-base search, which would be a priced, tier-bound
   model call. Now the second step of DE-407.
 - Sources and connectors in runs, including case-law, authority and MCP tools.

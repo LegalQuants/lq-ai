@@ -259,9 +259,10 @@ def test_a_binding_without_tools_keeps_its_0_8_0_form() -> None:
 
 
 def test_a_binding_that_does_not_ask_for_restored_arguments_keeps_its_form() -> None:
-    # ADR 0038 D7: only a pseudonymized planning call asks the gateway to
-    # restore its tool-call arguments. Every other binding's dump, which is
-    # part of its effect's identity, is as it was before the field existed.
+    # ADR 0038 D7: a call asks the gateway to restore its tool-call arguments
+    # only when it is offered tools on a route that pseudonymizes. Every other
+    # binding's dump, which is part of its effect's identity, is as it was
+    # before the field existed.
     plain = _binding(tools=True).model_dump(mode="json")
     assert "restore_tool_arguments" not in plain
     asking = _binding(tools=True, restore=True).model_dump(mode="json")
@@ -293,8 +294,8 @@ def test_a_binding_matches_a_request_only_with_the_restore_flag_it_was_bound_wit
         assert bound(True).matches({**request, "lq_ai_restore_tool_arguments": other}) is False
 
 
-async def test_only_a_bound_planning_call_may_ask_for_restored_arguments() -> None:
-    """A task's reply is echoed back to its model, so its arguments are never restored."""
+async def test_only_a_bound_call_may_ask_for_restored_arguments() -> None:
+    """A bound call may ask, a task's too: the gateway pseudonymizes it again when it goes back."""
     from app.autonomous.enums import ToolIntent
     from app.autonomous.orchestration.boundary import constrain_call
     from app.autonomous.orchestration.contracts import (
@@ -334,19 +335,20 @@ async def test_only_a_bound_planning_call_may_ask_for_restored_arguments() -> No
         "lq_ai_restore_tool_arguments": True,
     }
 
-    narrowed = await constrain_call(db, session, ToolIntent.plan, request, scope, None, binding)
-    assert narrowed["lq_ai_restore_tool_arguments"] is True
-
-    # A task's call, with or without a binding that asks.
-    with pytest.raises(ToolNotGranted, match="only a planning call"):
-        await constrain_call(db, session, ToolIntent.run_skill, request, scope, None, binding)
-    # A planning call with no route binding: a legacy session never asks.
-    with pytest.raises(ToolNotGranted, match="only a planning call"):
-        await constrain_call(db, session, ToolIntent.plan, request, scope, None, None)
-    # A planning call that asks although its binding does not.
+    intents = (ToolIntent.plan, ToolIntent.run_skill)
+    # A planning call and a task's call, each bound to a route that asks.
+    for intent in intents:
+        narrowed = await constrain_call(db, session, intent, request, scope, None, binding)
+        assert narrowed["lq_ai_restore_tool_arguments"] is True
+    # A call with no route binding: a legacy session never asks.
+    for intent in intents:
+        with pytest.raises(ToolNotGranted, match="only a bound call"):
+            await constrain_call(db, session, intent, request, scope, None, None)
+    # A call that asks although its binding does not.
     plain = binding.model_copy(update={"restore_tool_arguments": False})
-    with pytest.raises(ToolNotGranted, match="differs from approved route binding"):
-        await constrain_call(db, session, ToolIntent.plan, request, scope, None, plain)
+    for intent in intents:
+        with pytest.raises(ToolNotGranted, match="differs from approved route binding"):
+            await constrain_call(db, session, intent, request, scope, None, plain)
 
 
 def test_tool_calls_are_normalized_into_bounded_data() -> None:

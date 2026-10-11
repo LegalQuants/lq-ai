@@ -30,7 +30,6 @@ from tests.autonomous.orchestration.model_harness import (
     job,
     messages,
     new_chat,
-    operation_of,
     read,
     run_to_completion,
     sections,
@@ -298,14 +297,16 @@ async def test_a_plan_that_carries_a_placeholder_is_refused_where_the_call_was_p
 
 
 @pytest.mark.parametrize("pseudonymized", [True, False])
-async def test_only_a_pseudonymized_planning_call_asks_the_gateway_to_restore_its_arguments(
+async def test_a_pseudonymized_call_offered_tools_asks_the_gateway_to_restore_their_arguments(
     harness: SimpleNamespace, pseudonymized: bool
 ) -> None:
-    """ADR 0038 D7, ruling 6. The plan tool is terminal, so its arguments may be restored.
+    """ADR 0038 D7, ruling 6. A call offered tools asks, on a route that pseudonymizes.
 
-    A task's call is echoed back to its model on the next turn, and the
-    combining call is offered no tool: neither ever asks. Where nothing is
-    pseudonymized there is nothing to restore, and no call asks.
+    The plan, a search query and a note are acted on as the owner's own text,
+    and the gateway pseudonymizes the conversation again each time it goes
+    out, so a task's call asks too. The combining call is offered no tool and
+    never asks. Where nothing is pseudonymized there is nothing to restore,
+    and no call asks.
     """
     api = harness
     if not pseudonymized:
@@ -324,13 +325,13 @@ async def test_only_a_pseudonymized_planning_call_asks_the_gateway_to_restore_it
         "synthesize_answers",
     }
     assert {operation for operation, flag in asked if flag} == (
-        {"propose_plan"} if pseudonymized else set()
+        {"propose_plan", "work_on_task"} if pseudonymized else set()
     )
     # The request says so in the field the gateway reads, as the literal True. Every
     # other call leaves the field out of its body, as before the field existed, so a
     # gateway that does not know it is sent nothing new.
     for request in api.gateway.requests:
-        asks = operation_of(request) == "propose_plan" and pseudonymized
+        asks = pseudonymized and bool(request.tools)
         assert request.lq_ai_restore_tool_arguments is (True if asks else None)
         body = request.model_dump(mode="json", exclude_none=True)
         assert ("lq_ai_restore_tool_arguments" in body) is asks

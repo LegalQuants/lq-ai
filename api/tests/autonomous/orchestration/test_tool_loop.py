@@ -288,6 +288,47 @@ async def test_notes_are_run_files_and_cannot_displace_the_engine_files(
     assert "note-payment.md" in [f["name"] for f in tree["children"][0]["files"]]
 
 
+async def test_a_note_written_with_a_pseudonym_is_kept_with_the_name_it_stands_for(
+    model_demo: SimpleNamespace,
+) -> None:
+    """The gateway restores a task's call arguments, so the run keeps the owner's own text.
+
+    The model saw PERSON_0001 in the material and wrote it into a note. The
+    gateway returns the call with the name put back (the fake restores the
+    pseudonyms it is told about, as the real one restores the ones it
+    assigned), so the note is stored with the name, a search would run on it,
+    and the call is held that way for the next turn. The gateway pseudonymizes
+    the conversation again as it goes out; between the backend's agents
+    nothing is cleaned.
+    """
+    api = model_demo
+    api.gateway.restorations = {"PERSON_0001": "Jane Roe"}
+    api.gateway.child_script = [
+        [
+            tool_call(
+                "save_note",
+                {"name": "note-party.md", "content": "PERSON_0001 signed.", "reason": "Keep it."},
+                "call_a",
+            ),
+        ],
+        None,
+    ]
+    root, children, _ = await approved(api)
+    assert await job(api, root, children[0]) == "completed"
+    async with api.env.factory() as db:
+        files = {
+            f.name: f
+            for f in await db.scalars(
+                select(OrchestrationFile).where(OrchestrationFile.session_id == UUID(children[0]))
+            )
+        }
+    assert files["note-party.md"].content == "Jane Roe signed."
+    # The call is replayed on the next turn as it was returned, with the name.
+    second = child_requests(api)[1]
+    held = json.loads(second.messages[2].tool_calls[0]["function"]["arguments"])
+    assert held["content"] == "Jane Roe signed."
+
+
 async def test_a_restart_mid_loop_reuses_completed_effects_and_repeats_none(
     model_demo: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:

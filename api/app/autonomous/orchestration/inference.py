@@ -182,8 +182,11 @@ class InferenceBinding(Snapshot):
     # response may carry tool calls only when they were.
     tools_offered: bool = False
     # ADR 0038 D7: whether the gateway is asked to restore pseudonyms in the
-    # reply's tool-call arguments. True only for a pseudonymized planning
-    # call that is offered the plan tool.
+    # reply's tool-call arguments. True for a call that is offered tools on a
+    # route that pseudonymizes: the plan, a search query or a note is acted on
+    # as the owner's own text. Between the backend's agents the run's data is
+    # stored as it is; the gateway pseudonymizes it again, as it does every
+    # message, on the way out.
     restore_tool_arguments: bool = False
 
     @field_serializer("reservation_usd")
@@ -229,15 +232,16 @@ class InferenceRoutes:
         scope: ExecutionScope,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
-        *,
-        plan_tool: bool = False,
     ) -> InferenceBinding:
         """Bind one request to the pinned route as the gateway is configured now.
 
-        ``plan_tool`` says this is a planning call offered its one terminal
-        tool. Where such a call will be pseudonymized, the binding asks the
-        gateway to restore the pseudonyms in that tool's arguments, which
-        the application reads and never sends back to a model.
+        Where a call that is offered tools will be pseudonymized, the binding
+        asks the gateway to restore the pseudonyms in the arguments of the
+        calls it makes. The run holds what its agents wrote as the owner's own
+        text, so a search runs on the name that was asked about and a note is
+        kept with the name in it. The gateway pseudonymizes the conversation on
+        every request, the earlier calls' arguments and the tool results
+        included, so what is held does not leave as such.
         """
         operator = self.operator()
         if (
@@ -328,7 +332,7 @@ class InferenceRoutes:
                 gateway_revision=config["configuration_revision"],
                 anonymization_expected=expected,
                 tools_offered=bool(tools),
-                restore_tool_arguments=plan_tool and bool(tools) and expected,
+                restore_tool_arguments=bool(tools) and expected,
             )
         except (KeyError, TypeError, ValueError, ArithmeticError, AttributeError):
             raise Forbidden(

@@ -396,18 +396,20 @@ here differs from that section, that section is the present state.
   readable. Completed and stopped runs keep their plan hashes and approvals. Ruling 3
   settled that such a run need not survive; the upgrade notes are to say so.
 - **Document reads and pseudonymization.** A document a task reads is returned to the
-  model as a tool result. The gateway pseudonymizes the content of system, user and
-  assistant messages only, so the document's text reaches the provider as stored, as
-  retrieved text does in ordinary chat. The request, the thread and the task text are
-  pseudonymized where the route's tier calls for it, and placeholders in a reply's text are
-  restored. A placeholder inside a sub-agent's tool-call arguments is not restored, so a
-  note, a stated reason or a search query can hold one. When this was written the plan
-  tool's arguments were not restored either; since ruling 6 the gateway restores them on
-  request (see "Built after the maintainer's rulings"). What the gateway does without
-  that request is pinned in `gateway/tests/anonymization/test_middleware.py`. Whether source documents should be
-  pseudonymized is the open question
-  [DE-269](../PRD.md#9-deferred-enhancements-and-identified-future-work) already
-  tracks. This plan did not decide it.
+  model as a tool result. As first built, the gateway pseudonymized the content of
+  system, user and assistant messages only, so the document's text reached the provider as
+  stored, as retrieved text does in ordinary chat. That was an inconsistency, and the
+  maintainer ruled that the gateway is where the rule applies: what leaves it for a
+  provider is pseudonymized as one request, in every role, and between the backend's own
+  agents nothing is. The gateway now rewrites a tool message's JSON string values and the
+  arguments of an assistant message's earlier calls, with the one mapper, and restores
+  placeholders in a reply's text and, on the caller's request, in a call's arguments. A
+  governed run's calls that are offered tools make that request on a route that
+  pseudonymizes, so a note, a stated reason or a search query is held with the name in it
+  and is pseudonymized again when the conversation goes out. What the gateway does is
+  pinned in `gateway/tests/anonymization/test_middleware.py`. Ordinary chat is unchanged:
+  its retrieval context stays un-pseudonymized under Decision M2-1, which
+  [DE-269](../PRD.md#9-deferred-enhancements-and-identified-future-work) tracks.
 - **Citation checks.** The delivered answer's quotations are checked with the Citation
   Engine's exact and tolerant stages only, against the whole text of the file their source
   number names. No judge model is called, because a run's model calls are priced, reserved
