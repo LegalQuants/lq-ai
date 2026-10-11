@@ -55,7 +55,11 @@ explicitly qualified.
 
 ## Cascade
 
-Each citation the model emits (a `"<quote>" (Source: [N])` pair)
+Each citation the model emits (a `"<quote>" (Source: [N])` pair, optionally
+with up to three `*` or `_` between the closing quotation mark and the marker,
+so a quotation the model wrapped in Markdown emphasis is still checked; the
+characters between the quotation marks are unchanged, and an asterisk or
+underscore inside them is part of the quote)
 becomes a `CitationCandidate` and runs through staged verification.
 The first stage to verify wins; the persisted method names the stage.
 Misses propagate to the next stage. A row that misses *every* stage

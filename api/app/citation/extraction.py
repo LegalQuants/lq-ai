@@ -109,6 +109,12 @@ class CitationCandidate:
 # match (``+?``) so we don't gobble a closing quote that belongs to a
 # later, different citation.
 #
+# A curly body stops at the next opening quote as well as at a closing one, as a
+# straight body stops at the next straight quote. Without that, each unclosed
+# opening quote scanned to the end of the text, so a reply with many of them
+# took time quadratic in its length (about 450 ms at 40 KB, minutes at 1 MB),
+# and the nearest opening quote is the one a closing quote belongs to.
+#
 # Up to three ``*`` or ``_`` may stand between the closing quote and the
 # marker, so a quotation the model wrapped in Markdown emphasis
 # (``**"..."** (Source: [N])``) is still a citation and is checked like
@@ -119,7 +125,7 @@ class CitationCandidate:
 _CITATION_RE = re.compile(
     r'"(?P<sq>[^"]+?)"[*_]{0,3}\s*\(Source:\s*\[(?P<sq_index>\d+)\]\)'
     r"|"
-    r"“(?P<cq>[^”]+?)”[*_]{0,3}\s*\(Source:\s*\[(?P<cq_index>\d+)\]\)",
+    r"“(?P<cq>[^“”]+?)”[*_]{0,3}\s*\(Source:\s*\[(?P<cq_index>\d+)\]\)",
     flags=re.DOTALL,
 )
 

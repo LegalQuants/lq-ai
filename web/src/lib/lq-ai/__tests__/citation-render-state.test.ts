@@ -223,6 +223,25 @@ describe('CITATION_REGEX + iterCitationMarkers', () => {
 		expect(markers.map((m) => m.sourceIndex)).toEqual([1, 2]);
 	});
 
+	it('closes a curly quotation at the nearest opening quote, as a straight one does', () => {
+		// A stray opening quotation mark does not belong to the quotation after it.
+		const text = 'He said “no, and then “no compete” (Source: [1]).';
+		const markers = Array.from(iterCitationMarkers(text));
+		expect(markers.map((m) => m.quote)).toEqual(['no compete']);
+	});
+
+	it('scans a reply full of unclosed curly quotes in linear time', () => {
+		// Each opening quote used to scan to the end of the text, which is quadratic: about
+		// half a second at 40 KB in the api's twin of this pattern, minutes at 1 MB. The
+		// bound is far above a linear scan and far below a quadratic one.
+		for (const text of ['“ '.repeat(250_000), '“a” '.repeat(125_000) + '“'.repeat(250_000)]) {
+			const started = performance.now();
+			const markers = Array.from(iterCitationMarkers(text));
+			expect(markers).toHaveLength(0);
+			expect(performance.now() - started).toBeLessThan(5000);
+		}
+	});
+
 	it('CITATION_REGEX is exported with the g + s flags (matchAll-safe)', () => {
 		expect(CITATION_REGEX.flags).toContain('g');
 		expect(CITATION_REGEX.flags).toContain('s');

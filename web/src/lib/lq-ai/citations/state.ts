@@ -29,13 +29,18 @@ export type CitationRenderState =
  * The emphasis before the opening quote is ordinary text ahead of the
  * match, so a match still starts at the opening quote.
  *
+ * A curly body stops at the next opening quote as well as at a closing one, as
+ * a straight body stops at the next straight quote. Otherwise each unclosed
+ * opening quote scans to the end of the text, so a reply with many of them
+ * takes time quadratic in its length, here in the person's browser tab.
+ *
  * Capture groups:
  *   1: straight-quote body, 2: straight-quote source index
  *   3: curly-quote body,    4: curly-quote source index
  * Exactly one of (1,2) or (3,4) is populated per match.
  */
 export const CITATION_REGEX =
-	/"([^"]+?)"[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)|“([^”]+?)”[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)/gs;
+	/"([^"]+?)"[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)|“([^“”]+?)”[*_]{0,3}\s*\(Source:\s*\[(\d+)\]\)/gs;
 
 /** Convenience: parsed citation marker from a model response. */
 export interface ParsedCitationMarker {
