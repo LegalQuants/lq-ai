@@ -226,6 +226,27 @@ async def test_an_owner_made_a_viewer_reads_and_halts_their_run_but_cannot_appro
     assert halted.status_code == 200 and halted.json()["status"] == "halted"
 
 
+async def test_closing_and_the_tree_halt_stay_reachable_for_an_owner_made_a_viewer(
+    roles: SimpleNamespace,
+) -> None:
+    """Both only narrow authority, so a changed role does not take them away.
+
+    Close answers for the run's state (this run is not uncertain), never for the role:
+    moving it behind the gate would make it a 403 and leave such an owner unable to
+    release an uncertain run.
+    """
+    api = roles
+    planned = await awaiting(api)
+    root = planned["root_id"]
+    await api.owner_as("viewer")
+
+    closed = await api.client.post(f"{BASE}/chat-runs/{root}/close")
+    assert closed.status_code == 409 and READ_ONLY not in closed.text
+    halted = await api.client.post(f"{BASE}/{root}/halt")
+    assert halted.status_code == 200, halted.text
+    assert halted.json()["status"] == "halted"
+
+
 async def test_a_member_again_can_approve(roles: SimpleNamespace) -> None:
     """The gate reads the role as it is now, in both directions."""
     api = roles
@@ -282,6 +303,32 @@ async def test_a_privileged_reader_reads_another_owners_run_and_each_read_is_aud
     assert (await api.client.post(f"{BASE}/{root}/halt")).status_code == 404
     # Refused reads and actions write no further auditor rows.
     assert len(await auditor_rows(api, reader)) == 4
+
+
+async def test_the_owner_sees_in_the_receipts_who_read_their_run(roles: SimpleNamespace) -> None:
+    """A privileged read is an event in the owner's own feed, with the reader's id.
+
+    The reader's `auditor.run_viewed` row is keyed to the run's session, which the
+    feed resolves through the chat's run message. Whether an owner should see this
+    was not recorded before; this pins what is built: they do, as they see
+    `receipts_viewed` rows for their chat (audit the auditor).
+    """
+    api = roles
+    value = await start_in_chat(api, await new_chat(api), profile=PROFILE)
+    await run_to_completion(api, value)
+    reader = await api.someone("auditor")
+    api.act_as(reader)
+    assert (await api.client.get(f"{BASE}/chat-runs/{value['root_id']}")).status_code == 200
+
+    await api.owner_as("member")
+    response = await api.client.get(f"{CHATS}/{value['chat_id']}/receipts")
+    assert response.status_code == 200, response.text
+    seen = [
+        (e["detail"]["action"], e["detail"]["actor_user_id"], e["detail"]["run_root_id"])
+        for e in response.json()
+        if e["kind"] == "audit" and e["detail"]["action"].startswith("auditor.")
+    ]
+    assert seen == [("auditor.run_viewed", str(reader.id), value["root_id"])]
 
 
 @pytest.mark.parametrize(("role", "admin"), [("auditor", False), ("admin", True)])

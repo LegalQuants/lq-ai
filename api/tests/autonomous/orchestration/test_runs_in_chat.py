@@ -429,6 +429,35 @@ async def test_receipts_show_a_run_through_the_same_feed_as_an_ordinary_turn(
     assert len(export.text.splitlines()) == len(events)
 
 
+async def test_a_chats_receipts_hold_only_the_audit_rows_of_runs_hosted_in_that_chat(
+    model_demo: SimpleNamespace,
+) -> None:
+    """The feed is scoped to its chat: another chat's run does not appear in it.
+
+    Two chats of one owner each host a run. Each feed carries its own run's audit rows
+    and none of the other's. Without the chat filter on the run messages, a run's rows
+    would be listed in every chat that has any run.
+    """
+    api = model_demo
+    first_chat, second_chat = await new_chat(api), await new_chat(api)
+    first = await start_in_chat(api, first_chat)
+    await run_to_completion(api, first)
+    second = await start_in_chat(api, second_chat)
+    await run_to_completion(api, second)
+    assert first["root_id"] != second["root_id"]
+
+    for chat_id, mine, other in ((first_chat, first, second), (second_chat, second, first)):
+        response = await api.client.get(f"{CHATS}/{chat_id}/receipts")
+        assert response.status_code == 200, response.text
+        events = response.json()
+        run_rows = [e for e in events if e["kind"] == "audit" and "run_root_id" in e["detail"]]
+        assert run_rows
+        assert {e["detail"]["run_root_id"] for e in run_rows} == {mine["root_id"]}
+        assert {e["detail"]["message_id"] for e in run_rows} == {mine["message_id"]}
+        assert other["root_id"] not in json.dumps(events)
+        assert other["message_id"] not in json.dumps(events)
+
+
 async def test_a_run_started_without_a_chat_still_runs_and_has_no_message(
     model_demo: SimpleNamespace,
 ) -> None:

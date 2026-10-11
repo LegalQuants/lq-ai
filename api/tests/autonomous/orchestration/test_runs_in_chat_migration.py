@@ -178,16 +178,42 @@ def exercise(source_url: str) -> None:
             with pytest.raises(DBAPIError), target.begin() as db:
                 db.execute(text(statement), params)
 
+        def refused_by_the_guard() -> None:
+            """0073's own guard refused, as the driver reports it.
+
+            SQLAlchemy echoes the whole failing statement into the error text, and the
+            guard shares a statement with the DDL after it, so a match on the text of
+            the error would pass when any later step failed instead. The driver's own
+            message says which clause raised.
+            """
+            with pytest.raises(DBAPIError) as refusal:
+                command.downgrade(config, "0072")
+            assert "0073 downgrade requires removing chat-hosted runs" in str(refusal.value.orig)
+
         # Downgrade is refused while a run message or a registry profile is retained.
-        with pytest.raises(DBAPIError, match="removing chat-hosted runs"):
-            command.downgrade(config, "0072")
+        refused_by_the_guard()
         with target.begin() as db:
             assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0073"
             db.execute(text("DELETE FROM messages WHERE id=:id"), {"id": message})
-        with pytest.raises(DBAPIError, match="removing chat-hosted runs"):
-            command.downgrade(config, "0072")
+        # A registry-profile root alone is enough.
+        refused_by_the_guard()
         with target.begin() as db:
             db.execute(text("DELETE FROM autonomous_sessions WHERE id=:id"), {"id": second})
+            # Only a run message is retained, with no registry-profile root: the other half
+            # of the guard, which the two refusals above never isolate. Without it a later
+            # constraint would still fail on the retained row, with a different error.
+            db.execute(
+                text(
+                    "INSERT INTO messages(id,chat_id,role,kind,content,autonomous_session_id) "
+                    "VALUES (:id,:chat,'assistant','run','',:session)"
+                ),
+                {"id": message, "chat": chat, "session": retained},
+            )
+        # A run message alone is enough.
+        refused_by_the_guard()
+        with target.begin() as db:
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0073"
+            db.execute(text("DELETE FROM messages WHERE id=:id"), {"id": message})
         command.downgrade(config, "0072")
         with target.begin() as db:
             # The 0.8.0 run survived the round trip, with its reservation.

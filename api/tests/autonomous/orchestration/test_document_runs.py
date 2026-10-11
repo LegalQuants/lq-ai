@@ -869,6 +869,49 @@ async def test_the_projects_tier_floor_refuses_a_weaker_pinned_route(
     assert not api.gateway.requests and await messages(api, chat_id) == []
 
 
+async def test_another_users_export_holds_none_of_the_owners_runs(
+    documents: SimpleNamespace,
+) -> None:
+    """The export is the exporting user's own work product and no one else's (ADR 0016 P9).
+
+    A user with no runs gets an empty runs file, and nothing of the owner's run (its id,
+    its message, its file names, its text) is anywhere in the archive. Without the owner
+    filter on the roots, the owner's run would be in it.
+    """
+    api = documents
+    chat_id, msa, dpa = await setup(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[msa, dpa])
+    final = await run_to_completion(api, value)
+    async with api.env.factory.begin() as db:
+        stranger = User(
+            email=f"stranger-{uuid4()}@example.com",
+            hashed_password="unused-test",
+            autonomous_enabled=True,
+        )
+        db.add(stranger)
+        await db.flush()
+        stranger_id = stranger.id
+    try:
+        async with api.env.factory() as db:
+            other = await db.get(User, stranger_id)
+            assert other is not None
+            archive = zipfile.ZipFile(io.BytesIO(await build_export_zip_for_test(db, other)))
+        assert json.loads(archive.read("orchestration_runs.json")) == []
+        everything = b"".join(archive.read(name) for name in archive.namelist())
+        for needle in (
+            value["root_id"],
+            value["message_id"],
+            final["tree"]["plan_hash"],
+            "msa.txt",
+            value["planning"]["goal"],
+        ):
+            assert needle.encode() not in everything, needle
+    finally:
+        async with api.env.factory.begin() as db:
+            await db.execute(delete(AuditLog).where(AuditLog.user_id == stranger_id))
+            await db.execute(delete(User).where(User.id == stranger_id))
+
+
 async def test_the_owners_export_includes_run_plans_results_and_files(
     documents: SimpleNamespace,
 ) -> None:

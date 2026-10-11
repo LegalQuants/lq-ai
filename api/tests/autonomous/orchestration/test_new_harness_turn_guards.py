@@ -1684,6 +1684,37 @@ async def test_a_file_in_the_knowledge_base_that_another_user_owns_is_withheld(
     assert [s["filename"] for s in run.final["sources"]] == ["own.txt"]
 
 
+async def test_a_passage_of_a_file_deleted_after_the_search_read_it_is_withheld_and_counted(
+    harness: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The check on the passages is a second layer behind the search's own.
+
+    The search leaves a deleted file out in SQL, so a test that deletes a file first
+    never reaches the check. This one deletes it after the search has returned the
+    file's passage and before the check, in the same transaction, as another request
+    could. Without the check the passage would be shown.
+    """
+    api = harness
+    _, files = await knowledge_base(api, "Mixed", {"own.txt": LEAVE, "gone.txt": LEAVE})
+    real_search = retrieval.hybrid_search
+
+    async def deleting_once_it_has_searched(db: Any, **kwargs: Any) -> Any:
+        found = await real_search(db, **kwargs)
+        gone = update(File).where(File.id == UUID(files["gone.txt"]))
+        await db.execute(gone.values(deleted_at=func.now()))
+        return found
+
+    async def install() -> None:
+        monkeypatch.setattr(retrieval, "hybrid_search", deleting_once_it_has_searched)
+
+    run = await searched(api, [[search("annual leave")], None], after_approval=install)
+    (result,) = run.results
+    assert [p["file"] for p in result["results"]] == ["own.txt"]
+    (step,) = run.steps
+    assert (step["summary"]["passages"], step["summary"]["withheld"]) == (1, 1)
+    assert [s["filename"] for s in run.final["sources"]] == ["own.txt"]
+
+
 async def test_when_every_matching_passage_is_withheld_the_model_is_told_none_can_be_shown(
     harness: SimpleNamespace,
 ) -> None:

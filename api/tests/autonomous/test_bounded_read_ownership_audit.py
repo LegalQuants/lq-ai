@@ -91,15 +91,29 @@ async def test_an_owned_bounded_read_passes_the_ownership_check_without_a_denial
     assert await _retrieval_outcomes(db_session, session) == []
 
 
+@pytest.mark.parametrize("target", ["the owner's own", "unknown", "another owner's"])
 async def test_a_session_that_is_not_a_run_is_refused_the_bounded_read(
     db_session: AsyncSession,
     seeded_matter_session: AutonomousSession,
     kb_with_one_indexed_file: KbOneFile,
+    target: str,
 ) -> None:
+    """The run requirement comes first, before any ownership predicate.
+
+    The same refusal for a file the session's owner owns, one that does not exist and
+    one another owner holds, and no ``ownership_denied`` row for any of them. Were the
+    ownership check reached first, the last two would be refused as "not accessible"
+    and audited.
+    """
     session, kb = seeded_matter_session, kb_with_one_indexed_file
     session.current_phase = "analysis"
-    # The file is the session owner's, so the ownership check would pass it.
-    session.user_id = kb.owner_id
+    file_id = kb.file_id
+    if target == "the owner's own":
+        # The file is the session owner's, so the ownership check would pass it.
+        session.user_id = kb.owner_id
+    elif target == "unknown":
+        file_id = uuid.uuid4()
+    # "another owner's": the session keeps its own owner, who does not own the file.
     await db_session.flush()
     with patch(
         "app.autonomous.guard._handle_read_document_text", new_callable=AsyncMock
@@ -108,19 +122,20 @@ async def test_a_session_that_is_not_a_run_is_refused_the_bounded_read(
             await guarded_tool_call(
                 session,
                 ToolIntent.retrieve_chunks,
-                {"file_id": str(kb.file_id), "offset": 0, "max_chars": 100},
+                {"file_id": str(file_id), "offset": 0, "max_chars": 100},
                 db_session,
                 None,
             )
         read_text.assert_not_awaited()
     assert await _retrieval_outcomes(db_session, session) == []
-    # The whole-file read such a session had before ADR 0038 is still served.
-    whole = await guarded_tool_call(
-        session,
-        ToolIntent.retrieve_chunks,
-        {"file_id": str(kb.file_id)},
-        db_session,
-        None,
-    )
-    assert whole.data["chunks"]
-    assert await _retrieval_outcomes(db_session, session) == ["started", "success"]
+    if target == "the owner's own":
+        # The whole-file read such a session had before ADR 0038 is still served.
+        whole = await guarded_tool_call(
+            session,
+            ToolIntent.retrieve_chunks,
+            {"file_id": str(kb.file_id)},
+            db_session,
+            None,
+        )
+        assert whole.data["chunks"]
+        assert await _retrieval_outcomes(db_session, session) == ["started", "success"]
