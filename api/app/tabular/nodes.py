@@ -47,7 +47,7 @@ from app.graph_types import AsyncStateNode
 from app.models.document import Document, DocumentChunk
 from app.models.file import File
 from app.models.tabular import TabularExecution
-from app.observability_helpers import get_tracer, record_attributes
+from app.observability_helpers import get_tracer, quiet_span, record_attributes
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.tabular import ColumnSpec
 from app.tabular.cost import TABULAR_EXTRACTION_PURPOSE
@@ -253,7 +253,7 @@ def make_extract_cells_node(
                 verify_ensemble_config = (
                     ensemble_config if (effective and ensemble_config is not None) else None
                 )
-                with tracer.start_as_current_span("tabular.cell") as cell_span:
+                with quiet_span(tracer, "tabular.cell") as cell_span:
                     record_attributes(
                         cell_span,
                         **{
