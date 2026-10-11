@@ -31,13 +31,36 @@ from __future__ import annotations
 
 from typing import Any, Final
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import audit_action
 from app.autonomous.enums import ToolIntent
 from app.models.autonomous import AutonomousSession
+from app.models.orchestration import OrchestrationRoot
 
 OWNERSHIP_DENIED_OUTCOME: Final[str] = "ownership_denied"
+
+# The ``privilege_basis`` of a run outside any matter that is privileged because
+# a matter holding one of its selected files is (ADR 0038, ruling 4). A matter's
+# own rows carry its name; such a run has none to name.
+RUN_PRIVILEGE_BASIS: Final[str] = "run terms: a selected file is held by a privileged matter"
+
+
+def run_privilege(planning_snapshot: dict[str, Any] | None) -> dict[str, Any]:
+    """The privilege marking for the audit rows of a run that has no matter.
+
+    A run in a matter is marked from that matter. A run outside any matter has
+    none to read the flag from; it is privileged exactly when a matter that
+    holds a selected file is, and its intake snapshot recorded that at the
+    start (``root.privileged``). Every admission holds the run to it. Returns
+    the keyword arguments for :func:`~app.audit.audit_action`; empty when the
+    run is not privileged, so the row is marked as any other.
+    """
+    scope = planning_snapshot.get("root") if isinstance(planning_snapshot, dict) else None
+    if isinstance(scope, dict) and scope.get("privileged") is True:
+        return {"privilege_marked": True, "privilege_basis": RUN_PRIVILEGE_BASIS}
+    return {}
 
 
 class AuditedRetrievalOwnershipDenied(ValueError):
@@ -106,6 +129,19 @@ async def autonomous_audit(
 
     assert event in _ACTIONS, f"undefined autonomous audit action: {event!r}"
 
+    # A session in a matter is marked from the matter. One outside any matter
+    # may belong to a governed run, which carries the terms it took on at the
+    # start; any other has nothing to mark it from.
+    marking: dict[str, Any] = {"project_id": session.project_id}
+    if session.project_id is None:
+        marking = run_privilege(
+            await db.scalar(
+                select(OrchestrationRoot.planning_snapshot).where(
+                    OrchestrationRoot.session_id == session.root_session_id
+                )
+            )
+        )
+
     await audit_action(
         db,
         user_id=session.user_id,
@@ -113,6 +149,7 @@ async def autonomous_audit(
         resource_type="autonomous_session",
         resource_id=str(session.id),
         details=details or None,
+        **marking,
     )
 
 

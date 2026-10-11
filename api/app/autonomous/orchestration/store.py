@@ -32,6 +32,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.audit import audit_action
+from app.autonomous.audit import run_privilege
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import (
     ApprovalBinding,
@@ -213,10 +214,18 @@ async def _data_terms(
 
 async def _audit(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
     assert event in _EVENTS
+    # A run in a matter is marked from the matter. One in no matter is marked
+    # from the terms it took on when it was accepted (``run_privilege``), so the
+    # privileged-activity query finds a run that read a privileged matter's file.
+    marking: dict[str, Any] = (
+        {"project_id": root.project_id}
+        if root.project_id is not None
+        else run_privilege(root.planning_snapshot)
+    )
     await audit_action(
         db,
         user_id=root.owner_id,
-        project_id=root.project_id,
+        **marking,
         action=f"orchestration.{event}",
         resource_type="autonomous_session",
         resource_id=str(root.session_id),

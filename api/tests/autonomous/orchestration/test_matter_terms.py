@@ -39,10 +39,14 @@ from tests.autonomous.orchestration.test_new_harness import approved, filed, req
 
 from app.autonomous.orchestration.intake import WITHHELD_ANSWER, _stricter_than
 from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, selection_terms
+from app.models.audit import AuditLog
+from app.models.autonomous import AutonomousSession
 from app.models.document import Document
 from app.models.file import File
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.orchestration import OrchestrationEffect as Effect, OrchestrationRoot
 from app.models.project import Project, ProjectFile
+from app.models.project_knowledge_base import ProjectKnowledgeBase
 
 pytestmark = pytest.mark.integration
 
@@ -99,6 +103,47 @@ async def from_matter(api: SimpleNamespace, name: str, text: str, project_id: UU
     file_id = await filed(api, name, text)
     await hold(api, file_id, project_id)
     return file_id
+
+
+async def in_knowledge_base(
+    api: SimpleNamespace, file_id: str, project_id: UUID, *, archived: bool = False
+) -> None:
+    """File the file in a knowledge base that the matter has attached, and nowhere else."""
+    async with api.env.factory.begin() as db:
+        kb = KnowledgeBase(
+            owner_id=api.env.owner_id,
+            name=f"Knowledge base {uuid4().hex[:6]}",
+            archived_at=func.now() if archived else None,
+        )
+        db.add(kb)
+        await db.flush()
+        db.add(KnowledgeBaseFile(kb_id=kb.id, file_id=UUID(file_id)))
+        db.add(ProjectKnowledgeBase(project_id=project_id, knowledge_base_id=kb.id))
+
+
+async def run_audit_rows(api: SimpleNamespace, root_id: str) -> list[AuditLog]:
+    """Every audit row written for the run's root and its child sessions."""
+    async with api.env.factory() as db:
+        session_ids = [
+            str(session_id)
+            for session_id in (
+                await db.scalars(
+                    select(AutonomousSession.id).where(
+                        AutonomousSession.root_session_id == UUID(root_id)
+                    )
+                )
+            ).all()
+        ]
+        return list(
+            (
+                await db.scalars(
+                    select(AuditLog).where(
+                        AuditLog.resource_type == "autonomous_session",
+                        AuditLog.resource_id.in_(session_ids),
+                    )
+                )
+            ).all()
+        )
 
 
 async def listing(api: SimpleNamespace, chat_id: UUID, *file_ids: str) -> dict[str, Any]:
@@ -302,6 +347,89 @@ async def test_a_run_with_a_privileged_matters_document_is_privileged_and_not_ps
     assert await job(api, plain["root_id"]) == "completed"
     (planning,) = (await read(api, plain["root_id"]))["effects"]
     assert planning["accounting"]["anonymization_applied"] is True
+
+
+@pytest.mark.parametrize("archived", [False, True])
+async def test_a_file_held_only_through_a_matters_knowledge_base_brings_that_matters_terms(
+    harness: SimpleNamespace, archived: bool
+) -> None:
+    """A knowledge base's files are the matter's material, so its terms go with them.
+
+    The file is neither uploaded to the matter nor attached to it, only in a
+    knowledge base the matter has attached. Archiving the knowledge base does not
+    release the file, as archiving a matter does not.
+    """
+    api = harness
+    secret = await matter(api, "Privileged matter", floor=2, privileged=True)
+    only_there = await filed(api, "kb-only.txt", MSA)
+    await in_knowledge_base(api, only_there, secret, archived=archived)
+    free = await filed(api, "free.txt", DPA)
+    chat_id = await new_chat(api, in_project=False)
+
+    rows = await listing(api, chat_id, only_there, free)
+    kb_row = rows["kb-only.txt"]
+    assert (
+        kb_row["matters"],
+        kb_row["matter_minimum_inference_tier"],
+        kb_row["matter_privileged"],
+    ) == (["Privileged matter"], 2, True)
+    assert rows["free.txt"]["matters"] == []
+
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[only_there])
+    root = value["planning"]["root"]
+    assert (root["minimum_inference_tier"], root["privileged"]) == (2, True)
+    async with api.env.factory() as db:
+        terms = await selection_terms(
+            db, [(await db.scalar(select(Document.id).where(Document.file_id == UUID(only_there))))]
+        )
+    assert terms == MatterTerms(minimum_inference_tier=2, privileged=True)
+
+
+async def test_the_audit_rows_of_a_run_outside_a_matter_carry_the_privilege_of_its_files(
+    harness: SimpleNamespace,
+) -> None:
+    """The privileged-activity query must find a run that read a privileged matter's file."""
+    api = harness
+    secret = await matter(api, "Privileged matter", floor=1, privileged=True)
+    advice = await from_matter(api, "msa.txt", MSA, secret)
+    free = await filed(api, "free.txt", DPA)
+    chat_id = await new_chat(api, in_project=False)
+
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    privileged = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[advice])
+    final = await run_to_completion(api, privileged)
+    assert final["status"] == "completed"
+    rows = await run_audit_rows(api, privileged["root_id"])
+    families = {row.action.split(".")[0] for row in rows}
+    # Both writers: the run's own events and the chokepoint's session events.
+    assert families == {"orchestration", "autonomous_session"}
+    assert all(row.privilege_marked and row.privilege_basis for row in rows), [
+        (row.action, row.privilege_marked) for row in rows if not row.privilege_marked
+    ]
+
+    # The same chat with a file no matter holds is marked as any other row is.
+    api.gateway.expected_documents = [{"number": 1, "filename": "free.txt"}]
+    plain = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[free])
+    assert (await run_to_completion(api, plain))["status"] == "completed"
+    plain_rows = await run_audit_rows(api, plain["root_id"])
+    assert plain_rows
+    assert not any(row.privilege_marked or row.privilege_basis for row in plain_rows)
+
+
+async def test_the_audit_rows_of_a_run_in_a_privileged_matter_carry_the_matters_privilege(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    await set_terms(api, api.env.project_id, privileged=True, minimum_inference_tier=1)
+    chat_id = await new_chat(api)
+    document = await filed(api, "msa.txt", MSA)
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[document])
+    assert (await run_to_completion(api, value))["status"] == "completed"
+    rows = await run_audit_rows(api, value["root_id"])
+    assert {row.action.split(".")[0] for row in rows} == {"orchestration", "autonomous_session"}
+    assert all(row.privilege_marked and row.privilege_basis for row in rows)
 
 
 async def test_a_direct_answer_is_made_under_the_selected_documents_terms(

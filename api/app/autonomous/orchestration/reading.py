@@ -11,6 +11,8 @@ what the owner is offered and what a run may read cannot drift apart.
   they are filed, and takes on the terms of every matter that holds one of
   them (ADR 0038, ruling 4).
 
+A matter holds a file when it uploaded it, when it attached it, or when the
+file is in a knowledge base the matter has attached (:func:`held_through_a_knowledge_base`).
 A file that a matter holds carries that matter's inference-tier floor and
 privilege flag, and they go with the file. A run with no matter has no terms
 of its own, so it runs under the strictest of its documents' matters: the
@@ -45,14 +47,41 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document
 from app.models.file import File
-from app.models.knowledge import KnowledgeBase
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.project import Project, ProjectFile
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 
 
+def held_through_a_knowledge_base(project: Any = None) -> Any:
+    """True for a file in a knowledge base that a matter has attached.
+
+    With ``project`` (a column or an id), only that matter. A matter's files
+    include the ones in its knowledge bases, which its runs may search, so a
+    file that lives only there still brings that matter's terms with it. An
+    archived knowledge base counts: archiving does not release a file.
+    """
+    conditions = [
+        KnowledgeBaseFile.file_id == File.id,
+        KnowledgeBaseFile.kb_id == ProjectKnowledgeBase.knowledge_base_id,
+    ]
+    if project is not None:
+        conditions.append(ProjectKnowledgeBase.project_id == project)
+    return exists().where(*conditions)
+
+
 def filed_in_a_matter() -> Any:
-    """True for a file that any matter holds, by upload or by attachment."""
-    return File.project_id.is_not(None) | exists().where(ProjectFile.file_id == File.id)
+    """True for a file that any matter holds: by upload, attachment or a knowledge base.
+
+    This decides which candidates of a run outside any matter bring a matter's
+    terms. It is not the test of whether a matter's own search may show a
+    passage (:func:`filed_in_another_matter` and :func:`filed_in_matter`), which
+    stays as it was: a knowledge base's files are what that search is for.
+    """
+    return (
+        File.project_id.is_not(None)
+        | exists().where(ProjectFile.file_id == File.id)
+        | held_through_a_knowledge_base()
+    )
 
 
 def filed_in_another_matter(project_id: UUID) -> Any:
@@ -116,7 +145,10 @@ class MatterTerms:
 def holding_matters(
     document_ids: Collection[UUID],
 ) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
-    """Each matter that holds the file of one of these documents, by upload or attachment.
+    """Each matter that holds the file of one of these documents.
+
+    A matter holds a file by upload, by attachment, or through a knowledge base
+    it has attached.
 
     One row for each file and matter: the file, then the matter's id, name,
     owner, floor and privilege flag. An archived matter is included: archiving
@@ -141,6 +173,7 @@ def holding_matters(
                 exists().where(
                     ProjectFile.project_id == Project.id, ProjectFile.file_id == File.id
                 ),
+                held_through_a_knowledge_base(Project.id),
             ),
         )
         .where(Document.id.in_(document_ids))
