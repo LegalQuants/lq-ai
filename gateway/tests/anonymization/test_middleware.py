@@ -23,6 +23,7 @@ middleware into the FastAPI app and mocks the provider.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 import pytest
@@ -72,6 +73,26 @@ class _StubAnalyzer:
 
     def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
         return list(self._by_text.get(text, []))
+
+
+class _NameAnalyzer:
+    """Finds each of the given names wherever it stands in the text.
+
+    The keyed stub above needs the exact text of each message. A tool result is
+    walked value by value, so these tests name the entities instead.
+    """
+
+    def __init__(self, names: dict[str, str]) -> None:
+        self._names = names
+
+    def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
+        found: list[_Span] = []
+        for name, entity_type in self._names.items():
+            start = text.find(name)
+            while start != -1:
+                found.append(_Span(entity_type, start, start + len(name)))
+                start = text.find(name, start + len(name))
+        return found
 
 
 def _make_request(
@@ -235,58 +256,271 @@ def test_pre_anonymize_walks_user_assistant_and_system_roles() -> None:
     assert req.messages[2].content == "Assistant: ORGANIZATION_0002."
 
 
+_CONFIG = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
+_PEOPLE = {"John Smith": "PERSON", "Jane Doe": "PERSON", "Acme Ltd": "ORGANIZATION"}
+
+
+def _tool_call(arguments: str, *, call_id: str = "call_1", name: str = "save_note") -> dict:
+    return {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}
+
+
+def _pseudonymized(messages: list[ChatCompletionMessage], **kwargs: object) -> tuple:
+    req = _make_request(messages=messages, **kwargs)
+    mapper = pre_anonymize_request(
+        chat_request=req,
+        config=_CONFIG,
+        routed_tier=4,
+        anonymizer=Anonymizer(analyzer=_NameAnalyzer(_PEOPLE)),
+    )
+    return req, mapper
+
+
 @pytest.mark.unit
-def test_pre_anonymize_leaves_a_tool_result_and_tool_call_arguments_as_sent() -> None:
-    """A ``tool`` message is not walked, so a tool result reaches the provider as sent.
+def test_pre_anonymize_pseudonymizes_a_tool_result_and_the_arguments_of_an_earlier_call() -> None:
+    """What a tool read, and what the model asked of it, leave the gateway like any content.
 
     A governed run's child reads a document through a tool (ADR 0038 D4, D5),
-    so the document's text travels as a tool result. This pins what the
-    provider receives for it: the stored text, not pseudonyms, as with the
-    retrieval context in ordinary chat. The arguments of an earlier tool call
-    are not content either and are sent as the model wrote them.
+    so the document's text travels as a tool result. Between the backend's
+    agents the text stays as stored; at this boundary it is pseudonymized with
+    the rest of the request, by the same mapper, so one name is one pseudonym
+    in the task, in the call and in the result.
     """
 
     arguments = '{"name": "note-smith.md", "content": "John Smith signed."}'
-    req = _make_request(
-        messages=[
+    req, mapper = _pseudonymized(
+        [
             ChatCompletionMessage(role="user", content="User: Jane Doe."),
             ChatCompletionMessage(
-                role="assistant",
-                content=None,
-                tool_calls=[
-                    {
-                        "id": "call_1",
-                        "type": "function",
-                        "function": {"name": "save_note", "arguments": arguments},
-                    }
-                ],
+                role="assistant", content=None, tool_calls=[_tool_call(arguments)]
             ),
             ChatCompletionMessage(role="tool", tool_call_id="call_1", content="John Smith signed."),
         ]
     )
-    config = AnonymizationConfig(enabled=True, apply_at_tiers=[3, 4, 5])
-    analyzer = _StubAnalyzer(
+
+    assert mapper is not None
+    assert req.messages[0].content == "User: PERSON_0001."
+    assert req.messages[1].tool_calls is not None
+    sent = req.messages[1].tool_calls[0]["function"]["arguments"]
+    assert json.loads(sent) == {"name": "note-smith.md", "content": "PERSON_0002 signed."}
+    assert list(json.loads(sent)) == ["name", "content"]
+    assert req.messages[2].content == "PERSON_0002 signed."
+    assert mapper.reverse() == {"PERSON_0001": "Jane Doe", "PERSON_0002": "John Smith"}
+
+
+@pytest.mark.unit
+def test_pre_anonymize_walks_the_string_values_of_a_json_tool_result_not_its_keys() -> None:
+    result = json.dumps(
         {
-            "User: Jane Doe.": [_Span("PERSON", 6, 14)],
-            # The analyzer would find the name if it were asked.
-            "John Smith signed.": [_Span("PERSON", 0, 10)],
-            arguments: [_Span("PERSON", 39, 49)],
+            "document": 1,
+            "John Smith": "a member name is not content",
+            "text": "John Smith signed for Acme Ltd.\nJane Doe witnessed.",
+            "parts": ["Acme Ltd", 2, None, True],
         }
+    )
+    req, mapper = _pseudonymized([ChatCompletionMessage(role="tool", content=result)])
+
+    assert mapper is not None
+    sent = json.loads(req.messages[0].content or "")
+    assert sent == {
+        "document": 1,
+        "John Smith": "a member name is not content",
+        "text": "PERSON_0001 signed for ORGANIZATION_0001.\nPERSON_0002 witnessed.",
+        "parts": ["ORGANIZATION_0001", 2, None, True],
+    }
+    # The escape for a line break is never put against a name.
+    assert "\\nPERSON_0002" in (req.messages[0].content or "")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "content",
+    [
+        '{"document":1,"text":"Nothing to hide here."}',  # compact, as written
+        "[ 1 ,  2 ]",  # spacing the serialiser would change
+        "Plain words, no entity.",
+        "",
+    ],
+)
+def test_pre_anonymize_returns_a_tool_result_with_no_entity_exactly_as_sent(content: str) -> None:
+    req, mapper = _pseudonymized([ChatCompletionMessage(role="tool", content=content)])
+
+    assert mapper is not None
+    assert req.messages[0].content == content
+
+
+@pytest.mark.unit
+def test_pre_anonymize_treats_a_tool_result_that_is_not_a_json_document_as_text() -> None:
+    req, _ = _pseudonymized(
+        [
+            ChatCompletionMessage(role="tool", content="John Smith signed."),
+            ChatCompletionMessage(
+                role="tool", content='"John Smith"'
+            ),  # a JSON string, not a document
+            ChatCompletionMessage(role="tool", content="{not json: John Smith"),
+        ]
+    )
+
+    assert [m.content for m in req.messages] == [
+        "PERSON_0001 signed.",
+        '"PERSON_0001"',
+        "{not json: PERSON_0001",
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"query": "John Smith", "query": "again"}',  # a member twice
+        '{"query": "John Smith", "n": NaN}',  # not JSON
+        '{"query": "John Smith", "n": Infinity}',
+    ],
+)
+def test_pre_anonymize_keeps_the_structure_of_arguments_it_cannot_walk(arguments: str) -> None:
+    """Fail restrictive: the name still goes, and nothing is repaired on the way."""
+
+    req, _ = _pseudonymized(
+        [ChatCompletionMessage(role="assistant", tool_calls=[_tool_call(arguments)])]
+    )
+
+    assert req.messages[0].tool_calls is not None
+    sent = req.messages[0].tool_calls[0]["function"]["arguments"]
+    assert sent == arguments.replace("John Smith", "PERSON_0001")
+    assert "John Smith" not in sent
+
+
+@pytest.mark.unit
+def test_pre_anonymize_leaves_the_rest_of_a_tool_call_alone() -> None:
+    call = _tool_call('{"query": "John Smith"}', call_id="call_John Smith_1")
+    req, _ = _pseudonymized([ChatCompletionMessage(role="assistant", tool_calls=[call])])
+
+    assert req.messages[0].tool_calls == [
+        {
+            "id": "call_John Smith_1",
+            "type": "function",
+            "function": {"name": "save_note", "arguments": '{"query": "PERSON_0001"}'},
+        }
+    ]
+
+
+@pytest.mark.unit
+def test_pre_anonymize_honours_the_skip_flag_on_a_tool_message_and_a_call() -> None:
+    arguments = '{"query": "John Smith"}'
+    req, mapper = _pseudonymized(
+        [
+            ChatCompletionMessage(
+                role="assistant",
+                tool_calls=[_tool_call(arguments)],
+                lq_ai_skip_anonymization=True,
+            ),
+            ChatCompletionMessage(
+                role="tool", content="John Smith signed.", lq_ai_skip_anonymization=True
+            ),
+            ChatCompletionMessage(role="tool", content="Jane Doe signed."),
+        ]
+    )
+
+    assert mapper is not None
+    assert req.messages[0].tool_calls is not None
+    assert req.messages[0].tool_calls[0]["function"]["arguments"] == arguments
+    assert req.messages[1].content == "John Smith signed."
+    assert req.messages[2].content == "PERSON_0001 signed."
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("config", "kwargs"),
+    [
+        (AnonymizationConfig(enabled=False, apply_at_tiers=[3, 4, 5]), {}),
+        (AnonymizationConfig(enabled=True, apply_at_tiers=[5]), {}),
+        (_CONFIG, {"privileged": True}),
+        (_CONFIG, {"anonymize": False}),
+    ],
+    ids=["disabled", "tier", "privileged", "opt-out"],
+)
+def test_pre_anonymize_sends_tool_content_as_stored_where_nothing_is_pseudonymized(
+    config: AnonymizationConfig, kwargs: dict
+) -> None:
+    """The skip rules decide for the whole request; a tool message is not an exception."""
+
+    arguments = '{"query": "John Smith"}'
+    req = _make_request(
+        messages=[
+            ChatCompletionMessage(role="assistant", tool_calls=[_tool_call(arguments)]),
+            ChatCompletionMessage(role="tool", content="John Smith signed."),
+        ],
+        **kwargs,
     )
 
     mapper = pre_anonymize_request(
         chat_request=req,
         config=config,
         routed_tier=4,
-        anonymizer=Anonymizer(analyzer=analyzer),
+        anonymizer=Anonymizer(analyzer=_NameAnalyzer(_PEOPLE)),
     )
 
-    assert mapper is not None
-    assert req.messages[0].content == "User: PERSON_0001."
-    assert req.messages[1].tool_calls is not None
-    assert req.messages[1].tool_calls[0]["function"]["arguments"] == arguments
-    assert req.messages[2].content == "John Smith signed."
-    assert mapper.reverse() == {"PERSON_0001": "Jane Doe"}
+    assert mapper is None
+    assert req.messages[0].tool_calls is not None
+    assert req.messages[0].tool_calls[0]["function"]["arguments"] == arguments
+    assert req.messages[1].content == "John Smith signed."
+
+
+@pytest.mark.unit
+def test_a_tool_loop_round_trips_through_the_gateway_with_the_originals_kept_by_the_caller() -> (
+    None
+):
+    """Pseudonymized out, restored back, and pseudonymized again when sent on.
+
+    The caller opts in to restoring a call's arguments (it acts on a search
+    query), holds the originals, and sends the conversation back with them.
+    Each request is pseudonymized from the originals, so the pseudonyms agree
+    from turn to turn and no original name leaves.
+    """
+
+    anonymizer = Anonymizer(analyzer=_NameAnalyzer(_PEOPLE))
+    task = ChatCompletionMessage(role="user", content="What did John Smith agree with Acme Ltd?")
+    first_req = _make_request(messages=[task.model_copy()])
+    first_mapper = pre_anonymize_request(
+        chat_request=first_req, config=_CONFIG, routed_tier=4, anonymizer=anonymizer
+    )
+    assert first_mapper is not None
+    assert first_req.messages[0].content == "What did PERSON_0001 agree with ORGANIZATION_0001?"
+
+    # The model searches for what it was shown; the caller gets the original back.
+    reply = _make_response(contents=[None])
+    reply.choices[0].message.tool_calls = [_tool_call('{"query": "PERSON_0001 ORGANIZATION_0001"}')]
+    post_anonymize_response(
+        response=reply, mapper=first_mapper, anonymizer=anonymizer, restore_tool_arguments=True
+    )
+    held = reply.choices[0].message.tool_calls
+    assert held is not None
+    assert json.loads(held[0]["function"]["arguments"]) == {"query": "John Smith Acme Ltd"}
+
+    # The next turn sends the held originals back with the result it fetched.
+    second_req = _make_request(
+        messages=[
+            task.model_copy(),
+            ChatCompletionMessage(role="assistant", tool_calls=held),
+            ChatCompletionMessage(
+                role="tool", tool_call_id="call_1", content='{"passage": "Jane Doe signed."}'
+            ),
+        ]
+    )
+    second_mapper = pre_anonymize_request(
+        chat_request=second_req, config=_CONFIG, routed_tier=4, anonymizer=anonymizer
+    )
+
+    assert second_mapper is not None
+    assert second_req.messages[0].content == "What did PERSON_0001 agree with ORGANIZATION_0001?"
+    sent = second_req.messages[1].tool_calls
+    assert sent is not None
+    assert json.loads(sent[0]["function"]["arguments"]) == {
+        "query": "PERSON_0001 ORGANIZATION_0001"
+    }
+    assert json.loads(second_req.messages[2].content or "") == {"passage": "PERSON_0002 signed."}
+    for message in second_req.messages:
+        assert "John Smith" not in repr(message) and "Acme Ltd" not in repr(message)
+        assert "Jane Doe" not in repr(message)
 
 
 @pytest.mark.unit

@@ -322,12 +322,15 @@ class ChatCompletionRequest(BaseModel):
     body. It has no effect on a request that was not pseudonymized, and
     none on the streaming path.
 
-    A caller sets it only for a call whose tool arguments it will read and
-    never send back to a model as a tool call. The request path does not
-    pseudonymize ``tool_calls`` in an assistant message, so restored
-    arguments that were echoed back on a later turn would leave with the
-    original names in them. The backend sets it on one call: a governed
-    run's planning call, whose one tool is terminal (ADR 0038 D7)."""
+    A caller sets it for a call whose tool arguments it will act on, such as
+    a search query or a note's text, and holds them as the originals. Sent
+    back on a later turn, as part of the conversation, they are pseudonymized
+    again with the rest of the request: the request path rewrites the
+    arguments of an assistant message's ``tool_calls`` and the content of a
+    ``tool`` message like any other content, so nothing the caller holds
+    leaves with the original names in it. The backend sets it on every call
+    of a governed run that is offered tools, on a route that pseudonymizes
+    (ADR 0038 D7)."""
 
 
 # --- Chat completion response -------------------------------------------------

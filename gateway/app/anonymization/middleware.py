@@ -55,9 +55,11 @@ __all__ = [
 ]
 
 
-# Semantic roles whose ``content`` is content the user (or model)
-# generated. ``tool`` messages carry tool-call payloads and shouldn't
-# be pseudonymized — those are structured outputs, not natural prose.
+# Semantic roles whose ``content`` is prose to pseudonymize as it stands.
+# A ``tool`` message is walked too, but through :func:`_pseudonymize_document`:
+# its content is a JSON document (a document read, a search result) whose
+# string values are the prose, and the detector is given those, not the
+# escapes and keys around them.
 _ANONYMIZED_ROLES: frozenset[str] = frozenset({"user", "assistant", "system"})
 
 
@@ -70,9 +72,13 @@ def pre_anonymize_request(
 ) -> PseudonymMapper | None:
     """Pseudonymize ``chat_request`` in place; return mapper or ``None``.
 
-    Mutates ``chat_request.messages[*].content`` and the nested
-    string values in ``chat_request.lq_ai_skill_inputs`` so the
-    provider sees only pseudonyms. Returns the mapper carrying the
+    Mutates ``chat_request.messages[*].content`` (every role, a ``tool``
+    message's JSON string values included), the arguments of the tool calls
+    an assistant message carries, and the nested string values in
+    ``chat_request.lq_ai_skill_inputs`` so the provider sees only
+    pseudonyms. What leaves the gateway for a provider is rewritten under
+    one rule: a message's own ``lq_ai_skip_anonymization`` flag is the only
+    exception. Returns the mapper carrying the
     ``pseudonym → original`` mapping so the post-middleware can
     rehydrate the response.
 
@@ -112,10 +118,6 @@ def pre_anonymize_request(
         mapper = PseudonymMapper()
 
         for message in chat_request.messages:
-            if message.role not in _ANONYMIZED_ROLES:
-                continue
-            if message.content is None:
-                continue
             # M2-D2: per Decision M2-1, retrieved source documents stay
             # un-pseudonymized so the model sees intact source quotes for
             # citation grounding. The api/ marks the retrieval-context
@@ -125,7 +127,28 @@ def pre_anonymize_request(
             # still get pseudonymized normally.
             if getattr(message, "lq_ai_skip_anonymization", False):
                 continue
-            message.content = anonymizer.pseudonymize_into(message.content, mapper)
+            if message.content is not None:
+                if message.role in _ANONYMIZED_ROLES:
+                    message.content = anonymizer.pseudonymize_into(message.content, mapper)
+                elif message.role == "tool":
+                    # A tool result is what a tool read: a document's text, a
+                    # search's passages. It leaves the gateway like any other
+                    # content, so it is pseudonymized like it. Between the
+                    # backend's agents it stays as stored; this is the boundary.
+                    message.content = _pseudonymize_document(
+                        message.content, anonymizer=anonymizer, mapper=mapper
+                    )
+            if message.role == "assistant" and message.tool_calls:
+                # The arguments of a call the model made on an earlier turn,
+                # sent back with the conversation. A caller that asked for them
+                # to be restored holds the originals; they must not leave as
+                # such.
+                for call in message.tool_calls:
+                    function = call.get("function") if isinstance(call, dict) else None
+                    if isinstance(function, dict) and isinstance(function.get("arguments"), str):
+                        function["arguments"] = _pseudonymize_document(
+                            function["arguments"], anonymizer=anonymizer, mapper=mapper
+                        )
 
         if chat_request.lq_ai_skill_inputs:
             for skill_name, inputs in chat_request.lq_ai_skill_inputs.items():
@@ -251,7 +274,10 @@ def post_anonymize_response(
     (``ChatCompletionRequest.lq_ai_restore_tool_arguments``). When it is
     set, the pseudonyms in each tool call's arguments are restored as
     well; see :func:`_restore_arguments`. Without it a tool call's
-    arguments are returned as the model wrote them, as before.
+    arguments are returned as the model wrote them, as before. Restored
+    arguments may be kept and sent back on a later turn: the request path
+    pseudonymizes the arguments of an earlier call again
+    (:func:`pre_anonymize_request`), so the originals do not leave.
     """
 
     originals = mapper.reverse() if restore_tool_arguments else {}
@@ -409,3 +435,37 @@ def _pseudonymize_strings(value: Any, *, anonymizer: Anonymizer, mapper: Pseudon
     if isinstance(value, list):
         return [_pseudonymize_strings(v, anonymizer=anonymizer, mapper=mapper) for v in value]
     return value
+
+
+def _pseudonymize_document(text: str, *, anonymizer: Anonymizer, mapper: PseudonymMapper) -> str:
+    """Pseudonymize a JSON document held in a string, or the string as prose.
+
+    A tool result and a tool call's arguments are JSON documents in a string.
+    The detector is given each string value on its own, so that an escape (a
+    backslash and an ``n`` for a line break) never stands against a name, and
+    a member name or a number is never rewritten. Members keep their order.
+
+    The string is returned exactly as it was when no value held an entity: a
+    document with nothing to hide is never re-serialised. It is treated as
+    prose, as a whole, when it is not a JSON object or array, when an object
+    names a member twice (parsing would drop one and writing back would repair
+    it), when it holds ``NaN`` or ``Infinity``, when it is nested too deeply,
+    and when what would be written cannot be encoded. The fallback leaves
+    the structure as it was and still replaces what the detector finds, so a
+    document that cannot be walked is never sent as it stands.
+    """
+
+    try:
+        parsed = json.loads(text, object_pairs_hook=_unique_members, parse_constant=_not_a_number)
+        if not isinstance(parsed, dict | list):
+            return anonymizer.pseudonymize_into(text, mapper)
+        walked = _pseudonymize_strings(parsed, anonymizer=anonymizer, mapper=mapper)
+        if walked == parsed:
+            return text
+        written = json.dumps(walked, ensure_ascii=False, allow_nan=False)
+        written.encode("utf-8")
+        return written
+    except (ValueError, TypeError, RecursionError):
+        # ``_NotRestorable`` and ``json.JSONDecodeError`` are both ``ValueError``,
+        # as is the ``UnicodeEncodeError`` of a lone surrogate.
+        return anonymizer.pseudonymize_into(text, mapper)

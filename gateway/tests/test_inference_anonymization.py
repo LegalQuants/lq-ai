@@ -225,6 +225,86 @@ async def test_non_streaming_pseudonymizes_request_and_rehydrates_response(
 
 
 # ---------------------------------------------------------------------------
+# A tool loop — what a tool read and what the model asked of it leave pseudonymized.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_a_tool_result_and_an_earlier_calls_arguments_reach_the_provider_pseudonymized(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """The provider payload holds no original name, in any message.
+
+    The conversation is what a governed run's child sends on its second turn:
+    the task, its own earlier call with the arguments the caller restored, and
+    the document the call read. All three are pseudonymized by one mapper, so
+    the same name is the same pseudonym in each.
+    """
+
+    client, recorder, app = http_client
+    task = "Did John Smith sign?"
+    _install_stub_anonymizer(
+        app,
+        {
+            task: [_Span("PERSON", 4, 14)],
+            # The detector is given each string value, not the JSON around it.
+            "John Smith": [_Span("PERSON", 0, 10)],
+            "John Smith signed on 1 May.": [_Span("PERSON", 0, 10)],
+        },
+    )
+    upstream = _mock_anthropic(response_text="PERSON_0001 signed on 1 May.")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [
+                {"role": "user", "content": task},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "search_knowledge_base",
+                                "arguments": json.dumps({"query": "John Smith"}),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": json.dumps({"passage": "John Smith signed on 1 May."}),
+                },
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_knowledge_base",
+                        "description": "Search.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "John Smith signed on 1 May."
+    assert body["anonymization_applied"] is True
+    sent = json.dumps(json.loads(upstream.calls.last.request.content))
+    assert "John Smith" not in sent
+    assert sent.count("PERSON_0001") == 3
+    assert recorder.rows[0].anonymization_applied is True
+
+
+# ---------------------------------------------------------------------------
 # Tool-call arguments — restored only on the caller's opt-in (ADR 0038 D7).
 # ---------------------------------------------------------------------------
 

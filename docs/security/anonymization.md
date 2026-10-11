@@ -54,6 +54,8 @@ This gap is tracked at [PRD §9 / DE-282 — Anonymization Layer empirical valid
 
 Per the **M2-1 decision** locked at M2 kickoff, anonymization applies only to **chat and skill content** sent to the model. Retrieved source documents stay un-pseudonymized so the model sees intact source quotes for citation grounding and the user-facing retrieval surface continues to render real document text. The skip mechanism is the `lq_ai_skip_anonymization` field on `ChatCompletionMessage`: the api/ marks the retrieval-context system message with `True`; the gateway middleware honors the flag and leaves that message's content alone. See [Retrieval-context skip](#retrieval-context-skip-m2-d2) below for the data flow. The alternative (Option A — pseudonymize the document corpus too) is filed as **[DE-269](../PRD.md#de-269--anonymization-option-a-pseudonymize-source-documents-too)** for future consideration.
 
+**One rule for what leaves the gateway.** The exemption above is that one flagged message, and nothing else. Whatever else a request carries to a provider is rewritten the same way, in every role: the text of a `tool` message (a document a governed run's task read, the passages a search returned) and the arguments of the tool calls an assistant message carries. A governed run (ADR 0038) holds its data as stored while it passes between the backend's own agents, from the orchestrator to a task and back, and nothing is rewritten there; the gateway is where it is. The same mapper numbers one name the same way in the task, in a call and in a result.
+
 ## Recognizer set
 
 The gateway's `AnalyzerEngine` runs with this configuration (`gateway/app/anonymization/engine.py`):
@@ -195,7 +197,9 @@ All four conditions must hold; the first that fails short-circuits to a no-op fo
 
 ### What the pre-pass touches
 
-- Every `messages[*]` whose role is `user`, `assistant`, or `system` and whose `content` is non-null. Tool-call shaped messages (`content: null`) are left alone.
+- Every `messages[*]` whose role is `user`, `assistant`, or `system` and whose `content` is non-null, except a message carrying `lq_ai_skip_anonymization`.
+- Every `messages[*]` whose role is `tool`. Its content is a JSON document in a string (a document read, a search result), so the detector is given each string value and not the document: a member name, a number and an escape are never rewritten, and a result with no entity in it is sent byte for byte as it was. A result that is not a JSON object or array is treated as text.
+- The arguments of every tool call an assistant message carries (`tool_calls[*].function.arguments`, also a JSON document in a string), the same way. Arguments that cannot be walked (a member named twice, `NaN`, nesting too deep) are treated as text, so the name still goes and nothing is repaired on the way.
 - Every string leaf inside `lq_ai_skill_inputs` (recursive — dicts and lists are walked). Numbers, booleans, and `null` pass through untouched.
 
 ### What the post-pass touches
@@ -204,7 +208,9 @@ All four conditions must hold; the first that fails short-circuits to a no-op fo
 
 **Streaming.** Each SSE chunk's `choices[*].delta.content` is fed through a per-stream `StreamingRehydrator`. The rehydrator holds the tail of the stream when it ends in a partial pseudonym (e.g. `PERSON_` or `PERSON_0001` with no trailing space — could grow to `PERSON_00010`). Held text emits as soon as the pattern crystallizes or fails to grow. At `[DONE]`, any held tail flushes as a synthesized terminal chunk so the caller doesn't lose the last fragment. The buffer is bounded by the length of one in-flight pseudonym (~25 chars in practice), so streaming latency is unaffected.
 
-Per **Decision D**: the middleware rehydrates response **content** only. Citation rehydration is incidental — the api/'s downstream citation extraction operates on already-rehydrated content, so cite quotes naturally carry originals. The gateway never touches `message_citations` rows directly.
+Per **Decision D**: the middleware rehydrates response **content**. Citation rehydration is incidental — the api/'s downstream citation extraction operates on already-rehydrated content, so cite quotes naturally carry originals. The gateway never touches `message_citations` rows directly.
+
+**Tool-call arguments, on the caller's opt-in.** A request may set `lq_ai_restore_tool_arguments`. On a non-streaming response to a request that was pseudonymized, the pseudonyms in each tool call's arguments are then replaced by the originals as well, inside the JSON string values, and only where a pseudonym this request assigned stands as a whole token. Without the opt-in, arguments are returned as the model wrote them, as Decision D had it. A governed run's calls that are offered tools set it (ADR 0038 D7), because it acts on the arguments as the owner's own text: a search runs on the name that was asked about and a note is kept with the name in it. The originals are held by the caller and sent back as part of the next request, where the request path pseudonymizes them again (above), so none leaves the gateway. The opt-in changes what the gateway returns and sends nothing more to a provider; it has no effect on a request that was not pseudonymized or on a streaming response.
 
 ### Audit log
 

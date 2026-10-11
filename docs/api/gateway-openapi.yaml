@@ -1232,11 +1232,16 @@ components:
             The field changes only what the gateway returns to its
             caller. It is stripped from the outbound provider body, and
             it has no effect on a request that was not pseudonymized or
-            on the streaming path. A caller sets it only for a call whose
-            tool arguments it reads and never sends back to a model as a
-            tool call: the request path does not pseudonymize
-            `tool_calls` in an assistant message. The backend sets it on
-            a governed run's planning call (ADR 0038 D7).
+            on the streaming path. A caller sets it for a call whose tool
+            arguments it acts on, such as a search query or a note, and
+            holds them as the originals. Sent back on a later turn they are
+            pseudonymized again with the rest of the request: the request
+            path rewrites the string values of a `tool` message's JSON
+            content and of the arguments of an assistant message's
+            `tool_calls`, like any other content, so nothing the caller
+            holds leaves with the original names in it. The backend sets it
+            on every call of a governed run that is offered tools, on a
+            route that pseudonymizes (ADR 0038 D7).
         lq_ai_purpose:
           type: string
           description: |
