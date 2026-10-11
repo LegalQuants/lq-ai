@@ -18,9 +18,8 @@ live, a person must accept it on a configured provider; see
 [Evidence and sign-off](#evidence-and-sign-off).
 
 **Status.** [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md) is Proposed,
-not ratified. The implementation is on an unmerged branch, has had no maintainer or
-security review, and does not merge before ratification. Both profile switches default to
-off. The direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and
+not ratified. The implementation has had no maintainer or security review. Both
+profile switches default to off. The direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and
 D2, which are Accepted; ADR 0038 D1 gives the words, and they are ratified with it.
 Design, and what was and was not verified:
 [plan](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). This runbook

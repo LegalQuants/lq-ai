@@ -1,6 +1,6 @@
 # ADR 0035 bounded chat: UAT
 
-> On the ADR 0038 implementation branch (unmerged, not ratified) the stand-alone page has no intake form and runs start from a chat; this script describes the page as released in 0.8.0. For the chat-hosted flow, use the [ADR 0038 runs-in-chat UAT](adr38-runs-in-chat-uat.md).
+> With the ADR 0038 implementation (not ratified) the stand-alone page has no intake form and runs start from a chat; this script describes the page as released in 0.8.0. For the chat-hosted flow, use the [ADR 0038 runs-in-chat UAT](adr38-runs-in-chat-uat.md).
 
 This test demonstrates model planning, explicit approval, parallel autonomous
 children applying an installed skill, and model synthesis in an experimental

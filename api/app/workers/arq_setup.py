@@ -167,9 +167,10 @@ async def on_startup(ctx: dict[str, Any]) -> None:
         from app.errors import Forbidden
 
         runtime = DemonstrationService(settings, holder, get_session_factory())
-        # Fail at startup, not at the first run: every profile the operator
-        # switched on must have a complete policy, and the checkpoint schema
-        # must be the one this build expects.
+        # Fail at startup, not at the first run, when no switched-on profile has
+        # a complete policy, and when the checkpoint schema is not the one this
+        # build expects. A switched-on profile that is misconfigured while another
+        # is complete is left disabled; the admin profile list reports why.
         enabled = runtime.enabled_profiles()
         for profile in enabled:
             runtime.for_profile(profile).require_policy()

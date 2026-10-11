@@ -83,7 +83,7 @@ documents the owner selected and to search the matter's knowledge bases by keywo
 need not be in a matter. The ADR is not ratified. Its direct answer, and a run in a chat
 that is in no matter, amend ADR 0035 D1 and D2, which are Accepted; ADR 0038 D1 gives the
 words, and they are ratified with it.
-The requirements below are implemented on an unmerged implementation branch, pending
+The requirements below are implemented, pending
 ratification and review; they are in no release, and both profile switches default to off.
 The accepted scope above stands for released software.
 

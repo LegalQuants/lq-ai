@@ -1259,8 +1259,7 @@ components:
             The field is stripped from the outbound provider body.
 
             Every label other than `chat`, `embedding`, `judge_paraphrase`
-            and `tabular_bulk_op` is ADR 0038 (proposed): the set was widened on an unmerged
-            implementation branch, and before that those labels recorded
+            and `tabular_bulk_op` is ADR 0038 (proposed): the set was widened, and before that those labels recorded
             `chat`. `orchestration_run` is what a governed run's model calls
             record; `autonomous_executor` is a legacy single autonomous
             session.

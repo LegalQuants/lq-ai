@@ -3936,7 +3936,7 @@ paths:
         and its model calls as ``inference`` events. The audit rows of the run's
         root session and children appear as ``audit`` events, read through the run
         message's link to its root session; each carries ``run_root_id`` and
-        ``message_id`` in ``detail``. Implemented on an unmerged branch and not
+        ``message_id`` in ``detail``. Implemented and not
         ratified.
       parameters:
         - name: chat_id
@@ -5322,7 +5322,7 @@ paths:
       tags: [autonomous]
       summary: "ADR 0038 (proposed): close an uncertain run without a retry"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         Owner-only. Nothing is repeated: each unresolved effect is closed without
         an outcome and its reservation is charged. The run ends as ``closed`` with
         stop reason ``owner_closed``, its running sessions are halted, retained
@@ -5426,8 +5426,8 @@ paths:
                 $ref: './backend-openapi.generated.yaml#/components/schemas/WorkspaceContent'
         '404': {description: File absent, belongs to another run or owner}
 
-  # ADR 0038 (proposed): governed runs as turns in a chat thread. Implemented on an
-  # unmerged branch; the ADR is not ratified, so none of these paths is in a release.
+  # ADR 0038 (proposed): governed runs as turns in a chat thread. Implemented; the
+  # ADR is not ratified, so none of these paths is in a release.
   # The run read shapes above are generated and gain these fields under ADR 0038:
   # ChatRunRead gains profile, profile_title, reads, evidence, evidence_result, chat_id
   # and message_id; EffectRead gains outcome and step; RunRead gains tools and
@@ -5476,7 +5476,7 @@ paths:
       tags: [chats]
       summary: "ADR 0038 (proposed): start a governed run as a turn in this chat"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         Requires the owner's Autonomous opt-in, a member or admin role (a viewer
         or an auditor is refused with 403) and an operator-enabled profile.
         The chat is inside an active owned project, or, where the profile allows
@@ -5575,7 +5575,7 @@ paths:
       tags: [chats]
       summary: "ADR 0038 (proposed): run profiles available to this chat's composer"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         Each registry profile's availability for this chat, and the reason when
         it is unavailable (``operator_disabled``, ``not_configured``,
         ``autonomous_opt_in_required``, ``role_read_only``, ``chat_archived``, ``project_required``,
@@ -5620,7 +5620,7 @@ paths:
       tags: [chats]
       summary: "ADR 0038 (proposed): files a run started from this chat could read"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         In a project: the project's files, plus any named candidates, each with
         whether a run can read it. Choosing a candidate attaches it to the
         project when the run is accepted. Outside any project
@@ -5679,7 +5679,7 @@ paths:
       tags: [autonomous]
       summary: "ADR 0038 (proposed): how one session of a run was set up, and what its model wrote back"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         The owner's read; an admin or auditor may read another owner's run, and
         that read writes one ``auditor.run_trace_viewed`` audit row.
         ``session_id`` is the run's root for the orchestrator, or one
@@ -5723,7 +5723,7 @@ paths:
       tags: [autonomous]
       summary: "ADR 0038 (proposed): the text of one engine prompt file"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         Any signed-in user. Returns one of the engine's own versioned prompt
         files, for example ``new_harness/orchestrator.v2``, with its version and
         the digest a run pins. An earlier version stays readable, so a run that
@@ -5745,7 +5745,7 @@ paths:
       tags: [admin]
       summary: "ADR 0038 (proposed): the closed set of run profiles and each one's operator state"
       description: |
-        Proposed by ADR 0038; implemented on an unmerged branch and not ratified.
+        Proposed by ADR 0038; implemented and not ratified.
         Administrator-only and read-only. Profiles are switched on and routed
         through deployment configuration; this route reports what that
         configuration yields. Each entry names the switch, what the profile reads,
@@ -8416,7 +8416,7 @@ components:
           description: |
             LQ.AI message classification (migration 0020), distinct from ``role``.
             ``run`` is ADR 0038 (proposed): the one assistant message that hosts a
-            governed run in the thread. It is implemented on an unmerged branch and
+            governed run in the thread. It is implemented and
             not ratified. A ``run`` message has empty ``content`` until its run
             delivers an answer, and stays empty for a run that ends without one.
         autonomous_session_id:

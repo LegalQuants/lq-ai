@@ -8,7 +8,7 @@
 > with links to the tracking DE entries.
 >
 > The governed-run spans, the worker tracing and the routing-log purpose labels
-> for runs (ADR 0038, proposed) are implemented on an unmerged branch and are
+> for runs (ADR 0038, proposed) are implemented and are
 > marked as such where they appear. They are in no release.
 
 For the architectural context see [docs/architecture.md](architecture.md) §OBS and the
@@ -232,7 +232,7 @@ The autonomous spans also write audit rows — see [§2.4 — Audit actions](#au
 
 #### `orchestration.job` / `orchestration.run` / `orchestration.effect`
 
-**ADR 0038 D2, proposed; implemented on an unmerged branch and in no release.** A
+**ADR 0038 D2, proposed; implemented and in no release.** A
 governed run executes on the arq worker, not in the API request that accepted or
 approved it. These spans put the worker's part of a run in the same trace as that
 request. Attributes are **identifiers and labels only — never prompt, document or
@@ -363,7 +363,7 @@ creation-time write is wired up.
 rows through the run store (`api/app/autonomous/orchestration/store.py`), with
 `resource_type = autonomous_session` and the run's root session as `resource_id`.
 `details` hold identifiers, counts, labels and amounts, never prompt, document or answer
-text. The ADR 0038 branch (proposed, unmerged) adds `orchestration.tool_refused` (a call
+text. ADR 0038 (proposed) adds `orchestration.tool_refused` (a call
 the application refused: the registry tool name or `unregistered`, and a code, never the
 model's own text) and `orchestration.run_closed` (an owner closed an uncertain run: the
 number of effects closed and the amount charged). A run the orchestrator answered by
@@ -410,7 +410,7 @@ does a label outside the set. The column is `varchar(32)`, so a label must fit i
 | `autonomous_executor` | A legacy single autonomous session's model calls |
 | `orchestration_run` | A governed run's model calls: planning (which may be the orchestrator's own answer), tasks and the combined answer |
 
-**Proposed, unmerged (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
+**Proposed (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
 `tabular_bulk_op` were in the set before. The other labels were already sent by the backend and recorded as
 `chat`; recording them as themselves, and the chat and message identifiers on a run's
 model calls, are implemented on the branch. Two Easy Playbook assembly labels,
@@ -513,7 +513,7 @@ the acceptance criteria and contributor profile.
 
 | DE | Title | Notes |
 |---|---|---|
-| [DE-299](PRD.md#de-299--otel-instrumentation-for-sqlalchemy--arq-workers-otel-deepening-de-a) | OTel instrumentation for SQLAlchemy + ARQ workers | DB query and background-job latency are blind spots today. The ADR 0038 branch (proposed, unmerged) gives the governed-run job path its own `orchestration.job` span, which is not general arq instrumentation. |
+| [DE-299](PRD.md#de-299--otel-instrumentation-for-sqlalchemy--arq-workers-otel-deepening-de-a) | OTel instrumentation for SQLAlchemy + ARQ workers | DB query and background-job latency are blind spots today. ADR 0038 (proposed) gives the governed-run job path its own `orchestration.job` span, which is not general arq instrumentation. |
 | [DE-300](PRD.md#de-300--log-trace-correlation-via-structured-logger-trace_id--span_id-injection-otel-deepening-de-b) | Log-trace correlation via structured-logger trace_id / span_id injection | Pivoting from a span to its logs requires manual timestamp correlation until this lands |
 | [DE-301](PRD.md#de-301--otel-meterprovider-for-metrics-export-otel-deepening-de-c) | OTel MeterProvider for metrics export | Metrics today go only to Prometheus; OTel-native metrics export (Honeycomb-only, Datadog APM-only) is additive |
 | [DE-302](PRD.md#de-302--reconcile-otel-with-the-openwebui-forks-inherited-telemetry-otel-deepening-de-d) | Reconcile OTel with the OpenWebUI fork's inherited telemetry | The OWUI-inherited layer runs as a parallel `service.name`; alignment or disable decision pending |
@@ -539,8 +539,9 @@ or `gateway/` implements it. The `telemetry:` block in `gateway.yaml.example`, w
 and read by no code. The `LANGFUSE_*` variables in `.env.example` and the Compose files
 are read by no code either, so setting them has no effect. Trace export is controlled only
 by the `OTEL_*` variables in [§1](#1-environment-variable-matrix). Spans, audit rows and
-routing-log rows carry identifiers, counts and labels, not prompt or document text. On the
-ADR 0038 branch (proposed, unmerged), a run's owner can read how each call was set up and
+routing-log rows carry identifiers, counts and labels, not prompt or document text, and a
+span that records a failure keeps its class and never its message. Under
+ADR 0038 (proposed), a run's owner can read how each call was set up and
 what the model wrote back through the trace read described under
 [the governed-run spans](#orchestrationjob--orchestrationrun--orchestrationeffect); that read draws on the run's own records and is
 not this sink.

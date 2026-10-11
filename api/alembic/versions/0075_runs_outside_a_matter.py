@@ -10,8 +10,10 @@ was already nullable, and the tree trigger from 0067 compares projects with
 ``IS DISTINCT FROM``, so a root and its children that all have no project pass.
 
 What such a run may read and which inference tier it may use are decided by the
-application, not here: it reads only the owner's files that are filed in no
-matter, it is never treated as privileged, and its tier floor is the profile's.
+application, not here: it reads the owner's undeleted files wherever they are
+filed, and takes on the strictest floor and the privilege flag of the matters
+that hold the files it selects. With none held by a matter it is not privileged
+and its floor is the profile's (ADR 0038, ruling 4; ``reading.selection_terms``).
 
 Downgrade refuses while a run without a matter is retained.
 """

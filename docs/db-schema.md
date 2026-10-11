@@ -413,7 +413,7 @@ CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 The sketch above does not show `messages.kind`. Migration 0020 added it, with
 `chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
 [0073](../api/alembic/versions/0073_runs_in_chat.py) changes `messages` as below.
-It is implemented on an unmerged branch, and
+It is implemented, and
 [ADR 0038](adr/0038-skill-backed-orchestration-profile.md) is proposed, not
 ratified.
 
@@ -1388,8 +1388,7 @@ calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
 
 Only `chat`, `embedding`, `judge_paraphrase` and `tabular_bulk_op` were in the set
 before ADR 0038 (proposed). The other labels were already sent by the backend and
-recorded as `chat`; recording them as themselves is implemented on an unmerged
-branch. Two
+recorded as `chat`; recording them as themselves is implemented. Two
 Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
 `playbook_easy_assemble_describe_tier`, are longer than the 32-character column
 and are not in the set, so those rows still record `chat`.
@@ -2048,7 +2047,7 @@ An unreadable policy fail-closes: no dispatch, refused audit row with
 
 ### Governed runs in chat and closing a run (0073 to 0076; ADR 0038 proposed)
 
-Implemented on an unmerged branch; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
+Implemented; [ADR 0038](adr/0038-skill-backed-orchestration-profile.md)
 is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
 already carries the orchestration tables. The authoritative DDL for the first two is in
 [`0073_runs_in_chat.py`](../api/alembic/versions/0073_runs_in_chat.py) and
@@ -2114,8 +2113,8 @@ application, at intake, on every policy check while the run is live, and at each
 
 | Rule | Where |
 |---|---|
-| It reads the owner's undeleted files wherever they are filed (ADR 0038, ruling 4). | `reading.readable_documents`, used by intake, `policy.CurrentPolicy` and `boundary.constrain_call` |
-| It runs under the strictest terms of the matters that hold its selected documents (`files.project_id`, or a `project_files` row): the lowest `projects.minimum_inference_tier` any of them sets, and privileged if any is. With none, it is not privileged and its floor is the profile's own. | `reading.selection_terms`, set by `begin_run` |
+| It reads the owner's undeleted files wherever they are filed (ADR 0038, ruling 4). | `reading.readable_documents`, used by `policy.CurrentPolicy` and `boundary.constrain_call`; intake lists and refuses with the same predicates (`reading.filed_in_a_matter`, `reading.filed_in_another_matter`) |
+| It runs under the strictest terms of the matters that hold its selected documents (`files.project_id`, a `project_files` row, or a knowledge base the matter has attached through `project_knowledge_bases`, archived or not): the lowest `projects.minimum_inference_tier` any of them sets, and privileged if any is. With none, it is not privileged and its floor is the profile's own. | `reading.selection_terms`, set by `begin_run` |
 | Those terms are worked out again at every admission. A floor that has tightened, or a privilege flag that no longer matches, stops the run. A privilege flag with no privileged matter behind it is refused. | `store._data_terms` |
 | Nothing is attached to a matter for it. | `store.start_planning` |
 

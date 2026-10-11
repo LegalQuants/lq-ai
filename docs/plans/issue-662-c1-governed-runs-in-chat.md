@@ -2,9 +2,9 @@
 
 **Status:** Proposed. [ADR 0038](../adr/0038-skill-backed-orchestration-profile.md)
 is not ratified. This plan was superseded in part on 2026-10-07 and 2026-10-08 (see the
-note below). An implementation of the revised design exists on an unmerged branch and is
+note below). An implementation of the revised design exists and is
 described under [Implementation status](#implementation-status). It has had no
-maintainer or security review and does not merge before ratification.
+maintainer or security review.
 **Date:** 2026-10-06. **Baseline inspected:** `5e128d5ba`. The plan was written
 from a read of the code. The implementation status was rewritten on 2026-10-09 and
 extended on 2026-10-10.
@@ -687,6 +687,34 @@ which this branch makes.
 - **No full Docker stack smoke** of the revised design is recorded here.
 - **No browser test in CI.** The browser checks were scripts that agents ran, kept outside
   the repository, as the test strategy states for browser coverage generally.
+
+## Upgrade notes for the release that carries this
+
+The release notes are written at release time; these are what they need from this change.
+Each applies whether or not `LQ_AI_NEW_HARNESS_ENABLED` is on, unless it says so.
+
+- **A 0.8.0 run in flight at upgrade need not survive** (ruling 3). Completed and stopped
+  runs, with their plan hashes and approvals, stay readable.
+- **Migrations 0073 to 0076** run on upgrade. They are additive, and each downgrade
+  refuses while run data exists. 0073 changes `messages` in one transaction that holds an
+  `ACCESS EXCLUSIVE` lock while two checks, a foreign key and a unique index are
+  validated, so the pause grows with the number of messages. Plan a window on a database
+  with a large `messages` table.
+- **Routing-log purpose labels change for existing traffic.** The tabular executor and the
+  three Citation Engine judges used to be recorded as `chat`; they are now recorded as
+  themselves. The cost estimators for tabular runs and for citation calibration read rows
+  by purpose, so as new rows accrue they stop returning cold-start defaults and use the
+  deployment's own history. Pre-flight estimates and confirmation thresholds can change.
+- **With an OTLP endpoint set, the arq worker now exports spans** for every job (before,
+  only the API and the gateway did), under the service name
+  `LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME`. A span that records a failure keeps the
+  exception's class and never its message.
+- **The shared citation pattern accepts emphasis after a closing quotation mark** and
+  closes a curly quotation at the nearest opening quote (see `docs/citation-engine.md`).
+  This applies to ordinary chat as well.
+- **Where the operator's gateway setting pseudonymizes at a route's tier, a governed run's
+  tool results and tool-call arguments are pseudonymized with the rest of the request.**
+  Ordinary chat is unchanged.
 
 ## Evidence and limits
 
