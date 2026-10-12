@@ -1540,6 +1540,11 @@ password, store only its bcrypt hash, force a password change, and write an audi
 atomically. Existing MFA enrollment survives password reset. The initial password is
 returned in that response only, with `Cache-Control: no-store`; the admin delivers it through
 a secure channel. This is an admin-mediated flow; it adds no public signup or email service.
+The existing Role management card under `/lq-ai/admin/developer` exposes Create user
+(email, optional display name, and role) and a per-user Reset password confirmation.
+The generated password is held only in component memory and displayed until dismissal
+or navigation. Self-reset keeps it visible before clearing the session and returning
+the admin to sign-in.
 
 **MFA-mandatory option** (M1): operators can configure the deployment to require multi-factor authentication for all logins. The backend implements TOTP via `pyotp` (M1) with WebAuthn as a tracked enhancement (DE-### TBD). Recovery codes are single-use, hashed at rest, and rotated when the user re-enrolls. Configuration is documented in the deployment guide as a recommended default for any deployment handling client-confidential data.
 
