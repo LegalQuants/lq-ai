@@ -31,7 +31,7 @@ from app.clients.gateway import GatewayClient, set_gateway_client
 from app.db.session import get_db
 from app.main import app
 from app.models.audit import AuditLog
-from app.models.chat import Chat
+from app.models.chat import Chat, Message
 from app.models.document import Document
 from app.models.file import File
 from app.models.user import User
@@ -942,3 +942,46 @@ async def test_get_chat_exposes_sticky_skills(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["sticky_skills"] == ["nda-review"]
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_enhance_prompt_marker_is_persisted_but_not_forwarded(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """``enhance-prompt`` in ``skills`` is a provenance marker (ADR 0007), not a skill to assemble.
+
+    It must land in the user row's ``applied_skills`` (``is_enhanced`` keys
+    off it) and must not reach the gateway's ``lq_ai_skills``: the skill
+    declares ``raw_input`` as required, so forwarding it would be refused,
+    and its body is the expansion prompt, not chat instructions.
+    """
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload(applied_skills=["nda-review"]))
+    )
+    token = _bearer_for(db_user)
+    await client.post(
+        f"/api/v1/chats/{_DUMMY_CHAT_ID}/messages",
+        json={
+            "content": "review this NDA",
+            "model": "smart",
+            "skills": ["nda-review", "enhance-prompt"],
+            "skill_inputs": {"nda-review": {"document": "<NDA text>", "perspective": "discloser"}},
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert route.called
+    sent = _json.loads(route.calls[0].request.read())
+    assert sent["lq_ai_skills"] == ["nda-review"]
+
+    row = (
+        await db_session.execute(
+            select(Message)
+            .where(Message.chat_id == uuid.UUID(_DUMMY_CHAT_ID), Message.role == "user")
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one()
+    assert row.applied_skills == ["nda-review", "enhance-prompt"]

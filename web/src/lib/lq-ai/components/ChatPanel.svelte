@@ -40,6 +40,70 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Per-chat model-selection persistence (bugfix: model-selection-persist-
+	 * refresh). `modelByChat` was a component-local `Record` with no
+	 * persistence, so a full page refresh remounted the component, reset
+	 * modelByChat to `{}`, and currentModelId's reactive fallback silently
+	 * picked the picker's default — discarding the user's choice. Mirrors
+	 * ReceiptsDrawer.svelte's storageKeyForChat/readPersistedOpen/
+	 * writePersistedOpen convention (same file also uses a per-chat
+	 * localStorage key prefix, same optional injectable Storage param for
+	 * testability).
+	 *
+	 * All three helpers treat persistence as best-effort: a `Storage`
+	 * that throws (Safari private mode, a disabled-storage policy, a
+	 * quota-exceeded write) must never break chat selection, so the
+	 * read/write helpers swallow the exception and fall through to the
+	 * existing default-selection behaviour.
+	 */
+	const MODEL_STORAGE_KEY_PREFIX = 'lq_ai_chat_model_';
+
+	export function modelStorageKeyForChat(chatId: string): string {
+		return `${MODEL_STORAGE_KEY_PREFIX}${chatId}`;
+	}
+
+	export function readPersistedModel(chatId: string, storage?: Storage): string | null {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return null;
+		try {
+			return store.getItem(modelStorageKeyForChat(chatId));
+		} catch {
+			return null;
+		}
+	}
+
+	export function writePersistedModel(chatId: string, modelId: string, storage?: Storage): void {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return;
+		try {
+			store.setItem(modelStorageKeyForChat(chatId), modelId);
+		} catch {
+			/* best-effort: private-mode / quota / disabled storage — skip */
+		}
+	}
+
+	/**
+	 * Pure resolver for a chat's remembered model choice: return the
+	 * persisted id only when it is still in the supplied catalog.
+	 *
+	 * A model the operator has since removed from the gateway must not be
+	 * shown by the picker — `selectModel()` never ran for this session, so
+	 * `currentModelId` would surface the stale id while the send path
+	 * (`MessageCreate.model`) falls back to the default alias. The picker
+	 * would then display one model and the request would use another.
+	 * Gating on `availableIds` keeps the two in lockstep.
+	 */
+	export function readAvailablePersistedModel(
+		chatId: string,
+		availableIds: readonly string[],
+		storage?: Storage
+	): string | null {
+		const persisted = readPersistedModel(chatId, storage);
+		if (persisted === null) return null;
+		return availableIds.includes(persisted) ? persisted : null;
+	}
 </script>
 
 <script lang="ts">
@@ -61,7 +125,7 @@
 	 * surfaced per-message.
 	 */
 	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import {
@@ -84,6 +148,20 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import {
+		canAttachChatFile,
+		createProcessingFileWarningHandler,
+		processingFileNames,
+		readyFileNames,
+		selectFileIdsForSend
+	} from '$lib/lq-ai/chat/attachedFiles';
+	import {
+		firstUnloadedSkillInputs,
+		flattenSkillInputs,
+		missingInputsMessage,
+		resolveSkillInputsForSend,
+		skillInputsUnavailableMessage
+	} from '$lib/lq-ai/chat/skillInputs';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -170,9 +248,46 @@
 	let projectFiles: FileMeta[] = [];
 	let uploading = false;
 
+	// In-flight ingestion-status polls, keyed by file id, so detach, chat
+	// switch, and teardown can stop them (files attached in chat A must not
+	// keep polling — or get sent — after switching to chat B).
+	let filePollAborts: Record<string, AbortController> = {};
+
+	function abortFilePolls(): void {
+		for (const controller of Object.values(filePollAborts)) controller.abort();
+		filePollAborts = {};
+	}
+
+	onDestroy(abortFilePolls);
+
+	$: attachLimitReached = !canAttachChatFile(chatFiles.length);
+
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+	let attachmentWarning: string | null = null;
+	// Why the composer refused to send (a skill's inputs are missing or not
+	// loaded). Kept apart from `sendError` because it describes the form's
+	// current state: it is dropped as soon as the skills, their inputs or the
+	// attached files change, where a server error stays until the next send.
+	let inputsError: string | null = null;
+	$: attachedReadyNames = readyFileNames(chatFiles);
+	$: attachedProcessingNames = processingFileNames(chatFiles);
+	// Keyed on values, not array identity: the ingestion poll replaces
+	// `chatFiles` on every tick, which must not wipe a notice that says a
+	// file is still processing.
+	$: inputStateKey = JSON.stringify([
+		attachedSkillNames,
+		skillInputs,
+		attachedReadyNames,
+		attachedProcessingNames
+	]);
+	$: {
+		void inputStateKey;
+		inputsError = null;
+	}
+	// Attached skills whose detail or input schema failed to load.
+	let failedSkillNames: string[] = [];
 
 	// PR6b — governed tool-loop gate. When the stream pauses on a
 	// `tool_confirmation_required` or `mcp_authorization_required` terminal
@@ -319,17 +434,38 @@
 		const chat = $activeChatStore;
 		if (!chat) return;
 		modelByChat = { ...modelByChat, [chat.id]: id };
+		writePersistedModel(chat.id, id);
 	}
 
 	async function selectChat(chat: Chat) {
 		activeChatStore.set(chat);
 		streamingMessageId = null;
 		sendError = null;
+		attachmentWarning = null;
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
+		failedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
+		// Attached files are per-chat draft state too — reset them (and stop
+		// their status polls) so chat A's files are never sent from chat B.
+		abortFilePolls();
+		chatFiles = [];
+		// Hydrate this chat's remembered model choice from localStorage if we
+		// don't already have one in-memory (survives a page refresh; a
+		// same-session choice already in modelByChat always wins). Only accept
+		// a persisted id the current catalog still offers, so the picker can
+		// never show a model the send path would silently drop.
+		if (!(chat.id in modelByChat)) {
+			const persisted = readAvailablePersistedModel(
+				chat.id,
+				availableModels.data.map((m) => m.id)
+			);
+			if (persisted) {
+				modelByChat = { ...modelByChat, [chat.id]: persisted };
+			}
+		}
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
@@ -409,16 +545,38 @@
 			attachmentSources = { ...attachmentSources, [name]: 'picker' };
 		}
 		attachedSkillNames = [...attachedSkillNames, name];
+		await loadSkillDetail(name);
+	}
+
+	// Also the picker's Retry handler. Send is blocked until this has
+	// succeeded for every attached skill: without the schema the composer
+	// cannot tell which inputs the gateway will insist on.
+	async function loadSkillDetail(name: string) {
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		try {
-			const detail = await skillsApi.getSkill(name);
-			skillDetails = { ...skillDetails, [name]: detail };
+			// The form schema comes from the api's own resolver (user > team >
+			// built-in, both frontmatter shapes) so the form and the gateway's
+			// required-input check read the same declaration.
+			const [detail, inputs] = await Promise.all([
+				skillsApi.getSkill(name),
+				skillsApi.getInputs(name)
+			]);
+			skillDetails = {
+				...skillDetails,
+				[name]: { ...detail, inputs: flattenSkillInputs(inputs) }
+			};
 		} catch (e) {
 			console.error('lq-ai: failed to load skill detail', e);
+			// Detached (or the chat changed) while loading: nothing to flag.
+			if (attachedSkillNames.includes(name) && !failedSkillNames.includes(name)) {
+				failedSkillNames = [...failedSkillNames, name];
+			}
 		}
 	}
 
 	function detachSkill(name: string) {
 		attachedSkillNames = attachedSkillNames.filter((n) => n !== name);
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		const next = { ...skillInputs };
 		delete next[name];
 		skillInputs = next;
@@ -436,12 +594,26 @@
 
 	// ---- file panel handlers ----
 	async function uploadAttached(file: File) {
+		// The backend 422s the whole send when file_ids exceeds the cap
+		// (MESSAGE_FILE_IDS_MAX_LEN), so block the attach up front; the panel
+		// shows the limit notice + disables the upload button in parallel.
+		if (!canAttachChatFile(chatFiles.length)) return;
+		// The active chat can change while the upload is in flight; capture the
+		// target so chat A's file is never appended to (or sent from) chat B.
+		const targetChatId = $activeChatStore?.id ?? null;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
+			// Re-check after the await: the chat may have changed, and a
+			// parallel upload may have taken the last slot under the cap.
+			if (($activeChatStore?.id ?? null) !== targetChatId) return;
+			if (!canAttachChatFile(chatFiles.length)) return;
 			chatFiles = [...chatFiles, uploaded];
+			// Ingestion is async; poll so the chip flips pending -> ready (or
+			// failed) instead of showing a stale "pending" forever.
+			void pollAttachedStatus(uploaded.id);
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
@@ -449,9 +621,37 @@
 		}
 	}
 
+	// Poll a chat-attached file's ingestion status until it reaches a terminal
+	// state, patching the matching chatFiles entry so the panel chip updates.
+	// The per-file AbortController stops the loop on detach, chat switch, and
+	// component teardown (abortFilePolls / onDestroy).
+	async function pollAttachedStatus(id: string): Promise<void> {
+		const controller = new AbortController();
+		filePollAborts[id]?.abort();
+		filePollAborts = { ...filePollAborts, [id]: controller };
+		const result = await filesApi.pollFileStatus(id, {
+			signal: controller.signal,
+			onStatus: (latest) => {
+				chatFiles = chatFiles.map((f) =>
+					f.id === id ? { ...f, ingestion_status: latest.ingestion_status } : f
+				);
+			}
+		});
+		if (filePollAborts[id] === controller) {
+			const next = { ...filePollAborts };
+			delete next[id];
+			filePollAborts = next;
+		}
+		if (result.outcome === 'timeout') {
+			// Leave the last known status in place — don't fabricate 'failed'.
+			console.warn('lq-ai: file ingestion status poll timed out', id);
+		}
+	}
+
 	async function detachFile(file: FileMeta) {
 		// Per the spec the M1 attached-files panel manages chat-local state;
 		// the full file-row is left in place and can be re-attached later.
+		filePollAborts[file.id]?.abort();
 		chatFiles = chatFiles.filter((f) => f.id !== file.id);
 	}
 
@@ -467,9 +667,17 @@
 	 */
 	async function consumeIntoMessage(
 		body: ReadableStream<Uint8Array>,
-		assistantId0: string
+		assistantId0: string,
+		processingFileIds: string[] = []
 	): Promise<void> {
 		let assistantId = assistantId0;
+		const warnForProcessingFile = createProcessingFileWarningHandler(
+			processingFileIds,
+			() => $activeChatStore?.id,
+			(warning) => {
+				attachmentWarning = warning;
+			}
+		);
 		await consumeMessageStream(body, {
 			onStart: (frame) => {
 				// Reconcile the optimistic draft id with the persisted id on the
@@ -501,6 +709,7 @@
 			},
 			onComplete: (frame) => {
 				streamingMessageId = null;
+				warnForProcessingFile(frame);
 				messagesStore.update(($m) =>
 					$m.map((m) =>
 						m.id === assistantId
@@ -540,25 +749,41 @@
 		if (!chat) return;
 		if (!composerText.trim()) return;
 
-		// Validate required skill inputs.
-		for (const name of attachedSkillNames) {
-			const detail = skillDetails[name];
-			if (!detail || !detail.inputs) continue;
-			const missing = detail.inputs
-				.filter((i) => i.required)
-				.filter((i) => {
-					const v = skillInputs[name]?.[i.name];
-					return v === undefined || v === null || v === '';
-				});
-			if (missing.length > 0) {
-				sendError = `Skill "${name}" is missing required inputs: ${missing
-					.map((m) => m.name)
-					.join(', ')}.`;
-				return;
-			}
+		// Hold the send until every attached skill's input schema is on hand.
+		const inputDefs = Object.fromEntries(
+			attachedSkillNames.map((n) => [n, skillDetails[n]?.inputs])
+		);
+		const unloaded = firstUnloadedSkillInputs(attachedSkillNames, inputDefs, failedSkillNames);
+		if (unloaded) {
+			sendError = null;
+			inputsError = skillInputsUnavailableMessage(
+				skillDetails[unloaded.skill]?.title ?? unloaded.skill,
+				unloaded.loadFailed
+			);
+			return;
+		}
+
+		// Validate required skill inputs and build the payload. A required
+		// document input left empty is bound to the ready attached files' names.
+		const resolvedInputs = resolveSkillInputsForSend(
+			attachedSkillNames,
+			inputDefs,
+			skillInputs,
+			attachedReadyNames
+		);
+		if (resolvedInputs.missing.length > 0) {
+			const first = resolvedInputs.missing[0];
+			sendError = null;
+			inputsError = missingInputsMessage(
+				first,
+				skillDetails[first.skill]?.title,
+				attachedProcessingNames
+			);
+			return;
 		}
 
 		sendError = null;
+		attachmentWarning = null;
 		// Clear any prior gate card up front: a new turn supersedes a stranded
 		// gate even if this send throws before the stream's `onStart` fires.
 		pendingGate = null;
@@ -626,6 +851,9 @@
 			slug,
 			source: attachmentSources[slug] ?? 'picker'
 		}));
+		const processingFileIds = chatFiles
+			.filter((file) => file.ingestion_status !== 'ready' && file.ingestion_status !== 'failed')
+			.map((file) => file.id);
 
 		try {
 			const res = await messagesApi.sendMessageStream(
@@ -634,13 +862,15 @@
 					content: composerText,
 					model: currentModelId ?? undefined,
 					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
-					skill_inputs:
-						Object.keys(skillInputs).length > 0
-							? (skillInputs as Record<string, Record<string, unknown>>)
-							: undefined,
+					skill_inputs: resolvedInputs.skillInputs,
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
+					// Chat-scoped attached files — the backend injects each ready
+					// file's canonical text as a system block (chats.py). Ownership
+					// is validated server-side; files with no text are skipped.
+					// selectFileIdsForSend drops 'failed' files and caps at 16.
+					file_ids: selectFileIdsForSend(chatFiles),
 					stream: true
 				},
 				streamAbort.signal
@@ -658,7 +888,7 @@
 				throw new Error('Empty stream body');
 			}
 
-			await consumeIntoMessage(res.body, draftAssistantId);
+			await consumeIntoMessage(res.body, draftAssistantId, processingFileIds);
 		} catch (e: unknown) {
 			streamingMessageId = null;
 			console.error('lq-ai: stream failed', e);
@@ -1048,8 +1278,12 @@
 					{projectAttachedSkills}
 					{skillDetails}
 					{skillInputs}
+					readyFileNames={attachedReadyNames}
+					processingFileNames={attachedProcessingNames}
+					{failedSkillNames}
 					onAttach={attachSkill}
 					onDetach={detachSkill}
+					onRetry={loadSkillDetail}
 					onUpdateInputs={updateSkillInputs}
 				/>
 
@@ -1059,12 +1293,21 @@
 					}}
 				/>
 
-				{#if sendError}
+				{#if sendError ?? inputsError}
 					<div
 						class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
 						data-testid="lq-ai-send-error"
 					>
-						{sendError}
+						{sendError ?? inputsError}
+					</div>
+				{/if}
+				{#if attachmentWarning}
+					<div
+						class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1"
+						role="status"
+						data-testid="lq-ai-attachment-warning"
+					>
+						{attachmentWarning}
 					</div>
 				{/if}
 
@@ -1164,6 +1407,7 @@
 			{chatFiles}
 			{projectFiles}
 			{uploading}
+			{attachLimitReached}
 			onUpload={uploadAttached}
 			onDetach={detachFile}
 		/>

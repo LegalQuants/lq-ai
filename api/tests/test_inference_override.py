@@ -19,8 +19,9 @@ Test cases:
 
 from __future__ import annotations
 
+import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
@@ -44,7 +45,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -362,3 +363,45 @@ async def test_override_short_reason_returns_validation_error(
     )
 
     assert response.status_code in (400, 422), response.text
+
+
+# ---------------------------------------------------------------------------
+# Skill replay
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_override_replays_applied_skills_without_the_enhance_marker(
+    client: AsyncClient,
+    admin_user: User,
+    sample_refusal_message: Message,
+    db_session: AsyncSession,
+) -> None:
+    """The re-run forwards the persisted skill names, minus the ``enhance-prompt`` marker.
+
+    The row stores names only (DE-390), so the gateway — not this path —
+    decides whether a skill can run without bound inputs.
+    """
+
+    user_msg = (
+        await db_session.execute(
+            select(Message).where(
+                Message.chat_id == sample_refusal_message.chat_id, Message.kind == "user"
+            )
+        )
+    ).scalar_one()
+    user_msg.applied_skills = ["contract-snapshot", "enhance-prompt"]
+    await db_session.flush()
+
+    route = respx.post(f"{GATEWAY_BASE}/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json=_success_payload("Override worked."))
+    )
+    response = await client.post(
+        "/api/v1/inference/override-tier-floor",
+        json={"message_id": str(sample_refusal_message.id), "reason": "risk-accepted by partner"},
+        headers=_h(admin_user),
+    )
+
+    assert response.status_code == 200, response.text
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["lq_ai_skills"] == ["contract-snapshot"]

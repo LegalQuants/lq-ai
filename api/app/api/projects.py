@@ -245,6 +245,7 @@ async def _serialize_project(db: AsyncSession, project: Project) -> ProjectRespo
         context_md=project.context_md,
         privileged=project.privileged,
         minimum_inference_tier=project.minimum_inference_tier,
+        max_egress_tier=project.max_egress_tier,
         is_sandbox=project.is_sandbox,
         attached_file_ids=file_ids,
         attached_skill_names=skill_names,
@@ -371,6 +372,7 @@ async def create_project(
         context_md=payload.context_md,
         privileged=payload.privileged,
         minimum_inference_tier=payload.minimum_inference_tier,
+        max_egress_tier=payload.max_egress_tier,
     )
     db.add(project)
     try:
@@ -535,6 +537,10 @@ async def update_project(
         project.privileged = new_privileged
     if tier_set:
         project.minimum_inference_tier = new_tier
+    # DE-358 item 6: the egress ceiling is independent of privileged/tier —
+    # no cross-field rule; explicit null clears it (exclude_unset pattern).
+    if "max_egress_tier" in update_fields:
+        project.max_egress_tier = update_fields["max_egress_tier"]
 
     if "archived" in update_fields:
         # Map the boolean PATCH flag to ``archived_at`` semantics.
@@ -677,6 +683,7 @@ async def ensure_sandbox(
             ),
             privileged=False,
             minimum_inference_tier=None,
+            max_egress_tier=None,
             is_sandbox=True,
         )
         .on_conflict_do_nothing(

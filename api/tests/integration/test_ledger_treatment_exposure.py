@@ -18,7 +18,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_ledger_entry_carries_resolved_treatment(db_session: AsyncSession):
+async def test_ledger_entry_carries_resolved_treatment(db_session: AsyncSession) -> None:
     user = User(email=f"l-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(user)
     await db_session.flush()
@@ -84,7 +84,7 @@ async def test_ledger_entry_carries_resolved_treatment(db_session: AsyncSession)
 
 
 @pytest.mark.asyncio
-async def test_ledger_exposes_treatment_rollup_and_signals(db_session: AsyncSession):
+async def test_ledger_exposes_treatment_rollup_and_signals(db_session: AsyncSession) -> None:
     """WS-G PR2: treatment dict gains rollup + per-passage signals from judge run."""
     user = User(email=f"trs-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(user)
@@ -182,7 +182,7 @@ async def test_ledger_exposes_treatment_rollup_and_signals(db_session: AsyncSess
 
 
 @pytest.mark.asyncio
-async def test_ledger_graph_only_treatment_yields_null_rollup(db_session: AsyncSession):
+async def test_ledger_graph_only_treatment_yields_null_rollup(db_session: AsyncSession) -> None:
     """WS-G PR2: graph-only treatment (no signals) yields new keys as null/empty."""
     user = User(email=f"go-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(user)

@@ -19,7 +19,16 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, Text, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    SmallInteger,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +39,20 @@ class ToolCallLog(Base):
     """Per-call governance audit log — counts/types only, never raw payloads."""
 
     __tablename__ = "tool_call_log"
+    __table_args__ = (
+        CheckConstraint(
+            # 0 ("no egress") is a real applied ceiling: a scope-0 refusal is
+            # audited with max_allowed_tier=0.  Configured ceilings (operator /
+            # project / pending) are 1-5; 0 only ever comes from the scope.
+            "max_allowed_tier IS NULL OR (max_allowed_tier BETWEEN 0 AND 5)",
+            name="chk_tool_call_log_max_allowed_tier_range",
+        ),
+        CheckConstraint(
+            "ceiling_source IS NULL OR (ceiling_source IN "
+            "('operator', 'project', 'execution_scope', 'pending_original', 'unresolved'))",
+            name="chk_tool_call_log_ceiling_source",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -66,6 +89,21 @@ class ToolCallLog(Base):
 
     tier: Mapped[int] = mapped_column(Integer, nullable=False)
     """Provider egress tier (0-5) at call time."""
+
+    max_allowed_tier: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    """Egress ceiling actually applied to this call (issue #593).
+
+    NULL when the call ran unconstrained (no operator, Project, or scope
+    ceiling was set).
+    """
+
+    ceiling_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    """Which policy bound this call: 'operator' | 'project' |
+    'execution_scope' | 'pending_original' | 'unresolved'.
+
+    NULL when no ceiling applied. 'unresolved' marks a fail-closed refusal
+    where the egress policy could not be read at call time.
+    """
 
     confirmation_state: Mapped[str] = mapped_column(
         Text,

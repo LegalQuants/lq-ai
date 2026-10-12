@@ -156,6 +156,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/cancel",
         # M3-C4a — XLSX/CSV export.
         "/api/v1/tabular/executions/{execution_id}/export",
+        # DE-304 / ADR 0040 — bulk operations (preview + create).
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops",
+        "/api/v1/tabular/bulk-ops",
+        "/api/v1/tabular/bulk-ops/{bulk_op_id}",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
@@ -164,6 +169,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
         "/api/v1/admin/intake-bridges/teams/{tenant_id}",
+        # 3.8 / DE-263 — admin community-skill installer (ADR 0041)
+        "/api/v1/admin/community-skills",
+        "/api/v1/admin/community-skills/{slug}",
+        "/api/v1/admin/community-skills/{slug}/install",
         # M4-A4-i — Autonomous sessions read/halt API (per-user)
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
@@ -197,6 +206,17 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/notifications/{notification_id}/read",
         # Phase 1 §4.4 — one-off manual session spawn (run a skill/playbook now)
         "/api/v1/autonomous/run-now",
+        "/api/v1/autonomous/orchestration/chat-runs",
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}",
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt",
+        "/api/v1/skill-workspaces",
+        "/api/v1/skill-workspaces/{workspace_id}",
+        "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
+        "/api/v1/autonomous/orchestration/{root_id}/tree",
+        "/api/v1/autonomous/orchestration/{root_id}/approve",
+        "/api/v1/autonomous/orchestration/{root_id}/reject",
+        "/api/v1/autonomous/orchestration/{root_id}/halt",
+        "/api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}",
         # WS3b — case-law research surface
         "/api/v1/research/capabilities",
         "/api/v1/research/verify-citations",
@@ -342,7 +362,14 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    assert len(actual) == 139
+    # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
+    # Optional persistent skill workspaces add three owner paths (146 -> 149).
+    # DE-304 / ADR 0040 adds four new paths (150 -> 154).
+    # 3.8 / DE-263 adds three community-skill paths (154 -> 157):
+    # /api/v1/admin/community-skills
+    # /api/v1/admin/community-skills/{slug}
+    # /api/v1/admin/community-skills/{slug}/install
+    assert len(actual) == 157
 
 
 @pytest.mark.unit

@@ -20,6 +20,7 @@ from app.autonomous.nodes import make_analysis_node
 from app.autonomous.state import AutonomousSessionState
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
+from tests.autonomous.conftest import _CHUNK_TEXT_DEFAULT, KbOneFile
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
@@ -59,12 +60,14 @@ class _ScriptedGateway:
 
     def __init__(self, planner_script: list[Any]) -> None:
         self.planner_script = list(planner_script)
+        self.captured_requests: list[Any] = []
 
     async def list_tool_providers(self) -> list[dict[str, Any]]:
         """No providers configured in the agentic-loop unit tests."""
         return []
 
     async def chat_completion(self, request: Any, *, request_id: object = None) -> SimpleNamespace:
+        self.captured_requests.append(request)
         system = request.messages[0].content
         if "research planner" in system:
             return _resp(json.dumps(self.planner_script.pop(0)))
@@ -100,6 +103,26 @@ def _tool_started_calls(rows: list[Any], tool: str) -> int:
         if r.action == "autonomous_session.tool_call"
         and (r.details or {}).get("tool") == tool
         and (r.details or {}).get("outcome") == "started"
+    )
+
+
+def _tool_error_rows(rows: list[Any], tool: str) -> list[dict[str, Any]]:
+    """Details of the ``error`` audit rows for a specific tool intent."""
+    return [
+        r.details
+        for r in rows
+        if r.action == "autonomous_session.tool_call"
+        and (r.details or {}).get("tool") == tool
+        and (r.details or {}).get("outcome") == "error"
+    ]
+
+
+def _tool_outcomes(rows: list[Any], tool: str) -> list[str]:
+    """Audit outcomes for one tool, independent of row ordering."""
+    return sorted(
+        str((r.details or {}).get("outcome"))
+        for r in rows
+        if r.action == "autonomous_session.tool_call" and (r.details or {}).get("tool") == tool
     )
 
 
@@ -334,6 +357,97 @@ async def test_action_error_is_nonfatal_observation(
 
 
 # ---------------------------------------------------------------------------
+# AG-01 — ownership denial through the loop is a non-fatal observation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["query", "file", "since"])
+async def test_foreign_kb_denial_is_nonfatal_loop_observation(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+    kb_with_one_indexed_file: KbOneFile,
+    mode: str,
+) -> None:
+    """AG-01 through the executor loop: a foreign-KB denial degrades, not crashes.
+
+    The scope tests in ``test_retrieve_chunks_scope.py`` call the handler
+    directly; this test pins the run-level behaviour on the planner path.
+    The session user and the fixture KB's owner are different users, so the
+    ownership gate raises ``ValueError`` inside ``guarded_tool_call``.  The
+    loop must catch it as a non-fatal failed observation (nodes.py, invariant
+    #5): the run continues, the observation reads
+    ``retrieve_chunks → failed (ValueError)``, and no chunk data reaches
+    state or any model prompt.
+    """
+    kb = kb_with_one_indexed_file
+    assert seeded_matter_session.user_id != kb.owner_id  # the premise: cross-owner
+    private_query = "PRIVATE_QUERY_494"
+    args = {
+        "query": {"kb_id": str(kb.kb_id), "query": private_query},
+        "file": {"file_id": str(kb.file_id)},
+        "since": {"kb_id": str(kb.kb_id), "since": "2026-01-01T00:00:00Z"},
+    }[mode]
+
+    gw = _ScriptedGateway(
+        [
+            {
+                "next_intent": "retrieve_chunks",
+                "args": args,
+                "rationale": "x",
+            },
+            {"done": True, "rationale": "enough evidence"},
+        ]
+    )
+    node = make_analysis_node(db_session, gw)
+    state: AutonomousSessionState = {
+        "session_id": str(seeded_matter_session.id),
+        "query": "Is the assignment clause enforceable?",
+        "retrieved_chunks": [],
+    }
+    # Must not raise — the denial is non-fatal on the loop path
+    result = await node(state)
+
+    # 1. The run continues: synthesis ran, the failed step is counted, planner finished
+    assert result.get("analysis_content") is not None
+    trace = result.get("analysis_plan_trace")
+    assert trace is not None
+    assert trace["steps"] == 1
+    assert trace["halt_reason"] == "planner_done"
+
+    # 2. The observation is the exact non-fatal failure line (observations live
+    #    only in the prompts, not in returned state — hence the captured requests)
+    all_prompt_text = "\n".join(
+        m.content
+        for req in gw.captured_requests
+        for m in req.messages
+        if isinstance(m.content, str)
+    )
+    assert "retrieve_chunks → failed (ValueError)" in all_prompt_text
+
+    # 3. No chunk data escaped the denial: nothing in evidence, and the foreign
+    #    chunk's text never reached any model prompt
+    assert not result.get("analysis_evidence")
+    assert _CHUNK_TEXT_DEFAULT not in all_prompt_text
+
+    # One started row and one payload-free closing refusal, with no duplicate
+    # generic error row. The nonfatal ValueError observation remains unchanged.
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_started_calls(rows, "retrieve_chunks") == 1
+    denied = [r.details for r in rows if (r.details or {}).get("outcome") == "ownership_denied"]
+    assert denied == [{"tool": "retrieve_chunks", "outcome": "ownership_denied"}]
+    assert private_query not in json.dumps([r.details for r in rows])
+    assert _CHUNK_TEXT_DEFAULT not in json.dumps([r.details for r in rows])
+    errors = _tool_error_rows(rows, "retrieve_chunks")
+    assert errors == []
+    outcomes = [
+        r.details["outcome"]
+        for r in rows
+        if r.details and r.details.get("tool") == "retrieve_chunks"
+    ]
+    assert sorted(outcomes) == ["ownership_denied", "started"]
+
+
+# ---------------------------------------------------------------------------
 # C1 — boundary-validate bad planner args before they reach the SQL layer
 # ---------------------------------------------------------------------------
 
@@ -376,6 +490,66 @@ async def test_bad_top_k_is_nonfatal_validation_observation(
 
     action_decisions = [d for d in trace["decisions"] if d.get("intent") == "retrieve_chunks"]
     assert len(action_decisions) == 1
+
+    # The rejected attempt never reached the chokepoint (no ``started`` row),
+    # but it is still audited: one ``error`` row.
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_started_calls(rows, "retrieve_chunks") == 0
+    errors = _tool_error_rows(rows, "retrieve_chunks")
+    assert errors == [{"tool": "retrieve_chunks", "outcome": "error", "error_type": "ValueError"}]
+
+
+@pytest.mark.parametrize("processing_step", ["summarize_observation", "collect_evidence"])
+async def test_postprocessing_failure_does_not_audit_successful_tool_as_error(
+    db_session: AsyncSession,
+    seeded_matter_session: AutonomousSession,
+    kb_with_one_indexed_file: KbOneFile,
+    monkeypatch: pytest.MonkeyPatch,
+    processing_step: str,
+) -> None:
+    """A failed observation/evidence transform must not relabel a successful dispatch."""
+    # The shared KB fixture has a different owner from seeded_matter_session.
+    # Match them here so the real guarded retrieval reaches its success row.
+    seeded_matter_session.user_id = kb_with_one_indexed_file.owner_id
+    await db_session.flush()
+    gw = _ScriptedGateway(
+        [
+            {
+                "next_intent": "retrieve_chunks",
+                "args": {"kb_id": str(kb_with_one_indexed_file.kb_id), "query": "confidential"},
+                "rationale": "gather clause context",
+            },
+            {"done": True, "rationale": "enough evidence"},
+        ]
+    )
+
+    def fail_postprocessing(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("postprocessing failed")
+
+    monkeypatch.setattr(f"app.autonomous.nodes.{processing_step}", fail_postprocessing)
+    result = await make_analysis_node(db_session, gw)(
+        {
+            "session_id": str(seeded_matter_session.id),
+            "query": "Is the assignment clause enforceable?",
+            "retrieved_chunks": [],
+        }
+    )
+
+    assert result.get("analysis_content") is not None
+    trace = result["analysis_plan_trace"]
+    assert trace["steps"] == 1
+    assert trace["halt_reason"] == "planner_done"
+    planner_text = "\n".join(
+        m.content
+        for req in gw.captured_requests
+        for m in req.messages
+        if isinstance(m.content, str)
+    )
+    assert "retrieve_chunks → postprocessing failed (RuntimeError)" in planner_text
+
+    rows = await _audit_rows(db_session, str(seeded_matter_session.id))
+    assert _tool_outcomes(rows, "retrieve_chunks") == ["started", "success"]
+    assert _tool_error_rows(rows, "retrieve_chunks") == []
 
 
 # ---------------------------------------------------------------------------

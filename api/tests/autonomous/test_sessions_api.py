@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -33,7 +33,7 @@ from app.security import create_access_token, hash_password
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -526,23 +526,95 @@ async def test_detail_unauth_returns_401(
 
 
 @pytest.mark.integration
-async def test_receipt_assembles_phase_transitions_and_tool_calls(
+async def test_receipt_records_insert_times_in_one_transaction(
     db_session: AsyncSession,
     user_a: User,
 ) -> None:
-    """build_receipt assembles phase_transitions and tool_calls in order."""
+    """Receipt timestamps reflect audit inserts, not transaction start.
+
+    Regression: ``audit_log.timestamp`` defaulted to ``now()``, which is the
+    transaction start time. The executor flushes a session's audit rows and
+    commits once, so each receipt entry showed the session's start time.
+    Migration 0069 switches the default to ``clock_timestamp()``. Wall-clock
+    timestamps may tie or move backwards; they do not guarantee write order.
+    """
+    from datetime import datetime
+
+    from sqlalchemy import text
+
     from app.autonomous.audit import autonomous_audit
     from app.autonomous.receipt import build_receipt
 
     sess = await _make_session(db_session, user=user_a)
+    transaction_start = (await db_session.execute(text("SELECT now()"))).scalar_one()
 
-    await autonomous_audit(db_session, sess, "phase_transition", to_phase="intake")
-    await autonomous_audit(db_session, sess, "tool_call", tool="retrieve_chunks", outcome="started")
-    await autonomous_audit(
-        db_session, sess, "tool_call", tool="retrieve_chunks", outcome="success", cost_usd=0.0
+    # Separate the audit inserts from transaction start on the database's
+    # clock, without relying on the application clock or per-row ordering.
+    await db_session.execute(text("SELECT pg_sleep(0.02)"))
+
+    tools = [f"tool_{i:02d}" for i in range(40)]
+    for tool in tools:
+        await autonomous_audit(db_session, sess, "tool_call", tool=tool, outcome="started")
+
+    receipt = await build_receipt(sess, db_session)
+
+    calls = receipt["tool_calls"]
+    assert len(calls) == len(tools)
+    assert {c["tool"] for c in calls} == set(tools)
+    rows = (
+        (
+            await db_session.execute(
+                select(AuditLog)
+                .where(AuditLog.resource_type == "autonomous_session")
+                .where(AuditLog.resource_id == str(sess.id))
+                .where(AuditLog.action == "autonomous_session.tool_call")
+            )
+        )
+        .scalars()
+        .all()
     )
-    await autonomous_audit(db_session, sess, "phase_transition", to_phase="analysis")
-    await db_session.flush()
+    expected = {row.details["tool"]: row.timestamp for row in rows if row.details is not None}
+    assert len(expected) == len(tools)
+    for call in calls:
+        stamp = datetime.fromisoformat(call["timestamp"])
+        assert stamp.tzinfo is not None
+        assert stamp != transaction_start
+        assert stamp == expected[call["tool"]]
+
+
+@pytest.mark.integration
+async def test_receipt_assembles_phase_transitions_and_tool_calls(
+    db_session: AsyncSession,
+    user_a: User,
+) -> None:
+    """build_receipt sorts phase transitions and tool calls by timestamp."""
+    from datetime import UTC, datetime, timedelta
+    from typing import Any
+
+    from app.audit import audit_action
+    from app.autonomous.receipt import build_receipt
+
+    sess = await _make_session(db_session, user=user_a)
+
+    events: list[tuple[str, dict[str, Any]]] = [
+        ("phase_transition", {"to_phase": "intake"}),
+        ("tool_call", {"tool": "retrieve_chunks", "outcome": "started"}),
+        ("tool_call", {"tool": "retrieve_chunks", "outcome": "success", "cost_usd": 0.0}),
+        ("phase_transition", {"to_phase": "analysis"}),
+    ]
+    base_time = datetime(2026, 1, 1, tzinfo=UTC)
+    # Explicit, distinct times test sorting independently of the database
+    # clock. Insert in reverse order so physical write order cannot pass.
+    for index, (event, details) in reversed(list(enumerate(events))):
+        await audit_action(
+            db_session,
+            user_id=sess.user_id,
+            action=f"autonomous_session.{event}",
+            resource_type="autonomous_session",
+            resource_id=str(sess.id),
+            details=details,
+            timestamp=base_time + timedelta(seconds=index),
+        )
 
     receipt = await build_receipt(sess, db_session)
 

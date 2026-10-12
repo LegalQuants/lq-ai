@@ -58,6 +58,7 @@ class SkillRecord:
     skill was found in."""
     reference_paths: tuple[Path, ...] = field(default_factory=tuple)
     example_paths: tuple[Path, ...] = field(default_factory=tuple)
+    script_paths: tuple[Path, ...] = field(default_factory=tuple)
 
     def summary(self) -> SkillSummary:
         return derive_summary(self.name, self.frontmatter, source=self.source)
@@ -75,6 +76,7 @@ class SkillRecord:
             content_md=self.body,
             reference_files=list(reference_files),
             example_files=list(example_files),
+            script_files=list(_read_files(self.folder, self.script_paths)),
         )
 
 

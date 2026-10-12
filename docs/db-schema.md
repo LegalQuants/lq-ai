@@ -98,7 +98,7 @@ CREATE INDEX idx_user_sessions_expires ON user_sessions(expires_at);
 ### `user_export_jobs`
 
 Per-user GDPR Article 20 export job, tracked from queued → processing →
-completed/failed. The actual ZIP bytes live in MinIO under
+completed/failed. The actual ZIP bytes live in S3-compatible object storage under
 `storage_key`; the table itself is a job-state ledger that
 `POST /users/me/export` writes to and the worker mutates.
 
@@ -120,7 +120,7 @@ CREATE INDEX idx_user_export_jobs_expires ON user_export_jobs (expires_at) WHERE
 ```
 
 `expires_at` is set to `now() + 7 days` when the worker completes; an
-hourly GC cron clears `storage_key` (and deletes the MinIO bytes) once
+hourly GC cron clears `storage_key` (and deletes the object-store bytes) once
 that timestamp passes. The row itself is retained so status polling
 remains deterministic for a recently-deleted bundle.
 
@@ -158,12 +158,16 @@ CREATE TABLE projects (
     context_md               TEXT,  -- free-form markdown
     privileged               BOOLEAN NOT NULL DEFAULT FALSE,
     minimum_inference_tier   SMALLINT,
+    max_egress_tier          SMALLINT,  -- 0070: matter-scoped tool-egress ceiling, 1-5, NULL = none
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at              TIMESTAMPTZ,  -- soft-delete; NULL means active
     CONSTRAINT chk_projects_tier_range CHECK (
         minimum_inference_tier IS NULL OR (minimum_inference_tier BETWEEN 1 AND 5)
+    ),
+    CONSTRAINT chk_projects_max_egress_tier_range CHECK (  -- 0070
+        max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)
     ),
     CONSTRAINT chk_projects_privileged_implies_tier CHECK (
         (privileged = false) OR (minimum_inference_tier IS NOT NULL)
@@ -848,7 +852,7 @@ CREATE TRIGGER trg_organization_profile_updated_at
 
 ### `files`
 
-Original uploaded files; the bytes themselves live in object storage (MinIO/S3).
+Original uploaded files; the bytes themselves live in S3-compatible object storage.
 
 ```sql
 CREATE TABLE files (
@@ -883,10 +887,10 @@ CREATE TABLE documents (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     file_id             UUID NOT NULL UNIQUE REFERENCES files(id) ON DELETE CASCADE,
     parser              TEXT NOT NULL,  -- 'docling+pymupdf', 'pymupdf', 'pymupdf-only'
-    parser_version      TEXT,            -- e.g. 'pymupdf=1.24.0; docling=1.16.0'
+    parser_version      TEXT,            -- e.g. 'pymupdf=1.24.0'
     page_count          INTEGER,
     character_count     INTEGER,
-    structured_content  JSONB,            -- Docling's structured representation; M2 reads
+    structured_content  JSONB,            -- reserved structured sidecar; currently unused (no reader). See ADR 0026.
     normalized_content  TEXT NOT NULL DEFAULT '',  -- M2-A1 (migration 0024); see below
     was_ocrd            BOOLEAN NOT NULL DEFAULT FALSE,  -- M2-A1 (migration 0024); see below
     ingest_status       TEXT NOT NULL DEFAULT 'ok'    -- M3-0.3 (migration 0030); see below
@@ -907,7 +911,10 @@ CREATE INDEX idx_documents_ingest_status ON documents(ingest_status)
 Per ADR 0006, the `parser` column carries the cascade outcome:
 `docling+pymupdf` (both succeeded), `pymupdf` (Docling fell through),
 or `pymupdf-only` (Docling intentionally disabled via
-`LQ_AI_DOCLING_ENABLED=false`).
+`LQ_AI_DOCLING_ENABLED=false`). **In practice `docling+pymupdf` has never
+occurred** — the Docling pass has never been operational (broken since C5),
+so every row is `pymupdf`; Docling is being removed per ADR 0026, after which
+the value set collapses to PyMuPDF-only.
 
 Per M2-A1 (migration 0024), `normalized_content` carries the full,
 canonical PyMuPDF text stream — the source the M2 Citation Engine
@@ -1146,6 +1153,7 @@ CREATE TABLE user_skills (
     frontmatter_extra JSONB NOT NULL DEFAULT '{}',
     body              TEXT NOT NULL,
     slash_alias       TEXT,                                       -- 0023: chat-composer trigger alias (e.g. '/nda')
+    installation_provenance JSONB,                              -- 0072: immutable installation snapshot
     forked_from       TEXT,                                       -- 0023: source skill slug when created via fork
     archived_at       TIMESTAMPTZ,                                -- soft-delete
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1185,6 +1193,7 @@ CREATE UNIQUE INDEX idx_user_skills_slash_alias_team_active
 |---|---|---|
 | `slash_alias` | 0023 | Optional chat-composer trigger alias. Must match `^/[a-z0-9-]{1,32}$` (enforced by `chk_user_skills_slash_alias_format`). Unique per active owner (partial unique indexes above). `POST` and `PATCH /user-skills` return 422 with `"slash_alias '...' is already used by another of your skills."` on collision. |
 | `forked_from` | 0023 | Slug of the source skill when this row was created via the fork button on the skill detail page. Stored as plain text — the source may be a filesystem-canonical built-in with no DB row (per ADR 0004). Set on create; read-only afterward. |
+| `installation_provenance` | 0072 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
 
 Resolution path during prompt assembly (`/internal/skills/{slug}?user_id=…`): user-scope row for the requesting user wins on slug match; falls through to the filesystem registry otherwise. D8.1's only addition is the `teams` FK target and a middle resolution slot for team-scope rows.
 
@@ -1234,8 +1243,8 @@ The most consequential table in the schema. Every privilege-affecting action lan
 
 ```sql
 CREATE TABLE audit_log (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    timestamp             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp             TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),  -- wall-clock insert time, not transaction start (0069)
     user_id               UUID REFERENCES users(id) ON DELETE SET NULL,
     action                TEXT NOT NULL,           -- e.g. 'chat.create', 'message.send', 'skill.fork'
     resource_type         TEXT NOT NULL,           -- e.g. 'chat', 'project', 'skill'
@@ -1262,6 +1271,12 @@ CREATE INDEX idx_audit_log_tier ON audit_log(routed_inference_tier, timestamp DE
 
 The audit log is **append-only** at the application layer; the database does not enforce this directly (the maintainer-team can add a trigger if desired).
 
+The `timestamp` default records wall-clock insert time with `clock_timestamp()`
+(migration 0069). The shared `audit_action` writer uses this default unless the
+caller supplies an explicit timestamp; audit rows still share the caller's
+atomic transaction. Wall-clock values may tie or move backwards if the clock is
+adjusted, so timestamp sorting does not guarantee write order.
+
 **`details` JSONB conventions.**
 
 The `details` column carries action-specific payloads. Documented keys by action:
@@ -1272,6 +1287,7 @@ The `details` column carries action-specific payloads. Documented keys by action
 | `user_skill.created` | `slug`, `scope`, `version` | Identifies the created row. `team_id` also present for `scope='team'` rows. |
 | `user_skill.updated` | `slug`, `scope`, `changed_fields`, `version_before`, `version_after` | `changed_fields` is a sorted array of mutated keys; `version_before`/`version_after` present only when `version` changed. `team_id` present for team-scope rows. |
 | `user_skill.deleted` | `slug`, `scope` | Identity of the archived row. |
+| `autonomous_session.tool_call` | `tool`, `outcome` | Retrieval ownership-predicate refusals use `tool='retrieve_chunks'`, `outcome='ownership_denied'` (#494) as the one closing row after `started`, without a duplicate generic `error` row (#656) or raw arguments/results. Ordinary failures retain their generic error audit. Actor and run are in `user_id` and `resource_id`; rows share the caller's transaction. See [audit logging](security/audit-logging.md) for scope and rollback limits. |
 
 ### `inference_routing_log`
 
@@ -1518,11 +1534,15 @@ Substrate for the Tabular / Multi-Document Review surface
 execution walks a `documents × columns` grid and produces a
 row-per-document by column-per-spec result, run as a LangGraph workflow
 on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
-doc: reuse the queue rather than add a second worker container). One
-table, introduced by migration `0036_tabular_executions.py`:
+doc: reuse the queue rather than add a second worker container). Two
+tables (migrations `0036_tabular_executions.py` and
+`0071_tabular_bulk_ops.py`):
 
 * `tabular_executions` — one row per execution; persists the inputs +
   status + assembled grid so the result view can re-render a week later.
+* `tabular_bulk_ops` — one row per bulk operation over a completed
+  execution (DE-304 / ADR 0040); persists the op params + per-item
+  results causally linked to the parent execution.
 
 ### `tabular_executions` (M3)
 
@@ -1600,6 +1620,38 @@ populated once status is `completed` (may carry partial output on
 
 Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
 from M3-A6's migration 0034.
+
+### `tabular_bulk_ops` (DE-304 / [ADR 0040](adr/0040-tabular-bulk-operations.md))
+
+One row per selected-column report/memo operation (migration 0071).
+
+```sql
+CREATE TABLE tabular_bulk_ops (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id UUID REFERENCES tabular_executions(id) ON DELETE SET NULL,
+    source_execution_id UUID NOT NULL,
+    provenance JSONB NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('redline_rows','summarize_column')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    params JSONB NOT NULL DEFAULT '{}'::jsonb,
+    results JSONB,
+    confirmed_cost_usd NUMERIC(10,4),
+    cost_actual_usd NUMERIC(10,4),
+    error_text TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+CREATE INDEX idx_tabular_bulk_ops_execution_recent ON tabular_bulk_ops (execution_id, created_at DESC);
+CREATE INDEX idx_tabular_bulk_ops_owner_recent ON tabular_bulk_ops (user_id, created_at);
+```
+
+`execution_id` is a nullable live link. `source_execution_id` preserves the original identity after hard deletion. `provenance` stores column/document metadata and the immutable skill snapshot (body, references, version, scope, hash, input bindings and tier floor); it does not duplicate source documents or the full grid. `params` identifies the selected column and skill.
+
+Source soft/hard deletion retains outputs; owner-scoped list/detail endpoints remain available independently. Account deletion cascades through the owner FK and removes work product, and account export includes `tabular_bulk_ops.json`. Queued work fails if its source is gone. Migration downgrade refuses while retained rows exist.
+
+`completed` includes visible per-item failures. Results use `{schema_version: 'de304-v1', items: [{document_id, document_name, status, output_text, error, cost_usd}], summary: {total_items, failed_items}}`. Per-call costs currently remain unreconciled; the aggregate is not metered spend.
 
 ---
 
@@ -1718,6 +1770,11 @@ CREATE TABLE autonomous_sessions (
     project_id        UUID REFERENCES projects(id) ON DELETE SET NULL,             -- fk_autonomous_sessions_project_id
     trigger_kind      TEXT NOT NULL CHECK (trigger_kind IN ('watch','schedule','suggestion','manual')),
     trigger_ref       UUID,                                                        -- id of the schedule/watch/suggestion that started it
+    -- 0067 / ADR 0035: legacy inserts receive root_session_id=id from a trigger.
+    parent_session_id UUID REFERENCES autonomous_sessions(id) ON DELETE CASCADE,
+    root_session_id   UUID NOT NULL REFERENCES autonomous_sessions(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
+    delegation_depth INTEGER NOT NULL DEFAULT 0,
+    child_order      INTEGER,
     current_phase     TEXT NOT NULL DEFAULT 'intake'
                           CHECK (current_phase IN ('intake','analysis','drafting','ethics_review','delivery')),
     halt_state        TEXT NOT NULL DEFAULT 'running'
@@ -1746,6 +1803,172 @@ CREATE INDEX idx_autonomous_sessions_user_created ON autonomous_sessions(user_id
 -- The scheduler's "which running sessions need a halt/idle check?" scan (partial).
 CREATE INDEX idx_autonomous_sessions_active ON autonomous_sessions(halt_state, last_activity_at) WHERE status = 'running';
 ```
+
+### Governed orchestration records (0067)
+
+These private tables implement accepted ADR 0035. The implementation connects
+them to the closed demonstration API and arq worker; live research remains disabled.
+The authoritative governance DDL is
+[`0067_orchestration_governance.py`](../api/alembic/versions/0067_orchestration_governance.py);
+the [lifecycle and transaction contract](adr/0035-governed-orchestration-run-tree.md#d5--durable-admission-short-transactions-and-explicit-uncertain-effects)
+defines allowed transitions and remaining integration gates.
+
+Revision **0067** includes `profile` (`demonstration` by default, or
+`model_demo_v1`) and nullable private `planning_snapshot JSONB` on
+`orchestration_roots`. Model roots have a snapshot before their first provider
+call and may have `current_revision = NULL` until a valid proposal is retained.
+The new `planning` status participates in the one-active-root-per-owner index.
+Sample roots continue to require a current prepared revision and no planning
+snapshot. A root in `planning` cannot reference a prepared revision.
+
+The immutable intake snapshot pins owner/project, skill and packet digests,
+gateway revision, direct route, grants, deadlines, and root/planning allowances.
+The existing account and effect ledger charge planning before approval;
+promotion writes plan revision 1 with a `planning_digest`, preserving that
+ledger. No child admission is authorized by a planning snapshot. Invalid model
+output, halt, expiry and uncertain effects retain the snapshot and receipts.
+Downgrade to 0066 refuses retained orchestration runs instead of discarding their history.
+See [0067](../api/alembic/versions/0067_orchestration_governance.py) and the
+[model demo tests](../api/tests/autonomous/orchestration/test_chat_demo.py).
+
+`autonomous_sessions` gains immutable tree identity. Depth-zero roots have no
+parent/order and reference themselves. Depth-one children reference the same
+parent and root, with order 1–4. A check constraint and trigger reject deeper
+delegation, cycles and cross-owner/project edges. The migration backfills old
+sessions; the insert trigger supplies root identity for unchanged callers.
+Partial parent and full root indexes support tree reads. Parent/root deletion
+cascades children. Existing single-session status/phase enums are unchanged.
+
+| Table | Keys and fields | Constraints and lifecycle |
+|---|---|---|
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
+| `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
+| `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
+| `orchestration_effects` | PK `(session_id, effect_key)`; request hash, phase, intent, generation, status; reservation, nullable charge/result/completion time, creation timestamp | One admitted/uncertain effect per run. Bounded stable effect key and digest shape. Completed requires charge/result/time. Result JSONB is private content; audit does not contain it. Uncertain effects retain reservations. |
+
+The internal `release_claim` transaction clears account worker/lease fields and
+increments the generation only for the exact unexpired claim with no admitted or
+uncertain effect and zero reserved balance. It writes `orchestration.claim_released`
+in the same transaction; audit failure rolls back ownership changes. Cleanup
+remains possible after execution permission is revoked and preserves consent,
+root lifecycle and accounting. A replacement claim rechecks current authority.
+No new columns or migration are needed for this operation.
+
+The schema includes `attempt_deadline TIMESTAMPTZ` on each account. New claims
+fix it to the earlier of the approved root deadline and claim time plus the
+approved attempt timeout; renewable `lease_until` cannot exceed it. Release
+and uncertainty recovery clear both timestamps. `renew_claim` revalidates current
+authority, preserves generation/accounting/activity, and atomically audits actual
+extensions as `orchestration.claim_renewed`. Downgrade refuses retained runs and
+preserves legacy sessions once drained. Rebuild all API workers together. See the
+[lease renewal tests](../api/tests/autonomous/orchestration/test_leases.py).
+
+The internal `recover_expired_claims` transaction drains expired account ownership
+without requiring current execution permission. It advances each generation,
+clears worker/lease/attempt fields and records `orchestration.claim_expired`
+atomically across the root's affected accounts. Clean accounts preserve lifecycle,
+progress and receipts; pending effects or orphaned reservations keep funds and
+mark the root uncertain. Live accounts are skipped. This also supplies cleanup
+for expired idle accounts before a schema downgrade; no additional migration is
+needed. See [recovery tests](../api/tests/autonomous/orchestration/test_guard_recovery.py).
+
+The private `expire_root` operation validates the stored current plan and compares
+its deadline with database time under the root lock. At/past that deadline, clean
+awaiting/queued/running/waiting roots become `expired`. Unresolved tree-wide
+accounting remains `uncertain`, including unowned accounts; clean prior terminal
+outcomes are preserved. Claim cleanup and `orchestration.root_expired` or
+`orchestration.deadline_uncertain` audits share one transaction. It changes no
+legacy session status/phase, budget or receipt schema. See
+[root deadline tests](../api/tests/autonomous/orchestration/test_deadlines.py).
+
+The internal recovery sweep discovers only root IDs, using UUID pagination with
+existing root/account indexes available, then closes discovery before invoking independent
+claim/deadline transactions. Its caller-carried scan cursor is not persisted in
+these tables and does not represent execution continuation. Page limits and
+per-stage timeouts bound work; there is no migration or new authority record.
+See [recovery sweep tests](../api/tests/autonomous/orchestration/test_watchdog.py).
+
+Revision **0067** also creates the separate `orchestration_checkpoints` schema for
+the pinned Postgres saver 3.1.2: `checkpoint_migrations` (versions 0–9),
+`checkpoints`, `checkpoint_blobs` and `checkpoint_writes`. The three content tables
+retain the saver's composite primary keys and add generated `session_id UUID`
+foreign keys to `autonomous_sessions`, with cascading deletion and indexes.
+Only UUID session thread IDs are accepted. Checkpoint state contains identifiers;
+bounded findings/synthesis live in `autonomous_sessions.result` and effect
+receipts. Node errors are sanitized before framework error writes. The application
+migration, not a worker startup or request, creates these tables. Downgrade
+refuses retained checkpoints or owned accounts; it never silently erases history.
+
+Each graph invocation owns its saver connection and a session advisory lock.
+That exact connection performs checkpoint writes; it cannot reconnect and keep
+writing after losing ownership. Additional advisory slots and serialized durable
+account admission enforce root/deployment child limits. Approval and child waits
+release worker ownership. The legacy idle watchdog excludes governed trees;
+their dedicated sweep handles leases, deadlines and lost arq wakeups.
+
+The same revision adds `orchestration_files`, keyed by `(session_id, name)`.
+`session_id` references the run's `orchestration_accounts` row with `ON DELETE
+CASCADE`. Columns hold bounded UTF-8 `content`, `revision` (1–32), SHA-256 `digest`,
+`size_bytes`, `shared` and `updated_at`. Database checks restrict names and content
+size; guarded writes enforce eight files and 256 KiB per session, 64 KiB per file,
+expected revisions and immutability after sharing. The root may read an approved
+child's shared file; siblings and other runs cannot. Owner receipt access includes
+private notes after halt. This table has no host directory or cross-run skill namespace.
+File writes and effect receipts commit atomically under the existing lock order.
+Downgrade refuses retained files or owned accounts; explicit session deletion
+removes the corresponding files. See [storage evidence](plans/issue-563-workspace.md).
+
+All root-owned records cascade on root/session deletion. Projects use RESTRICT
+while orchestration roots exist; ordinary archival remains available. Deleting
+an admitted child removes its private account/effects but leaves the plan and
+root's admitted marker; recovery refuses to recreate an incomplete batch.
+Downgrade refuses to drop this schema while roots/children exist, requiring an
+explicit drain/export/removal procedure. No automatic loss of receipts is allowed.
+
+### Optional persistent skill workspaces (0068, local implementation)
+
+These tables are independent of the run tree and LangGraph checkpoints.
+
+| Table | Key and fields | Lifetime and constraints |
+|---|---|---|
+| `skill_workspaces` | UUID `id`; `owner_id`, nullable `project_id`; `skill_key`, `skill_name`; integer `format_version` | Owner/project FKs cascade on hard deletion. `UNIQUE NULLS NOT DISTINCT(owner_id, project_id, skill_key, format_version)` isolates the personal null-project namespace too. Names/keys are 1–256 characters; version 1–1000. |
+| `skill_workspace_files` | PK `(workspace_id, name)`; `content`, UUID `revision`, `size_bytes`, `updated_at` | Parent FK cascades. Name regex excludes paths; content at most 65,536 bytes and size must equal `octet_length(content)`. |
+
+`skill_key` uses built-in/community slug identity or user/team skill UUID, so
+shadowing does not alias saved data. Tools bind it server-side. Names match
+`[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}`. Guarded application writes enforce 32 files and
+1 MiB per workspace under the owner/project lock order, require an expected
+revision (`null` for creation) and allocate a fresh revision UUID for every write.
+This prevents stale overwrites after reset. Writes share the caller's audit/effect
+transaction. File reads do not inject data into future prompts automatically.
+
+Run/chat deletion does not remove these rows. Skill disablement/removal preserves
+them for owner inspection/export/reset. Project archival blocks tool access but
+retains inspection. Account export includes `skill_workspaces.json`. Migration
+0068 refuses downgrade while any workspace remains: export and intentionally
+clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
+
+### Tool-egress ceiling columns (0070, DE-358 item 6 / AG-03)
+
+Migration 0070 adds the nullable columns behind the API-side matter-scoped
+tool-egress ceiling ([ADR 0014 amendment 2026-10-01](adr/0014-gateway-egress-boundary-for-tool-providers.md),
+[ADR 0015 amendment 2026-10-01](adr/0015-governed-tool-calling-model.md)).
+The effective ceiling is the numeric `min()` over the operator default
+(`LQ_AI_TOOL_MAX_EGRESS_TIER`), `projects.max_egress_tier`, and the
+orchestration `ExecutionScope.maximum_egress_tier` — a project can only
+tighten the operator default, never loosen it. The policy is independent
+of `minimum_inference_tier` and `privileged`.
+
+| Table | New columns | Constraints |
+|---|---|---|
+| `projects` | `max_egress_tier` SMALLINT, NULL = no project ceiling | `chk_projects_max_egress_tier_range`: NULL or 1–5 |
+| `chat_pending_tool_call` | `max_egress_tier` SMALLINT — ceiling resolved at proposal time; approval re-resolves and executes under `min(original, current)` | `chk_chat_pending_tool_call_max_egress_tier_range`: NULL or 1–5 |
+| `tool_call_log` | `max_allowed_tier` SMALLINT — the ceiling actually applied; `ceiling_source` TEXT — which policy bound it | `chk_tool_call_log_max_allowed_tier_range`: NULL or 0–5 (0 = a scope "no egress" refusal was audited); `chk_tool_call_log_ceiling_source`: NULL or one of `operator`, `project`, `execution_scope`, `pending_original`, `unresolved` |
+
+A scope ceiling of `0` refuses in the API and is never sent to the gateway.
+An unreadable policy fail-closes: no dispatch, refused audit row with
+`ceiling_source="unresolved"`.
 
 ### `autonomous_schedules` (M4)
 

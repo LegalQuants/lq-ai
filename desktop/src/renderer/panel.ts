@@ -4,6 +4,12 @@ interface Snapshot {
 	engineMessage?: string
 }
 
+interface CommandResult {
+	code: number
+	stdout: string
+	stderr: string
+}
+
 const LABELS: Record<string, string> = {
 	NO_ENGINE: 'Docker is not running',
 	STOPPED: 'Stopped',
@@ -25,6 +31,9 @@ export function renderPanel(root: HTMLElement): void {
 		</div>
 		<h3>Logs</h3>
 		<div id="logs"></div>
+		<h3>Deployment migrations</h3>
+		<pre id="migrations">Loading journal…</pre>
+		<button id="rollback" class="secondary">Restore latest migration snapshot…</button>
 		<p style="margin-top:24px">
 			<button id="reset" class="secondary">Reset…</button>
 			<span id="resethint" style="color:#555; margin-left:8px"></span>
@@ -37,6 +46,32 @@ export function renderPanel(root: HTMLElement): void {
 	const install = document.getElementById('install') as HTMLButtonElement
 	const reset = document.getElementById('reset') as HTMLButtonElement
 	const resetHint = document.getElementById('resethint')!
+	const migrationsEl = document.getElementById('migrations')!
+	const rollback = document.getElementById('rollback') as HTMLButtonElement
+
+	const refreshMigrations = async (): Promise<void> => {
+		const result = (await window.lqai.migrationStatus()) as CommandResult
+		if (result.code !== 0) {
+			migrationsEl.textContent = result.stderr || 'Migration journal is not available.'
+			return
+		}
+		try {
+			const status = JSON.parse(result.stdout.trim()) as {
+				entries?: unknown[]
+				snapshots?: unknown[]
+			}
+			migrationsEl.textContent = JSON.stringify(
+				{
+					entries: (status.entries ?? []).slice(0, 10),
+					snapshots: status.snapshots ?? []
+				},
+				null,
+				2
+			)
+		} catch {
+			migrationsEl.textContent = result.stdout || 'Migration journal is empty.'
+		}
+	}
 
 	const apply = (snap: Snapshot): void => {
 		let label = LABELS[snap.state] ?? snap.state
@@ -53,14 +88,33 @@ export function renderPanel(root: HTMLElement): void {
 
 	document.getElementById('open')!.addEventListener('click', () => window.lqai.openWeb())
 	document.getElementById('start')!.addEventListener('click', async () => {
-		await window.lqai.start()
-		tick()
+		try {
+			await window.lqai.start()
+			msgEl.textContent = ''
+			tick()
+			refreshMigrations()
+		} catch (error) {
+			msgEl.textContent = `Start failed: ${String(error)}. The migration journal and rollback action are below.`
+		}
 	})
 	document.getElementById('stop')!.addEventListener('click', async () => {
 		await window.lqai.stop()
 		tick()
 	})
 	install.addEventListener('click', () => window.lqai.installDocker())
+	rollback.addEventListener('click', async () => {
+		rollback.disabled = true
+		try {
+			const result = (await window.lqai.rollbackMigration()) as CommandResult
+			msgEl.textContent = result.code === 0 ? 'Snapshot restored.' : result.stderr || result.stdout
+			await refreshMigrations()
+			await tick()
+		} catch (error) {
+			msgEl.textContent = `Rollback failed: ${String(error)}`
+		} finally {
+			rollback.disabled = false
+		}
+	})
 
 	// Reset wipes the stack + all data and re-runs first-run setup — two-click confirm.
 	let resetArmed = false
@@ -95,5 +149,6 @@ export function renderPanel(root: HTMLElement): void {
 		if (snap) apply(snap)
 	}
 	tick()
+	refreshMigrations()
 	setInterval(tick, 5000)
 }

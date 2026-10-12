@@ -389,6 +389,7 @@ async def test_executor_drafts_redline_for_deviates_verdict(
 
     await db_session.refresh(execution)
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "deviates"
     assert positions[0]["redline"] is not None
@@ -445,6 +446,7 @@ async def test_executor_marks_missing_when_keyword_not_in_document(
 
     await db_session.refresh(execution)
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "missing"
     assert positions[0]["redline"] is None
@@ -500,6 +502,7 @@ async def test_executor_persists_error_on_gateway_failure(
     # The gateway swallowed the error per-call; the executor still
     # writes a completed row with a 'missing' verdict for the position.
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "missing"
     assert positions[0]["confidence"] == 0.5  # low → 0.5

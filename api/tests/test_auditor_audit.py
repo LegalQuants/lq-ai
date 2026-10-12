@@ -12,6 +12,8 @@ Covers:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 import pytest
 import pytest_asyncio
@@ -33,7 +35,7 @@ class _FakeUser:
 
 
 @pytest_asyncio.fixture
-async def make_user(db_session: AsyncSession):
+async def make_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]]:
     """Factory fixture mirroring the local ``make_user`` helper pattern used
     elsewhere in this suite (e.g. test_internal_skills.py, test_wave_c.py),
     but parameterized on ``role`` for this task's purposes."""
@@ -55,15 +57,17 @@ async def make_user(db_session: AsyncSession):
     return _make_user
 
 
-def test_is_privileged_reader_truth_table():
-    assert is_privileged_reader(_FakeUser(is_admin=True, role="admin")) is True
-    assert is_privileged_reader(_FakeUser(is_admin=False, role="auditor")) is True
-    assert is_privileged_reader(_FakeUser(is_admin=False, role="member")) is False
-    assert is_privileged_reader(_FakeUser(is_admin=False, role="viewer")) is False
+def test_is_privileged_reader_truth_table() -> None:
+    assert is_privileged_reader(cast(User, _FakeUser(is_admin=True, role="admin"))) is True
+    assert is_privileged_reader(cast(User, _FakeUser(is_admin=False, role="auditor"))) is True
+    assert is_privileged_reader(cast(User, _FakeUser(is_admin=False, role="member"))) is False
+    assert is_privileged_reader(cast(User, _FakeUser(is_admin=False, role="viewer"))) is False
 
 
 @pytest.mark.integration
-async def test_auditor_audit_writes_row(db_session: AsyncSession, make_user) -> None:
+async def test_auditor_audit_writes_row(
+    db_session: AsyncSession, make_user: Callable[..., Awaitable[User]]
+) -> None:
     reader = await make_user(email="r@example.com", role="auditor")
     viewed = uuid.uuid4()
     await auditor_audit(
@@ -85,11 +89,14 @@ async def test_auditor_audit_writes_row(db_session: AsyncSession, make_user) -> 
         .one()
     )
     assert row.user_id == reader.id
+    assert row.details is not None
     assert row.details["viewed_user_id"] == str(viewed)
 
 
 @pytest.mark.integration
-async def test_auditor_audit_rejects_unknown_event(db_session: AsyncSession, make_user) -> None:
+async def test_auditor_audit_rejects_unknown_event(
+    db_session: AsyncSession, make_user: Callable[..., Awaitable[User]]
+) -> None:
     reader = await make_user(email="r2@example.com", role="auditor")
     with pytest.raises(AssertionError):
         await auditor_audit(

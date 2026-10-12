@@ -73,6 +73,10 @@ class Project(Base):
             name="chk_projects_privileged_implies_tier",
         ),
         CheckConstraint(
+            "max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)",
+            name="chk_projects_max_egress_tier_range",
+        ),
+        CheckConstraint(
             "char_length(name) > 0 AND char_length(name) <= 200",
             name="chk_projects_name_len",
         ),
@@ -98,6 +102,15 @@ class Project(Base):
     context_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     privileged: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     minimum_inference_tier: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    max_egress_tier: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    """Optional per-matter tool-egress ceiling (1-5, NULL = no Project ceiling).
+
+    Composes with the operator default (``settings.tool_max_egress_tier``):
+    the effective ceiling is ``min()`` over the values that are set, so a
+    Project can only tighten the operator default, never loosen it
+    (issue #593). Independent of ``minimum_inference_tier`` and
+    ``privileged`` — never derived from each other.
+    """
     is_sandbox: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

@@ -127,6 +127,9 @@ class UserSkill(Base):
     PATCH must not change it. The audit-log carries the actual lineage.
     """
 
+    installation_provenance: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    """Write-once source/content snapshot; never editable through skill PATCH."""
+
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

@@ -11,11 +11,28 @@ For dependencies touching:
 - **LLM-provider SDKs** — Inference Gateway boundary (PRD §4); same auto-routing.
 - **Web frontend** — must not introduce React or other framework runtimes alongside SvelteKit; the boundary lives in [ADR 0009](../adr/0009-web-lq-ai-shell-coexistence.md).
 
+## Lockfiles (gateway/, api/)
+
+Per [ADR 0023](../adr/0023-uv-lockfiles-gateway-api.md), `gateway/` and `api/` are locked with [uv](https://docs.astral.sh/uv/). Two layers, deliberately separated:
+
+- **Policy** — `pyproject.toml` keeps the tight range windows with rationale comments (intent: which versions we accept, and why).
+- **Fact** — the committed `uv.lock` pins the exact resolved tree, transitives included (what actually ships).
+
+This makes the shipped dependency tree a **reviewed artifact**: container images install with `uv sync --frozen`, so the tree in the image is exactly the tree in the lockfile diff a reviewer approved — the build fails rather than silently re-resolving. CI gates lock freshness with `uv lock --check`, which is the "lockfiles enforced in CI" commitment in the PRD's supply-chain posture (Appendix C risk 10, Appendix E). Dependency PRs therefore carry concrete name+version pairs that mechanical vetting (OSV advisory lookup, release-age cooldown, new-package detection in lockfile churn) can check.
+
+The `web/` subsystem is out of scope here: its Python side still installs from the fork's `requirements.txt`, and consuming the fork's upstream-maintained `web/uv.lock` is a tracked follow-up (see ADR 0023's consequences).
+
 ## Automated scanning
 
 Two layers of automated dependency-vulnerability scanning:
 
-1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (pip), `gateway/` (pip), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically.
+1. **GitHub Advisory Database / Dependabot.** [`.github/dependabot.yml`](../../.github/dependabot.yml) configures weekly scans for `api/` (uv), `gateway/` (uv), `web/` (npm), and `.github/workflows/` (actions). High and critical advisories open PRs automatically. For the uv ecosystems, updates arrive as lock-pinned bumps against `uv.lock` with a 7-day release-age cooldown, not range widenings. `web/` is **security-updates only** (`open-pull-requests-limit: 0`): it is a vendored OpenWebUI fork pinned by [ADR 0001](../adr/0001-openwebui-fork-pin.md), so routine version currency arrives with the quarterly rebase rather than between refreshes. Advisories against `web/` packages still open PRs — that limit constrains version updates only.
+
+   Container images are pinned by tag and multi-arch index digest (#301) and covered by two more ecosystems, which do version currency only (Dependabot has no security-update channel for docker):
+   - `docker`: the Dockerfiles in `api/`, `gateway/`, `slack-bridge/`, `teams-bridge/` and `proxy/`, plus the Helm chart's rustfs pin ([ADR 0036](../adr/0036-bundled-object-store-rustfs.md)).
+   - `docker-compose`: the root compose files.
+
+   Both refresh digests and allow patch tag moves only (minor and major tag bumps are ignored; 7-day cooldown). The exception is `ollama/ollama:latest` in `docker-compose.yml`: a refresh of `latest` is a real Ollama version upgrade, so it arrives as its own PR. The pinned bases in `web/Dockerfile` are not refreshed at all between rebases (`open-pull-requests-limit: 0`, and there is no advisory channel to fall back on), and the `# syntax=` directive pins are bumped by hand. Whether hosted Dependabot actually proposes digest-only refreshes for versioned tags is unconfirmed until the first docker PRs land (see the comment in `dependabot.yml`).
 2. **SBOM scanning.** The SBOM produced by the release workflow (per [docs/security/releases/README.md](releases/README.md)) is in SPDX JSON format and is parseable by any SCA tool. Operators evaluating a specific release can run `grype sbom:./api.spdx.json` (or equivalent) to check the dependency snapshot.
 
 ## Update cadence

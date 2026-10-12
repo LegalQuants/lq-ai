@@ -1,0 +1,706 @@
+{
+  "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+  "status": "completed",
+  "stop_reason": null,
+  "planning": {
+    "contract_version": 1,
+    "plan_id": "799af3ba-2cc1-4d0c-b92f-b8100535434b",
+    "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+    "owner_id": "1a035000-0000-4000-8000-000000000002",
+    "project_id": "1a035000-0000-4000-8000-000000000001",
+    "goal": "Use two independent agents to answer two focused questions about this fictional agreement: (1) What amount must Customer pay and when? (2) What notice is required to prevent renewal or terminate for convenience? Combine their concise clause-based answers and flag only information that the agreement does not specify.",
+    "policy_version": "5f4ae5d232c7965df77909e84bf097d56447a05574bd59315ed2df6846c3f9ed",
+    "root": {
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "grants": {
+        "intake": [],
+        "analysis": [
+          "plan"
+        ],
+        "drafting": [],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+      },
+      "minimum_inference_tier": 1,
+      "maximum_egress_tier": 0,
+      "privileged": false,
+      "anonymize": true
+    },
+    "delegation_grants": {
+      "intake": [],
+      "analysis": [
+        "plan",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "delivery": []
+    },
+    "budget_usd": "2.0000",
+    "root_allowance_usd": "0.0000",
+    "planning_allowance_usd": "0.0000",
+    "max_active_children": 2,
+    "deadline": "2026-09-27T09:12:36.420494Z",
+    "attempt_timeout_seconds": 300,
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "gateway_revision": "2e80c52a5ddf325ba9ab468c11e751a522ae0f025414bf1fcd9914502ca9ae79",
+    "model": "local-uat/gemma4:26b-mlx",
+    "child_skill_version": "1.0.0",
+    "root_skill_version": "1.0.0"
+  },
+  "effects": [
+    {
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "plan",
+      "created_at": "2026-09-27T08:12:37.278793Z",
+      "completed_at": "2026-09-27T08:12:58.470502Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "gemma4:26b-mlx",
+        "provider": "local-uat",
+        "charged_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+        "estimated_prompt_tokens": 8054,
+        "reported_usage_cost_usd": "0.0000"
+      }
+    },
+    {
+      "effect_key": "demo:collect:d867ed77-053d-4276-8dc3-66a0dd0e9d3c:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "workspace_read",
+      "created_at": "2026-09-27T08:17:52.729315Z",
+      "completed_at": "2026-09-27T08:17:52.761595Z",
+      "skill": null,
+      "accounting": null
+    },
+    {
+      "effect_key": "demo:collect:6cf7d53e-d3bc-4691-9d93-b6f1731f5b25:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "workspace_read",
+      "created_at": "2026-09-27T08:17:52.782754Z",
+      "completed_at": "2026-09-27T08:17:52.814037Z",
+      "skill": null,
+      "accounting": null
+    },
+    {
+      "effect_key": "demo:synthesis:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "run_skill",
+      "created_at": "2026-09-27T08:17:52.858483Z",
+      "completed_at": "2026-09-27T08:18:09.648730Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "gemma4:26b-mlx",
+        "provider": "local-uat",
+        "charged_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+        "estimated_prompt_tokens": 7778,
+        "reported_usage_cost_usd": "0.0000"
+      }
+    }
+  ],
+  "spent_usd": "0.0000",
+  "reserved_usd": "0.0000",
+  "tree": {
+    "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+    "status": "completed",
+    "stop_reason": null,
+    "plan": {
+      "contract_version": 2,
+      "planning_digest": "efeac949c6698ece11a5fc990f7b2660181896d4767d6011a9ccc4f585326b84",
+      "plan_id": "799af3ba-2cc1-4d0c-b92f-b8100535434b",
+      "revision": 1,
+      "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+      "project_id": "1a035000-0000-4000-8000-000000000001",
+      "owner_id": "1a035000-0000-4000-8000-000000000002",
+      "goal": "Use two independent agents to answer two focused questions about this fictional agreement: (1) What amount must Customer pay and when? (2) What notice is required to prevent renewal or terminate for convenience? Combine their concise clause-based answers and flag only information that the agreement does not specify.",
+      "policy_version": "5f4ae5d232c7965df77909e84bf097d56447a05574bd59315ed2df6846c3f9ed",
+      "root": {
+        "resources": {
+          "document_ids": [],
+          "source_names": []
+        },
+        "grants": {
+          "intake": [],
+          "analysis": [
+            "plan",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "delivery": []
+        },
+        "skill": {
+          "name": "orchestration-chat-demo",
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+        },
+        "minimum_inference_tier": 1,
+        "maximum_egress_tier": 0,
+        "privileged": false,
+        "anonymize": true
+      },
+      "delegation_grants": {
+        "intake": [],
+        "analysis": [
+          "plan",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "children": [
+        {
+          "dispatch_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+          "profile": "research",
+          "task": {
+            "topic": "Payment terms",
+            "question": "What is the amount the Customer must pay and the timing for invoicing and payments?",
+            "boundaries": "Identify the payment amount, the timing of invoices, and the timeframe for payment of undisputed invoices as specified in \u00a72.",
+            "output_contract": "Payment amount and timing information.",
+            "stopping_condition": "One answer."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        },
+        {
+          "dispatch_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+          "profile": "research",
+          "task": {
+            "topic": "Renewal and Termination notice",
+            "question": "What notice is required to prevent renewal and what notice is required for termination for convenience?",
+            "boundaries": "Identify the notice requirement for non-renewal in \u00a75 and the notice requirement for termination for convenience in \u00a76.",
+            "output_contract": "Notice requirements for renewal and termination.",
+            "stopping_condition": "One answer."
+          },
+          "execution": {
+            "resources": {
+              "document_ids": [],
+              "source_names": []
+            },
+            "grants": {
+              "intake": [],
+              "analysis": [
+                "plan",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "delivery": []
+            },
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42"
+            },
+            "minimum_inference_tier": 1,
+            "maximum_egress_tier": 0,
+            "privileged": false,
+            "anonymize": true
+          },
+          "budget_usd": "0.0000"
+        }
+      ],
+      "budget_usd": "2.0000",
+      "root_allowance_usd": "0.0000",
+      "max_active_children": 2,
+      "deadline": "2026-09-27T09:12:36.420494Z",
+      "attempt_timeout_seconds": 300
+    },
+    "plan_hash": "05c9d5c97c553f14b6f42d7528daa94960508afd8a55b9af295b1d8fd839306d",
+    "approved": true,
+    "mode": "model_demo_v1",
+    "verification": "unverified",
+    "root": {
+      "session_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+      "status": "completed",
+      "phase": "delivery",
+      "allocation_usd": "0.0000",
+      "spent_usd": "0.0000",
+      "reserved_usd": "0.0000",
+      "updated_at": "2026-09-27T08:18:09.765664Z",
+      "outcome": null,
+      "effects": [
+        {
+          "effect_key": "chat:plan:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "plan",
+          "created_at": "2026-09-27T08:12:37.278793Z",
+          "completed_at": "2026-09-27T08:12:58.470502Z",
+          "skill": {
+            "name": "orchestration-chat-demo",
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "version": "1.0.0"
+          },
+          "accounting": {
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "model": "gemma4:26b-mlx",
+            "provider": "local-uat",
+            "charged_usd": "0.0000",
+            "reserved_usd": "0.0000",
+            "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+            "estimated_prompt_tokens": 8054,
+            "reported_usage_cost_usd": "0.0000"
+          }
+        },
+        {
+          "effect_key": "demo:collect:d867ed77-053d-4276-8dc3-66a0dd0e9d3c:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "workspace_read",
+          "created_at": "2026-09-27T08:17:52.729315Z",
+          "completed_at": "2026-09-27T08:17:52.761595Z",
+          "skill": null,
+          "accounting": null
+        },
+        {
+          "effect_key": "demo:collect:6cf7d53e-d3bc-4691-9d93-b6f1731f5b25:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "workspace_read",
+          "created_at": "2026-09-27T08:17:52.782754Z",
+          "completed_at": "2026-09-27T08:17:52.814037Z",
+          "skill": null,
+          "accounting": null
+        },
+        {
+          "effect_key": "demo:synthesis:v1",
+          "status": "completed",
+          "reserved_usd": "0.0000",
+          "charged_usd": "0.0000",
+          "intent": "run_skill",
+          "created_at": "2026-09-27T08:17:52.858483Z",
+          "completed_at": "2026-09-27T08:18:09.648730Z",
+          "skill": {
+            "name": "orchestration-chat-demo",
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "version": "1.0.0"
+          },
+          "accounting": {
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "model": "gemma4:26b-mlx",
+            "provider": "local-uat",
+            "charged_usd": "0.0000",
+            "reserved_usd": "0.0000",
+            "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+            "estimated_prompt_tokens": 7778,
+            "reported_usage_cost_usd": "0.0000"
+          }
+        }
+      ],
+      "files": []
+    },
+    "children": [
+      {
+        "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+        "status": "completed",
+        "phase": "delivery",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-09-27T08:17:22.682511Z",
+        "outcome": {
+          "status": "completed",
+          "summary": "The agreement specifies a payment amount of USD 200 per month, which is invoiced monthly in advance, with undisputed invoices due within 30 days of receipt.",
+          "findings": [
+            "The payment terms specify the amount to be paid, the schedule for invoicing, and the deadline for payment of undisputed invoices.\n\n### Payment amount and invoicing schedule\nThe amount to be paid is USD 200 per month, which is invoiced monthly in advance.\n\n> \"Customer shall pay USD 200 per month, invoiced monthly in advance.\"\n\n[\u00a72]\n\n### Timing for payment of undisputed invoices\nUndisputed invoices must be paid within 30 days of their receipt.\n\n> \"Undisputed invoices are payable within 30 days of receipt...\"\n\n[\u00a72]"
+          ],
+          "verification": "unverified",
+          "failure_code": null,
+          "artifact": {
+            "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "27dabe06fb36faa8be255a650dc9236fa41337b2117c15d234739b66eeb3a457"
+          }
+        },
+        "effects": [
+          {
+            "effect_key": "demo:notes:create:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:16:38.584813Z",
+            "completed_at": "2026-09-27T08:16:38.649684Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T08:16:38.705993Z",
+            "completed_at": "2026-09-27T08:16:38.751368Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:topic:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "run_skill",
+            "created_at": "2026-09-27T08:16:38.841763Z",
+            "completed_at": "2026-09-27T08:17:22.385242Z",
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "version": "1.0.0"
+            },
+            "accounting": {
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "model": "gemma4:26b-mlx",
+              "provider": "local-uat",
+              "charged_usd": "0.0000",
+              "reserved_usd": "0.0000",
+              "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+              "estimated_prompt_tokens": 68078,
+              "reported_usage_cost_usd": "0.0000"
+            }
+          },
+          {
+            "effect_key": "demo:findings:write:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:17:22.406281Z",
+            "completed_at": "2026-09-27T08:17:22.439611Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:update:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:17:22.459653Z",
+            "completed_at": "2026-09-27T08:17:22.492928Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T08:17:22.531737Z",
+            "completed_at": "2026-09-27T08:17:22.564574Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:share:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_share",
+            "created_at": "2026-09-27T08:17:22.584579Z",
+            "completed_at": "2026-09-27T08:17:22.615463Z",
+            "skill": null,
+            "accounting": null
+          }
+        ],
+        "files": [
+          {
+            "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "27dabe06fb36faa8be255a650dc9236fa41337b2117c15d234739b66eeb3a457",
+            "size_bytes": 808,
+            "shared": true,
+            "updated_at": "2026-09-27T08:17:22.610068Z"
+          },
+          {
+            "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+            "name": "notes.md",
+            "revision": 2,
+            "digest": "1a22fca064921b1623e59883e1b7071664dcb502ef9889db2326729a34f466e3",
+            "size_bytes": 189,
+            "shared": false,
+            "updated_at": "2026-09-27T08:17:22.486625Z"
+          }
+        ]
+      },
+      {
+        "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+        "status": "completed",
+        "phase": "delivery",
+        "allocation_usd": "0.0000",
+        "spent_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "updated_at": "2026-09-27T08:17:52.373345Z",
+        "outcome": {
+          "status": "completed",
+          "summary": "The agreement requires written notice of non-renewal at least 30 days before the end of the current term to prevent renewal, and 60 days' written notice for termination for convenience.",
+          "findings": [
+            "The agreement requires written notice of non-renewal at least 30 days before the end of the current term to prevent automatic renewal, and 60 days' written notice for a termination for convenience by the Customer.\n\n### Notice of Non-Renewal\nTo prevent the agreement from renewing for successive 12-month periods, either party must provide written notice of non-renewal.\n\n> \"The agreement renews for successive 12-month periods unless either party gives written notice of non-renewal at least 30 days before the current term ends.\"\n\n[\u00a75]\n\n### Termination for Convenience\nThe Customer may terminate the agreement for convenience by providing a specific notice period, though the Customer remains liable for subscription fees through the end of the then-current term.\n\n> \"Customer may terminate for convenience on 60 days' written notice but remains liable for subscription fees through the end of the current term.\"\n\n[\u00a76]"
+          ],
+          "verification": "unverified",
+          "failure_code": null,
+          "artifact": {
+            "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "f4dd0abd0f449ade46bba99a262957a4779079f9a5c0c70860a4ca47ad876dd6"
+          }
+        },
+        "effects": [
+          {
+            "effect_key": "demo:notes:create:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:16:38.606038Z",
+            "completed_at": "2026-09-27T08:16:38.666463Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T08:16:38.710355Z",
+            "completed_at": "2026-09-27T08:16:38.767933Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:topic:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "run_skill",
+            "created_at": "2026-09-27T08:16:38.851699Z",
+            "completed_at": "2026-09-27T08:17:52.002436Z",
+            "skill": {
+              "name": "contract-qa",
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "version": "1.0.0"
+            },
+            "accounting": {
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "model": "gemma4:26b-mlx",
+              "provider": "local-uat",
+              "charged_usd": "0.0000",
+              "reserved_usd": "0.0000",
+              "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+              "estimated_prompt_tokens": 68144,
+              "reported_usage_cost_usd": "0.0000"
+            }
+          },
+          {
+            "effect_key": "demo:findings:write:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:17:52.031602Z",
+            "completed_at": "2026-09-27T08:17:52.075147Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:notes:update:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_write",
+            "created_at": "2026-09-27T08:17:52.101057Z",
+            "completed_at": "2026-09-27T08:17:52.140328Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:read:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_read",
+            "created_at": "2026-09-27T08:17:52.188477Z",
+            "completed_at": "2026-09-27T08:17:52.225135Z",
+            "skill": null,
+            "accounting": null
+          },
+          {
+            "effect_key": "demo:findings:share:v1",
+            "status": "completed",
+            "reserved_usd": "0.0000",
+            "charged_usd": "0.0000",
+            "intent": "workspace_share",
+            "created_at": "2026-09-27T08:17:52.249975Z",
+            "completed_at": "2026-09-27T08:17:52.287852Z",
+            "skill": null,
+            "accounting": null
+          }
+        ],
+        "files": [
+          {
+            "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+            "name": "findings.json",
+            "revision": 1,
+            "digest": "f4dd0abd0f449ade46bba99a262957a4779079f9a5c0c70860a4ca47ad876dd6",
+            "size_bytes": 1239,
+            "shared": true,
+            "updated_at": "2026-09-27T08:17:52.281518Z"
+          },
+          {
+            "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+            "name": "notes.md",
+            "revision": 2,
+            "digest": "ce6852e1840142ad1141b00fc1e1bbaa3d971383512ab14ce3edb90f8332dd7c",
+            "size_bytes": 218,
+            "shared": false,
+            "updated_at": "2026-09-27T08:17:52.133423Z"
+          }
+        ]
+      }
+    ],
+    "spent_usd": "0.0000",
+    "reserved_usd": "0.0000",
+    "result": {
+      "kind": "orchestration_demonstration",
+      "verification": "unverified",
+      "coverage": "complete",
+      "summary": "Model-generated from fictional inputs; unverified.\n\n**Payment terms**\nThe amount to be paid is USD 200 per month, invoiced monthly in advance [\u00a72]. Undisputed invoices are payable within 30 days of receipt [\u00a72].\n\n**Renewal and Termination notice**\nThe agreement renews for successive 12-month periods unless either party gives written notice of non-renewal at least 30 days before the current term ends [\u00a75]. The Customer may terminate for convenience on 60 days' written notice, but remains liable for subscription fees through the end of the current term [\u00a76].",
+      "topics": [
+        {
+          "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+          "topic": "Payment terms",
+          "outcome": {
+            "status": "completed",
+            "summary": "The agreement specifies a payment amount of USD 200 per month, which is invoiced monthly in advance, with undisputed invoices due within 30 days of receipt.",
+            "findings": [
+              "The payment terms specify the amount to be paid, the schedule for invoicing, and the deadline for payment of undisputed invoices.\n\n### Payment amount and invoicing schedule\nThe amount to be paid is USD 200 per month, which is invoiced monthly in advance.\n\n> \"Customer shall pay USD 200 per month, invoiced monthly in advance.\"\n\n[\u00a72]\n\n### Timing for payment of undisputed invoices\nUndisputed invoices must be paid within 30 days of their receipt.\n\n> \"Undisputed invoices are payable within 30 days of receipt...\"\n\n[\u00a72]"
+            ],
+            "verification": "unverified",
+            "failure_code": null,
+            "artifact": {
+              "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "27dabe06fb36faa8be255a650dc9236fa41337b2117c15d234739b66eeb3a457"
+            }
+          }
+        },
+        {
+          "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+          "topic": "Renewal and Termination notice",
+          "outcome": {
+            "status": "completed",
+            "summary": "The agreement requires written notice of non-renewal at least 30 days before the end of the current term to prevent renewal, and 60 days' written notice for termination for convenience.",
+            "findings": [
+              "The agreement requires written notice of non-renewal at least 30 days before the end of the current term to prevent automatic renewal, and 60 days' written notice for a termination for convenience by the Customer.\n\n### Notice of Non-Renewal\nTo prevent the agreement from renewing for successive 12-month periods, either party must provide written notice of non-renewal.\n\n> \"The agreement renews for successive 12-month periods unless either party gives written notice of non-renewal at least 30 days before the current term ends.\"\n\n[\u00a75]\n\n### Termination for Convenience\nThe Customer may terminate the agreement for convenience by providing a specific notice period, though the Customer remains liable for subscription fees through the end of the then-current term.\n\n> \"Customer may terminate for convenience on 60 days' written notice but remains liable for subscription fees through the end of the current term.\"\n\n[\u00a76]"
+            ],
+            "verification": "unverified",
+            "failure_code": null,
+            "artifact": {
+              "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+              "name": "findings.json",
+              "revision": 1,
+              "digest": "f4dd0abd0f449ade46bba99a262957a4779079f9a5c0c70860a4ca47ad876dd6"
+            }
+          }
+        }
+      ]
+    },
+    "partial_summary": null
+  }
+}

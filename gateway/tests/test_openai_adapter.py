@@ -21,6 +21,7 @@ from app.providers import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
 )
 from app.providers.openai_schema import (
     ChatCompletionMessage,
@@ -97,6 +98,43 @@ def test_from_config_openai_compatible_no_key_ok() -> None:
     )
     adapter = OpenAIAdapter.from_config(config, env={})
     assert adapter.name == "vllm-local"
+
+
+def _hosted_compatible() -> ProviderConfig:
+    """A hosted OpenAI-compatible service: it names the key it needs."""
+    return ProviderConfig.model_validate(
+        {
+            "name": "openrouter",
+            "type": "openai_compatible",
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key_env": "OPENROUTER_API_KEY",
+            "tier": 2,
+            "models": [],
+        }
+    )
+
+
+@pytest.mark.unit
+def test_from_config_openai_compatible_declared_key_must_resolve() -> None:
+    """An ``openai_compatible`` entry that names a key and does not have it
+    is a missing key, not a keyless server: no adapter is built. Startup
+    then skips the provider with a warning, as it does for ``openai``."""
+
+    with pytest.raises(
+        ValueError, match=r"OpenAI-compatible provider 'openrouter'.*OPENROUTER_API_KEY"
+    ):
+        OpenAIAdapter.from_config(_hosted_compatible(), env={})
+    # Present but empty is the same as unset.
+    with pytest.raises(ValueError, match=r"(?i)environment variable"):
+        OpenAIAdapter.from_config(_hosted_compatible(), env={"OPENROUTER_API_KEY": ""})
+
+
+@pytest.mark.unit
+def test_from_config_openai_compatible_declared_key_resolves() -> None:
+    adapter = OpenAIAdapter.from_config(
+        _hosted_compatible(), env={"OPENROUTER_API_KEY": "sk-or-test"}
+    )
+    assert adapter.name == "openrouter"
 
 
 # --- Embeddings ---------------------------------------------------------
@@ -894,3 +932,60 @@ async def test_chat_completion_forwards_tools_and_tool_choice_to_openai() -> Non
     # Regression pin: tools/tool_choice must appear in the upstream body.
     assert "tools" in sent and sent["tools"][0]["function"]["name"] == "get_time"
     assert sent["tool_choice"] == "auto"
+
+
+# --- #318 follow-through: client timeouts are labelled, not "upstream" -------
+
+
+@pytest.mark.unit
+async def test_chat_completion_client_timeout_raises_provider_timeout_error() -> None:
+    """A client-side timeout raises :class:`ProviderTimeoutError` — a
+    :class:`ProviderNetworkError` subclass (wire code unchanged) that the
+    routing log labels ``client_timeout:`` rather than ``upstream_error:``,
+    exactly as the Anthropic adapter does."""
+
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        router.post("/chat/completions").mock(side_effect=httpx.ReadTimeout("read timed out"))
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            with pytest.raises(ProviderTimeoutError) as excinfo:
+                await adapter.chat_completion(_basic_chat_request(), model="gpt-4o", stream=False)
+        finally:
+            await client.aclose()
+    exc = excinfo.value
+    assert isinstance(exc, ProviderNetworkError)
+    assert exc.code == "provider_unavailable"
+    assert "client-side timeout" in exc.message
+    assert exc.details["timeout_s"] == adapter._timeout
+
+
+@pytest.mark.unit
+async def test_streaming_client_timeout_raises_provider_timeout_error() -> None:
+    """The streaming path labels a client-side timeout the same way."""
+
+    with respx.mock(base_url="https://api.openai.com/v1") as router:
+        router.post("/chat/completions").mock(side_effect=httpx.ReadTimeout("read timed out"))
+        client = httpx.AsyncClient(base_url="https://api.openai.com/v1")
+        try:
+            adapter = OpenAIAdapter(
+                name="openai-prod",
+                base_url="https://api.openai.com/v1",
+                api_key="sk-test",
+                client=client,
+            )
+            stream = await adapter.chat_completion(
+                _basic_chat_request(stream=True), model="gpt-4o", stream=True
+            )
+            assert not isinstance(stream, ChatCompletionResponse)
+            with pytest.raises(ProviderTimeoutError) as excinfo:
+                async for _chunk in stream:
+                    pass
+        finally:
+            await client.aclose()
+    assert "client-side timeout" in excinfo.value.message

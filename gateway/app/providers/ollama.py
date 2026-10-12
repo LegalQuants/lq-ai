@@ -88,6 +88,7 @@ from app.providers.base import (
     ProviderHealth,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.openai_schema import (
@@ -108,11 +109,14 @@ from app.secrets import ProviderKeyResolver
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_TIMEOUT_SECONDS = 120.0
+DEFAULT_TIMEOUT_SECONDS = 600.0
 """Default per-request timeout. Ollama generation latency is bounded by
 local hardware — slow CPUs or large models can take well over a minute
-on the first generation after a model load. The default is generous;
-``timeout_s`` on each provider entry overrides per-deployment."""
+on the first generation after a model load, and a single long
+generation on modest hardware can run for many minutes (#535). The
+default matches the other adapters' 600s so the whole request path
+shares one budget; ``timeout_s`` on each provider entry overrides
+per-deployment."""
 
 
 DONE_REASON_MAP: dict[str, FinishReason] = {
@@ -357,6 +361,15 @@ class OllamaAdapter(ProviderAdapter):
                 json=ollama_body,
                 headers=self._auth_headers(),
             )
+        except httpx.TimeoutException as exc:
+            # Our own timeout elapsed — not an upstream failure. Same
+            # distinct class as the Anthropic adapter so the routing log
+            # labels it ``client_timeout:`` rather than ``upstream_error:``.
+            raise ProviderTimeoutError(
+                f"timed out after {self._timeout:g}s waiting for Ollama "
+                "(client-side timeout; raise timeout_s for long generations)",
+                details={"provider": self.name, "timeout_s": self._timeout},
+            ) from exc
         except httpx.HTTPError as exc:
             raise ProviderNetworkError(
                 f"failed to reach Ollama: {type(exc).__name__}",
@@ -421,11 +434,11 @@ def _to_ollama_request(
       uses ``stop`` directly, list-only).
 
     Tool messages (``role: tool``) flow through; Ollama 0.4+ accepts
-    them in the ``messages`` array. Tool-call assistant messages (with
-    ``tool_calls``) are passed through under their original role; the
-    M1 starter skill corpus does not declare tools today (per the C2
-    scope check in M1-PROGRESS), so this is unexercised but
-    structurally correct.
+    them in the ``messages`` array, and matches a result to its call by
+    ``tool_name``, which is set from ``name``. Tool-call assistant
+    messages keep their role, with each OpenAI-shaped ``tool_calls``
+    entry converted to Ollama's shape (``function.arguments`` as an
+    object rather than a JSON string).
     """
 
     ollama_messages: list[dict[str, Any]] = []
@@ -442,9 +455,12 @@ def _to_ollama_request(
             # messages too.
             message_obj["tool_call_id"] = msg.tool_call_id
         if msg.tool_calls:
-            message_obj["tool_calls"] = msg.tool_calls
+            message_obj["tool_calls"] = [_tool_call_to_ollama(tc) for tc in msg.tool_calls]
         if msg.name:
             message_obj["name"] = msg.name
+            if msg.role == "tool":
+                # Ollama matches a tool result to its call by ``tool_name``.
+                message_obj["tool_name"] = msg.name
         ollama_messages.append(message_obj)
 
     body: dict[str, Any] = {
@@ -489,6 +505,65 @@ def _to_ollama_request(
     return body
 
 
+def _tool_call_to_ollama(tool_call: dict[str, Any]) -> dict[str, Any]:
+    """OpenAI-shaped tool call -> Ollama's: ``function.arguments`` becomes an
+    object. Unparsable (or non-object) JSON is passed through as the raw
+    string rather than dropped."""
+
+    function = tool_call.get("function")
+    if not isinstance(function, dict):
+        return tool_call
+    arguments = function.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments) if arguments.strip() else {}
+        except json.JSONDecodeError:
+            parsed = arguments
+        if isinstance(parsed, dict):
+            arguments = parsed
+    out: dict[str, Any] = {"function": {**function, "arguments": arguments}}
+    if isinstance(tool_call.get("id"), str):
+        out["id"] = tool_call["id"]
+    return out
+
+
+def _tool_calls_from_ollama(raw: Any, *, start_index: int = 0) -> list[dict[str, Any]]:
+    """Ollama ``message.tool_calls`` -> OpenAI-shaped tool calls.
+
+    Ollama sends ``{"function": {"name", "arguments": {...}}}`` with no id
+    and arguments as an object; OpenAI wants ``id``, ``type`` and
+    ``function.arguments`` as a JSON string. Each call gets a synthesized
+    ``call_<uuid hex>`` id (unless Ollama supplied one) and an ``index``
+    (needed by streaming consumers; stripped on unary)."""
+
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function")
+        if not isinstance(function, dict):
+            continue
+        arguments = function.get("arguments")
+        if not isinstance(arguments, str):
+            arguments = json.dumps(arguments if arguments is not None else {})
+        call_id = item.get("id")
+        out.append(
+            {
+                "index": start_index + len(out),
+                "id": call_id if isinstance(call_id, str) and call_id else _new_call_id(),
+                "type": "function",
+                "function": {"name": str(function.get("name") or ""), "arguments": arguments},
+            }
+        )
+    return out
+
+
+def _new_call_id() -> str:
+    return f"call_{uuid.uuid4().hex}"
+
+
 # --- Translation: Ollama -> OpenAI (non-streaming) ----------------------------
 
 
@@ -516,10 +591,12 @@ def _from_ollama_response(
 
     message_block = payload.get("message") or {}
     content = ""
+    tool_calls: list[dict[str, Any]] = []
     if isinstance(message_block, dict):
         raw_content = message_block.get("content")
         if isinstance(raw_content, str):
             content = raw_content
+        tool_calls = _tool_calls_from_ollama(message_block.get("tool_calls"))
 
     done_reason_raw = payload.get("done_reason")
     finish_reason: FinishReason | None = None
@@ -529,6 +606,10 @@ def _from_ollama_response(
         # Ollama always sets ``done: true`` on the unary response; if
         # ``done_reason`` is missing we still surface a finish.
         finish_reason = "stop"
+    if tool_calls and finish_reason in (None, "stop"):
+        # Ollama reports ``done_reason: "stop"`` even when the turn ended
+        # in tool calls; OpenAI callers key off ``tool_calls``.
+        finish_reason = "tool_calls"
 
     prompt_tokens = _safe_int(payload.get("prompt_eval_count"))
     completion_tokens = _safe_int(payload.get("eval_count"))
@@ -548,7 +629,12 @@ def _from_ollama_response(
         choices=[
             ChatCompletionChoice(
                 index=0,
-                message=ChatCompletionMessage(role="assistant", content=content),
+                message=ChatCompletionMessage(
+                    role="assistant",
+                    content=content,
+                    tool_calls=[{k: v for k, v in tc.items() if k != "index"} for tc in tool_calls]
+                    or None,
+                ),
                 finish_reason=finish_reason,
             )
         ],
@@ -595,6 +681,7 @@ async def _ollama_stream_iter(
     prompt_tokens = 0
     completion_tokens = 0
     role_emitted = False
+    tool_call_count = 0
 
     try:
         async with client.stream("POST", "/api/chat", json=body, headers=headers) as response:
@@ -636,6 +723,18 @@ async def _ollama_stream_iter(
 
                 message_block = parsed.get("message") or {}
                 if isinstance(message_block, dict):
+                    chunk_tool_calls = _tool_calls_from_ollama(
+                        message_block.get("tool_calls"), start_index=tool_call_count
+                    )
+                    if chunk_tool_calls:
+                        # Ollama sends tool calls whole, in one frame.
+                        tool_call_count += len(chunk_tool_calls)
+                        yield _make_chunk(
+                            response_id=response_id,
+                            created=created,
+                            model=response_model,
+                            delta=ChatCompletionDelta(tool_calls=chunk_tool_calls),
+                        )
                     chunk_text = message_block.get("content")
                     if isinstance(chunk_text, str) and chunk_text:
                         yield _make_chunk(
@@ -658,6 +757,13 @@ async def _ollama_stream_iter(
                     # naturally on EOF. Breaking would skip any
                     # trailing whitespace lines that aiter_lines might
                     # surface.
+    except httpx.TimeoutException as exc:
+        # Our own timeout elapsed mid-stream — see the unary path.
+        raise ProviderTimeoutError(
+            "timed out waiting for Ollama stream "
+            "(client-side timeout; raise timeout_s for long generations)",
+            details={"provider": provider_name},
+        ) from exc
     except httpx.HTTPError as exc:
         raise ProviderNetworkError(
             f"failed to stream from Ollama: {type(exc).__name__}",
@@ -675,7 +781,12 @@ async def _ollama_stream_iter(
             ChatCompletionChunkChoice(
                 index=0,
                 delta=ChatCompletionDelta(),
-                finish_reason=finish_reason or "stop",
+                # Ollama says "stop" even when the turn ended in tool calls.
+                finish_reason=(
+                    "tool_calls"
+                    if tool_call_count and finish_reason in (None, "stop")
+                    else finish_reason or "stop"
+                ),
             )
         ],
         usage=ChatCompletionUsage(
