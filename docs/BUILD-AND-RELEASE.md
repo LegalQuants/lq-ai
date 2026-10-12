@@ -136,6 +136,14 @@ yes. Bug fixes, dependency bumps and output-side hardening — no.
 - **Any "yes" in the list → the next release is a minor bump** (`0.6.x` → `0.7.0`).
 - **All "no" → patch** (`0.6.2` → `0.6.3`).
 
+**After 1.0** ([ADR 0029](adr/0029-definition-of-1.0.md) R3), the same question
+answers what each level asks of an operator: a **patch** is a blind upgrade; a
+**minor** means read the release notes and expect that operator action may be
+needed; a **major** can break a working install's data, configuration or API
+contracts — plan for it. Per [ADR 0031](adr/0031-headless-api-only-use.md), the
+patch and minor promises do not extend to third-party API clients; "API
+contracts" means the contracts the project's own clients rely on.
+
 A breaking PR does **not** wait for a `0.7.0` milestone to exist before merging.
 Merging it is what makes the next release `0.7.0`.
 
