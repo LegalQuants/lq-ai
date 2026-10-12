@@ -295,7 +295,9 @@ async def _create_session(
 def _login_response(user: User, refresh_token: str) -> LoginResponse:
     """Build the LoginResponse for a successful login or refresh-with-user."""
     settings = get_settings()
-    access_token = create_access_token(user.id, user.email, is_admin=user.is_admin)
+    access_token = create_access_token(
+        user.id, user.email, is_admin=user.is_admin, credential_version=user.credential_version
+    )
     return LoginResponse(
         access_token=access_token,
         token_type="Bearer",
@@ -330,7 +332,7 @@ async def login(
     # Look up the user. Email column is CITEXT so case is irrelevant.
     # `deleted_at IS NOT NULL` users are treated as non-existent.
     result = await db.execute(
-        select(User).where(User.email == payload.email, User.deleted_at.is_(None))
+        select(User).where(User.email == payload.email, User.deleted_at.is_(None)).with_for_update()
     )
     user = result.scalar_one_or_none()
 
@@ -375,7 +377,7 @@ async def login(
     # it at /auth/mfa/verify (D5). No session is created here — the user
     # has not yet completed authentication.
     if user.mfa_enabled:
-        mfa_token = create_mfa_token(user.id)
+        mfa_token = create_mfa_token(user.id, credential_version=user.credential_version)
         challenge = MfaChallenge(mfa_token=mfa_token, methods=["totp", "recovery_code"])
         await audit_action(
             db,
@@ -512,7 +514,10 @@ async def refresh(
 
     # Look up the owning user; if missing or soft-deleted, refuse.
     user_result = await db.execute(
-        select(User).where(User.id == matched.user_id, User.deleted_at.is_(None))
+        select(User)
+        .where(User.id == matched.user_id, User.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     user = user_result.scalar_one_or_none()
     if user is None:
@@ -530,6 +535,23 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
+
+    # Reset and session issuance serialize on the user row. Re-read the
+    # candidate after acquiring that lock: a reset may have revoked it while
+    # we were matching its hash. Never rotate a revoked session into a new one.
+    await db.refresh(matched)
+    if matched.revoked_at is not None:
+        await audit_action(
+            db,
+            user_id=user.id,
+            action="user.session_refresh_failed",
+            resource_type="user_session",
+            resource_id=str(matched.id),
+            request=request,
+            details={"reason": "session_revoked"},
+        )
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     # Rotate: revoke this session, mint a fresh one. Both happen in the
     # same transaction so a crash mid-way doesn't leave the user with an
@@ -555,7 +577,9 @@ async def refresh(
     await db.commit()
 
     return TokenResponse(
-        access_token=create_access_token(user.id, user.email, is_admin=user.is_admin),
+        access_token=create_access_token(
+            user.id, user.email, is_admin=user.is_admin, credential_version=user.credential_version
+        ),
         token_type="Bearer",
         expires_in=settings.jwt_access_token_ttl_seconds,
         refresh_token=plaintext,
@@ -640,6 +664,16 @@ async def change_password(
     """
     settings = get_settings()
 
+    # Re-read under the same row lock used by reset/login/refresh so a
+    # concurrent reset cannot be overwritten with a stale password check.
+    user = (
+        await db.execute(
+            select(User)
+            .where(User.id == user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
     if not verify_password(payload.current_password, user.hashed_password):
         await audit_action(
             db,
@@ -672,6 +706,7 @@ async def change_password(
     # Hash and persist. Clear the forced-change flag in the same transaction
     # so a crash mid-way doesn't leave the user in an inconsistent state.
     user.hashed_password = hash_password(new_password)
+    user.credential_version += 1
     user.must_change_password = False
 
     # Revoke all active sessions — the user must re-authenticate. This is
@@ -880,10 +915,18 @@ async def mfa_verify(
         )
 
     result = await db.execute(
-        select(User).where(User.id == claims.user_id, User.deleted_at.is_(None))
+        select(User)
+        .where(User.id == claims.user_id, User.deleted_at.is_(None))
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     user = result.scalar_one_or_none()
-    if user is None or not user.mfa_enabled or not user.totp_secret:
+    if (
+        user is None
+        or not user.mfa_enabled
+        or not user.totp_secret
+        or claims.credential_version != user.credential_version
+    ):
         await audit_action(
             db,
             user_id=claims.user_id,

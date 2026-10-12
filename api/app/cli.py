@@ -81,7 +81,9 @@ async def _reset_admin_password(
             target: User | None
             if email is not None:
                 result = await session.execute(
-                    select(User).where(User.email == email, User.deleted_at.is_(None))
+                    select(User)
+                    .where(User.email == email, User.deleted_at.is_(None))
+                    .with_for_update()
                 )
                 target = result.scalar_one_or_none()
                 if target is None:
@@ -89,7 +91,9 @@ async def _reset_admin_password(
                     return 2
             else:
                 result = await session.execute(
-                    select(User).where(User.is_admin.is_(True), User.deleted_at.is_(None))
+                    select(User)
+                    .where(User.is_admin.is_(True), User.deleted_at.is_(None))
+                    .with_for_update()
                 )
                 admins = result.scalars().all()
                 if not admins:
@@ -111,6 +115,7 @@ async def _reset_admin_password(
 
             new_password = password if password is not None else generate_password()
             target.hashed_password = hash_password(new_password)
+            target.credential_version += 1
             target.must_change_password = force_change
 
             # Self-healing fallback for the legacy bootstrap path: if the

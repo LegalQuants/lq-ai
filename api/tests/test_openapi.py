@@ -110,6 +110,7 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/users/{user_id}/role",
         # Wave B v2 — admin user list for DevRoleManagementCard
         "/api/v1/admin/users",
+        "/api/v1/admin/users/{user_id}/reset-password",
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
@@ -369,7 +370,8 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/community-skills
     # /api/v1/admin/community-skills/{slug}
     # /api/v1/admin/community-skills/{slug}/install
-    assert len(actual) == 157
+    # Admin provisioning adds the reset-password path (157 -> 158).
+    assert len(actual) == 158
 
 
 @pytest.mark.unit
