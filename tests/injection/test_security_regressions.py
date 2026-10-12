@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -235,6 +236,41 @@ def test_workflow_credential_boundary(workflow, kind):
     cleanup = by_name["Remove disposable stack and credentials"]
     assert cleanup["if"].startswith("always()")
     assert "rm -f .env" in cleanup["run"]
+
+
+def test_pr_ci_collects_keyless_regressions_without_live_tests():
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    job = workflow["jobs"]["keyless-eval-checks"]
+    assert "if" not in job and "services" not in job
+    assert job["defaults"]["run"]["working-directory"] == "${{ github.workspace }}"
+    assert "secrets." not in json.dumps(job)
+    steps = {step["name"]: step for step in job["steps"]}
+    install = steps["Install hash-locked harness dependencies"]["run"]
+    assert "--require-hashes" in install and "tests/eval-requirements.txt" in install
+    command = shlex.split(steps["Run keyless golden and injection suites"]["run"])
+    assert command[:3] == ["python", "-m", "pytest"]
+    env = {**os.environ, **job["env"]}
+    for name in (
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "LQ_GOLDEN_PASSWORD",
+        "LQ_INJECTION_PASSWORD",
+    ):
+        env.pop(name, None)
+    assert env["LQ_GOLDEN_LIVE"] == env["LQ_INJECTION_LIVE"] == "0"
+    result = subprocess.run(
+        [sys.executable, *command[1:], "--collect-only", "-p", "no:cacheprovider"],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "golden/test_golden_inventory.py::" in result.stdout
+    assert "injection/test_injection_inventory.py::" in result.stdout
+    assert "injection/test_security_regressions.py::test_all_degraded" in result.stdout
+    assert "golden/test_skill_goldens.py::" not in result.stdout
+    assert "injection/test_injection_rates.py::" not in result.stdout
 
 
 @pytest.mark.parametrize(

@@ -124,6 +124,12 @@ schema-2 observations rather than reusing thresholds for the old metric.
 
 ## Workflow and credentials
 
+The regular PR/main CI job `Evaluation harness (keyless regressions)`
+installs the hash-locked harness dependencies at the repository root and
+runs `tests/golden` and `tests/injection` with both live markers excluded.
+It gates corpus validation, scoring, floors, complete-run reporting and
+credential safeguards without a stack, API credentials or provider keys.
+
 `injection-rates.yml` runs weekly or by manual dispatch **on the default
 branch only**. No keys produces an explicit skip notice. It never runs
 secret-bearing evaluation automatically on a PR.

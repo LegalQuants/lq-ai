@@ -124,11 +124,23 @@ that assume 8–30 page instruments.
 
 ## Running
 
-Keyless (always green — this is what CI collection relies on):
+Keyless (no provider credentials; inventory regressions fail the run):
 
 ```bash
 pytest tests/golden -q            # live tests skip; inventory tests run
 ```
+
+The PR/main CI job `Evaluation harness (keyless regressions)` installs the
+hash-locked harness dependencies and runs both root-level suites:
+
+```bash
+python -m pytest tests/golden tests/injection \
+  -m "not golden_live and not injection_live" -q
+```
+
+Live flags are disabled in this job. It includes the scorer, floor,
+completeness, bootstrap and workflow regression tests using fake clients
+and commands; real inference stays in the scheduled/manual workflows.
 
 Live, against a booted compose stack (`docker compose up -d --wait`) whose
 `.env` carries a real provider key:
