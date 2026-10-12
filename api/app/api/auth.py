@@ -332,7 +332,9 @@ async def login(
     # Look up the user. Email column is CITEXT so case is irrelevant.
     # `deleted_at IS NOT NULL` users are treated as non-existent.
     result = await db.execute(
-        select(User).where(User.email == payload.email, User.deleted_at.is_(None)).with_for_update()
+        select(User)
+        .where(User.email == payload.email, User.deleted_at.is_(None))
+        .with_for_update(key_share=True)
     )
     user = result.scalar_one_or_none()
 
@@ -516,7 +518,7 @@ async def refresh(
     user_result = await db.execute(
         select(User)
         .where(User.id == matched.user_id, User.deleted_at.is_(None))
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
     user = user_result.scalar_one_or_none()
@@ -670,7 +672,7 @@ async def change_password(
         await db.execute(
             select(User)
             .where(User.id == user.id)
-            .with_for_update()
+            .with_for_update(key_share=True)
             .execution_options(populate_existing=True)
         )
     ).scalar_one()
@@ -917,7 +919,7 @@ async def mfa_verify(
     result = await db.execute(
         select(User)
         .where(User.id == claims.user_id, User.deleted_at.is_(None))
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
     user = result.scalar_one_or_none()

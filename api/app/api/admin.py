@@ -1222,7 +1222,11 @@ async def reset_user_password(
         await db.execute(
             select(UserORM)
             .where(UserORM.id == target_uuid)
-            .with_for_update()
+            # Password changes do not modify the user key. NO KEY UPDATE
+            # still serializes credential mutation/session issuance, while
+            # allowing audit inserts to take KEY SHARE on another admin.
+            # FOR UPDATE deadlocks when two admins reset each other.
+            .with_for_update(key_share=True)
             .execution_options(populate_existing=True)
         )
     ).scalar_one_or_none()

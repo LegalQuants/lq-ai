@@ -16,15 +16,18 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 import pytest_asyncio
 from fastapi import HTTPException, Request, Response
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, select
+from sqlalchemy.engine import Result
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.sql import Executable
 
 from app.db.session import get_db
 from app.main import app
@@ -37,7 +40,7 @@ from app.security import create_access_token, create_refresh_token, hash_passwor
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -515,8 +518,8 @@ async def test_concurrent_refresh_cannot_escape_reset(
             waiting = asyncio.Event()
             original_execute = refresh_db.execute
 
-            async def observe_lock(statement, *args, **kwargs):
-                if statement._for_update_arg is not None:
+            async def observe_lock(statement: Executable, *args: Any, **kwargs: Any) -> Result[Any]:
+                if getattr(statement, "_for_update_arg", None) is not None:
                     waiting.set()
                 return await original_execute(statement, *args, **kwargs)
 
@@ -580,6 +583,117 @@ async def test_non_admin_roles_cannot_provision_or_reset(
 
 
 @pytest.mark.asyncio
+async def test_reciprocal_admin_resets_complete_and_invalidate_both_sessions(
+    test_engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two admins resetting each other must not deadlock on the audit actor FK."""
+    from app.api.dependencies import get_current_user
+    from app.audit import audit_action
+
+    factory = async_sessionmaker(test_engine, expire_on_commit=False)
+    now = datetime.now(UTC)
+    async with factory() as seed:
+        admins = [_make_user(email=_new_email(), is_admin=True, role="admin") for _ in range(2)]
+        seed.add_all(admins)
+        await seed.flush()
+        old_headers = [_bearer(admin) for admin in admins]
+        for admin in admins:
+            _, hashed = create_refresh_token()
+            seed.add(
+                UserSession(
+                    user_id=admin.id,
+                    refresh_token_hash=hashed,
+                    expires_at=now + timedelta(days=7),
+                    absolute_expires_at=now + timedelta(hours=8),
+                    last_active_at=now,
+                )
+            )
+        await seed.commit()
+
+    async def request_db() -> AsyncIterator[AsyncSession]:
+        async with factory() as db:
+            yield db
+
+    both_targets_locked = asyncio.Barrier(2)
+
+    async def simultaneous_audit(db: AsyncSession, **kwargs: Any) -> AuditLog:
+        if kwargs.get("action") == "user.password_reset":
+            # Both requests have changed their target while retaining the
+            # target lock. Now let both audit inserts acquire their actor FK.
+            await asyncio.wait_for(both_targets_locked.wait(), timeout=10)
+        return await audit_action(db, **kwargs)
+
+    monkeypatch.setitem(app.dependency_overrides, get_db, request_db)
+    monkeypatch.setattr("app.audit.audit_action", simultaneous_audit)
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    client.post(
+                        f"/api/v1/admin/users/{admins[1].id}/reset-password", headers=old_headers[0]
+                    ),
+                    client.post(
+                        f"/api/v1/admin/users/{admins[0].id}/reset-password", headers=old_headers[1]
+                    ),
+                    return_exceptions=True,
+                ),
+                timeout=20,
+            )
+            passwords = {}
+            for response in results:
+                if isinstance(response, BaseException):
+                    raise response
+                assert response.status_code == 200, response.text
+                assert response.headers["Cache-Control"] == "no-store"
+                body = response.json()
+                assert body["sessions_revoked"] == 1
+                passwords[body["user_id"]] = body["initial_password"]
+
+        async with factory() as check:
+            for admin, headers in zip(admins, old_headers, strict=True):
+                current = await check.get(User, admin.id)
+                assert current is not None
+                assert current.credential_version == 1
+                assert current.must_change_password is True
+                assert verify_password(passwords[str(admin.id)], current.hashed_password)
+                with pytest.raises(HTTPException) as rejected:
+                    await get_current_user(headers["Authorization"].removeprefix("Bearer "), check)
+                assert rejected.value.status_code == 401
+            active = (
+                (
+                    await check.execute(
+                        select(UserSession).where(
+                            UserSession.user_id.in_([admin.id for admin in admins]),
+                            UserSession.revoked_at.is_(None),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert active == []
+            audits = (
+                (
+                    await check.execute(
+                        select(AuditLog).where(
+                            AuditLog.action == "user.password_reset",
+                            AuditLog.user_id.in_([admin.id for admin in admins]),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(audits) == 2
+    finally:
+        async with factory() as cleanup:
+            ids = [admin.id for admin in admins]
+            await cleanup.execute(delete(AuditLog).where(AuditLog.user_id.in_(ids)))
+            await cleanup.execute(delete(User).where(User.id.in_(ids)))
+            await cleanup.commit()
+
+
+@pytest.mark.asyncio
 async def test_provisioning_and_reset_require_authentication(client: AsyncClient) -> None:
     assert (
         await client.post("/api/v1/admin/users", json={"email": _new_email()})
@@ -616,7 +730,7 @@ async def test_account_mutation_rolls_back_if_audit_fails(
         seed.add(session)
         await seed.commit()
 
-    async def fail_audit(*args, **kwargs):
+    async def fail_audit(*args: object, **kwargs: object) -> None:
         raise RuntimeError("test audit failure")
 
     monkeypatch.setattr("app.audit.audit_action", fail_audit)

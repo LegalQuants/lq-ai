@@ -83,7 +83,7 @@ async def _reset_admin_password(
                 result = await session.execute(
                     select(User)
                     .where(User.email == email, User.deleted_at.is_(None))
-                    .with_for_update()
+                    .with_for_update(key_share=True)
                 )
                 target = result.scalar_one_or_none()
                 if target is None:
@@ -93,7 +93,7 @@ async def _reset_admin_password(
                 result = await session.execute(
                     select(User)
                     .where(User.is_admin.is_(True), User.deleted_at.is_(None))
-                    .with_for_update()
+                    .with_for_update(key_share=True)
                 )
                 admins = result.scalars().all()
                 if not admins:
