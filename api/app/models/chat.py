@@ -38,6 +38,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Integer,
     Numeric,
@@ -186,6 +187,12 @@ class Message(Base):
         UUID(as_uuid=True),
         ForeignKey("chats.id", ondelete="CASCADE", name="fk_messages_chat_id"),
         nullable=False,
+    )
+    directed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_messages_directed_by_user"),
+        nullable=True,
+        server_default=FetchedValue(),
     )
     role: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(

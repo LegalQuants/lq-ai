@@ -428,6 +428,18 @@ async def governed_tool_invocation(
         listed in ``denied_on``) or ``outcome="error"`` (all other
         exceptions) and flushing.
     """
+    if chat_id is not None and user_id is not None:
+        from app.authz.matters import require_matter
+        from app.errors import NotFound
+        from app.models.chat import Chat
+        from app.models.user import User
+
+        chat = await db.get(Chat, chat_id)
+        actor = await db.get(User, user_id)
+        if chat is None or actor is None:
+            raise NotFound("Chat or user no longer exists.")
+        if chat.project_id is not None:
+            await require_matter(db, chat.project_id, actor, need="write")
     # ── Fail closed: egress policy unreadable ───────────────────────────────
     # resolve_tool_egress_ceiling returns source "unresolved" when the
     # Project lookup raised.  Refuse before dispatch and persist the

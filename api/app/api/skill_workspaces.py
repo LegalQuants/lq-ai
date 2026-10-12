@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import matter_scope_filter, require_matter
 from app.db.session import get_db
 from app.errors import NotFound
 from app.models.project import Project
@@ -50,7 +51,15 @@ async def list_workspaces(
         await db.execute(
             select(SkillWorkspace, Project.name)
             .outerjoin(Project, Project.id == SkillWorkspace.project_id)
-            .where(SkillWorkspace.owner_id == user.id)
+            .where(
+                SkillWorkspace.owner_id == user.id,
+                (
+                    SkillWorkspace.project_id.is_(None)
+                    | SkillWorkspace.project_id.in_(
+                        select(Project.id).where(matter_scope_filter(user))
+                    )
+                ),
+            )
             .order_by(SkillWorkspace.skill_name, SkillWorkspace.id)
             .offset(offset)
             .limit(50)
@@ -79,6 +88,11 @@ async def list_workspaces(
 
 @router.get("/{workspace_id}/files/{name}", response_model=SavedContent)
 async def read_file(workspace_id: UUID, name: str, user: ActiveUser, db: DB) -> SavedContent:
+    workspace = await db.get(SkillWorkspace, workspace_id)
+    if workspace is None or workspace.owner_id != user.id:
+        raise NotFound("Saved file not found")
+    if workspace.project_id is not None:
+        await require_matter(db, workspace.project_id, user, include_archived=True)
     row = await db.scalar(
         select(SkillWorkspaceFile)
         .join(SkillWorkspace)
@@ -105,6 +119,8 @@ async def reset_workspace(
     )
     if workspace is None:
         raise NotFound(message="Workspace not found")
+    if workspace.project_id is not None:
+        await require_matter(db, workspace.project_id, user, need="write", include_archived=True)
     await db.execute(delete(SkillWorkspace).where(SkillWorkspace.id == workspace_id))
     await audit_action(
         db,

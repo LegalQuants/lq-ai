@@ -6144,6 +6144,461 @@ paths:
 # ============================================================
 # COMPONENTS
 # ============================================================
+  # Matter sharing and central access administration (replacement for PR #536)
+  /api/v1/admin/matters:
+    get:
+      operationId: list_matters_api_v1_admin_matters_get
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterAdministrationSummary'
+                title: Response List Matters Api V1 Admin Matters Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Matters
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/members:
+    get:
+      operationId: get_roster_api_v1_admin_matters__project_id__members_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterMemberResponse'
+                title: Response Get Roster Api V1 Admin Matters  Project Id  Members
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Roster
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/policy:
+    patch:
+      operationId: update_policy_api_v1_admin_matters__project_id__policy_patch
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterPolicyUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterAdministrationSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Update Policy
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/transfer:
+    post:
+      operationId: transfer_ownership_api_v1_admin_matters__project_id__transfer_post
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterOwnershipTransfer'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterAdministrationSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Transfer Ownership
+      tags:
+      - admin
+      - matters
+  /api/v1/projects/{project_id}/access:
+    get:
+      description: 'Resolve the caller''s own access.
+
+
+        ``ProjectResponse`` already carries ``caller_access``, so the UI rarely
+
+        needs this; it exists for clients that hold only a matter id (a
+
+        deep-link, a bridge) and want to decide what to render before fetching
+
+        the matter itself.'
+      operationId: get_caller_access_api_v1_projects__project_id__access_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Get Caller Access Api V1 Projects  Project Id  Access
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: What the caller may do on this matter, and why
+      tags:
+      - projects
+      - matters
+  /api/v1/projects/{project_id}/members:
+    get:
+      description: 'Anyone who can read the matter can see who else is on it.
+
+
+        Withholding the roster from readers would make the collaboration
+
+        surface unusable — you cannot see who authored the thread you are
+
+        reading — and it protects nothing, since those people''s work product
+
+        is already visible to the same caller.'
+      operationId: list_members_api_v1_projects__project_id__members_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterMemberResponse'
+                title: Response List Members Api V1 Projects  Project Id  Members
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people on a matter
+      tags:
+      - projects
+      - matters
+    post:
+      description: 'Add a roster row. ``role=''blocked''`` erects an ethical screen.
+
+
+        A screen is stored as an ordinary membership row so the roster answers
+
+        both halves of the question a conflicts check asks: who may see this
+
+        matter, and who explicitly may not.'
+      operationId: add_member_api_v1_projects__project_id__members_post
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberAdd'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Add someone to a matter (or screen them off it)
+      tags:
+      - projects
+      - matters
+  /api/v1/projects/{project_id}/members/{user_id}:
+    delete:
+      description: 'Drop a roster row.
+
+
+        Removing a ``blocked`` row *lifts a screen* — it is the one deletion
+
+        here that widens access, so the audit row records the role the person
+
+        held at removal rather than just the fact of it.
+
+
+        The owner''s row cannot be removed: their access does not depend on it,
+
+        so deleting it would only make the roster lie.'
+      operationId: remove_member_api_v1_projects__project_id__members__user_id__delete
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      - in: query
+        name: reason
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Remove someone from a matter
+      tags:
+      - projects
+      - matters
+    patch:
+      description: 'Move a roster row between roles, including to and from ``blocked``.
+
+
+        The audit row carries before/after so "when was this person screened
+
+        off, and by whom" is answerable from the log alone — the same
+
+        before/after convention ``team.member_role_updated`` uses.'
+      operationId: update_member_role_api_v1_projects__project_id__members__user_id__patch
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberRoleUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Change someone's role on a matter
+      tags:
+      - projects
+      - matters
+  /api/v1/users/directory:
+    get:
+      description: 'GET /api/v1/users/directory — id, email, and display name only.
+
+
+        Any signed-in user may call this. Sharing a matter is impossible without
+
+        it: the roster endpoints take a ``user_id``, and a matter lead who is not
+
+        an operator-admin cannot reach ``GET /admin/users`` to find one. Asking a
+
+        lawyer to paste a colleague''s UUID is not a design.
+
+
+        Deliberately minimal — no role, no admin flag, no MFA or password state,
+
+        no last-login. Those stay behind ``GET /admin/users``. A deployment is a
+
+        single organisation (PRD §2.3), so who else works here is not a secret;
+
+        *what they can do* still is.
+
+
+        Soft-deleted users are excluded so a picker cannot re-add someone who has
+
+        exercised erasure.'
+      operationId: list_directory_api_v1_users_directory_get
+      parameters:
+      - description: Case-insensitive substring match on email or display name.
+        in: query
+        name: q
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Case-insensitive substring match on email or display name.
+          title: Q
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DirectoryEntry'
+                title: Response List Directory Api V1 Users Directory Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people in this deployment (for people-pickers)
+      tags:
+      - users
+
 components:
   securitySchemes:
     bearerAuth:
@@ -6173,6 +6628,214 @@ components:
         threat models.
 
   schemas:
+    MatterAdministrationSummary:
+      properties:
+        archived_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Archived At
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        share_scope:
+          title: Share Scope
+          type: string
+      required:
+      - id
+      - name
+      - owner_id
+      - share_scope
+      - archived_at
+      title: MatterAdministrationSummary
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    ValidationError:
+      properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+      type: object
+    MatterMemberResponse:
+      description: One row of a matter's roster.
+      properties:
+        added_by_user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Added By User Id
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        is_owner:
+          default: false
+          title: Is Owner
+          type: boolean
+        role:
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - email
+      - role
+      - added_by_user_id
+      - created_at
+      title: MatterMemberResponse
+      type: object
+    MatterPolicyUpdate:
+      additionalProperties: false
+      properties:
+        reason:
+          maxLength: 1000
+          minLength: 1
+          title: Reason
+          type: string
+        share_scope:
+          enum:
+          - personal
+          - members
+          - org
+          title: Share Scope
+          type: string
+      required:
+      - reason
+      - share_scope
+      title: MatterPolicyUpdate
+      type: object
+    MatterOwnershipTransfer:
+      additionalProperties: false
+      properties:
+        former_owner_role:
+          default: reader
+          enum:
+          - lead
+          - contributor
+          - reader
+          - blocked
+          title: Former Owner Role
+          type: string
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        reason:
+          maxLength: 1000
+          minLength: 1
+          title: Reason
+          type: string
+      required:
+      - reason
+      - owner_id
+      title: MatterOwnershipTransfer
+      type: object
+    MatterMemberAdd:
+      additionalProperties: false
+      properties:
+        reason:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+        role:
+          default: contributor
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      title: MatterMemberAdd
+      type: object
+    MatterMemberRoleUpdate:
+      additionalProperties: false
+      properties:
+        reason:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+        role:
+          title: Role
+          type: string
+      required:
+      - role
+      title: MatterMemberRoleUpdate
+      type: object
+    DirectoryEntry:
+      description: One colleague, as the people-pickers need them.
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+      required:
+      - id
+      - email
+      title: DirectoryEntry
+      type: object
     SlackWorkspaceCreate:
       type: object
       description: |
@@ -8128,6 +8791,11 @@ components:
       type: object
       required: [id, chat_id, role, content, created_at]
       properties:
+        directed_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Human director recorded independently of current chat custody.
         id: {type: string, format: uuid}
         chat_id: {type: string, format: uuid}
         role: {type: string, enum: [user, assistant, system, tool]}

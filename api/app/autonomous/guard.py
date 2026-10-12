@@ -86,6 +86,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz.matters import denied_file_ids, denied_kb_ids
 from app.autonomous.audit import (
     AuditedRetrievalOwnershipDenied,
     audit_retrieval_ownership_denial,
@@ -237,6 +238,19 @@ async def guarded_tool_call(
         CostCapReached: If the projected cost would exceed
             ``max_cost_usd`` (R4).
     """
+    if session.project_id is not None:
+        from app.authz.matters import require_matter
+        from app.errors import Forbidden, NotFound
+        from app.models.user import User
+
+        user = await db.get(User, session.user_id)
+        if user is None:
+            raise SessionHalted("The session's user no longer exists.")
+        try:
+            await require_matter(db, session.project_id, user, need="write")
+        except (NotFound, Forbidden) as exc:
+            session.halt_state = str(HaltState.halted)
+            raise SessionHalted("Matter access was revoked.") from exc
     with _tracer.start_as_current_span("autonomous.tool_call") as span:
         if source_binding is not None and (
             execution_scope is None or effect is None or intent != ToolIntent.retrieve_authority
@@ -1458,6 +1472,7 @@ async def _assert_kb_owned(
             select(KnowledgeBase.id).where(
                 KnowledgeBase.id == kb_id,
                 KnowledgeBase.owner_id == owner_id,
+                KnowledgeBase.id.not_in(denied_kb_ids(owner_id)),
                 KnowledgeBase.archived_at.is_(None),
             )
         )
@@ -1489,6 +1504,7 @@ async def _assert_file_owned(
             select(FileModel.id).where(
                 FileModel.id == file_id,
                 FileModel.owner_id == owner_id,
+                FileModel.id.not_in(denied_file_ids(owner_id)),
                 FileModel.deleted_at.is_(None),
             )
         )
@@ -1575,7 +1591,7 @@ async def _handle_retrieve_chunks(
         await _assert_kb_owned(
             db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
         )
-        return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
+        return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db, owner_id=owner_id)
 
     # Mode 1: query-based hybrid search (existing path — unchanged).
     if query is None:
@@ -1597,13 +1613,14 @@ async def _handle_retrieve_chunks(
     await _assert_kb_owned(
         db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
     )
-    return await _handle_retrieve_chunks_query(params, db=db)
+    return await _handle_retrieve_chunks_query(params, db=db, owner_id=owner_id)
 
 
 async def _handle_retrieve_chunks_query(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID | None = None,
 ) -> ToolResult:
     """Mode 1: hybrid semantic+FTS search via :func:`hybrid_search`.
 
@@ -1629,6 +1646,7 @@ async def _handle_retrieve_chunks_query(
     results = await hybrid_search(
         db,
         kb_id=kb_id,
+        user_id=owner_id,
         query=query,
         query_embedding=query_embedding,
         top_k=top_k,
@@ -1715,6 +1733,7 @@ async def _handle_retrieve_chunks_since(
     kb_id_raw: Any,
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID | None = None,
 ) -> ToolResult:
     """Mode 3: return chunks of files in KB ``kb_id`` attached after ``since``.
 
@@ -1788,6 +1807,11 @@ async def _handle_retrieve_chunks_since(
                 .where(KnowledgeBaseFile.kb_id == kb_id)
                 .where(KnowledgeBaseFile.attached_at > since_dt)
                 .where(FileModel.deleted_at.is_(None))
+                .where(
+                    FileModel.id.not_in(denied_file_ids(owner_id))
+                    if owner_id is not None
+                    else FileModel.id.is_not(None)
+                )
                 # Self-ingestion-echo guard: a prior run's emit_artifact memo
                 # is attached to this KB as a real file; "new since last run"
                 # must not feed it back into the next run (mode 1 / chat RAG

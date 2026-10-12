@@ -81,6 +81,13 @@ async def read_tree(
         )
         if root is None or root.profile != "model_demo_v1":
             raise NotFound(message="Orchestration root not found")
+        from app.authz.matters import require_matter
+        from app.models.user import User
+
+        user = await db.get(User, actor_id)
+        if user is None:
+            raise NotFound("Orchestration root not found")
+        await require_matter(db, root.project_id, user, include_archived=True)
         if root.current_revision is None:
             raise Conflict(message="The model is still preparing a plan; use the chat run view")
         row = await db.get(PlanRow, (root_id, root.current_revision))
@@ -190,6 +197,14 @@ async def read_workspace_file(
         )
         if row is None:
             raise NotFound(message="Workspace file not found")
+        root = await db.get(Root, root_id)
+        from app.authz.matters import require_matter
+        from app.models.user import User
+
+        user = await db.get(User, actor_id)
+        if root is None or user is None:
+            raise NotFound("Workspace file not found")
+        await require_matter(db, root.project_id, user, include_archived=True)
         return WorkspaceContent(**file_metadata(row).model_dump(), content=row.content)
 
 
@@ -235,6 +250,13 @@ async def read_chat_run(
         )
         if root is None:
             raise NotFound(message="Orchestration chat not found")
+        from app.authz.matters import require_matter
+        from app.models.user import User
+
+        user = await db.get(User, actor_id)
+        if user is None:
+            raise NotFound("Orchestration root not found")
+        await require_matter(db, root.project_id, user, include_archived=True)
         snapshot = PlanningSnapshot.model_validate_json(json.dumps(root.planning_snapshot))
         account = await db.get(Account, root_id)
         assert account is not None

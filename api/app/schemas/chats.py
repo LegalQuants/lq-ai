@@ -473,6 +473,7 @@ class MessageResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: uuid.UUID
+    directed_by_user_id: uuid.UUID | None = None
     chat_id: uuid.UUID
     role: Literal["user", "assistant", "system", "tool"]
     kind: Literal["user", "ai", "refusal", "system"] = "user"
@@ -524,6 +525,7 @@ def message_to_response(row: Any) -> MessageResponse:
     return MessageResponse(
         id=row.id,
         chat_id=row.chat_id,
+        directed_by_user_id=getattr(row, "directed_by_user_id", None),
         role=row.role,
         kind=row.kind,
         content=row.content,

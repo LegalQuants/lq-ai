@@ -74,6 +74,12 @@ from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
+from app.authz.matters import (
+    denied_file_ids,
+    matter_access,
+    matter_scope_filter,
+    require_matter,
+)
 from app.autonomous.guard import _args_digest
 from app.chat.tool_loop import (
     LoopConfirmation,
@@ -384,6 +390,11 @@ async def _load_visible_chat(
             f"Chat {chat_id} not found.",
             details={"chat_id": str(chat_id)},
         )
+    user = await db.get(User, owner_id)
+    if user is None:
+        raise NotFound("Chat not found.")
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, need="write", include_archived=True)
     return row
 
 
@@ -405,31 +416,68 @@ async def _resolve_proposal_ceiling(db: AsyncSession, *, chat_id: uuid.UUID) -> 
 async def _load_visible_project_for_chat(
     db: AsyncSession,
     project_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    user: User,
 ) -> Project:
-    """Validate that ``project_id`` is owned by the caller before accepting it
-    as a chat's project association; 404 on miss / cross-user / archived.
+    """Validate the caller may contribute to ``project_id`` before accepting it
+    as a chat's matter association; 404 on miss / no access / archived.
 
-    Mirrors :func:`app.api.knowledge_bases._load_visible_project_for_kb`.
-    Inlined here rather than imported to keep the chat surface free of a
-    reverse dependency on the projects router module — it is a one-statement
-    SELECT. Without this guard a caller can bind a chat to another user's
-    project id and, on ``send_message``, pull that project's attached
+    Without this guard a caller can bind a chat to a matter they cannot
+    reach and, on ``send_message``, pull that matter's attached
     knowledge-base content into the response and out to the LLM provider.
+
+    ``write`` rather than ``read`` deliberately: a firm-wide-readable matter
+    lets a colleague *see* the work, but starting a new thread against it is
+    contributing, and contributing is what the roster is supposed to record.
     """
 
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == owner_id,
-        Project.archived_at.is_(None),
-    )
+    return await require_matter(db, project_id, user, need="write")
+
+
+async def _load_readable_chat(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = False,
+) -> Chat:
+    """Load a chat the caller may *read*; 404 otherwise.
+
+    Wider than :func:`_load_visible_chat` by exactly one rule: a chat
+    pinned to a matter is readable by anyone who can read that matter.
+    That is the point of sharing a matter — colleagues can see the work
+    already done on it instead of duplicating it.
+
+    Writing stays owner-only (:func:`_load_visible_chat`). Two lawyers
+    interleaving turns in one thread would make
+    ``work_product_attribution`` ambiguous about who directed which
+    output, which is precisely the record that has to stay unambiguous.
+    A colleague who wants to act on a shared matter starts their own
+    thread in it.
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
-        raise NotFound(
-            f"Project {project_id} not found.",
-            details={"project_id": str(project_id)},
-        )
-    return row
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, include_archived=True)
+    if row.owner_id == user.id:
+        return row
+
+    if row.project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == row.project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            if access != "none":
+                return row
+
+    # Existence-safe: a caller with no path to the chat cannot tell
+    # "exists, not yours" from "does not exist".
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
 
 
 async def _load_chat_for_reader(
@@ -452,8 +500,12 @@ async def _load_chat_for_reader(
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
         raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, include_archived=True)
     if row.owner_id == user.id:
         return row, False
+    if row.project_id is not None:
+        return row, row.owner_id != user.id and is_privileged_reader(user)
     if is_privileged_reader(user):
         return row, True
     raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
@@ -506,6 +558,7 @@ async def _validate_owned_file_ids(
     stmt = select(File.id).where(
         File.id.in_(parsed),
         File.owner_id == owner_id,
+        File.id.not_in(denied_file_ids(owner_id)),
         File.deleted_at.is_(None),
     )
     found = set((await db.execute(stmt)).scalars().all())
@@ -566,6 +619,7 @@ async def _load_attached_file_contexts(
         .where(
             File.id.in_(parsed),
             File.owner_id == owner_id,
+            File.id.not_in(denied_file_ids(owner_id)),
             File.deleted_at.is_(None),
         )
     )
@@ -667,7 +721,7 @@ async def create_chat(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
     if payload.project_id is not None:
-        await _load_visible_project_for_chat(db, payload.project_id, user.id)
+        await _load_visible_project_for_chat(db, payload.project_id, user)
 
     chat = Chat(
         owner_id=user.id,
@@ -853,10 +907,30 @@ async def list_chats(
         Query(ge=1, le=LIST_LIMIT_MAX, description="Page size; capped at 100."),
     ] = LIST_LIMIT_DEFAULT,
 ) -> ChatListResponse:
+    # Scoping rule: the unfiltered sidebar stays strictly personal, so a
+    # firm-wide-readable matter never floods a colleague's chat list. Ask
+    # for a specific matter you can read, and you get that matter's threads
+    # — every author's, not just your own. That is the whole point of
+    # sharing a matter: see the work already done rather than repeat it.
+    scope_to_owner = True
+    if project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            scope_to_owner = access == "none"
+
     stmt = select(Chat).where(
-        Chat.owner_id == user.id,
         Chat.autonomous_session_id.is_(None),
+        (
+            Chat.project_id.is_(None)
+            | Chat.project_id.in_(select(Project.id).where(matter_scope_filter(user)))
+        ),
     )
+    if scope_to_owner:
+        stmt = stmt.where(Chat.owner_id == user.id)
+
     if archived is True:
         stmt = stmt.where(Chat.archived_at.is_not(None))
     else:
@@ -909,7 +983,7 @@ async def get_chat(
     cid = _validate_chat_id(chat_id)
     # Archived chats are visible via direct GET (so a client can render
     # the archived-detail page); list excludes them by default.
-    chat = await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat = await _load_readable_chat(db, cid, user, include_archived=True)
     return await _serialize_chat(db, chat)
 
 
@@ -1016,7 +1090,7 @@ async def list_messages(
     # The chat must be visible to the caller (404 cross-user). We
     # accept archived chats so a user can read history of an archived
     # conversation.
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    await _load_readable_chat(db, cid, user, include_archived=True)
 
     stmt = select(Message).where(Message.chat_id == cid)
 
@@ -1162,6 +1236,7 @@ async def _retrieve_kb_context_for_chat(
             results = await hybrid_search(
                 db,
                 kb_id=kb.id,
+                user_id=chat.owner_id,
                 query=query,
                 query_embedding=query_embedding,
                 top_k=RAG_TOP_K_PER_KB,
@@ -1478,6 +1553,7 @@ async def send_message(
     ]
     user_message = Message(
         chat_id=cid,
+        directed_by_user_id=user.id,
         role="user",
         content=effective_content,
         applied_skills=user_applied_skills,
@@ -2488,6 +2564,7 @@ async def resume_tool_call(
         try:
             await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=cid,
                 content="".join(accumulated),
@@ -2992,6 +3069,7 @@ async def _persist_assistant_message(
     applied_skills: list[str],
     error_code: str | None,
     kind: str = "ai",
+    directed_by_user_id: uuid.UUID | None = None,
 ) -> Message:
     """Insert one assistant message row in its own transaction.
 
@@ -3016,6 +3094,7 @@ async def _persist_assistant_message(
     row = Message(
         id=message_id,
         chat_id=chat_id,
+        directed_by_user_id=directed_by_user_id,
         role="assistant",
         kind=kind,
         content=content,
@@ -3084,7 +3163,7 @@ async def _write_work_product_attribution(
 
     attribution = WorkProductAttribution(
         message_id=message.id,
-        user_id=chat_row.owner_id,
+        user_id=message.directed_by_user_id,
         chat_id=message.chat_id,
         project_id=chat_row.project_id,
         routed_inference_tier=routed_inference_tier,
@@ -3164,6 +3243,7 @@ async def _non_streaming_response(
             applied_skills = list(outcome.applied_skills or [])
             persisted = await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=chat.id,
                 content=outcome.text,
@@ -3421,6 +3501,7 @@ async def _non_streaming_response(
 
     persisted = await _persist_assistant_message(
         db,
+        directed_by_user_id=user.id,
         message_id=assistant_message_id,
         chat_id=chat.id,
         content=assistant_text,
@@ -3784,6 +3865,7 @@ async def _stream_response(
         try:
             await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=chat.id,
                 content="".join(accumulated),
@@ -4058,6 +4140,7 @@ async def run_inference_override(
     # disagree about what kind of row this is (T1 + T4).
     persisted = await _persist_assistant_message(
         db,
+        directed_by_user_id=user.id,
         message_id=assistant_message_id,
         chat_id=chat.id,
         content=assistant_text,

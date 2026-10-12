@@ -27,7 +27,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
-from app.workers.user_deletion import hard_delete_user_for_test
+from app.workers.user_deletion import drain_storage_deletions, hard_delete_user_for_test
 
 
 @pytest.mark.integration
@@ -79,6 +79,8 @@ async def test_hard_delete_cascades_owned_rows_and_anonymizes_audit(
     file_storage_path = file_row.storage_path
 
     await hard_delete_user_for_test(db_session, user)
+    await db_session.commit()
+    await drain_storage_deletions(db_session)
     await db_session.flush()
 
     # User row gone.

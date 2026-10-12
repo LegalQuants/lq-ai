@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends
 from app.api import (
     admin,
     admin_intake_bridges,
+    admin_matters,
     admin_mcp,
     auth,
     autonomous,
@@ -40,6 +41,7 @@ from app.api import (
     integrations_teams,
     internal,
     knowledge_bases,
+    matter_members,
     mcp_oauth,
     models,
     orchestration,
@@ -97,6 +99,10 @@ api_router.include_router(word_addin.public_router)
 # future real handler in these modules inherits the gate automatically.
 _active = [Depends(get_active_user)]
 api_router.include_router(projects.router, dependencies=_active)
+# Matter roster — mounted on the same /projects prefix so membership reads
+# as part of the matter surface rather than a separate resource.
+api_router.include_router(matter_members.router, dependencies=_active)
+api_router.include_router(admin_matters.router, dependencies=_active)
 api_router.include_router(chats.router, dependencies=_active)
 api_router.include_router(chat_receipts.router, dependencies=_active)
 api_router.include_router(skills.router, dependencies=_active)

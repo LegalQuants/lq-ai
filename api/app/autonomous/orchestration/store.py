@@ -191,6 +191,9 @@ class OrchestrationStore:
         )
         if project is None or project.owner_id != owner_id or project.archived_at is not None:
             raise Forbidden(message="Orchestration requires an owned active project")
+        from app.authz.matters import require_matter
+
+        await require_matter(db, project_id, owner, need="write")
         return project
 
     async def _root(

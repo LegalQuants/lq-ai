@@ -4,6 +4,7 @@
 	$: pathname = $page.url.pathname;
 
 	const navLinks = [
+		{ href: '/lq-ai/admin/matters', label: 'Matter access' },
 		{ href: '/lq-ai/admin/audit-log', label: 'Audit log' },
 		{ href: '/lq-ai/admin/models', label: 'Models' },
 		{ href: '/lq-ai/admin/provider-keys', label: 'Provider keys' },
@@ -59,7 +60,14 @@
 		gap: 0;
 	}
 
+	.admin-nav-list {
+		overflow-x: auto;
+	}
+	.admin-nav-list li {
+		flex: 0 0 auto;
+	}
 	.admin-nav-link {
+		white-space: nowrap;
 		display: block;
 		padding: var(--lq-space-3) var(--lq-space-4);
 		color: var(--lq-text-secondary);

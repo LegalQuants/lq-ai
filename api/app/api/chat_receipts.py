@@ -46,6 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.auditor_audit import auditor_audit
+from app.authz.matters import require_matter
 from app.db.session import get_db
 from app.errors import Forbidden, NotFound
 from app.models.audit import AuditLog
@@ -93,8 +94,10 @@ async def _authorize_receipts_access(
             "Chat not found.",
             details={"chat_id": str(chat_id)},
         )
+    if chat.project_id is not None:
+        await require_matter(db, chat.project_id, user, include_archived=True)
     privileged = is_privileged_reader(user)
-    if chat.owner_id != user.id and not privileged:
+    if chat.project_id is None and chat.owner_id != user.id and not privileged:
         raise Forbidden(
             "You do not own this chat.",
             details={"chat_id": str(chat_id)},
@@ -170,6 +173,9 @@ async def _build_receipt_events(
                             "message_id": str(m.id),
                             "message_kind": m.kind,
                             "role": m.role,
+                            "directed_by_user_id": str(m.directed_by_user_id)
+                            if m.directed_by_user_id
+                            else None,
                             "prompt_tokens": m.prompt_tokens,
                             "completion_tokens": m.completion_tokens,
                         },

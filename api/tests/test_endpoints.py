@@ -309,6 +309,18 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     # User provisioning — create a user + reset a user's password (admin-only)
     ("POST", "/api/v1/admin/users"),
     ("POST", "/api/v1/admin/users/{user_id}/reset-password"),
+    # People-picker directory (id/email/display_name only)
+    ("GET", "/api/v1/users/directory"),
+    ("GET", "/api/v1/admin/matters"),
+    ("GET", "/api/v1/admin/matters/{project_id}/members"),
+    ("PATCH", "/api/v1/admin/matters/{project_id}/policy"),
+    ("POST", "/api/v1/admin/matters/{project_id}/transfer"),
+    # Matter membership — the roster surface over project_members (0067)
+    ("GET", "/api/v1/projects/{project_id}/members"),
+    ("POST", "/api/v1/projects/{project_id}/members"),
+    ("PATCH", "/api/v1/projects/{project_id}/members/{user_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/members/{user_id}"),
+    ("GET", "/api/v1/projects/{project_id}/access"),
     # Wave D.2 — sandbox ensure, skills autocomplete, user-skill versions, KB files
     ("POST", "/api/v1/projects/sandbox/ensure"),
     ("GET", "/api/v1/skills/autocomplete"),

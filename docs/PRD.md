@@ -1005,6 +1005,15 @@ Remaining implementation-level open questions (watch-trigger plumbing, notificat
 
 **M1 status:** Shipped. Matter (project) workspaces are wired end-to-end: create, list, detail view at `/lq-ai/matters/[id]`, attached files/skills/knowledge bases, the `privileged` flag, and `minimum_inference_tier`. An operator can verify at `api/app/api/projects.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-c-matters.cy.ts`. Note: playbook attachment lands when Playbooks ship (M3). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
 
+**Matter sharing extension (replacement for PR #536, pending merge).** Matter-scoped
+roles (`lead`, `contributor`, `reader`, `blocked`) implement explicit grants and
+screens. Unscreened administrators manage policy without implicit content access,
+with reasons and atomic audit records. Ownership transfer and post-commit object
+erasure are included. The administration UI is `/lq-ai/admin/matters`; see
+[ADR 0042](adr/0042-matter-scoped-access-control.md) and the
+[operator guide](security/matter-access-control.md). This is proposed implementation,
+not a claim that the unmerged feature is deployed.
+
 **Description.** A Project is a user-curated container that scopes a set of chats, files, skills, playbooks, and a free-form context document around a single matter — a deal, a counterparty, a regulatory question, a policy refresh. Chats inside a Project automatically inherit the Project's attached files and skills. The Project's free-form context document ("we are the customer; counterparty is Acme; their counsel is Smith Crowell; we agreed to a 12-month liability cap last round") is read into every chat in the Project as context. Projects are the operational answer to the question "what about *this matter*?" — distinct from per-chat attachments (which solve "this conversation") and from autonomous-layer memory (which is system-curated rather than user-authored).
 
 Persistent matter memory is the single most-cited capability across in-house users in the competitive research and is the reason GC.AI customers cite stickiness. Projects are the single most consequential capability addition to v1.

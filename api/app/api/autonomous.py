@@ -51,6 +51,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser, is_privileged_reader
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
+from app.authz.matters import matter_scope_filter
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
@@ -192,32 +193,53 @@ async def _load_owned_project(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Project:
-    """Fetch a Project by id; 404 if missing OR not owned by the caller.
+    """Fetch a matter the caller may act on; 404 if missing OR out of reach.
 
-    Conflates "doesn't exist" and "belongs to someone else" to avoid
-    existence disclosure — same idiom as the autonomous loaders. The
-    autonomous layer never reveals another user's Projects.
+    Conflates "doesn't exist" and "you have no access" to avoid existence
+    disclosure — same idiom as the autonomous loaders. The autonomous layer
+    never reveals a matter the caller cannot reach.
+
+    Access is resolved by :func:`app.authz.matters.require_matter` at
+    ``write``, because everything reached through here *spends* against the
+    matter — spawning a session, scheduling a watch, accepting a context
+    proposal. Reading a shared matter does not entitle a colleague to run
+    autonomous work under it and bill the firm for it.
 
     ``archived_at IS NULL`` matches :func:`app.api.projects._load_visible_project`,
     which excludes archived rows by default: a matter the caller has deleted is
     gone from their UI and must not be re-attachable as an autonomous target.
 
     Raises:
-        HTTPException: 404 if the row is absent, archived, or owned by a
-        different user.
+        HTTPException: 404 if the row is absent or unreachable; 403 if the
+        caller can read the matter but not contribute to it.
     """
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == user_id,
-        Project.archived_at.is_(None),
-    )
-    row = (await db.execute(stmt)).scalar_one_or_none()
-    if row is None:
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden as _Forbidden, NotFound as _NotFound
+
+    # The caller is identified by id at several of these call sites, so
+    # re-load the row rather than threading a User object through seven
+    # signatures; it is normally already in the session identity map.
+    user = await db.get(User, user_id)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project not found",
         )
-    return row
+
+    try:
+        return await require_matter(db, project_id, user, need="write")
+    except _NotFound:
+        # Re-raise in this module's plain shape so the autonomous surface's
+        # error contract does not shift underneath its callers.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project not found",
+        ) from None
+    except _Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="project requires contributor access",
+        ) from None
 
 
 async def _load_owned_kb(
@@ -352,6 +374,13 @@ async def _load_owned_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous session not found",
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        caller = await db.get(User, user_id)
+        if caller is None:
+            raise HTTPException(status_code=404, detail="autonomous session not found")
+        await require_matter(db, row.project_id, caller, include_archived=True)
     return row
 
 
@@ -374,6 +403,11 @@ async def _load_session_for_reader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="autonomous session not found"
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        await require_matter(db, row.project_id, user, include_archived=True)
+        return row, row.user_id != user.id and is_privileged_reader(user)
     if row.user_id == user.id:
         return row, False
     if is_privileged_reader(user):
@@ -574,13 +608,21 @@ async def list_sessions(
     count_stmt = (
         select(func.count())
         .select_from(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
     )
     total_count: int = (await db.execute(count_stmt)).scalar_one()
 
     rows_stmt = (
         select(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
         .order_by(AutonomousSession.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -1237,7 +1279,10 @@ async def list_project_context_proposals(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [ProjectContextProposal.user_id == user.id]
+    base_where = [
+        ProjectContextProposal.user_id == user.id,
+        ProjectContextProposal.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+    ]
     if state is not None:
         base_where.append(ProjectContextProposal.state == str(state))
     if project_id is not None:

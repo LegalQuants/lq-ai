@@ -96,6 +96,17 @@ the numeric ``min()`` of the operator default
 orchestration ``ExecutionScope`` value is the ceiling for gateway tool
 egress on that matter. Independent of ``minimum_inference_tier`` and of
 ``privileged``."""
+ShareScope = Literal["personal", "members", "org"]
+"""Ambient grant over a matter (migration 0074).
+
+``personal`` — owner + explicit ``project_members`` rows only.
+``members``  — same reach as ``personal``; marks a matter as deliberately
+               restricted rather than never shared.
+``org``      — every non-blocked user in the deployment gets **read**.
+               Writing still needs an explicit membership row.
+
+A ``blocked`` membership row overrides all three.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +179,10 @@ class ProjectCreateRequest(BaseModel):
     # for gateway tool egress. ``None`` means "no project-level ceiling" —
     # the operator default and any orchestration scope still apply.
     max_egress_tier: EgressTier | None = None
+    share_scope: ShareScope | None = None
+    """Ambient grant over the new matter. ``None`` (the default) means
+    "use the deployment default" — ``LQ_AI_MATTER_DEFAULT_SHARE_SCOPE``,
+    itself defaulting to ``personal``."""
 
     @model_validator(mode="after")
     def _validate_context_size(self) -> Self:
@@ -221,6 +236,10 @@ class ProjectUpdateRequest(BaseModel):
     OpenAPI sketch has a separate DELETE for soft-delete; this field is
     the non-destructive form (PATCH ``{archived: true}``)."""
 
+    share_scope: ShareScope | None = None
+    """Change the matter's ambient grant. Lead-only — widening who can
+    see a matter is a governance act, not an edit."""
+
     @model_validator(mode="after")
     def _validate_context_size(self) -> Self:
         _validate_context_md_bytes(self.context_md)
@@ -265,6 +284,23 @@ class ProjectResponse(BaseModel):
     # matters created via ``POST /projects``; ``True`` only for the
     # internally-managed row created by ``POST /projects/sandbox/ensure``.
     is_sandbox: bool = False
+    share_scope: str = "personal"
+    """Ambient grant over this matter — ``personal`` / ``members`` / ``org``
+    (migration 0074). Only a matter lead may change it."""
+
+    caller_access: str = "read"
+    """What *this* caller may do here — ``read`` / ``write`` / ``lead``.
+
+    Returned on every project payload so the UI can render the right
+    affordances without a second round-trip; the same trick
+    ``TeamSummary.caller_role`` uses. Never ``none`` — a caller with no
+    access receives 404 rather than a serialized row."""
+
+    caller_access_basis: str = "owner"
+    """Why the caller has that access — ``owner`` / ``member`` / ``org`` /
+    ``privileged_reader``. Lets the matter list distinguish "mine" from
+    "shared with me" without inferring it from ``owner_id``."""
+
     attached_file_ids: list[uuid.UUID] = Field(default_factory=list)
     attached_skill_names: list[str] = Field(default_factory=list)
     attached_knowledge_base_ids: list[uuid.UUID] = Field(default_factory=list)

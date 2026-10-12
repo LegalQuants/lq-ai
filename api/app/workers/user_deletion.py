@@ -35,6 +35,7 @@ from app.models import (
     File,
     KnowledgeBase,
     Project,
+    ProjectMember,
     User,
     UserExportJob,
 )
@@ -60,43 +61,131 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
     SET NULL).
     """
 
-    # Delete export-job bytes first so we don't orphan stored ZIPs.
-    export_jobs = (
+    from sqlalchemy import or_
+
+    from app.errors import Conflict
+    from app.models.project import ProjectFile
+    from app.models.project_knowledge_base import ProjectKnowledgeBase
+
+    # Lock the user before examining ownership so new FK-linked content cannot
+    # arrive between preflight and deletion. Lock owned resources against late sharing.
+    await session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    for model in (File, KnowledgeBase, Chat):
+        await session.execute(
+            select(model.__table__.c.id)
+            .where(model.__table__.c.owner_id == user.id)
+            .with_for_update()
+        )
+    # Serialize against roster changes / owner transfers on the user's matters.
+    owned = (
         (
             await session.execute(
-                select(UserExportJob).where(
-                    UserExportJob.user_id == user.id,
-                    UserExportJob.storage_key.is_not(None),
+                select(Project).where(Project.owner_id == user.id).with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    retained = [p.id for p in owned if p.share_scope == "org"]
+    other_members = (
+        (
+            await session.execute(
+                select(ProjectMember.project_id).where(
+                    ProjectMember.project_id.in_([p.id for p in owned]),
+                    ProjectMember.user_id != user.id,
                 )
             )
         )
         .scalars()
         .all()
     )
-    for job in export_jobs:
-        assert job.storage_key is not None
-        try:
-            await delete_object(storage_path=job.storage_key)
-        except Exception as exc:
-            log.warning(
-                "user_deletion: failed to delete export bytes %s: %s",
-                job.storage_key,
-                exc,
+    retained.extend(other_members)
+    foreign_files = (
+        (
+            await session.execute(
+                select(File.id)
+                .outerjoin(ProjectFile, ProjectFile.file_id == File.id)
+                .where(
+                    File.owner_id == user.id,
+                    or_(
+                        (
+                            File.project_id.is_not(None)
+                            & File.project_id.not_in([p.id for p in owned])
+                        ),
+                        (
+                            ProjectFile.project_id.is_not(None)
+                            & ProjectFile.project_id.not_in([p.id for p in owned])
+                        ),
+                    ),
+                )
             )
+        )
+        .scalars()
+        .first()
+    )
+    foreign_kbs = (
+        (
+            await session.execute(
+                select(KnowledgeBase.id)
+                .outerjoin(
+                    ProjectKnowledgeBase, ProjectKnowledgeBase.knowledge_base_id == KnowledgeBase.id
+                )
+                .where(
+                    KnowledgeBase.owner_id == user.id,
+                    or_(
+                        (
+                            KnowledgeBase.project_id.is_not(None)
+                            & KnowledgeBase.project_id.not_in([p.id for p in owned])
+                        ),
+                        (
+                            ProjectKnowledgeBase.project_id.is_not(None)
+                            & ProjectKnowledgeBase.project_id.not_in([p.id for p in owned])
+                        ),
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    shared_chats = (
+        (
+            await session.execute(
+                select(Chat.id).where(
+                    Chat.owner_id == user.id,
+                    (Chat.project_id.is_not(None) & Chat.project_id.not_in([p.id for p in owned])),
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if retained or foreign_files or foreign_kbs or shared_chats:
+        raise Conflict(
+            "User deletion requires reassignment of shared matter data and membership attribution before storage is removed."
+        )
 
-    # Delete file bytes — including soft-deleted rows. The user's
-    # right-to-erasure covers files they deleted previously but whose
-    # bytes lingered under ADR 0005's deferred-GC posture.
-    files = (await session.execute(select(File).where(File.owner_id == user.id))).scalars().all()
-    for file in files:
-        try:
-            await delete_object(storage_path=file.storage_path)
-        except Exception as exc:
-            log.warning(
-                "user_deletion: failed to delete file bytes %s: %s",
-                file.storage_path,
-                exc,
+    from sqlalchemy.dialects.postgresql import insert
+
+    from app.models.storage_deletion import StorageDeletion
+
+    exports = (
+        (
+            await session.execute(
+                select(UserExportJob.storage_key).where(
+                    UserExportJob.user_id == user.id, UserExportJob.storage_key.is_not(None)
+                )
             )
+        )
+        .scalars()
+        .all()
+    )
+    files = (await session.execute(select(File).where(File.owner_id == user.id))).scalars().all()
+    # Queue erasure in this transaction; never remove bytes before it commits.
+    for storage_path in set(exports) | {f.storage_path for f in files}:
+        await session.execute(
+            insert(StorageDeletion).values(storage_path=storage_path).on_conflict_do_nothing()
+        )
 
     # Knowledge bases — RESTRICT FK on owner; kb_files cascade.
     await session.execute(delete(KnowledgeBase).where(KnowledgeBase.owner_id == user.id))
@@ -105,13 +194,45 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
     # cascade on chat delete.
     await session.execute(delete(Chat).where(Chat.owner_id == user.id))
 
-    # Files — RESTRICT FK on owner; documents/chunks + project_files +
-    # remaining kb_files cascade. The bytes are already gone above.
+    # Files — relational rows are removed atomically; object erasure is queued.
     await session.execute(delete(File).where(File.owner_id == user.id))
 
     # Projects — RESTRICT FK on owner; project_files/skills cascade,
     # chats.project_id is SET NULL (already moot since chats are gone).
-    await session.execute(delete(Project).where(Project.owner_id == user.id))
+    #
+    # A matter this user owns but other people work on is NOT theirs alone
+    # to erase: deleting it would destroy colleagues' chats, attachments,
+    # and context along with it. Erasure covers the user's own data, not a
+    # shared matter file. Those rows are left standing and named in the
+    # log; an operator resolves them by transferring ownership before
+    # re-running the deletion, and ``projects.owner_id`` is RESTRICT, so
+    # the FK refuses the user delete below until they do — the job fails
+    # loudly rather than erasing a colleague's work quietly.
+    shared_project_ids = (
+        (
+            await session.execute(
+                select(Project.id)
+                .join(ProjectMember, ProjectMember.project_id == Project.id)
+                .where(Project.owner_id == user.id, ProjectMember.user_id != user.id)
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if shared_project_ids:
+        log.warning(
+            "user_deletion: %d matter(s) owned by %s have other members and were "
+            "NOT deleted; transfer ownership before retrying: %s",
+            len(shared_project_ids),
+            user.id,
+            ", ".join(str(pid) for pid in shared_project_ids),
+        )
+
+    stmt = delete(Project).where(Project.owner_id == user.id)
+    if shared_project_ids:
+        stmt = stmt.where(Project.id.not_in(shared_project_ids))
+    await session.execute(stmt)
 
     # User row — sessions + export_jobs CASCADE; audit_log +
     # inference_routing_log SET NULL (PRD §5.3 audit retention).
@@ -167,6 +288,9 @@ async def hard_delete_due_users_job(ctx: dict[str, Any]) -> dict[str, Any]:
                     exc,
                 )
 
+    async with factory() as session:
+        await drain_storage_deletions(session)
+
     return {
         "deleted": deleted,
         "failed": failed,
@@ -181,3 +305,28 @@ async def hard_delete_user_for_test(session: AsyncSession, user: User) -> None:
     """Direct-call entry for tests; commits are the caller's responsibility."""
 
     await _hard_delete_user(session, user)
+
+
+async def drain_storage_deletions(session: AsyncSession) -> None:
+    """Retry committed object removals; failed removals remain durable work."""
+    from app.models.storage_deletion import StorageDeletion
+
+    paths = list(
+        (
+            await session.scalars(
+                select(StorageDeletion.storage_path)
+                .order_by(StorageDeletion.created_at)
+                .limit(1000)
+            )
+        ).all()
+    )
+    for path in paths:
+        try:
+            await delete_object(storage_path=path)
+            await session.execute(
+                delete(StorageDeletion).where(StorageDeletion.storage_path == path)
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            log.exception("Queued object erasure failed; retained for retry")
