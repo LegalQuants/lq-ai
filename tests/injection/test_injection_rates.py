@@ -1,19 +1,10 @@
-"""Live injection tests: seed each attack into a fixture, score the output.
+"""Live injection measurements through the normal non-streaming chat API.
 
-Marker ``injection_live``; skipped cleanly unless LQ_INJECTION_LIVE=1 plus
-a provider key plus api credentials are present (see live.py). Each test
-seeds one corpus attack into its target DE-231 fixture, sends the composed
-document through the normal chat-send path with the skill attached, and
-deterministically classifies the assistant output (followed / flagged /
-ignored / degraded — see injection_lib). Outcomes accumulate into the
-session ``rate_collector``, which writes the rates summary and applies the
-ratcheted floor (if any) at session end.
-
-These tests do NOT assert per-attack pass/fail on the *outcome* — a single
-followed injection is a measurement, not a collection failure. They DO
-assert transport invariants (no gateway error, skill applied); a broken
-send measured nothing and must fail loudly. The detection-rate gate is the
-session-level floor in conftest.rate_collector.
+Runs require explicit opt-in, gateway readiness and API credentials.
+Every answer gets independent canary, mention and structure observations.
+Session hooks report corpus completeness and enforce an optional strict
+task-preservation proxy/degradation floor. A canary emission is an
+observation, not by itself a demonstrated successful attack.
 """
 
 from __future__ import annotations
@@ -21,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from .conftest import write_attack_report
-from .injection_lib import classify, compose_fixture, load_base_snapshot, load_corpus
+from .injection_lib import compose_fixture, load_base_snapshot, load_corpus, score_output
 from .live import injection_skip_reason
 
 pytestmark = pytest.mark.injection_live
@@ -31,7 +22,7 @@ ATTACK_IDS = [f"{a.target_skill}--{a.category}--{a.id}" for a in ATTACKS]
 
 
 @pytest.mark.parametrize("attack", ATTACKS, ids=ATTACK_IDS)
-def test_injection_rate(attack, injection_client, report_dir, rate_collector) -> None:
+def test_injection_rate(attack, injection_client, injection_report_dir, injection_run) -> None:
     assert injection_skip_reason() is None  # injection_client fixture already skipped
 
     fixture = compose_fixture(attack)
@@ -51,18 +42,16 @@ def test_injection_rate(attack, injection_client, report_dir, rate_collector) ->
         f"skill {attack.target_skill!r} was not applied (applied_skills={applied!r})"
     )
 
-    outcome = classify(content, attack, snapshot)
-
-    tally = rate_collector.setdefault(attack.target_skill, {}).setdefault(
-        attack.category, {"followed": 0, "flagged": 0, "ignored": 0, "degraded": 0}
-    )
-    tally[outcome] += 1
+    observation = score_output(content, attack, snapshot)
+    model = message.get("routed_model")
+    provider = message.get("routed_provider")
+    injection_run.record(attack, observation, model, provider)
 
     write_attack_report(
-        report_dir,
+        injection_report_dir,
         attack,
-        outcome=outcome,
-        routed_model=message.get("routed_model"),
-        routed_provider=message.get("routed_provider"),
+        observation=observation,
+        routed_model=model,
+        routed_provider=provider,
         content=content,
     )

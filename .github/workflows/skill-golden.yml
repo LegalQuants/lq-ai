@@ -56,6 +56,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
+      - name: Require a trusted default-branch run
+        env:
+          RUN_REF: ${{ github.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$RUN_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error::Live evaluation credentials may only be used on the default branch"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -96,64 +106,6 @@ jobs:
           sudo docker image prune -af
           df -h /
 
-      - name: Write .env with provider keys
-        if: steps.guard.outputs.have_keys == 'true'
-        # stack-smoke.sh writes a dummy .env only when none exists;
-        # pre-writing one here injects the real provider keys the
-        # gateway needs for inference. Non-key secrets are run-scoped
-        # throwaways (the stack is destroyed with the runner).
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          cat > .env <<EOF
-          POSTGRES_PASSWORD=ci-golden-postgres
-          MINIO_ROOT_PASSWORD=ci-golden-minio-password
-          LQ_AI_GATEWAY_KEY=ci-golden-gateway-key
-          JWT_SECRET=$(openssl rand -hex 32)
-          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-          OPENAI_API_KEY=${OPENAI_API_KEY}
-          EOF
-
-      - name: Build and boot the compose stack
-        if: steps.guard.outputs.have_keys == 'true'
-        # Reuses the battle-tested stack-smoke boot path (build order,
-        # image tagging, healthcheck wait, diagnostics on failure). The
-        # soak is shortened — this job's signal is the golden run, not
-        # boot stability.
-        run: SOAK_SECONDS=5 ./scripts/stack-smoke.sh
-
-      - name: Bootstrap api credentials
-        if: steps.guard.outputs.have_keys == 'true'
-        # The api mints a first-run admin (admin@lq.ai) and prints its
-        # password once to the logs; ActiveUser endpoints are gated
-        # until that password is rotated. Rotate it to a run-scoped
-        # random value and hand it to the harness via the environment.
-        run: |
-          set -euo pipefail
-          PW=$(docker compose logs api 2>&1 \
-            | grep "First-run admin password" | tail -1 | sed 's/.*): //' | tr -d '[:space:]')
-          if [ -z "$PW" ]; then
-            echo "::error::could not extract the first-run admin password from api logs"
-            exit 1
-          fi
-          echo "::add-mask::$PW"
-          LOGIN=$(curl -fsS -X POST http://127.0.0.1:8000/api/v1/auth/login \
-            -H 'Content-Type: application/json' \
-            -d "{\"email\":\"admin@lq.ai\",\"password\":\"$PW\"}")
-          TOKEN=$(echo "$LOGIN" | jq -r .access_token)
-          MUST=$(echo "$LOGIN" | jq -r .user.must_change_password)
-          if [ "$MUST" = "true" ]; then
-            NEWPW="golden-$(openssl rand -hex 16)"
-            echo "::add-mask::$NEWPW"
-            curl -fsS -o /dev/null -X POST http://127.0.0.1:8000/api/v1/auth/change-password \
-              -H "Authorization: Bearer $TOKEN" \
-              -H 'Content-Type: application/json' \
-              -d "{\"current_password\":\"$PW\",\"new_password\":\"$NEWPW\"}"
-            PW="$NEWPW"
-          fi
-          echo "LQ_GOLDEN_PASSWORD=$PW" >> "$GITHUB_ENV"
-
       - name: Set up Python
         if: steps.guard.outputs.have_keys == 'true'
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -164,19 +116,66 @@ jobs:
         if: steps.guard.outputs.have_keys == 'true'
         # The harness is deliberately lightweight: pytest + httpx +
         # pyyaml, no api/gateway package install needed.
-        run: pip install "pytest>=8" "httpx>=0.27" "pyyaml>=6.0,<7"
+        run: |
+          pip install --require-hashes --only-binary=:all: -r tests/eval-requirements.txt
+
+      - name: Write .env with provider keys
+        if: steps.guard.outputs.have_keys == 'true'
+        # stack-smoke.sh writes a dummy .env only when none exists;
+        # pre-writing one here injects the real provider keys the
+        # gateway needs for inference. Non-key secrets are run-scoped
+        # throwaways (the stack is destroyed with the runner).
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          umask 077
+          JWT_SECRET=$(openssl rand -hex 32)
+          echo "::add-mask::$JWT_SECRET"
+          cat > .env <<EOF
+          POSTGRES_PASSWORD=ci-golden-postgres
+          MINIO_ROOT_PASSWORD=ci-golden-minio-password
+          LQ_AI_GATEWAY_KEY=ci-golden-gateway-key
+          JWT_SECRET=${JWT_SECRET}
+          ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+          OPENAI_API_KEY=${OPENAI_API_KEY}
+          EOF
+
+      - name: Build and boot the compose stack
+        if: steps.guard.outputs.have_keys == 'true'
+        # Reuses the battle-tested stack-smoke boot path (build order,
+        # image tagging, healthcheck wait, diagnostics on failure). The
+        # soak is shortened — this job's signal is the golden run, not
+        # boot stability.
+        run: |
+          set -o pipefail
+          SOAK_SECONDS=5 ./scripts/stack-smoke.sh 2>&1 \
+            | sed -E 's/(First-run admin password[^:]*:).*/\1 [REDACTED]/'
+
+      - name: Bootstrap api credentials
+        if: steps.guard.outputs.have_keys == 'true'
+        id: bootstrap
+        run: bash scripts/bootstrap-eval-user.sh
 
       - name: Run the golden harness
         if: steps.guard.outputs.have_keys == 'true'
         env:
           LQ_GOLDEN_LIVE: "1"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LQ_EVAL_GATEWAY_READY: "1"
+          LQ_GOLDEN_PASSWORD: ${{ steps.bootstrap.outputs.password }}
           LQ_GOLDEN_REPORT_DIR: golden-report
           LQ_GOLDEN_RECORD: ${{ inputs.record && '1' || '' }}
           LQ_GOLDEN_SKILLS: ${{ inputs.skills }}
         run: pytest tests/golden -m golden_live -q
 
+      - name: Remove disposable stack and credentials
+        if: always() && steps.guard.outputs.have_keys == 'true'
+        run: |
+          status=0
+          docker compose down --volumes --remove-orphans || status=$?
+          rm -f .env
+          rm -rf stack-smoke-logs
+          exit "$status"
       - name: Upload reports and observed sidecars
         if: always() && steps.guard.outputs.have_keys == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

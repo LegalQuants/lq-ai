@@ -9,8 +9,8 @@ client only needs api credentials.
 Environment (all read by :func:`live_config`):
 
 * ``LQ_GOLDEN_LIVE=1``      — enable live golden tests (off by default).
-* ``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY`` — at least one must be
-  non-empty; the stack's gateway needs a provider to perform inference.
+* ``LQ_EVAL_GATEWAY_READY=1`` — operator confirms a configured, booted gateway.
+  Provider keys stay in the gateway rather than the harness process.
 * ``LQ_GOLDEN_API_URL``     — api base URL (default http://127.0.0.1:8000).
 * ``LQ_GOLDEN_EMAIL``       — api login (default admin@lq.ai).
 * ``LQ_GOLDEN_PASSWORD``    — api password (required; no default).
@@ -53,18 +53,15 @@ class LiveConfig:
 def live_skip_reason() -> str | None:
     """Why live golden tests must be skipped, or ``None`` to run them.
 
-    Fail-restrictive: without the explicit opt-in AND a provider key AND
+    Fail-restrictive: without the explicit opt-in AND gateway readiness AND
     credentials, every live test skips cleanly so the suite stays green
     keyless (DE-231 acceptance).
     """
 
     if os.environ.get("LQ_GOLDEN_LIVE") != "1":
         return "live golden tests disabled (set LQ_GOLDEN_LIVE=1 to enable)"
-    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")):
-        return (
-            "no provider key in the environment (ANTHROPIC_API_KEY or "
-            "OPENAI_API_KEY) — the compose stack's gateway cannot perform inference"
-        )
+    if os.environ.get("LQ_EVAL_GATEWAY_READY") != "1":
+        return "gateway readiness not confirmed (set LQ_EVAL_GATEWAY_READY=1 after stack boot)"
     if not os.environ.get("LQ_GOLDEN_PASSWORD"):
         return "LQ_GOLDEN_PASSWORD not set (api credentials required for the chat-send path)"
     return None

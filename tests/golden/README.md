@@ -135,7 +135,7 @@ Live, against a booted compose stack (`docker compose up -d --wait`) whose
 
 ```bash
 export LQ_GOLDEN_LIVE=1
-export ANTHROPIC_API_KEY=...        # or OPENAI_API_KEY; gateway must match
+export LQ_EVAL_GATEWAY_READY=1      # configure provider keys in the gateway only
 export LQ_GOLDEN_PASSWORD=...       # api login (default email admin@lq.ai)
 pytest tests/golden -m golden_live -q
 ```
@@ -162,3 +162,12 @@ release-blocking issue it files on failure.
 - It does not cover the multi-model regression matrix yet (DE-231's full
   scope); the harness runs one alias (`smart` by default) per run, and the
   matrix is a follow-up once snapshots are calibrated.
+
+## CI credential boundary
+
+The default-branch-only workflow installs hash-locked harness dependencies
+before introducing credentials. It resets the admin to a freshly generated,
+masked password after stack-smoke and scopes that password to the harness step.
+It does not parse the original startup password. Provider keys stay in the
+gateway; pytest receives a readiness signal and API credentials only.
+An always-run cleanup removes the temporary secret file and Compose volumes.

@@ -3,15 +3,15 @@
 Reuses DE-231's ``GoldenClient`` (the auth + chat-send plumbing) verbatim
 — this module only supplies an injection-scoped guard and configuration so
 the two harnesses opt in independently. Same fail-restrictive shape as the
-golden harness: without the explicit opt-in AND a provider key AND api
-credentials, every live injection test skips cleanly and the suite stays
-green keyless (DE-239 acceptance).
+golden harness: without the explicit opt-in AND gateway readiness AND api
+credentials, every live injection test skips cleanly in keyless mode.
+An explicitly enabled but incomplete run is invalid (see conftest.py).
 
 Environment:
 
 * ``LQ_INJECTION_LIVE=1``       — enable live injection tests (off by default).
-* ``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY`` — at least one non-empty; the
-  compose stack's gateway needs a provider to perform inference.
+* ``LQ_EVAL_GATEWAY_READY=1`` — operator confirms a configured, booted gateway.
+  Provider keys belong to the gateway, never this process.
 * ``LQ_INJECTION_PASSWORD``     — api password (required; no default).
 * ``LQ_INJECTION_API_URL``      — api base URL (default http://127.0.0.1:8000).
 * ``LQ_INJECTION_EMAIL``        — api login (default admin@lq.ai).
@@ -42,11 +42,8 @@ def injection_skip_reason() -> str | None:
 
     if os.environ.get("LQ_INJECTION_LIVE") != "1":
         return "live injection tests disabled (set LQ_INJECTION_LIVE=1 to enable)"
-    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")):
-        return (
-            "no provider key in the environment (ANTHROPIC_API_KEY or "
-            "OPENAI_API_KEY) — the compose stack's gateway cannot perform inference"
-        )
+    if os.environ.get("LQ_EVAL_GATEWAY_READY") != "1":
+        return "gateway readiness not confirmed (set LQ_EVAL_GATEWAY_READY=1 after stack boot)"
     if not os.environ.get("LQ_INJECTION_PASSWORD"):
         return "LQ_INJECTION_PASSWORD not set (api credentials required for the chat-send path)"
     return None

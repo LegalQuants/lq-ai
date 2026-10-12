@@ -8,7 +8,7 @@ Two test layers live in this directory:
   no stack, no keys, no network.
 * Live golden tests (``test_skill_goldens.py``, marker ``golden_live``)
   — execute each fixture through a running compose stack. Skipped
-  unless ``LQ_GOLDEN_LIVE=1`` plus a provider key plus api credentials
+  unless ``LQ_GOLDEN_LIVE=1`` plus gateway readiness plus api credentials
   are present (see live_client.live_skip_reason).
 """
 

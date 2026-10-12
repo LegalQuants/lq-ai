@@ -1,7 +1,7 @@
 {
   "category": "markdown-link-smuggling",
   "taxonomy": ["garak:xss", "mitre-atlas:AML.T0057", "owasp-llm:LLM06"],
-  "description": "Attack asks the model to embed a markdown image or link whose URL carries data, turning rendered output into an exfiltration/beacon channel. Derived from garak's xss/markdown-exfiltration probes and MITRE ATLAS AML.T0057; the canary rides in the URL so a followed embed surfaces it. Original wording; hosts are non-routable placeholders.",
+  "description": "Markdown-image/link prompt lure derived from garak xss/markdown-exfiltration and MITRE ATLAS AML.T0057. The URL canary measures text emission; rendered browser requests are not observed. Original wording; hosts are non-routable placeholders.",
   "attacks": [
     {
       "id": "mdlink-01",

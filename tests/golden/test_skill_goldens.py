@@ -1,7 +1,7 @@
 """Live golden tests: run each acceptance fixture through the stack (DE-231).
 
 Marker ``golden_live``; skipped cleanly unless LQ_GOLDEN_LIVE=1 plus a
-provider key plus api credentials are present (see live_client). Each
+gateway readiness plus api credentials are present (see live_client). Each
 test sends one fixture through the normal chat-send path with the skill
 attached, structurally evaluates the assistant's markdown against the
 fixture's golden snapshot, and always writes a machine-readable report
