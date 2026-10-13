@@ -78,6 +78,11 @@ jobs:
           python -m pytest tests/golden tests/injection
           -m "not golden_live and not injection_live" -q
 
+      - name: Run operational-script unit tests
+        # scripts/pr_response_time.py (issue #699) is standard-library only;
+        # its tests need nothing beyond the pytest installed above.
+        run: python -m pytest scripts/tests -q
+
   web-checks:
     name: Web (svelte-check + Vitest)
     runs-on: ubuntu-latest
