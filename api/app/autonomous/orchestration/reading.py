@@ -140,6 +140,32 @@ class MatterTerms:
     privileged: bool = False
 
 
+# Shown in place of an earlier run's answer that was written under stricter data
+# terms than the request now being sent: to a later run's planning call, to an
+# ordinary chat turn that replays the thread, and to the owner who reads what
+# was sent.
+WITHHELD_ANSWER = (
+    "[An earlier answer is not shown here. It was written under stricter data terms "
+    "(a matter's inference tier floor or privilege flag) than this request has.]"
+)
+
+
+def written_under_stricter_terms(snapshot: object, terms: MatterTerms) -> bool:
+    """Whether the run this intake belongs to ran under stricter terms than ``terms``.
+
+    Its floor was lower, or it was privileged and ``terms`` is not. An intake
+    whose terms cannot be read counts as stricter: the answer is then
+    withheld, never shown on a guess.
+    """
+    scope = snapshot.get("root") if isinstance(snapshot, dict) else None
+    if not isinstance(scope, dict):
+        return True
+    floor, privileged = scope.get("minimum_inference_tier"), scope.get("privileged")
+    if type(floor) is not int or type(privileged) is not bool:
+        return True
+    return floor < terms.minimum_inference_tier or (privileged and not terms.privileged)
+
+
 def holding_matters(
     document_ids: Collection[UUID],
 ) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:

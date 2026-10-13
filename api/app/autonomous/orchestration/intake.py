@@ -48,12 +48,14 @@ from app.autonomous.orchestration.planning import (
 from app.autonomous.orchestration.policy import OperatorPolicy, load_instructions
 from app.autonomous.orchestration.profiles import RunProfile, dedicated_project, run_terms
 from app.autonomous.orchestration.reading import (
+    WITHHELD_ANSWER,
     MatterTerms,
     attached_knowledge_bases,
     filed_in_a_matter,
     filed_in_another_matter,
     holding_matters,
     strictest,
+    written_under_stricter_terms,
 )
 from app.autonomous.orchestration.sourcing import run_sources
 from app.autonomous.orchestration.tools import get_tool
@@ -393,31 +395,6 @@ def prepare_model_plan(
 _SOURCE_MARKER = re.compile(r"\(Source:\s*\[(\d{1,3})\]\)")
 
 
-# Shown to the planning call, and to the owner who reads what was sent, in place of
-# an earlier run's answer that was written under stricter data terms than the
-# request now being planned.
-WITHHELD_ANSWER = (
-    "[An earlier answer is not shown here. It was written under stricter data terms "
-    "(a matter's inference tier floor or privilege flag) than this request has.]"
-)
-
-
-def _stricter_than(snapshot: object, terms: MatterTerms) -> bool:
-    """Whether the run this intake belongs to ran under stricter terms than ``terms``.
-
-    Its floor was lower, or it was privileged and ``terms`` is not. An intake
-    whose terms cannot be read counts as stricter: the answer is then
-    withheld, never shown on a guess.
-    """
-    scope = snapshot.get("root") if isinstance(snapshot, dict) else None
-    if not isinstance(scope, dict):
-        return True
-    floor, privileged = scope.get("minimum_inference_tier"), scope.get("privileged")
-    if type(floor) is not int or type(privileged) is not bool:
-        return True
-    return floor < terms.minimum_inference_tier or (privileged and not terms.privileged)
-
-
 async def _name_sources(db: AsyncSession, root_id: UUID, text: str, snapshot: dict | None) -> str:
     """Rewrite an earlier run's ``(Source: [N])`` markers to the file they named.
 
@@ -482,7 +459,7 @@ async def thread_excerpt(
                     OrchestrationRoot.session_id == session_id
                 )
             )
-            if terms is not None and _stricter_than(earlier, terms):
+            if terms is not None and written_under_stricter_terms(earlier, terms):
                 text = WITHHELD_ANSWER
             else:
                 text = await _name_sources(db, session_id, text, earlier)

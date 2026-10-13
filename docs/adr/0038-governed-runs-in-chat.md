@@ -569,8 +569,12 @@ note in its place, which the owner also sees when reading what was sent. A follo
 keeps the earlier run's documents has that run's terms and is shown its answer, and the
 composer starts a follow-up from those documents. An earlier run whose terms cannot be
 read is treated as stricter. The rule applies to every run; between runs of one matter it
-changes nothing unless the matter's terms were loosened in between. It covers runs only:
-an ordinary turn in the same chat is still shown the answer (D7).
+changes nothing unless the matter's terms were loosened in between. An ordinary turn in
+the same chat follows the same rule (ruled 2026-10-13). An ordinary turn replays the
+thread to the provider, and its terms are its chat's matter's floor and privilege flag, or
+none for a chat in no matter. Where the earlier run's terms were stricter, the replayed
+thread holds the note in place of the answer. The owner's own messages are replayed as
+before.
 
 Three points in this are choices made while building, which the maintainer has not ruled
 on. Where the selected files come from matters with different terms, the strictest apply.
@@ -734,11 +738,14 @@ turns. These limits of the branch must close first.
   pseudonymization off for the run; the picker's note on the file says so and the strip
   does not change. A route that cannot meet a matter's floor is refused only when the
   request is sent.
-- **A matter's terms do not follow the answer into ordinary chat.** A run that read a
-  matter's file writes its answer into a chat that is in no matter. A later run in that
-  chat is shown the answer only if it has the same terms or stricter (D5). An ordinary
-  turn is not a run: it is shown the answer as part of the thread, on whatever model is
-  chosen, and applies no matter's terms to it.
+- **A matter's terms follow a run's answer into later turns, and no further.** A run that
+  read a matter's file writes its answer into a chat that is in no matter. A later run or
+  ordinary turn in that chat is sent the answer only if its terms are the same or stricter
+  (D5). The comparison is with the chat's matter, not with the route a turn happens to
+  take, so a turn sent to a local model from a chat in no matter is still not sent it. The
+  answer stays in the chat for its owner to read, and what the owner copies into a new
+  message is the owner's own text. Ordinary chat applies no matter's terms to a file it
+  reads itself.
 - **No tools that leave the deployment.** No case-law, authority or MCP tool is granted to
   a run, and the organisation profile does not reach a run. Ordinary chat has them.
 - **No library skills** until the orchestrator can assign them (C2, ADR 0035 D3).

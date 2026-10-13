@@ -75,6 +75,12 @@ from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
 from app.autonomous.guard import _args_digest
+from app.autonomous.orchestration.reading import (
+    NO_FLOOR,
+    WITHHELD_ANSWER,
+    MatterTerms,
+    written_under_stricter_terms,
+)
 from app.chat.tool_loop import (
     LoopConfirmation,
     LoopFinal,
@@ -114,6 +120,7 @@ from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.message_tool_source import MessageToolSource
+from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
@@ -235,6 +242,7 @@ async def _load_history_messages(
     exclude_message_id: uuid.UUID,
     token_budget: int,
     max_messages: int,
+    terms: MatterTerms | None = None,
 ) -> list[ChatCompletionMessage]:
     """Load prior conversation turns for ``chat_id`` as gateway messages.
 
@@ -246,11 +254,27 @@ async def _load_history_messages(
     ``lq_ai_skip_anonymization`` flag, so the gateway pseudonymizes them
     with the same per-request map as the current turn (consistent entity
     mapping across the conversation).
+
+    ``terms`` are the data terms of the turn being sent: its matter's
+    inference-tier floor and privilege flag, or none for a chat in no matter.
+    A governed run's answer that was written under stricter terms is replaced
+    by :data:`WITHHELD_ANSWER`, as it is for a later run's planning call
+    (ADR 0038 D5): the answer may hold what a matter's file said, and this
+    turn goes out on its own terms. With no ``terms`` nothing is withheld.
     """
     if token_budget <= 0 or max_messages <= 0:
         return []
     stmt = (
-        select(Message.role, Message.content)
+        select(
+            Message.role,
+            Message.content,
+            Message.autonomous_session_id,
+            OrchestrationRoot.planning_snapshot,
+        )
+        .outerjoin(
+            OrchestrationRoot,
+            OrchestrationRoot.session_id == Message.autonomous_session_id,
+        )
         .where(
             Message.chat_id == chat_id,
             Message.id != exclude_message_id,
@@ -260,7 +284,18 @@ async def _load_history_messages(
         .order_by(Message.created_at.asc(), Message.id.asc())
     )
     rows = (await db.execute(stmt)).all()
-    history: list[tuple[str, str]] = [(row[0], row[1]) for row in rows if row[1]]
+    history: list[tuple[str, str]] = [
+        (
+            role,
+            WITHHELD_ANSWER
+            if terms is not None
+            and session_id is not None
+            and written_under_stricter_terms(snapshot, terms)
+            else content,
+        )
+        for role, content, session_id, snapshot in rows
+        if content
+    ]
     selected = _select_history_within_budget(
         history, token_budget=token_budget, max_messages=max_messages
     )
@@ -1661,6 +1696,12 @@ async def send_message(
         exclude_message_id=user_message.id,
         token_budget=settings.lq_ai_chat_history_token_budget,
         max_messages=settings.lq_ai_chat_history_max_messages,
+        # A run's answer written under a stricter matter's terms is not replayed
+        # to a turn that goes out on this chat's own (ADR 0038 D5).
+        terms=MatterTerms(
+            minimum_inference_tier=project_floor if project_floor is not None else NO_FLOOR,
+            privileged=project_privileged,
+        ),
     )
     gw_messages.extend(history_messages)
 

@@ -550,7 +550,10 @@ that it can be reviewed apart, and none has had maintainer or security review.
   the terms. An independent review then found that such a run's answer was shown, through
   the thread, to a later run without the terms; `intake.thread_excerpt` now replaces an
   earlier answer written under stricter terms with a note, and tests cover a privileged
-  matter, a floor alone and privilege alone. Three choices are the build's and not the
+  matter, a floor alone and privilege alone. On 2026-10-13 the maintainer ruled that an
+  ordinary turn follows the same rule: `_load_history_messages` in `api/app/api/chats.py`
+  replaces such an answer with the same note, compared against the chat's matter, and a
+  test sends an ordinary message through the route and reads what went to the gateway. Three choices are the build's and not the
   maintainer's: the strictest terms where matters differ, withholding that earlier
   answer, and no change for a run in a matter. Run once on the development
   stack: a privileged matter with a floor of 1, a file filed in it, and a chat in no

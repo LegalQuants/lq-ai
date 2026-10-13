@@ -22,7 +22,9 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
+import respx
 from sqlalchemy import func, select, update
 from tests.autonomous.orchestration.model_harness import (
     CHATS,
@@ -37,8 +39,15 @@ from tests.autonomous.orchestration.model_harness import (
 from tests.autonomous.orchestration.test_document_runs import DPA, MSA, PROFILE
 from tests.autonomous.orchestration.test_new_harness import approved, filed, requests_of
 
-from app.autonomous.orchestration.intake import WITHHELD_ANSWER, _stricter_than
-from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, selection_terms
+from app.api.chats import _load_history_messages
+from app.autonomous.orchestration.reading import (
+    NO_FLOOR,
+    WITHHELD_ANSWER,
+    MatterTerms,
+    selection_terms,
+    written_under_stricter_terms,
+)
+from app.config import get_settings
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.document import Document
@@ -655,6 +664,115 @@ async def test_an_answer_written_under_a_matters_terms_is_not_shown_to_a_later_r
     assert WITHHELD_ANSWER not in json.dumps(kept["planning"])
 
 
+@pytest.mark.parametrize(
+    ("floor", "privileged"),
+    [(1, True), (2, False), (NO_FLOOR, True)],
+)
+@respx.mock
+async def test_an_answer_written_under_a_matters_terms_is_not_replayed_to_an_ordinary_turn(
+    harness: SimpleNamespace, floor: int, privileged: bool
+) -> None:
+    """Ruled 2026-10-13. Terms follow the file into a follow-up that is not a run.
+
+    An ordinary turn replays the thread to the provider. In a chat that is in
+    no matter it has no floor and no privilege flag, so an answer a run wrote
+    under a matter's terms would leave on weaker ones. The ordinary turn is
+    sent the same note a later run is shown, and the owner's own messages.
+    """
+    api = harness
+    held = await matter(api, "Strict matter", floor=floor, privileged=privileged)
+    advice = await from_matter(api, "msa.txt", MSA, held)
+    answer = "## Answer\n\nONLY-IN-THE-MATTER: fees are due in thirty days."
+    api.gateway.synthesis_answer = answer
+    api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
+    chat_id = await new_chat(api, in_project=False)
+    first = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[advice])
+    assert (await run_to_completion(api, first))["status"] == "completed"
+    assert [m["content"] for m in await messages(api, chat_id)][1] == answer
+
+    async def replayed(terms: MatterTerms | None) -> list[tuple[str, str]]:
+        async with api.env.factory() as db:
+            history = await _load_history_messages(
+                db,
+                chat_id=chat_id,
+                exclude_message_id=uuid4(),
+                token_budget=100_000,
+                max_messages=50,
+                terms=terms,
+            )
+        return [(m.role, str(m.content)) for m in history]
+
+    # A turn with no terms of its own, and one whose matter is weaker than the run's.
+    weaker = MatterTerms(minimum_inference_tier=NO_FLOOR, privileged=False)
+    assert replayed_answer(await replayed(weaker)) == WITHHELD_ANSWER
+    # A turn under the same terms, as in the matter the file belongs to, is shown it.
+    assert replayed_answer(await replayed(MatterTerms(floor, privileged))) == answer
+    # The owner's own request of that turn is theirs, and is replayed either way.
+    assert ("user", first["planning"]["goal"]) in await replayed(weaker)
+
+    # And it is what the route sends, not only what the loader returns.
+    route = respx.post(f"{get_settings().lq_ai_gateway_url}/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-follow-up",
+                "object": "chat.completion",
+                "created": 1_700_000_000,
+                "model": "native",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Shorter."},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 4, "total_tokens": 9},
+                "routed_inference_tier": 3,
+                "routed_provider": "selected",
+                "cost_estimate": 0.0,
+            },
+        )
+    )
+    response = await api.client.post(
+        f"{CHATS}/{chat_id}/messages", json={"content": "Shorten that.", "model": "smart"}
+    )
+    assert response.status_code == 200, response.text
+    sent = route.calls[0].request.read().decode()
+    assert "ONLY-IN-THE-MATTER" not in sent
+    assert "An earlier answer is not shown here" in sent
+    assert first["planning"]["goal"] in sent
+
+
+def replayed_answer(history: list[tuple[str, str]]) -> str:
+    (content,) = [content for role, content in history if role == ASSISTANT]
+    return content
+
+
+async def test_an_ordinary_turn_in_the_runs_own_matter_is_shown_its_answer(
+    harness: SimpleNamespace,
+) -> None:
+    """Nothing is withheld from a follow-up in the matter the run ran in."""
+    api = harness
+    answer = "## Answer\n\nFees are due in thirty days."
+    api.gateway.synthesis_answer = answer
+    api.gateway.expected_documents = []
+    api.gateway.child_script = [None]
+    await set_terms(api, api.env.project_id, minimum_inference_tier=2)
+    chat_id = await new_chat(api)
+    first = await start_in_chat(api, chat_id, profile=PROFILE)
+    assert (await run_to_completion(api, first))["status"] == "completed"
+    async with api.env.factory() as db:
+        history = await _load_history_messages(
+            db,
+            chat_id=chat_id,
+            exclude_message_id=uuid4(),
+            token_budget=100_000,
+            max_messages=50,
+            terms=MatterTerms(minimum_inference_tier=2, privileged=False),
+        )
+    assert (ASSISTANT, answer) in [(m.role, m.content) for m in history]
+
+
 async def test_an_earlier_answer_is_shown_where_the_terms_are_the_same_or_stricter(
     harness: SimpleNamespace,
 ) -> None:
@@ -715,7 +833,7 @@ def test_which_earlier_terms_count_as_stricter(
     earlier: dict[str, Any] | None, now: MatterTerms, stricter: bool
 ) -> None:
     snapshot = None if earlier is None else {"root": earlier}
-    assert _stricter_than(snapshot, now) is stricter
+    assert written_under_stricter_terms(snapshot, now) is stricter
     if earlier is not None:
         # An intake with no scope at all, or one that is not an object.
-        assert _stricter_than({"root": "x"}, now) is True
+        assert written_under_stricter_terms({"root": "x"}, now) is True
