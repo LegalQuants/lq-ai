@@ -267,15 +267,19 @@ class Settings(BaseSettings):
 
     # Default model the analysis node passes to the gateway when neither
     # the spawning trigger (watch/schedule ``params["model"]``) nor the
-    # target skill/playbook pinned one. Mirrors the gateway.yaml deployment
-    # default. Operators may override via the env var; the value must be a
-    # model identifier the gateway recognises in its routing table.
+    # target skill/playbook pinned one. Defaults to the ``smart`` alias —
+    # the same alias the playbook and tabular executors use — so the
+    # fallback follows the operator's routing table instead of pinning one
+    # provider-native model id (a deployment that does not route a pinned
+    # model sees every autonomous analysis rejected at the gateway).
+    # Operators may override via the env var; the value must be a model id
+    # or alias the gateway recognises in its routing table.
     autonomous_default_model: str = Field(
-        default="claude-opus-4-7",
+        default="smart",
         description=(
             "Fallback chat-completion model used by the autonomous "
             "analysis node when ``params['model']`` is not set on the "
-            "session. Must be a model id the gateway can route."
+            "session. Must be a model id or alias the gateway can route."
         ),
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
