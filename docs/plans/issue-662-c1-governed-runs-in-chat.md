@@ -214,22 +214,24 @@ not show that an answer is legally sound.
 
 ## Deferred
 
-Unnumbered; the maintainer allocates identifiers.
+Numbered on 2026-10-13 at the maintainer's request, as DE-410 to DE-420 in PRD §9.
 
-- **Full prompt and tool-payload capture.** PRD §5.4 assigns it to an optional
+- **Full prompt and tool-payload capture** (DE-410). PRD §5.4 assigns it to an optional
   self-hosted tracing sink at the gateway. That sink is not implemented: the
   `telemetry` block in the gateway configuration is read by no code. It should
   serve ordinary turns and runs alike. The
   [observability guide](../observability.md#6-whats-not-yet-shipped) lists it as unshipped.
-- Sources and connectors in runs.
+- Sources and connectors in runs (DE-411), which wait on DE-409 and on D8.
+- Library skills assigned to sub-agents by the orchestrator (DE-412).
+- Keeping and showing a model's reasoning text (DE-413).
 - Bundled helpers and persistent skill workspaces on real documents, pending
-  ADR 0035 D8c and D8d.
-- A tool loop for the root, and a single-agent profile.
-- Moving the chat tool loop and the matter-session planner onto the tool registry.
-- Runs started by schedules or watches; recursion; streamed progress.
-- An operator screen for reconciling uncertain runs.
-- Word input, which waits on ADR 0017.
-- Replacing the chat-completion path, which ADR 0038 D7 leaves to a later decision.
+  ADR 0035 D8c and D8d (DE-414).
+- A tool loop for the root, and a single-agent profile (DE-415).
+- Moving the chat tool loop and the matter-session planner onto the tool registry (DE-416).
+- Runs started by schedules or watches; recursion; streamed progress (DE-417).
+- An operator screen for reconciling uncertain runs (DE-418).
+- Word input, which waits on ADR 0017 (DE-419).
+- Replacing the chat-completion path, which ADR 0038 D7 leaves to a later decision (DE-420).
 
 ## Risks
 
@@ -553,9 +555,17 @@ that it can be reviewed apart, and none has had maintainer or security review.
   matter, a floor alone and privilege alone. On 2026-10-13 the maintainer ruled that an
   ordinary turn follows the same rule: `_load_history_messages` in `api/app/api/chats.py`
   replaces such an answer with the same note, compared against the chat's matter, and a
-  test sends an ordinary message through the route and reads what went to the gateway. Three choices are the build's and not the
-  maintainer's: the strictest terms where matters differ, withholding that earlier
-  answer, and no change for a run in a matter. Run once on the development
+  test sends an ordinary message through the route and reads what went to the gateway.
+  The same day the maintainer ruled that a run in a matter may read a file another matter
+  holds through a knowledge base, on the stricter of the two matters' terms
+  (`reading.borrowed_terms`, held at intake and at every admission; the picker lists the
+  other matter's name and terms; the run's audit rows are privilege-marked when only the
+  other matter is privileged). Tests in `test_matter_terms.py` cover a floor alone,
+  privilege alone and both, a second run on the attached file, a route that cannot meet
+  the terms, a matter that tightens or loosens after approval, the audit rows and the
+  picker. Neither ruling has been driven in a browser or run on the development stack.
+  One choice is still the build's and not the maintainer's: the strictest terms where
+  matters differ. Run once on the development
   stack: a privileged matter with a floor of 1, a file filed in it, and a chat in no
   matter. The listing named the matter and its terms, the run took them on, the planning
   call went out at tier 1 and its receipt records that nothing was pseudonymized. On that
@@ -621,7 +631,9 @@ adds migration 0073 (`user_credential_version`), so this branch's four moved onc
 to 0074 to 0077, and the first now revises 0073. Two files conflicted. The pinned count
 of API paths is the sum of both sides, 165, and the generated OpenAPI file was
 regenerated. Git reported no conflict for the migrations, since the file names differ;
-the check that compares revision ids did.
+the check that compares revision ids did. The same day the maintainer deferred the
+pseudonymization design as DE-409 and had the deferred items below numbered DE-410 to
+DE-420, so this branch now holds DE-406 to DE-420. `main` was at DE-405.
 
 The suites were run as CI runs them. After the second rebase the whole API suite
 passed with its coverage gate (3,928 passed, 17 skipped; 82.77% against

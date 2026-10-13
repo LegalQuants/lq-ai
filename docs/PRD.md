@@ -4096,33 +4096,193 @@ confidentiality requirements. See the
 conditions. The earlier suggested orchestrator locations, JSONL audit alternative
 and M4 single-agent/multi-agent classification are superseded by ADR 0035.
 
-#### Governed runs in chat — deferred (identifiers to be allocated)
+#### Governed runs in chat — deferred (DE-410 to DE-420)
 
 Recorded from the [plan's Deferred section](plans/issue-662-c1-governed-runs-in-chat.md#deferred)
 and from the items ADR 0038 D7 lists as not built, while
-[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed. These items
-are unnumbered unless one says otherwise: the maintainer allocates identifiers. ADR 0038
-does not decide any of them,
-and none is implemented.
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed. The maintainer asked on
+2026-10-13 that they be numbered. ADR 0038 does not decide any of them, and none is
+implemented. The priorities and efforts below are provisional: they are the drafter's
+estimates, and the maintainer sets them. A query embedding for the knowledge-base search,
+which was in this list, is the second step of DE-407 and has no number of its own.
 
-- **Full prompt and tool-payload capture.** PRD §5.4 assigns it to an optional self-hosted
-  LLM-tracing sink at the gateway. That sink is not implemented: the `telemetry` block in
-  the gateway configuration is read by no code. It should serve ordinary turns and runs
-  alike. The [observability guide](observability.md#6-whats-not-yet-shipped) says so.
-- A query embedding for the knowledge-base search, which would be a priced, tier-bound
-  model call. Now the second step of DE-407.
-- Sources and connectors in runs, including case-law, authority and MCP tools.
-- Library skills assigned to sub-agents by the orchestrator (ADR 0035 D3).
-- Keeping and showing a model's reasoning text.
-- Bundled helpers and persistent skill workspaces on real documents, pending ADR 0035 D8c
-  and D8d.
-- A tool loop for the orchestrator, so that it can read or search by itself, and a
-  single-agent profile.
-- Moving the chat tool loop and the matter-session planner onto the tool registry.
-- Runs started by schedules or watches; recursion; streamed progress.
-- An operator screen for reconciling uncertain runs.
-- Word input, which waits on [ADR 0017](adr/0017-docx-ingest-via-pandoc.md).
-- Replacing the chat-completion path, which ADR 0038 D7 leaves to a later decision.
+#### DE-410 — Full prompt and tool-payload capture at the gateway
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** PRD §5.4 assigns the capture of full prompts and tool payloads to an optional
+self-hosted LLM-tracing sink at the gateway. That sink is not implemented: the `telemetry`
+block in the gateway configuration is read by no code, and the
+[observability guide](observability.md#6-whats-not-yet-shipped) says so. An ordinary turn
+keeps none of this today, and ADR 0038 D2 holds a run to the same level and no further.
+
+**Specific scope:** Implement the sink once, at the gateway, for ordinary turns and
+governed runs alike. Decide what is captured (the request as sent after pseudonymization,
+or before it), where it is stored, who may read it, how long it is kept, and how a
+privileged matter is treated.
+
+**Acceptance criteria:** An operator can turn the sink on and read one turn's and one run's
+full requests and tool payloads. The capture is off by default. What is stored and who can
+read it is stated in `docs/observability.md` and the security documents, and has had a
+security-path review.
+
+#### DE-411 — Sources and connectors in governed runs
+
+**Priority:** P1 (provisional; #662 names it as a later track) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** No case-law, authority or MCP tool is granted to a run, and ordinary chat has
+them (ADR 0038 D7). A run's tools all work inside the deployment and return the owner's
+own material, which is why the per-request pseudonymization opt-in is right for a run
+today.
+
+**Specific scope:** Grant a run tools that leave the deployment or return public sources,
+through the tool registry and the plan's grants. This depends on DE-409 (what is
+pseudonymized by source and destination) and on ADR 0038 D8 (the access module), and
+neither may be skipped.
+
+**Acceptance criteria:** A plan can grant a public-source tool to a task, the owner
+approves that grant, and the call is recorded in the tool call log with the run's
+identifiers. Published text reaches the model as published. No restored name reaches an
+outside tool except by the path DE-409 decides. Security-path review before release.
+
+#### DE-412 — Library skills assigned to sub-agents by the orchestrator
+
+**Priority:** P1 (provisional; #662 track C2) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** New harness applies no installed skill. Its two roles are instructed by
+versioned prompt files (ADR 0038 D3), and ADR 0035 D3 describes how a plan would name the
+skills its tasks apply. Bringing LegalQuants OSS skills into LQ.AI is the purpose #662
+gives for the whole track.
+
+**Specific scope:** Let the orchestrator name a library skill for a task, with the owner's
+approval covering it. Decide how a skill's required inputs, tier floor and tools are
+checked against the plan's grants, and how the answer's skill attribution is shown.
+
+**Acceptance criteria:** A plan that assigns an installed skill is approved and run, the
+task's call is assembled with that skill, the message shows the skill, and a skill the
+owner cannot use is refused at approval. Skills with legal substance still follow
+`skills/CONTRIBUTING.md`.
+
+#### DE-413 — Keep and show a model's reasoning text
+
+**Priority:** P3 (provisional) · **Effort:** M · **Status (2026-10-13): filed.**
+
+**Context:** The gateway can ask a model for a reasoning effort (ADR 0038 D3), and the
+reasoning text a model returns is neither kept nor shown. The trace shows each turn's text
+and tool calls (ADR 0038 D7).
+
+**Specific scope:** Decide whether reasoning text is kept, for how long, and where it is
+shown. It is model output written from what the model read, so it carries the same data
+terms as the answer.
+
+**Acceptance criteria:** A written decision. If it is kept: it is stored under the run's
+terms, shown in the trace behind a fold, covered by the data export, and withheld wherever
+the answer would be.
+
+#### DE-414 — Bundled helpers and persistent skill workspaces on real documents
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed; waits on ADR 0035 D8c and D8d.**
+
+**Context:** A run on real documents gets document reads and run files only. ADR 0035 D8c
+and D8d set the gates for helpers that execute and for workspaces that persist, and those
+gates are not met.
+
+**Specific scope:** Meet ADR 0035's helper-specific gates, then grant a helper or a
+persistent workspace to a task through the plan.
+
+**Acceptance criteria:** As ADR 0035 D8c and D8d state them, with security-path review of
+the script runner path.
+
+#### DE-415 — A tool loop for the orchestrator, and a single-agent profile
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** The orchestrator makes one planning call with one tool, `propose_plan`. It
+cannot read a document or search by itself, so it answers a question about a document only
+from a plan's results, and nothing but its prompt makes it plan for such a question (ADR
+0038 D1, D7).
+
+**Specific scope:** Decide whether the orchestrator may read or search before it plans,
+under what approval, and whether a profile with one agent and no plan is offered. Both
+change what the owner approves, so this needs its own ADR decision.
+
+**Acceptance criteria:** An accepted decision. If built: what the orchestrator read before
+planning is shown to the owner, is bounded by the same read rule as a task's, and is
+covered by tests for a hostile document.
+
+#### DE-416 — Move the chat tool loop and the matter-session planner onto the tool registry
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** Three paths call tools: ordinary chat's loop (`api/app/chat/tool_loop.py`),
+the matter session's closed-choice planner (ADR 0020 D1) and a run's sub-agent loop on the
+tool registry. Each has its own allowlist and dispatch.
+
+**Specific scope:** One registry of tools, with each tool's grants, tier and declarations
+(DE-409) in one place, used by all three paths. ADR 0020 D1 is not amended by ADR 0038, so
+moving the planner needs its own decision.
+
+**Acceptance criteria:** One definition per tool. The three paths' existing tests pass
+unchanged in behaviour. A new tool is added in one place.
+
+#### DE-417 — Runs started by schedules or watches; recursion; streamed progress
+
+**Priority:** P3 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** A run is started by its owner sending a request, has one level of
+sub-agents, and delivers its answer when it finishes (ADR 0038 D7). ADR 0035 defers
+streaming.
+
+**Specific scope:** Three separate questions, kept in one entry until one is taken up: a
+run with no person present to approve its plan; a sub-agent that plans further work; and
+progress streamed to the page while the run is live.
+
+**Acceptance criteria:** A decision for each before any is built. An unattended run in
+particular needs a rule for approval that ADR 0035's owner approval does not give.
+
+#### DE-418 — An operator screen for reconciling uncertain runs
+
+**Priority:** P2 (provisional) · **Effort:** M · **Status (2026-10-13): filed.**
+
+**Context:** A provider timeout can leave an effect uncertain. The owner can close an
+uncertain run (ADR 0038 D6). An operator has no screen that lists such runs across owners
+or shows what each one may have spent.
+
+**Specific scope:** A read-only operator view of uncertain and closed runs with their
+recorded reservations, and a written reconciliation procedure. Neither exists today; the
+[UAT record](uat/adr35-chat/README.md) notes that there is no reconciliation screen.
+
+**Acceptance criteria:** An operator can find every uncertain run, see its reserved and
+charged amounts, and follow a documented step to reconcile it. Cross-owner reads are
+audited.
+
+#### DE-419 — Word input for governed runs
+
+**Priority:** P2 (provisional) · **Effort:** S once ADR 0017 lands · **Status (2026-10-13): filed; waits on [ADR 0017](adr/0017-docx-ingest-via-pandoc.md).**
+
+**Context:** A run reads documents whose text the ingestion pipeline has extracted. Word
+files wait on ADR 0017, so a run lists a `.docx` as unreadable with the reason.
+
+**Specific scope:** Once Word ingestion exists, confirm that a run reads such a document
+and that quotations are checked against its extracted text.
+
+**Acceptance criteria:** A selected Word document is read by a task and a quotation from
+it is checked, with a test.
+
+#### DE-420 — Replace the chat-completion path with governed runs
+
+**Priority:** P1 (provisional; the stated direction) · **Effort:** L · **Status (2026-10-13): filed; ADR 0038 D7 leaves it to a later decision.**
+
+**Context:** The expected direction is that governed runs replace the chat-completion path
+over several releases. ADR 0038 does not authorize that, and D7 lists the limits that must
+close first.
+
+**Specific scope:** A decision of its own, taken when D7's limits are closed: what an
+ordinary turn becomes, how streaming, skills, tools and research are carried over, and how
+existing chats behave.
+
+**Acceptance criteria:** An accepted ADR that names the limits closed, the migration for
+existing chats, and the release in which the old path is removed.
 
 #### DE-295 — Word add-in code-signing certificate + signed manifest CI (community-led)
 

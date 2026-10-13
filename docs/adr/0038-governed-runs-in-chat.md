@@ -3,8 +3,8 @@
 **Status:** Proposed (2026-09-23; rewritten 2026-10-06; rewritten again 2026-10-09, after
 the maintainer redirected C1 on 2026-10-07 and 2026-10-08; D8 added 2026-10-09; the maintainer's
 rulings on the open questions recorded 2026-10-09; rulings 2, 4, 6 and 10 built
-2026-10-10; text brought to the code after the security review, 2026-10-12). Nothing in
-it is ratified.
+2026-10-10; text brought to the code after the security review, 2026-10-12; five further
+rulings recorded 2026-10-13, two of them built). Nothing in it is ratified.
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
 **Amends:** ADR 0035 D1, D2 and D3, in the words given in D1 below: a root may answer
@@ -576,19 +576,36 @@ none for a chat in no matter. Where the earlier run's terms were stricter, the r
 thread holds the note in place of the answer. The owner's own messages are replayed as
 before.
 
-Three points in this are choices made while building, which the maintainer has not ruled
-on. Where the selected files come from matters with different terms, the strictest apply.
-An earlier answer is withheld from a later run that lacks its terms; an independent
-review found that it was otherwise shown, and the alternative of carrying the terms
-forward with the thread was not built. And a run in one matter is unchanged: it still
-does not read a file that only another matter holds by upload or attachment, and it
-applies its own matter's terms and no other's. A file that another matter holds only
-through a knowledge base it has attached is still offered to a run in a matter, and the
-knowledge-base search's own passage check counts upload and attachment only. Closing that
-refuses files that are selectable today, so it is a ruling and not part of this decision. So for a file that two matters hold, a run in one of them applies
-that matter's terms, while a run outside any matter applies the stricter of the two; the
-heading above is exact only for the second. Ordinary chat remains looser than both: it reads any file the owner owns and
-applies no matter's terms to it.
+One point in this is a choice made while building, which the maintainer has not ruled on:
+where the selected files come from matters with different terms, the strictest apply. An
+earlier answer is withheld from a later turn that lacks its terms; an independent review
+found that it was otherwise shown, the maintainer ruled on 2026-10-13 that an ordinary
+turn follows the same rule, and the alternative of carrying the terms forward with the
+thread was not built.
+
+**A run in a matter, and another matter's file.** *Authorization path; needs security
+review.* A run in one matter has that matter's terms. It does not read a file that only
+another matter holds by upload or attachment: such a candidate is refused, and a file the
+owner attached to both matters is read on this matter's terms, as their own recorded
+action. A file that another matter holds through a knowledge base it has attached is
+different (ruling 12, 2026-10-13). The run may select it, and then runs under the
+stricter of the two matters' terms: the lower floor, and privileged if either is. That
+holds whether this run's pick attached the file to its matter or it was attached already,
+so a second run does not escape the terms. The terms are set when the request is
+accepted and held at every admission, with the other matter share-locked as the run's own
+is; a matter whose terms tighten stops the run before its next call. A route that cannot
+meet them is refused before anything is stored. The picker lists such a file with the
+other matter's name, floor and privilege flag. Where the run is privileged only because
+the other matter is, its audit rows are privilege-marked with the basis a run outside any
+matter uses.
+
+Three limits remain. A file that a knowledge-base search finds during a run does not
+change the run's terms, and the search's own passage check still counts upload and
+attachment only, so a passage from a knowledge base that a stricter matter has also
+attached is read on this matter's terms. A file attached to two matters by upload or
+attachment is read on the terms of the matter the run is in, while a run outside any
+matter applies the stricter of the two. And ordinary chat remains looser than both: it
+reads any file the owner owns and applies no matter's terms to it.
 
 **Evidence is per run.** A source is a selected document or a file one of the run's
 searches found. For a run with a source, the delivered answer's quotations are checked. A
@@ -951,7 +968,10 @@ branch as it is, and the item is marked **not built**.
    files' matters differ, the strictest terms apply (the lowest floor, and privileged if
    any is); an earlier answer written under stricter terms is not shown to a later run
    that lacks them; and a run in one matter still does not read a file that only another
-   matter holds. Authorization path; no security review.
+   matter holds. The maintainer ruled on the last two on 2026-10-13 (rulings 12 and 13
+   below): the withholding stands and reaches ordinary turns, and a run in a matter may
+   read a file another matter holds through a knowledge base, on the stricter terms.
+   Authorization path; no security review.
 5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
 6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
    restores reply text. **Built** as its own change (D7): an opt-in request field, set by
@@ -992,6 +1012,36 @@ branch as it is, and the item is marked **not built**.
 11. **The order of D8.** The run engine moves onto the access module first. The resource
     routes and the chat path may follow later and do not hold back a C2 to C7 run tool;
     that move is deferred as DE-408.
+
+### Rulings of 2026-10-13
+
+The security review and the ADR turn of 2026-10-12 left five points open in this text.
+The maintainer ruled on them on 2026-10-13. As above, a ruling is a direction and not
+ratification.
+
+12. **A file that another matter holds only through a knowledge base.** A run in a matter
+    may read it, on the stricter of the two matters' terms: the lower floor, and privileged
+    if either is. The maintainer chose this over refusing the file, as in ruling 4.
+    **Built** as its own change (D5). Authorization path; no security review.
+13. **A run's answer in an ordinary follow-up turn.** An answer written under stricter
+    terms than the follow-up's chat has is withheld from an ordinary turn as it is from a
+    later run. **Built** as its own change (D5, D7). Authorization path; no security
+    review.
+14. **`auditor.*` audit rows are not privilege-marked.** The gap is the base's for chat
+    reads as well, so it is fixed for every auditor read together, outside this change. It
+    stays a stated limit here (D1), and an issue records it.
+15. **Pseudonymization of tool text.** Deferred as DE-409. The released gateway decides by
+    a message's role and by its caller, not by where content comes from or where it goes.
+    This ADR's opt-in is right for a run only while every run tool works inside the
+    deployment and returns the owner's own material, so DE-409 lands before a run is
+    granted any outside or public-source tool (D5, D7).
+16. **The deferred items** are numbered DE-410 to DE-420 in PRD §9.
+
+The maintainer also decided how this ADR goes forward: a security-path checklist is
+drafted first, as its own change, because ADR 0034 names one and no file defined it; a
+walkthrough of the present design is recorded on a local model; and the ADR goes to the
+LQAI Committee call of 2026-10-18 for ratification. A run on a configured provider stays
+a condition for claiming live operation and is not a condition of ratification.
 
 ## Alternatives
 
@@ -1055,10 +1105,14 @@ pull request, followed by one commit for each of the four rulings that needed co
   returns the owner's own material, so DE-409 lands before a run is granted any outside or
   public-source tool. Setting the same opt-in in ordinary chat is not the answer: it would
   pseudonymize published sources and restore real names into calls that leave the
-  deployment. Also open: that a running run is not stopped by a change of
-  its owner's role (D1), that a run in a matter can still be offered a file that another
-  matter holds only through a knowledge base (D5), and that `auditor.*` audit rows are not
-  privilege-marked (D1).
+  deployment.
+- Stated limits that are decided and not built: a running run is not stopped by a change
+  of its owner's role, and the lever that stops it is the owner's Autonomous opt-in (D1,
+  ruled 2026-10-12); `auditor.*` audit rows are not privilege-marked, here or for ordinary
+  chat reads, and are fixed together outside this change (D1, ruling 14); and a file that
+  a knowledge-base search finds during a run does not change the run's terms, although a
+  selected file that another matter holds through a knowledge base now does (D5, ruling
+  12).
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.
 - ADR 0011's model picker now holds one entry that is not a provider model (D1).
@@ -1067,10 +1121,14 @@ pull request, followed by one commit for each of the four rulings that needed co
   is not changed; its note records that it does not reach a run sub-agent (D4).
 - PRD §3.1 and §3.10, the feature PRD, the OpenAPI sketches, the schema document,
   HONEST-STATE and the observability guide change with the code.
-- Not decided here: sources and connectors in runs; helpers and persistent workspaces on
-  real documents; a tool loop for the orchestrator; a single-agent profile; runs started by
-  schedules or watches; recursion; streaming; full prompt capture; and library skills
-  assigned by the orchestrator (C2).
+- Not decided here, and recorded as DE-410 to DE-420: full prompt capture (DE-410);
+  sources and connectors in runs (DE-411); library skills assigned by the orchestrator
+  (C2, DE-412); keeping a model's reasoning text (DE-413); helpers and persistent
+  workspaces on real documents (DE-414); a tool loop for the orchestrator and a
+  single-agent profile (DE-415); one tool registry for all three tool paths (DE-416); runs
+  started by schedules or watches, recursion and streaming (DE-417); an operator screen
+  for uncertain runs (DE-418); Word input (DE-419); and replacing the chat-completion
+  path (DE-420).
 
 ## Acceptance and release
 
