@@ -178,11 +178,14 @@ class RunDocument(BaseModel):
     selectable: bool
     # unsupported_type | not_ingested | ingestion_failed | no_text | in_another_matter
     reason: str | None = None
-    # For a chat outside any matter, a file that a matter holds: the owner's
-    # matters that hold it, the lowest inference tier floor any holding matter
-    # sets (null when none sets one), and whether one of them is privileged. A
-    # run that selects the file runs under these terms. Empty, null and false
-    # for a chat in a matter and for a file no matter holds.
+    # For a file that brings a matter's terms: the owner's matters that hold
+    # it, the lowest inference tier floor any such matter sets (null when none
+    # sets one), and whether one of them is privileged. For a chat outside any
+    # matter those are the matters that hold the file, and a run that selects
+    # it runs under these terms. For a chat in a matter they are the other
+    # matters that hold it through a knowledge base, and a run that selects it
+    # runs under the stricter of these terms and its own matter's. Empty, null
+    # and false for any other file.
     matters: list[str] = []
     matter_minimum_inference_tier: int | None = None
     matter_privileged: bool = False
@@ -224,9 +227,11 @@ class ChatRunRequest(BaseModel):
     """Documents the run may read, in the owner's order. A profile says whether
     it needs at least one, takes none to eight, or reads a fixed one and
     refuses any. In a matter, a file not yet attached to the matter is attached
-    when the run is accepted, with an audit row (ADR 0038 D5). Outside a matter
-    nothing is attached, and a file that a matter holds puts the run under that
-    matter's inference tier floor and privilege flag."""
+    when the run is accepted, with an audit row (ADR 0038 D5), and a file that
+    another matter holds through a knowledge base puts the run under the
+    stricter of the two matters' terms. Outside a matter nothing is attached,
+    and a file that a matter holds puts the run under that matter's inference
+    tier floor and privilege flag."""
 
 
 async def _owned_chat(runtime: DemonstrationService, chat_id: uuid.UUID, user: User) -> Chat:
@@ -475,7 +480,10 @@ async def run_documents(
     matter.
 
     In a matter: the matter's files, plus named candidates. Selecting a
-    candidate attaches it to the matter when the run is accepted. Outside a
+    candidate attaches it to the matter when the run is accepted. A file that
+    another matter holds through a knowledge base is listed with that matter's
+    name, floor and privilege flag; a run that reads it takes the stricter of
+    those terms and its own matter's. Outside a
     matter: named candidates only. One that a matter holds is listed with that
     matter's name, floor and privilege flag, which a run that reads it takes
     on. The documents the last run in this chat read are always

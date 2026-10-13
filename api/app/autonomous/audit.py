@@ -32,6 +32,7 @@ Usage::
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, Final
 
 from sqlalchemy import select
@@ -41,33 +42,44 @@ from app.audit import audit_action
 from app.autonomous.enums import ToolIntent
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import OrchestrationRoot
+from app.models.project import Project
 
 OWNERSHIP_DENIED_OUTCOME: Final[str] = "ownership_denied"
 
-# The ``privilege_basis`` of a run outside any matter that is privileged because
-# a matter holding one of its selected files is (ADR 0038, ruling 4). A matter's
-# own rows carry its name; such a run has none to name.
+# The ``privilege_basis`` of a run that is privileged because another matter
+# holding one of its selected files is: a run outside any matter (ADR 0038,
+# ruling 4), or a run in a matter that is not itself privileged and reads a
+# file from a privileged matter's knowledge base. A privileged matter's own
+# rows carry its name; such a run has none of its own to name.
 RUN_PRIVILEGE_BASIS: Final[str] = "run terms: a selected file is held by a privileged matter"
 
 
-def run_privilege(planning_snapshot: dict[str, Any] | None) -> dict[str, Any]:
-    """The privilege marking for the audit rows of a run that has no matter.
-
-    A run in a matter is marked from that matter. A run outside any matter has
-    none to read the flag from; it is privileged exactly when a matter that
-    holds a selected file is, and its intake snapshot recorded that at the
-    start (``root.privileged``). Every admission holds the run to it. Returns
-    the keyword arguments for :func:`~app.audit.audit_action`; empty when the
-    run is not privileged, so the row is marked as any other.
-    """
+def recorded_privilege(planning_snapshot: dict[str, Any] | None) -> bool:
+    """Whether a governed run was accepted as privileged (``root.privileged`` of its intake)."""
     scope = planning_snapshot.get("root") if isinstance(planning_snapshot, dict) else None
-    return _run_marking(isinstance(scope, dict) and scope.get("privileged") is True)
+    return isinstance(scope, dict) and scope.get("privileged") is True
 
 
-def _run_marking(privileged: bool) -> dict[str, Any]:
-    if privileged:
+async def run_privilege(
+    db: AsyncSession, project_id: uuid.UUID | None, privileged: bool
+) -> dict[str, Any]:
+    """The privilege marking for the audit rows of a governed run.
+
+    ``privileged`` is what the run's intake recorded at the start
+    (:func:`recorded_privilege`); every admission holds the run to it. A run in
+    a privileged matter is marked from that matter, as any row of the matter
+    is. A run that is privileged without that, because a matter that holds a
+    selected file is, has no matter of its own to take the basis from and is
+    marked with :data:`RUN_PRIVILEGE_BASIS`. Returns the keyword arguments for
+    :func:`~app.audit.audit_action`; a run that is not privileged is marked as
+    any other row.
+    """
+    if privileged and not (
+        project_id is not None
+        and await db.scalar(select(Project.privileged).where(Project.id == project_id))
+    ):
         return {"privilege_marked": True, "privilege_basis": RUN_PRIVILEGE_BASIS}
-    return {}
+    return {"project_id": project_id}
 
 
 class AuditedRetrievalOwnershipDenied(ValueError):
@@ -136,19 +148,16 @@ async def autonomous_audit(
 
     assert event in _ACTIONS, f"undefined autonomous audit action: {event!r}"
 
-    # A session in a matter is marked from the matter. One outside any matter
-    # may belong to a governed run, which carries the terms it took on at the
-    # start; any other has nothing to mark it from.
-    marking: dict[str, Any] = {"project_id": session.project_id}
-    if session.project_id is None:
-        # Only the one recorded flag is read, not the whole snapshot, which this
-        # query runs for on every row of every session that has no matter.
-        privileged = await db.scalar(
-            select(OrchestrationRoot.planning_snapshot["root"]["privileged"].as_boolean()).where(
-                OrchestrationRoot.session_id == session.root_session_id
-            )
+    # A session may belong to a governed run, which carries the terms it took
+    # on at the start; any other is marked from its matter, or not at all.
+    # Only the one recorded flag is read, not the whole snapshot, which this
+    # query runs for on every row of every session.
+    privileged = await db.scalar(
+        select(OrchestrationRoot.planning_snapshot["root"]["privileged"].as_boolean()).where(
+            OrchestrationRoot.session_id == session.root_session_id
         )
-        marking = _run_marking(privileged is True)
+    )
+    marking = await run_privilege(db, session.project_id, privileged is True)
 
     await audit_action(
         db,

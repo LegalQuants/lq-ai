@@ -11,8 +11,11 @@ any of them sets, and privileged if any of them is.
 * They are worked out again at every admission, so a change stops the run
   before its next model call.
 
-A run in a matter is unchanged: it has that matter's terms and no others, and
-still does not accept a file that only another matter holds.
+A run in a matter has that matter's terms, and still does not accept a file
+that only another matter holds by upload or attachment. A selected file that
+another matter holds through a knowledge base is the exception (ruled
+2026-10-13): the run reads it under the stricter of the two matters' terms,
+with the same four points.
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ from tests.autonomous.orchestration.test_document_runs import DPA, MSA, PROFILE
 from tests.autonomous.orchestration.test_new_harness import approved, filed, requests_of
 
 from app.api.chats import _load_history_messages
+from app.autonomous.audit import RUN_PRIVILEGE_BASIS
+from app.autonomous.orchestration.contracts import PreparedPlan
 from app.autonomous.orchestration.reading import (
     NO_FLOOR,
     WITHHELD_ANSWER,
@@ -47,7 +52,9 @@ from app.autonomous.orchestration.reading import (
     selection_terms,
     written_under_stricter_terms,
 )
+from app.autonomous.orchestration.store import _data_terms
 from app.config import get_settings
+from app.errors import Forbidden
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.document import Document
@@ -56,6 +63,7 @@ from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.orchestration import OrchestrationEffect as Effect, OrchestrationRoot
 from app.models.project import Project, ProjectFile
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.user import User
 
 pytestmark = pytest.mark.integration
 
@@ -87,11 +95,12 @@ async def matter(
     floor: int | None = None,
     privileged: bool = False,
     archived: bool = False,
+    owner_id: UUID | None = None,
 ) -> UUID:
     """Another of the owner's matters, with its own terms."""
     async with api.env.factory.begin() as db:
         project = Project(
-            owner_id=api.env.owner_id,
+            owner_id=owner_id or api.env.owner_id,
             name=name,
             slug=f"terms-{uuid4()}",
             minimum_inference_tier=floor,
@@ -222,7 +231,7 @@ async def test_the_picker_names_the_matters_and_their_strictest_terms(
 
 
 async def test_a_chat_in_a_matter_is_unchanged(harness: SimpleNamespace) -> None:
-    """Its run has that matter's terms and no others: another matter's file is still refused."""
+    """A file that only another matter holds, by attachment, is still refused."""
     api = harness
     other = await matter(api, "Other matter", floor=2)
     theirs = await from_matter(api, "theirs.txt", MSA, other)
@@ -426,19 +435,26 @@ async def test_the_audit_rows_of_a_run_outside_a_matter_carry_the_privilege_of_i
     assert not any(row.privilege_marked or row.privilege_basis for row in plain_rows)
 
 
+@pytest.mark.parametrize("borrows", [False, True])
 async def test_the_audit_rows_of_a_run_in_a_privileged_matter_carry_the_matters_privilege(
-    harness: SimpleNamespace,
+    harness: SimpleNamespace, borrows: bool
 ) -> None:
+    """The basis is the matter, also when the run reads a privileged lending matter's file."""
     api = harness
     await set_terms(api, api.env.project_id, privileged=True, minimum_inference_tier=1)
     chat_id = await new_chat(api)
     document = await filed(api, "msa.txt", MSA)
+    if borrows:
+        lender = await matter(api, "Lending matter", floor=1, privileged=True)
+        await in_knowledge_base(api, document, lender)
     api.gateway.expected_documents = [{"number": 1, "filename": "msa.txt"}]
     value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[document])
     assert (await run_to_completion(api, value))["status"] == "completed"
     rows = await run_audit_rows(api, value["root_id"])
     assert {row.action.split(".")[0] for row in rows} == {"orchestration", "autonomous_session"}
-    assert all(row.privilege_marked and row.privilege_basis for row in rows)
+    assert {(row.privilege_marked, row.privilege_basis) for row in rows} == {
+        (True, "project:Fixture")
+    }
 
 
 async def test_a_direct_answer_is_made_under_the_selected_documents_terms(
@@ -588,6 +604,360 @@ async def test_terms_that_loosen_or_stay_as_they_were_do_not_stop_the_run(
     assert final["status"] == "completed"
     # It ran on the terms it was approved under, not the looser ones.
     assert {r.minimum_inference_tier for r in api.gateway.requests} == {3}
+
+
+# --- A run in a matter that reads a file from another matter's knowledge base ---
+#
+# Ruled 2026-10-13. The file is held by the other matter (the lending matter)
+# only through a knowledge base it has attached. A run in this matter may read
+# it, and runs under the stricter of the two matters' terms.
+
+
+async def lent(api: SimpleNamespace, name: str, text: str, lender: UUID) -> str:
+    """A file that ``lender`` holds only through a knowledge base it has attached."""
+    file_id = await filed(api, name, text)
+    await in_knowledge_base(api, file_id, lender)
+    return file_id
+
+
+def terms_sent(api: SimpleNamespace) -> set[tuple[int, int, bool]]:
+    """The floor, the matter floor and the privilege flag of every request the gateway got."""
+    return {
+        (r.minimum_inference_tier, r.lq_ai_project_minimum_inference_tier, r.lq_ai_privileged)
+        for r in api.gateway.requests
+    }
+
+
+async def attached_here(api: SimpleNamespace, file_id: str) -> bool:
+    async with api.env.factory() as db:
+        return await db.get(ProjectFile, (api.env.project_id, UUID(file_id))) is not None
+
+
+def root_terms(value: dict[str, Any]) -> tuple[int, bool]:
+    root = value["planning"]["root"]
+    return root["minimum_inference_tier"], root["privileged"]
+
+
+@pytest.mark.parametrize(
+    ("floor", "privileged"),
+    [
+        # A floor alone, privilege alone with a floor any route meets, and both.
+        (3, False),
+        (NO_FLOOR, True),
+        (2, True),
+    ],
+)
+async def test_a_run_in_a_matter_takes_on_the_terms_of_a_matter_whose_knowledge_base_holds_its_file(
+    harness: SimpleNamespace, floor: int, privileged: bool
+) -> None:
+    """The fixture matter sets no terms, so the lending matter's are the stricter."""
+    api = harness
+    lender = await matter(api, "Lending matter", floor=floor, privileged=privileged)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    chat_id = await new_chat(api)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    assert value["planning"]["project_id"] == str(api.env.project_id)
+    assert value["planning"]["documents"][0]["attached_for_run"] is True
+    assert root_terms(value) == (floor, privileged)
+    assert (await run_to_completion(api, value))["status"] == "completed"
+    # Every call of the run went out with that floor and that flag.
+    assert terms_sent(api) == {(floor, floor, privileged)}
+    assert "thirty (30) days" in json.dumps(api.gateway.tool_results)
+
+    # The pick attached the file here. A second run that selects it, now one of
+    # this matter's own files, does not escape the lending matter's terms.
+    assert await attached_here(api, borrowed)
+    api.gateway.requests.clear()
+    again = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    assert again["planning"]["documents"][0]["attached_for_run"] is False
+    assert root_terms(again) == (floor, privileged)
+    assert (await run_to_completion(api, again))["status"] == "completed"
+    assert terms_sent(api) == {(floor, floor, privileged)}
+
+
+@pytest.mark.parametrize(
+    ("here", "there", "expected"),
+    [
+        # Term by term: the lower floor, and privileged if either matter is.
+        ((2, False), (3, True), (2, True)),
+        ((3, True), (2, False), (2, True)),
+        ((1, True), (None, False), (1, True)),
+    ],
+)
+async def test_the_stricter_of_the_two_matters_terms_applies_term_by_term(
+    harness: SimpleNamespace,
+    here: tuple[int, bool],
+    there: tuple[int | None, bool],
+    expected: tuple[int, bool],
+) -> None:
+    api = harness
+    await set_terms(api, api.env.project_id, minimum_inference_tier=here[0], privileged=here[1])
+    lender = await matter(api, "Lending matter", floor=there[0], privileged=there[1])
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    chat_id = await new_chat(api)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    assert root_terms(value) == expected
+    assert await job(api, value["root_id"]) == "completed"
+    (request,) = requests_of(api, "propose_plan")
+    assert (request.minimum_inference_tier, request.lq_ai_privileged) == expected
+
+
+async def test_a_route_weaker_than_the_lending_matters_floor_is_refused_before_anything_is_stored(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    api.gateway.config["providers"][0]["tier"] = 3
+    api.gateway.config["anonymization"] = {"enabled": True, "apply_at_tiers": []}
+    lender = await matter(api, "Lending matter", floor=2)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    ours = await filed(api, "ours.txt", DPA)
+    chat_id = await new_chat(api)
+
+    refused = await start_in_chat(
+        api, chat_id, profile=PROFILE, file_ids=[ours, borrowed], expect=403
+    )
+    assert refused["detail"]["message"] == (
+        "A selected document belongs to a matter whose inference tier floor "
+        "or privilege setting this run's route does not meet."
+    )
+    assert refused["detail"]["details"] == {"minimum_inference_tier": 2, "privileged": False}
+    # Nothing was stored, written, attached or sent.
+    assert await stored_roots(api) == 0
+    assert await messages(api, chat_id) == [] and api.gateway.requests == []
+    assert not await attached_here(api, borrowed) and not await attached_here(api, ours)
+
+    # The same route serves this matter with a file that brings no terms.
+    api.gateway.expected_documents = [{"number": 1, "filename": "ours.txt"}]
+    accepted = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[ours])
+    assert root_terms(accepted) == (NO_FLOOR, False)
+
+
+@pytest.mark.parametrize("why", ["the_route_is_not_priced", "this_matters_own_floor_is_not_met"])
+async def test_a_route_this_matter_cannot_use_anyway_is_not_blamed_on_the_lending_matter(
+    harness: SimpleNamespace, why: str
+) -> None:
+    """The comparison is this matter's own terms, not a chat with none."""
+    api = harness
+    if why == "the_route_is_not_priced":
+        api.gateway.config["cost_tracking"]["enabled"] = False
+    else:
+        api.gateway.config["providers"][0]["tier"] = 3
+        api.gateway.config["anonymization"] = {"enabled": True, "apply_at_tiers": []}
+        await set_terms(api, api.env.project_id, minimum_inference_tier=2)
+    lender = await matter(api, "Lending matter", floor=1)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    chat_id = await new_chat(api)
+
+    refused = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed], expect=403)
+    assert REFUSED not in refused["detail"]["message"]
+    assert await stored_roots(api) == 0
+    assert not await attached_here(api, borrowed)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "the_lending_matter_becomes_privileged",
+        "the_lending_matters_floor_tightens",
+        # The file is put in the knowledge base of a second, stricter matter.
+        "a_stricter_matters_knowledge_base_takes_the_file",
+    ],
+)
+async def test_a_lending_matter_whose_terms_tighten_after_approval_stops_the_run(
+    harness: SimpleNamespace, change: str
+) -> None:
+    api = harness
+    lender = await matter(api, "Lending matter", floor=3)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    children = await approved(api, value)
+    planned = await read(api, value["root_id"])
+
+    if change == "the_lending_matter_becomes_privileged":
+        await set_terms(api, lender, privileged=True)
+    elif change == "the_lending_matters_floor_tightens":
+        await set_terms(api, lender, minimum_inference_tier=2)
+    else:
+        stricter = await matter(api, "Stricter matter", floor=1, privileged=True)
+        await in_knowledge_base(api, borrowed, stricter)
+
+    sent = len(api.gateway.requests)
+    for child in children:
+        assert await job(api, value["root_id"], child) == "stopped"
+    assert len(api.gateway.requests) == sent
+    async with api.env.factory() as db:
+        reads = select(Effect.effect_key).where(
+            Effect.intent == "retrieve_chunks", Effect.session_id.in_([UUID(c) for c in children])
+        )
+        assert not (await db.scalars(reads)).all()
+        # The refusal is the one a matter's own changed terms give.
+        plan = PreparedPlan.model_validate_json(json.dumps(planned["tree"]["plan"]))
+        here = await db.get(Project, api.env.project_id)
+        with pytest.raises(Forbidden, match="Project data policy has changed"):
+            await _data_terms(db, here, plan)
+    assert (await read(api, value["root_id"]))["status"] != "completed"
+
+
+async def test_a_lending_matter_whose_terms_loosen_does_not_stop_the_run(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    lender = await matter(api, "Lending matter", floor=3, privileged=True)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    chat_id = await new_chat(api)
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    assert root_terms(value) == (3, True)
+    children = await approved(api, value)
+
+    # A weaker floor and no privilege flag allow what was approved.
+    await set_terms(api, lender, minimum_inference_tier=4, privileged=False)
+    for child in children:
+        assert await job(api, value["root_id"], child) == "completed"
+    assert await job(api, value["root_id"]) == "completed"
+    assert (await read(api, value["root_id"]))["status"] == "completed"
+    # It ran on the terms it was approved under, not the looser ones.
+    assert terms_sent(api) == {(3, 3, True)}
+
+
+async def test_the_audit_rows_of_a_run_made_privileged_by_a_lending_matter_are_marked(
+    harness: SimpleNamespace,
+) -> None:
+    """This matter is not privileged, so marking from it alone would leave the rows unmarked."""
+    api = harness
+    lender = await matter(api, "Lending matter", floor=1, privileged=True)
+    borrowed = await lent(api, "kb-only.txt", MSA, lender)
+    ours = await filed(api, "ours.txt", DPA, attached=True)
+    chat_id = await new_chat(api)
+
+    api.gateway.expected_documents = [{"number": 1, "filename": "kb-only.txt"}]
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[borrowed])
+    assert root_terms(value) == (1, True)
+    assert (await run_to_completion(api, value))["status"] == "completed"
+    rows = await run_audit_rows(api, value["root_id"])
+    # Both writers: the run's own events and the chokepoint's session events.
+    assert {row.action.split(".")[0] for row in rows} == {"orchestration", "autonomous_session"}
+    assert {(row.privilege_marked, row.privilege_basis) for row in rows} == {
+        (True, RUN_PRIVILEGE_BASIS)
+    }, [(row.action, row.privilege_basis) for row in rows]
+
+    # A run in the same matter without the file is marked as before: not at all.
+    api.gateway.expected_documents = [{"number": 1, "filename": "ours.txt"}]
+    plain = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[ours])
+    assert (await run_to_completion(api, plain))["status"] == "completed"
+    plain_rows = await run_audit_rows(api, plain["root_id"])
+    assert plain_rows
+    assert not any(row.privilege_marked or row.privilege_basis for row in plain_rows)
+
+
+async def test_a_candidate_another_matter_holds_by_attachment_is_refused_whatever_else_holds_it(
+    harness: SimpleNamespace,
+) -> None:
+    """Unchanged: a knowledge base elsewhere does not make another matter's file selectable."""
+    api = harness
+    other = await matter(api, "Other matter", floor=2)
+    lender = await matter(api, "Lending matter", floor=1, privileged=True)
+    theirs = await from_matter(api, "theirs.txt", MSA, other)
+    await in_knowledge_base(api, theirs, lender)
+    chat_id = await new_chat(api)
+
+    row = (await listing(api, chat_id, theirs))["theirs.txt"]
+    assert (row["selectable"], row["reason"]) == (False, "in_another_matter")
+    # Nothing is said about terms for a file a run here would never read.
+    assert (row["matters"], row["matter_minimum_inference_tier"], row["matter_privileged"]) == (
+        [],
+        None,
+        False,
+    )
+    refused = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[theirs], expect=400)
+    assert refused["detail"]["details"]["reason"] == "in_another_matter"
+    assert await stored_roots(api) == 0 and not await attached_here(api, theirs)
+
+
+async def test_a_run_that_borrows_nothing_runs_on_its_own_matters_terms_as_before(
+    harness: SimpleNamespace,
+) -> None:
+    """Unchanged: attachment to a second matter, and this matter's own knowledge base, add no terms."""
+    api = harness
+    strict = await matter(api, "Strict matter", floor=2, privileged=True)
+    # Attached to both matters: the owner's own earlier action, read on this matter's terms.
+    both = await filed(api, "both.txt", MSA, attached=True)
+    await hold(api, both, strict)
+    # In this matter's own knowledge base, and a candidate that no matter holds.
+    own = await filed(api, "own-kb.txt", DPA, attached=True)
+    await in_knowledge_base(api, own, api.env.project_id)
+    free = await filed(api, "free.txt", DPA)
+    # The strict matter lends a file that this run does not select.
+    await lent(api, "unselected.txt", MSA, strict)
+    api.gateway.expected_documents = [
+        {"number": 1, "filename": "both.txt"},
+        {"number": 2, "filename": "own-kb.txt"},
+        {"number": 3, "filename": "free.txt"},
+    ]
+    chat_id = await new_chat(api)
+
+    value = await start_in_chat(api, chat_id, profile=PROFILE, file_ids=[both, own, free])
+    assert root_terms(value) == (NO_FLOOR, False)
+    assert (await run_to_completion(api, value))["status"] == "completed"
+    assert terms_sent(api) == {(NO_FLOOR, NO_FLOOR, False)}
+    rows = await run_audit_rows(api, value["root_id"])
+    assert rows and not any(row.privilege_marked or row.privilege_basis for row in rows)
+
+
+async def test_the_picker_in_a_matter_names_the_lending_matters_and_their_terms(
+    harness: SimpleNamespace,
+) -> None:
+    api = harness
+    async with api.env.factory.begin() as db:
+        stranger = User(email=f"stranger-{uuid4()}@example.com", hashed_password="unused-test")
+        db.add(stranger)
+        await db.flush()
+        stranger_id = stranger.id
+    lender = await matter(api, "Lending matter", floor=2, privileged=True)
+    closed = await matter(api, "Archived matter", floor=3, archived=True)
+    open_matter = await matter(api, "Open matter")
+    someone_elses = await matter(api, "Someone else's matter", floor=1, owner_id=stranger_id)
+    # A candidate, not yet attached here, and a file that already is.
+    candidate = await lent(api, "candidate.txt", MSA, lender)
+    attached = await filed(api, "attached.txt", DPA, attached=True)
+    await in_knowledge_base(api, attached, lender)
+    await in_knowledge_base(api, attached, closed)
+    unfloored = await lent(api, "open.txt", MSA, open_matter)
+    unnamed = await lent(api, "unnamed.txt", MSA, someone_elses)
+    # Files that bring nothing: this matter's own, and one in its own knowledge base.
+    await filed(api, "plain.txt", MSA, attached=True)
+    own = await filed(api, "own-kb.txt", DPA, attached=True)
+    await in_knowledge_base(api, own, api.env.project_id)
+
+    chat_id = await new_chat(api)
+    rows = await listing(api, chat_id, candidate, unfloored, unnamed)
+    expected = {
+        "candidate.txt": (["Lending matter"], 2, True),
+        # Every lending matter is named, an archived one too; the lowest floor,
+        # and privileged if any is.
+        "attached.txt": (["Archived matter", "Lending matter"], 2, True),
+        "open.txt": (["Open matter"], None, False),
+        # Another owner's matter counts for the terms and is not named.
+        "unnamed.txt": ([], 1, False),
+        "plain.txt": ([], None, False),
+        # This matter is not a matter the run borrows from.
+        "own-kb.txt": ([], None, False),
+    }
+    assert all(rows[name]["selectable"] and rows[name]["reason"] is None for name in expected)
+    assert {
+        name: (
+            sorted(rows[name]["matters"]),
+            rows[name]["matter_minimum_inference_tier"],
+            rows[name]["matter_privileged"],
+        )
+        for name in expected
+    } == expected
 
 
 # --- An answer written under a matter's terms is not shown to a run without them ---

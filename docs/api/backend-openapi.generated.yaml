@@ -13669,7 +13669,13 @@ paths:
 
         In a matter: the matter''s files, plus named candidates. Selecting a
 
-        candidate attaches it to the matter when the run is accepted. Outside a
+        candidate attaches it to the matter when the run is accepted. A file that
+
+        another matter holds through a knowledge base is listed with that matter''s
+
+        name, floor and privilege flag; a run that reads it takes the stricter of
+
+        those terms and its own matter''s. Outside a
 
         matter: named candidates only. One that a matter holds is listed with that
 

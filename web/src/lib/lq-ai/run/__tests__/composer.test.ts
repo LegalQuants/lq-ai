@@ -1121,6 +1121,28 @@ describe('documentNote', () => {
 		// A file that cannot be read has its reason and no note.
 		expect(documentNote({ ...inAMatter, selectable: false }, false)).toBeNull();
 	});
+
+	it('in a matter, says what another matter’s knowledge-base file brings (ruling 12)', () => {
+		const borrowed = document({
+			matters: ['Advice'],
+			matter_minimum_inference_tier: 2,
+			matter_privileged: true
+		});
+		// Not yet attached here: the terms, then that it will be added.
+		expect(documentNote({ ...borrowed, attached_to_project: false })).toBe(
+			'From the matter “Advice”. A run that reads it follows its rules as well as this matter’s: ' +
+				'inference tier 2 or stronger; privileged, so nothing is pseudonymized. ' +
+				ADDED_TO_MATTER_NOTE
+		);
+		// Already attached: the terms still apply, so a second run is told too.
+		expect(documentNote({ ...borrowed, attached_to_project: true })).toBe(
+			'From the matter “Advice”. A run that reads it follows its rules as well as this matter’s: ' +
+				'inference tier 2 or stronger; privileged, so nothing is pseudonymized.'
+		);
+		// Outside a matter the same file is described without this matter's rules.
+		expect(documentNote(borrowed, false)).not.toContain('this matter');
+		expect(documentNote({ ...borrowed, selectable: false })).toBeNull();
+	});
 });
 
 describe('matterTermsNote', () => {

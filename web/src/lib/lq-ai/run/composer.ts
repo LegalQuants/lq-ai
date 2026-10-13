@@ -592,12 +592,15 @@ function quotedList(names: string[]): string {
 }
 
 /**
- * In a chat that is in no matter, what picking a matter's file brings: a run that reads
- * it runs under the rules of the matters that hold it (ADR 0038, ruling 4). Null for a
- * file that no matter holds. A privileged matter turns pseudonymization off for the whole
- * run, which the strip's own sentence about the route cannot know, so it is said here.
+ * What picking a matter's file brings: a run that reads it runs under the rules of the
+ * matters that hold it. In a chat that is in no matter those are every matter that holds
+ * the file (ADR 0038, ruling 4). In a chat that is in a matter they are the other matters
+ * that hold it through a knowledge base, and the run follows the stricter of their rules
+ * and its own matter's (ruling 12). Null for a file that brings no such rules. A
+ * privileged matter turns pseudonymization off for the whole run, which the strip's own
+ * sentence about the route cannot know, so it is said here.
  */
-export function matterTermsNote(doc: RunDocument): string | null {
+export function matterTermsNote(doc: RunDocument, inMatter = false): string | null {
 	const names = (Array.isArray(doc.matters) ? doc.matters : [])
 		.filter((name): name is string => typeof name === 'string')
 		.map((name) => name.trim())
@@ -615,20 +618,22 @@ export function matterTermsNote(doc: RunDocument): string | null {
 	if (floor !== null) rules.push(`inference tier ${floor} or stronger`);
 	if (privileged) rules.push('privileged, so nothing is pseudonymized');
 	const whose = several ? 'their' : 'its';
-	return rules.length === 0
-		? `${from} A run that reads it follows ${whose} rules.`
-		: `${from} A run that reads it follows ${whose} rules: ${rules.join('; ')}.`;
+	const follows = `A run that reads it follows ${whose} rules${inMatter ? ' as well as this matter’s' : ''}`;
+	return rules.length === 0 ? `${from} ${follows}.` : `${from} ${follows}: ${rules.join('; ')}.`;
 }
 
 /**
- * The note for a selectable file. In a matter: that a file not yet attached to it will
- * be. In a chat that is in no matter, where nothing is added to one: what a matter's
- * file brings with it. Null otherwise.
+ * The note for a selectable file. In a matter: what another matter's knowledge-base file
+ * brings with it, and that a file not yet attached to this matter will be. In a chat that
+ * is in no matter, where nothing is added to one: what a matter's file brings with it.
+ * Null otherwise.
  */
 export function documentNote(doc: RunDocument, inMatter = true): string | null {
 	if (!doc.selectable) return null;
-	if (!inMatter) return matterTermsNote(doc);
-	return doc.attached_to_project ? null : ADDED_TO_MATTER_NOTE;
+	const terms = matterTermsNote(doc, inMatter);
+	if (!inMatter) return terms;
+	const added = doc.attached_to_project ? null : ADDED_TO_MATTER_NOTE;
+	return [terms, added].filter((part) => part !== null).join(' ') || null;
 }
 
 /** Whether a profile takes documents from the owner: a selection it needs, or one it may have. */

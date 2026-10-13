@@ -48,7 +48,7 @@ from app.autonomous.orchestration.intake import (
 from app.autonomous.orchestration.planning import ThreadMessage
 from app.autonomous.orchestration.profiles import registered_profiles
 from app.autonomous.orchestration.prompts import load_prompt
-from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, selection_terms
+from app.autonomous.orchestration.reading import MatterTerms, borrowed_terms, selection_terms
 from app.autonomous.orchestration.service import DemonstrationService
 from app.autonomous.orchestration.tools import get_tool
 from app.autonomous.orchestration.trace import SessionTraceRead, read_session_trace
@@ -186,6 +186,10 @@ async def begin_run(
     lowest floor any of them sets, and privileged if any of them is (ADR 0038
     D5, ruling 4). With no document, or none from a matter, it is not
     privileged and its floor is the profile's own.
+
+    In a matter the run has that matter's terms. A selected file that another
+    matter holds through a knowledge base adds that matter's: the run takes
+    the stricter of the two (ruled 2026-10-13).
     """
     profile = runtime.run_profile
     policy = runtime.require_policy()
@@ -219,6 +223,8 @@ async def begin_run(
             privileged, tier = project.privileged, project.minimum_inference_tier or 5
         elif profile.project_scope != "any":
             raise Forbidden(message="This run profile starts from a chat inside a matter")
+        # The chat's own terms, before any selected document adds another matter's.
+        own = MatterTerms(minimum_inference_tier=tier, privileged=privileged)
         documents: tuple[DocumentRef, ...] = ()
         attach: tuple[UUID, ...] = ()
         if profile.documents == "packet":
@@ -230,11 +236,18 @@ async def begin_run(
             documents, attach = await select_documents(
                 db, owner_id=user.id, project_id=project_id, file_ids=file_ids
             )
+            # The store works these out again at every admission and holds
+            # the run to them.
+            selected = [d.document_id for d in documents]
             if project_id is None:
-                # The store works these out again at every admission and
-                # holds the run to them.
-                terms = await selection_terms(db, [d.document_id for d in documents])
+                terms = await selection_terms(db, selected)
                 privileged, tier = terms.privileged, terms.minimum_inference_tier
+            else:
+                # The stricter of this matter's terms and those of any other
+                # matter that holds a selected file through a knowledge base.
+                terms = await borrowed_terms(db, project_id, selected)
+                privileged = privileged or terms.privileged
+                tier = min(tier, terms.minimum_inference_tier)
         # Read once, here, and frozen in the intake: a replayed planning call
         # must see exactly the thread the first attempt saw.
         # An earlier answer written under stricter terms than this run's is not
@@ -262,7 +275,7 @@ async def begin_run(
     routes = runtime.effects().inference
     assert routes is not None
     # Quote first, so a route that cannot be priced never files a document.
-    from_matters = project_id is None and (privileged or tier < NO_FLOOR)
+    from_matters = (tier, privileged) != (own.minimum_inference_tier, own.privileged)
     try:
         await prepare_intake(
             profile,
@@ -281,10 +294,11 @@ async def begin_run(
     except Forbidden:
         if not from_matters:
             raise
-        # Quote again as the chat alone would be quoted. If that is refused
-        # too, the route is unavailable whatever is selected, and that refusal
-        # is the one to give. If it is accepted, the selected documents'
-        # matters are the reason.
+        # Quote again as the chat alone would be quoted: on its matter's own
+        # terms, or on none outside a matter. If that is refused too, the
+        # route is unavailable whatever is selected, and that refusal is the
+        # one to give. If it is accepted, the selected documents' matters are
+        # the reason.
         await prepare_intake(
             profile,
             settings=runtime.settings,
@@ -293,10 +307,10 @@ async def begin_run(
             routes=routes,
             root_id=request_id,
             owner_id=user.id,
-            project_id=None,
+            project_id=project_id,
             goal=goal,
-            privileged=False,
-            minimum_inference_tier=NO_FLOOR,
+            privileged=own.privileged,
+            minimum_inference_tier=own.minimum_inference_tier,
             today=today,
         )
         raise Forbidden(

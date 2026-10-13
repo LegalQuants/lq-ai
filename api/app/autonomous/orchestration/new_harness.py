@@ -26,7 +26,8 @@ What makes it general:
   some, the delivered answer's quotations are checked against them by the
   Citation Engine's local stages; no judge model is called.
 * The chat may be in a matter or in none. In a matter the matter's inference
-  tier floor and privilege flag apply at every call. Outside a matter the run
+  tier floor and privilege flag apply at every call, and so do those of another
+  matter whose knowledge base holds a selected file. Outside a matter the run
   may read the owner's files wherever they are filed, and takes on the
   strictest floor and the privilege flag of the matters that hold them; with
   no such file it is not privileged and its floor is this profile's (see

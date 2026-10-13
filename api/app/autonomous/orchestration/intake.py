@@ -54,6 +54,7 @@ from app.autonomous.orchestration.reading import (
     filed_in_a_matter,
     filed_in_another_matter,
     holding_matters,
+    lending_matters,
     strictest,
     written_under_stricter_terms,
 )
@@ -517,10 +518,13 @@ class SelectableDocument:
     selectable: bool
     reason: str | None
     document_id: UUID | None = None
-    # Set only when listed from a chat outside any matter, for a file that a
-    # matter holds: selecting it puts the run under these terms (ADR 0038,
-    # ruling 4). The names are the owner's own matters; the floor is the
-    # lowest any holding matter sets, or None when none sets one.
+    # Set for a file that brings a matter's terms: selecting it puts the run
+    # under them. From a chat outside any matter, that is a file any matter
+    # holds (ADR 0038, ruling 4). From a chat in a matter, a file that another
+    # matter holds through a knowledge base, and the terms are that other
+    # matter's; the run takes the stricter of them and its own. The names are
+    # the owner's own matters; the floor is the lowest any such matter sets,
+    # or None when none sets one.
     matters: tuple[str, ...] = ()
     matter_minimum_inference_tier: int | None = None
     matter_privileged: bool = False
@@ -552,8 +556,11 @@ async def list_documents(
     picking it attaches it to the matter. A file that cannot be read is listed
     with the reason, never silently left out.
 
-    In a matter, a candidate that only another matter holds is listed as
-    unreadable: a run in one matter has that matter's terms and no others.
+    In a matter, a candidate that only another matter holds, by upload or
+    attachment, is listed as unreadable. A file that another matter holds
+    through a knowledge base can be selected, and is listed with that matter's
+    name, floor and privilege flag: a run that reads it takes the stricter of
+    those terms and its own matter's.
     Outside a matter (``project_id`` is None) only candidates are listed. One
     that a matter holds can be selected, and is listed with that matter's
     name, floor and privilege flag, because a run that reads it takes those
@@ -586,22 +593,29 @@ async def list_documents(
             .order_by(File.created_at, File.id)
         )
     ).all()
-    # Outside a matter, what each matter-held file would bring with it.
+    # What each file would bring with it: outside a matter, the terms of the
+    # matters that hold it; in a matter, those of the other matters that hold
+    # it through a knowledge base.
     holders: dict[UUID, list[tuple]] = {}
     if project_id is None:
         held_documents = [
             document.id for _, document, held in rows if held and document is not None
         ]
-        if held_documents:
-            for row in (await db.execute(holding_matters(held_documents))).all():
-                holders.setdefault(row[0], []).append(tuple(row))
+        matters = holding_matters(held_documents)
+    else:
+        held_documents = [document.id for _, document, _ in rows if document is not None]
+        matters = lending_matters(project_id, held_documents)
+    if held_documents:
+        for row in (await db.execute(matters)).all():
+            holders.setdefault(row[0], []).append(tuple(row))
     result = []
     for file, document, held_elsewhere in rows:
         reason = _readability(file, document)
         if project_id is not None and held_elsewhere and file.id not in attached:
             # Attached here as well is the owner's own earlier action, and readable.
             reason = "in_another_matter"
-        held_by = holders.get(file.id, [])
+        # Nothing is said about terms for a file a run here would never read.
+        held_by = [] if reason == "in_another_matter" else holders.get(file.id, [])
         terms = strictest(held_by)
         floors = [row[4] for row in held_by if row[4] is not None]
         result.append(

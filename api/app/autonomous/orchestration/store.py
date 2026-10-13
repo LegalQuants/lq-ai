@@ -32,7 +32,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.audit import audit_action
-from app.autonomous.audit import run_privilege
+from app.autonomous.audit import recorded_privilege, run_privilege
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import (
     ApprovalBinding,
@@ -50,7 +50,7 @@ from app.autonomous.orchestration.outcomes import (
 )
 from app.autonomous.orchestration.planning import PlanningSnapshot
 from app.autonomous.orchestration.profiles import require_profile
-from app.autonomous.orchestration.reading import selection_terms
+from app.autonomous.orchestration.reading import MatterTerms, borrowed_terms, selection_terms
 from app.errors import Conflict, Forbidden, NotFound, ValidationError
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message
@@ -176,12 +176,19 @@ async def _now(db: AsyncSession) -> datetime:
     return (await db.execute(select(func.clock_timestamp()))).scalar_one()
 
 
-def _project_scope(project: Project, plan: PreparedPlan | PlanningSnapshot) -> None:
-    """Hold a run in a matter to that matter's floor and privilege flag."""
+def _project_scope(
+    project: Project, plan: PreparedPlan | PlanningSnapshot, borrowed: MatterTerms
+) -> None:
+    """Hold a run in a matter to that matter's floor and privilege flag.
+
+    And to ``borrowed``, the terms of the other matters it reads a
+    knowledge-base file of: the stricter of the two applies.
+    """
     # Gateway tier semantics: lower numbers provide stronger protection.
     # An unset project floor adds no restriction beyond the explicit plan.
-    if plan.root.minimum_inference_tier > (project.minimum_inference_tier or 5) or (
-        project.privileged and not plan.root.privileged
+    floor = min(project.minimum_inference_tier or 5, borrowed.minimum_inference_tier)
+    if plan.root.minimum_inference_tier > floor or (
+        (project.privileged or borrowed.privileged) and not plan.root.privileged
     ):
         raise Forbidden(message="Project data policy has changed")
 
@@ -191,7 +198,10 @@ async def _data_terms(
 ) -> None:
     """Hold a run to the data terms it runs under, as they are now.
 
-    In a matter those are the matter's. Outside any matter they are the
+    In a matter those are the matter's, and those of every other matter that
+    holds one of the run's selected documents through a knowledge base (ruled
+    2026-10-13): the run's floor may not be weaker than any of theirs, and it
+    is privileged when any of them is. Outside any matter they are the
     strictest of the matters that hold the run's selected documents (ADR
     0038, ruling 4): the run's floor may not be weaker than theirs, and it is
     privileged exactly when one of them is. The privilege flag turns
@@ -203,7 +213,8 @@ async def _data_terms(
     call.
     """
     if project is not None:
-        _project_scope(project, plan)
+        borrowed = await borrowed_terms(db, project.id, plan.root.resources.document_ids, lock=True)
+        _project_scope(project, plan, borrowed)
         return
     terms = await selection_terms(db, plan.root.resources.document_ids, lock=True)
     if (
@@ -215,18 +226,14 @@ async def _data_terms(
 
 async def _audit(db: AsyncSession, root: Root, event: str, **details: Any) -> None:
     assert event in _EVENTS
-    # A run in a matter is marked from the matter. One in no matter is marked
-    # from the terms it took on when it was accepted (``run_privilege``), so the
-    # privileged-activity query finds a run that read a privileged matter's file.
-    marking: dict[str, Any] = (
-        {"project_id": root.project_id}
-        if root.project_id is not None
-        else run_privilege(root.planning_snapshot)
-    )
+    # A run in a privileged matter is marked from the matter. Any other is
+    # marked from the terms it took on when it was accepted (``run_privilege``),
+    # so the privileged-activity query finds a run that read a privileged
+    # matter's file, from outside any matter or from another matter.
     await audit_action(
         db,
         user_id=root.owner_id,
-        **marking,
+        **await run_privilege(db, root.project_id, recorded_privilege(root.planning_snapshot)),
         action=f"orchestration.{event}",
         resource_type="autonomous_session",
         resource_id=str(root.session_id),

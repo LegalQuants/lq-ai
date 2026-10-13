@@ -11,7 +11,7 @@ what the owner is offered and what a run may read cannot drift apart.
   they are filed, and takes on the terms of every matter that holds one of
   them (ADR 0038, ruling 4).
 
-For the terms a run takes on, a matter holds a file when it uploaded it, when it attached it, or when the file is in a knowledge base the matter has attached (:func:`held_through_a_knowledge_base`). The candidate check for a run in a matter (:func:`filed_in_another_matter`) and the knowledge-base search's own passage check deliberately count upload and attachment only, so a file that another matter holds only through a knowledge base is still offered to a run in a matter (an open point). A file that a matter holds carries that matter's inference-tier floor and
+For the terms a run takes on, a matter holds a file when it uploaded it, when it attached it, or when the file is in a knowledge base the matter has attached (:func:`held_through_a_knowledge_base`). The candidate check for a run in a matter (:func:`filed_in_another_matter`) and the knowledge-base search's own passage check deliberately count upload and attachment only, so a file that another matter holds only through a knowledge base is still offered to a run in a matter. A file that a matter holds carries that matter's inference-tier floor and
 privilege flag, and they go with the file. A run with no matter has no terms
 of its own, so it runs under the strictest of its documents' matters: the
 lowest floor any of them sets, and privileged if any of them is
@@ -19,11 +19,20 @@ lowest floor any of them sets, and privileged if any of them is
 accepted and again at every admission, so a matter whose terms tighten, or a
 file that is filed in a stricter matter, stops the run before its next call.
 
-A run in one matter is different: it has that matter's terms and no others.
-It does not accept, as a candidate to attach, a file that only another matter
-holds (:func:`filed_in_another_matter`). The owner can attach a file to a
+A run in one matter has that matter's terms. It does not accept, as a
+candidate to attach, a file that only another matter holds by upload or
+attachment (:func:`filed_in_another_matter`). The owner can attach a file to a
 second matter themselves; that is their recorded action, and the file is then
-attached to the run's matter like any other.
+attached to the run's matter like any other and read on this matter's terms.
+
+A selected file that another matter holds through a knowledge base is the
+exception (ruled 2026-10-13). The run may read it, and then runs under the
+stricter of the two matters' terms: the lower floor, and privileged if either
+is (:func:`borrowed_terms`). That holds whether this run's pick attached the
+file to its matter or it was attached already, so a second run does not escape
+the terms. They are set when the request is accepted and held at every
+admission, like the terms of a run outside any matter. A file that a
+knowledge-base search finds during the run does not change the run's terms.
 
 Knowledge bases are narrower (:func:`searchable_knowledge_bases`).
 A run in a matter may search the knowledge bases attached to that matter that
@@ -179,6 +188,36 @@ def holding_matters(
     a matter does not release its files from its terms. So is a matter of
     another owner, should one ever hold the file.
     """
+    return _matters(
+        document_ids,
+        or_(
+            Project.id == File.project_id,
+            exists().where(ProjectFile.project_id == Project.id, ProjectFile.file_id == File.id),
+            held_through_a_knowledge_base(Project.id),
+        ),
+    )
+
+
+def lending_matters(
+    project_id: UUID, document_ids: Collection[UUID]
+) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
+    """Each other matter that holds the file of one of these documents through a knowledge base.
+
+    What a run in the matter ``project_id`` borrows from. The rows are those of
+    :func:`holding_matters`, and as there an archived matter and a matter of
+    another owner count. A matter that holds the file by upload or attachment
+    as well still counts. One that holds it by upload or attachment only does
+    not: such a file is refused as a candidate, or the owner attached it to
+    this matter themselves.
+    """
+    return _matters(document_ids, held_through_a_knowledge_base(Project.id)).where(
+        Project.id != project_id
+    )
+
+
+def _matters(
+    document_ids: Collection[UUID], holds: Any
+) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
     return (
         select(
             File.id,
@@ -190,16 +229,7 @@ def holding_matters(
         )
         .select_from(Document)
         .join(File, File.id == Document.file_id)
-        .join(
-            Project,
-            or_(
-                Project.id == File.project_id,
-                exists().where(
-                    ProjectFile.project_id == Project.id, ProjectFile.file_id == File.id
-                ),
-                held_through_a_knowledge_base(Project.id),
-            ),
-        )
+        .join(Project, holds)
         .where(Document.id.in_(document_ids))
         .order_by(File.id, Project.id)
     )
@@ -225,6 +255,24 @@ async def selection_terms(
     if not document_ids:
         return MatterTerms()
     query = holding_matters(document_ids)
+    if lock:
+        query = query.with_for_update(read=True, of=Project)
+    return strictest((await db.execute(query)).all())
+
+
+async def borrowed_terms(
+    db: AsyncSession, project_id: UUID, document_ids: Collection[UUID], *, lock: bool = False
+) -> MatterTerms:
+    """The terms a run in a matter takes on from other matters' knowledge bases.
+
+    The strictest of every other matter that holds one of the run's selected
+    documents through a knowledge base (:func:`lending_matters`). The run's own
+    matter's terms are not in this; the caller applies the stricter of the two.
+    With ``lock`` those matters are share-locked, as the run's own is.
+    """
+    if not document_ids:
+        return MatterTerms()
+    query = lending_matters(project_id, document_ids)
     if lock:
         query = query.with_for_update(read=True, of=Project)
     return strictest((await db.execute(query)).all())
