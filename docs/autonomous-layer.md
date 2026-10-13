@@ -159,6 +159,14 @@ precedents were produced."* — then proceeds to a normal `completed`
 terminal state. The session does **not** fabricate analysis it could
 not perform; it tells the user the gateway failed and stops cleanly.
 
+If the gateway rejects the *model itself* — a deployment whose routing
+table does not resolve the analysis fallback answers HTTP 400, logged
+as "does not resolve to any configured alias or provider-native model
+name" — point ``LQ_AI_AUTONOMOUS_DEFAULT_MODEL`` at a model id or alias
+the gateway routes (``.env.example`` documents it). The default is the
+``smart`` alias, the same one the playbook and tabular executors use,
+so a deployment that routes ``smart`` needs no extra setting.
+
 ---
 
 ## Single-chokepoint security model
