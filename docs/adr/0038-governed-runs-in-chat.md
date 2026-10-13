@@ -1041,9 +1041,14 @@ pull request, followed by one commit for each of the four rulings that needed co
   is not the security review.
 - Open for the maintainer: ordinary chat's tool loop and retrieval context are still not
   pseudonymized (PRD Decision M2-1, DE-269). It is the one place the rule that what leaves
-  the gateway is pseudonymized is not yet true, and whether to promote DE-269, or to let the
-  ordinary non-streaming tool loop hold its arguments as originals and set the same
-  opt-in, is the maintainer's. Also open: that a running run is not stopped by a change of
+  the gateway is pseudonymized is not yet true. The maintainer deferred it on 2026-10-13
+  as DE-409: the released gateway decides by a message's role and by its caller, not by
+  where content comes from or where it goes, and this ADR's opt-in is a switch of the same
+  kind. It is right for a run only while every run tool works inside the deployment and
+  returns the owner's own material, so DE-409 lands before a run is granted any outside or
+  public-source tool. Setting the same opt-in in ordinary chat is not the answer: it would
+  pseudonymize published sources and restore real names into calls that leave the
+  deployment. Also open: that a running run is not stopped by a change of
   its owner's role (D1), that a run in a matter can still be offered a file that another
   matter holds only through a knowledge base (D5), and that `auditor.*` audit rows are not
   privilege-marked (D1).

@@ -2896,7 +2896,48 @@ If the source-document corpus contains entities the operator considers sensitive
 
 **Acceptance criteria:** Spot-check empirical study comparing model output quality on Option A vs M2-1 for at least three skills (NDA Review, MSA Review SaaS, DPA Checklist Review); cross-conversation pseudonym stability decision documented or filed as DE-XXX; audit-log shape extended if needed; `docs/security/anonymization.md` and `docs/citation-engine.md` updated to reflect Option A as the new default; existing M2-B3 / M2-C3 / M2-D2 round-trip tests passing with the new shape.
 
-**Update (governed runs, ADR 0038).** A governed run does not follow M2-1: it holds its tool arguments as originals and says so (`lq_ai_restore_tool_arguments`), and the gateway then pseudonymizes what a task reads, with the rest of the request, wherever the operator's setting applies pseudonymization at the route's tier (the text of a `tool` message and the arguments of earlier tool calls; [anonymization.md](security/anonymization.md)). Ordinary chat is unchanged, and the retrieval context stays un-pseudonymized. How this affects the citation checks and the answers of a run has not been measured; UAT-41 records what is seen, and it is the first evidence this entry can use.
+**Update (governed runs, ADR 0038).** A governed run does not follow M2-1: it holds its tool arguments as originals and says so (`lq_ai_restore_tool_arguments`), and the gateway then pseudonymizes what a task reads, with the rest of the request, wherever the operator's setting applies pseudonymization at the route's tier (the text of a `tool` message and the arguments of earlier tool calls; [anonymization.md](security/anonymization.md)). Ordinary chat is unchanged, and the retrieval context stays un-pseudonymized. How this affects the citation checks and the answers of a run has not been measured; UAT-41 records what is seen, and it is the first evidence this entry can use. DE-409 asks the wider question, of which this entry is one part: what decides whether a piece of content is pseudonymized at all.
+
+#### DE-409 — Decide pseudonymization by where content comes from and where it goes
+
+**Priority:** P1 · **Effort:** L (a design and an ADR first) · **Status (2026-10-13): filed; found while reviewing ADR 0038. The rule described is the released gateway's, not a defect of governed runs.**
+
+**Context:** The gateway decides what to pseudonymize by a message's role and by who is calling. It does not look at where the content came from or where it is going. On a route that pseudonymizes (§4.7), as read from the code at `main` `f36c0c09c` and not reproduced on a running stack:
+
+- The text of `user`, `assistant` and `system` messages is pseudonymized, and the text of the reply is restored.
+- The retrieval context is exempt (Decision M2-1, DE-269). It is the owner's own documents.
+- The results of ordinary chat's tools are sent as the tool returned them, whatever they hold: published case law, an authority source, an MCP server's reply, a skill-bound tool's output.
+- The arguments of a tool call are returned as the model wrote them. The model was shown placeholders, so it can write `PERSON_0001` into a call, and the chat tool loop (`api/app/chat/tool_loop.py`) runs the tool with that.
+- [ADR 0014](adr/0014-gateway-egress-boundary-for-tool-providers.md) D5 already decides part of this for tool providers reached through the gateway: outbound arguments are anonymized by default, and fetched public text stays as published. In the code the gateway pseudonymizes a call's arguments only when the caller asks (`require_anonymization`), and refuses the call if it cannot. The only caller that asks is the autonomous engine's source-bound authority call (`api/app/autonomous/guard.py`). Ordinary chat's tool calls do not ask.
+
+[ADR 0038](adr/0038-governed-runs-in-chat.md) adds a per-request opt-in for a governed run, `lq_ai_restore_tool_arguments`, which restores the arguments of a reply's tool calls and pseudonymizes all the tool text the run sends. That is right for a run today only because every tool a run has works inside the deployment and returns the owner's own material. It is a switch per caller, so it has the same fault: the day a run is granted a public-source tool, published text would be pseudonymized.
+
+A tool call raises three questions, and the present rule does not tell them apart:
+
+1. **The arguments going out.** May the party that runs the tool see the owner's real names? A document read inside the deployment needs them. A search sent to an outside service is an egress.
+2. **The result going on to the model provider.** Whose information is it: the owner's, or a published source's?
+3. **The result as the model reads it.** Who wrote it, and can it steer the model?
+
+The answers do not line up. A counterparty's contract in a matter is the owner's confidential material and is not written by the owner. Published case law is public and is still not the owner's instructions. One MCP server can be a private source and an outside destination at once. And a call's arguments are written from everything the model has read, so an instruction hidden in a document can have the model put the owner's names into a query for an outside tool; restoring the placeholders in that call would send the real names out. Ordinary chat does not restore, which blocks that path today by accident and also means its tools are called with placeholders.
+
+**Specific scope:** a design, recorded as an ADR and routed as a security path, before any code. The shape proposed:
+
+- Each tool declares, where it is registered, where its arguments go (inside the deployment, or outside at an egress tier) and whose information its results are (the owner's, or public). Results are treated as untrusted unless declared otherwise.
+- The backend marks each tool message from that declaration and the gateway applies it. The per-message marker `lq_ai_skip_anonymization` already exists and may be enough to carry "public". A tool result with no mark on a pseudonymizing route is treated as the owner's.
+- Restoring arguments is separated from covering tool text, and is done only for a call that stays inside the deployment.
+- The same rule serves ordinary chat and governed runs, and replaces the per-request opt-in.
+
+Decisions the design must make:
+
+1. An outside call that needs a real name to be useful, case law about a named party for instance. ADR 0014 D5's default is that the arguments are anonymized, with an audited override per provider. The design says whether that default holds once arguments are restored for calls inside the deployment, and whether showing the owner the real query and asking is a third path.
+2. A published result that names the owner's client: send it as published (ADR 0014 D5), which lets the provider connect it to the pseudonymized request, or replace the names the request already mapped, which changes the source's wording.
+3. Why ADR 0014 D5's default for arguments is applied on one path only, and whether it becomes the gateway's rule for every outside call.
+4. What an MCP server is by default, and how an operator declares one that is both a private source and an outside destination.
+5. Whether the retrieval context comes under the same rule (DE-269) or stays a stated exemption.
+6. What a model may call after it has read untrusted content. Today the only defence is the prompt's wording.
+7. The cost on ordinary chat: the detector runs one analysis at a time, and ordinary chat sends far more requests than runs do.
+
+**Acceptance criteria:** An accepted ADR with a security-path review. `docs/security/anonymization.md` states one rule for both callers. Tests show that published source text reaches the model as published, that the owner's material in a tool result is pseudonymized for ordinary chat and for a run, and that a restored name reaches an outside tool only by the path decision 1 chooses, including a case where a document read earlier in the turn carries an instruction to send it. `lq_ai_restore_tool_arguments` is removed or narrowed to what the design keeps. The DE-240 leakage harness measures tool text. This lands before a governed run is granted any outside or public-source tool (#662 tracks C2 to C7). Related: DE-269, DE-397, ADR 0014 D5, ADR 0038 D5 and D7.
 
 #### DE-270 — Cryptography review: Fernet vs modern AEAD
 
