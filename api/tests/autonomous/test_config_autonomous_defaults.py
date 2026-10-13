@@ -5,6 +5,11 @@ per-session cost for autonomous sessions whose spawning trigger (watch
 or schedule) did not specify ``max_cost_usd``. The default mirrors the
 gateway.yaml default ($5.00). Operators can override via
 ``LQ_AI_AUTONOMOUS_DEFAULT_MAX_COST_USD``.
+
+``autonomous_default_model`` (#681) defaults to the ``smart`` alias rather
+than a provider-native model id, so the analysis-node fallback follows the
+operator's gateway routing table. Operators can override via
+``LQ_AI_AUTONOMOUS_DEFAULT_MODEL``.
 """
 
 from __future__ import annotations
@@ -33,5 +38,26 @@ def test_autonomous_default_max_cost_usd_env_override(
     try:
         s = get_settings()
         assert s.autonomous_default_max_cost_usd == Decimal("1.25")
+    finally:
+        get_settings.cache_clear()
+
+
+def test_autonomous_default_model_defaults_to_the_smart_alias() -> None:
+    get_settings.cache_clear()
+    try:
+        s = get_settings()
+        assert s.autonomous_default_model == "smart"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_autonomous_default_model_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LQ_AI_AUTONOMOUS_DEFAULT_MODEL", "fast")
+    get_settings.cache_clear()
+    try:
+        s = get_settings()
+        assert s.autonomous_default_model == "fast"
     finally:
         get_settings.cache_clear()
