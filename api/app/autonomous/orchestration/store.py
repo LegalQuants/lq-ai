@@ -551,7 +551,7 @@ class OrchestrationStore:
             profile,
         ):
             raise ValidationError(message="Planning profile is invalid")
-        # The database and the check above hold only a profile's shape (migration 0073);
+        # The database and the check above hold only a profile's shape (migration 0074);
         # the closed set is the registry's, so a well-formed name that nothing registered
         # never becomes a root, whoever the caller is.
         require_profile(profile)

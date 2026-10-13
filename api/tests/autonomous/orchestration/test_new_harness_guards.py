@@ -139,7 +139,7 @@ async def contracts(harness: SimpleNamespace) -> SimpleNamespace:
 async def test_the_store_refuses_a_well_formed_profile_name_that_nothing_registered(
     harness: SimpleNamespace, contracts: SimpleNamespace
 ) -> None:
-    """Migration 0073 and the store's shape check hold a name's form; the registry holds the set.
+    """Migration 0074 and the store's shape check hold a name's form; the registry holds the set.
 
     A name in the right form, bound to the snapshot as the caller's own, is refused
     before anything is written, so closed-set membership does not rest on the service

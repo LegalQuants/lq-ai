@@ -1,7 +1,7 @@
 """A governed run may complete without a plan (ADR 0038 D1).
 
-Revision ID: 0076
-Revises: 0075
+Revision ID: 0077
+Revises: 0076
 
 Where a profile hands its plan over by tool call, the orchestrator may answer a
 request by itself. That run ends ``completed`` with no plan row: its
@@ -19,8 +19,8 @@ Downgrade refuses while a run that completed without a plan is retained.
 
 from alembic import op
 
-revision = "0076"
-down_revision = "0075"
+revision = "0077"
+down_revision = "0076"
 branch_labels = None
 depends_on = None
 
@@ -46,7 +46,7 @@ def downgrade() -> None:
             SELECT 1 FROM orchestration_roots
             WHERE status = 'completed' AND current_revision IS NULL
           ) THEN
-            RAISE EXCEPTION '0076 downgrade requires removing runs answered without a plan first';
+            RAISE EXCEPTION '0077 downgrade requires removing runs answered without a plan first';
           END IF;
         END $$;
     """)

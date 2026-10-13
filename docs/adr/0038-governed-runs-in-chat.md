@@ -139,7 +139,7 @@ fails the plan, and so does a reply that writes the plan out as text, or the too
 JSON, in place of calling the tool (stop reason `plan_not_handed_over`); neither is shown
 as an answer. An answer longer than 16,384 characters is cut and marked. The answer is
 delivered whatever the planning call cost within the root's whole allocation; a charge past
-that halts the run when the call settles, as for any effect. Migration 0076 lets a run end
+that halts the run when the call settles, as for any effect. Migration 0077 lets a run end
 `completed` with no plan revision.
 
 **The amendment to ADR 0035, in its words.** Ratifying this ADR makes the four changes
@@ -187,7 +187,7 @@ selection (D5).
 **A chat outside a matter.** *Authorization path; needs security review.* A chat need not
 be in a matter (the API calls a matter a project). ADR 0035 D1 gives every root an
 active project, so this amends it; the words are with the amendment above. Migration
-0075 lets
+0076 lets
 `orchestration_roots.project_id` be null. Such a run has no terms of its own. With no
 document from a matter it is not privileged and its inference-tier floor is the profile's.
 It may read the owner's files wherever they are filed, and it then takes on the terms of
@@ -714,7 +714,7 @@ Closing ends it without synthesis, keeps retained work inspectable, converts the
 reservation into a charge, writes an audit row and releases the allowance. Nothing is
 retried. Like halt, closing stays reachable after opt-out or a switched-off profile. Only
 an uncertain run can be closed. Until then the composer names the run that is blocking a
-new one. Migration 0074 adds the `closed` state.
+new one. Migration 0075 adds the `closed` state.
 
 ### D7 — New harness stays experimental until its stated limits close; replacing the chat-completion path needs its own decision
 
@@ -1021,10 +1021,10 @@ branch as it is, and the item is marked **not built**.
   numbers and frozen terms). The maintainer looked at each in that order. They are in one
 pull request, followed by one commit for each of the four rulings that needed code.
 - Release 0.8.0 shipped the orchestration tables, so schema changes must upgrade deployed
-  databases. Migrations 0073 to 0076 are additive on a 0.8.0 database: 0073 adds the `run`
+  databases. Migrations 0074 to 0077 are additive on a 0.8.0 database: 0074 adds the `run`
   message kind and the message-to-session link, and turns the profile column's enumerated
-  check into a pattern check validated against the registry; 0074 adds the `closed` state;
-  0075 lets a run have no project; 0076 lets a run complete with no plan revision. Each
+  check into a pattern check validated against the registry; 0075 adds the `closed` state;
+  0076 lets a run have no project; 0077 lets a run complete with no plan revision. Each
   downgrade refuses while the data it would break is retained.
 - The changes touch authorization, audit and the gateway, and are routed to security
   review. The items that need it are the gateway changes (the truthful purpose label, the

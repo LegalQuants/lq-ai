@@ -1,4 +1,4 @@
-"""0073 to 0076 on a database that carries 0.8.0's orchestration rows.
+"""0074 to 0077 on a database that carries 0.8.0's orchestration rows.
 
 Runs on a second disposable database, never the shared test database. Release
 0.8.0 shipped 0067 and 0068, so these revisions must upgrade retained runs and
@@ -22,7 +22,7 @@ ACTIVE = "'planning','awaiting_approval','queued','running','waiting_children','
 
 
 def exercise(source_url: str) -> None:
-    name = f"lq_ai_test_0073_{uuid4().hex[:10]}"
+    name = f"lq_ai_test_0074_{uuid4().hex[:10]}"
     base = source_url.replace("postgresql+asyncpg://", "postgresql://", 1).rsplit("/", 1)[0]
     admin = create_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
     target = create_engine(f"{base}/{name}")
@@ -68,8 +68,8 @@ def exercise(source_url: str) -> None:
         with admin.connect() as db:
             db.execute(text(f'CREATE DATABASE "{name}"'))
         os.environ["DATABASE_URL"] = f"{base}/{name}"
-        # The schema 0.8.0 shipped, plus main's unreleased 0069 to 0072.
-        command.upgrade(config, "0072")
+        # The schema 0.8.0 shipped, plus main's unreleased 0069 to 0073.
+        command.upgrade(config, "0073")
         with target.begin() as db:
             db.execute(
                 text(
@@ -124,7 +124,7 @@ def exercise(source_url: str) -> None:
         with pytest.raises(DBAPIError), target.begin() as db:
             root(db, second, uuid4(), profile="new_harness_v1", status="halted")
 
-        command.upgrade(config, "0073")
+        command.upgrade(config, "0074")
         with target.begin() as db:
             # Existing rows are untouched and need no backfill.
             assert db.scalar(text("SELECT count(*) FROM messages WHERE kind='user'")) == 1
@@ -169,7 +169,7 @@ def exercise(source_url: str) -> None:
                 "UPDATE orchestration_roots SET planning_snapshot=NULL WHERE session_id=:id",
                 {"id": second},
             ),
-            # 0073 alone has no closed state.
+            # 0074 alone has no closed state.
             (
                 "UPDATE orchestration_roots SET status='closed' WHERE session_id=:id",
                 {"id": retained},
@@ -179,7 +179,7 @@ def exercise(source_url: str) -> None:
                 db.execute(text(statement), params)
 
         def refused_by_the_guard() -> None:
-            """0073's own guard refused, as the driver reports it.
+            """0074's own guard refused, as the driver reports it.
 
             SQLAlchemy echoes the whole failing statement into the error text, and the
             guard shares a statement with the DDL after it, so a match on the text of
@@ -187,13 +187,13 @@ def exercise(source_url: str) -> None:
             message says which clause raised.
             """
             with pytest.raises(DBAPIError) as refusal:
-                command.downgrade(config, "0072")
-            assert "0073 downgrade requires removing chat-hosted runs" in str(refusal.value.orig)
+                command.downgrade(config, "0073")
+            assert "0074 downgrade requires removing chat-hosted runs" in str(refusal.value.orig)
 
         # Downgrade is refused while a run message or a registry profile is retained.
         refused_by_the_guard()
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0073"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0074"
             db.execute(text("DELETE FROM messages WHERE id=:id"), {"id": message})
         # A registry-profile root alone is enough.
         refused_by_the_guard()
@@ -212,9 +212,9 @@ def exercise(source_url: str) -> None:
         # A run message alone is enough.
         refused_by_the_guard()
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0073"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0074"
             db.execute(text("DELETE FROM messages WHERE id=:id"), {"id": message})
-        command.downgrade(config, "0072")
+        command.downgrade(config, "0073")
         with target.begin() as db:
             # The 0.8.0 run survived the round trip, with its reservation.
             assert (
@@ -234,7 +234,7 @@ def exercise(source_url: str) -> None:
                 == 0
             )
 
-        command.upgrade(config, "0074")
+        command.upgrade(config, "0075")
         with target.begin() as db:
             db.execute(
                 text(
@@ -283,22 +283,22 @@ def exercise(source_url: str) -> None:
                 == 1
             )
         with pytest.raises(DBAPIError, match="removing closed runs"):
-            command.downgrade(config, "0073")
+            command.downgrade(config, "0074")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0074"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0075"
             db.execute(text("DELETE FROM autonomous_sessions WHERE id=:id"), {"id": retained})
             # Deleting the session removed the run's records and cleared nothing else.
             assert db.scalar(text("SELECT count(*) FROM orchestration_effects")) == 0
             assert db.scalar(text("SELECT count(*) FROM messages WHERE kind='user'")) == 1
-        command.downgrade(config, "0073")
-        command.upgrade(config, "0074")
-        # Before 0075 a run needs a matter.
+        command.downgrade(config, "0074")
+        command.upgrade(config, "0075")
+        # Before 0076 a run needs a matter.
         outside = uuid4()
         with pytest.raises(DBAPIError), target.begin() as db:
             root(db, outside, uuid4(), profile="new_harness_v1", status="halted", project=None)
-        command.upgrade(config, "0075")
+        command.upgrade(config, "0076")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0075"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0076"
             # A run from a chat outside any matter has no project, and neither do
             # its sessions; the tree trigger compares with IS DISTINCT FROM.
             root(db, outside, uuid4(), profile="new_harness_v1", status="halted", project=None)
@@ -321,19 +321,19 @@ def exercise(source_url: str) -> None:
         with pytest.raises(DBAPIError), target.begin() as db:
             db.execute(text("DELETE FROM projects WHERE id=:id"), {"id": project})
         with pytest.raises(DBAPIError, match="runs outside a matter"):
-            command.downgrade(config, "0074")
+            command.downgrade(config, "0075")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0075"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0076"
             db.execute(text("DELETE FROM autonomous_sessions WHERE id=:id"), {"id": outside})
-        command.downgrade(config, "0074")
-        command.upgrade(config, "0075")
-        # Before 0076 a run cannot complete without a plan.
+        command.downgrade(config, "0075")
+        command.upgrade(config, "0076")
+        # Before 0077 a run cannot complete without a plan.
         direct = uuid4()
         with pytest.raises(DBAPIError), target.begin() as db:
             root(db, direct, uuid4(), profile="new_harness_v1", status="completed")
         command.upgrade(config, "head")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0076"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0077"
             # The orchestrator answered by itself: completed, and no plan revision.
             root(db, direct, uuid4(), profile="new_harness_v1", status="completed")
             assert (
@@ -349,14 +349,14 @@ def exercise(source_url: str) -> None:
             with pytest.raises(DBAPIError), target.begin() as db:
                 root(db, uuid4(), uuid4(), profile=profile, status=status)
         with pytest.raises(DBAPIError, match="answered without a plan"):
-            command.downgrade(config, "0075")
+            command.downgrade(config, "0076")
         with target.begin() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0076"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0077"
             db.execute(text("DELETE FROM autonomous_sessions WHERE id=:id"), {"id": direct})
-        command.downgrade(config, "0075")
+        command.downgrade(config, "0076")
         command.upgrade(config, "head")
         with target.connect() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0076"
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0077"
     finally:
         if old_url is None:
             os.environ.pop("DATABASE_URL", None)
@@ -368,7 +368,7 @@ def exercise(source_url: str) -> None:
         admin.dispose()
 
 
-async def test_0073_to_0076_upgrade_a_release_database_and_refuse_a_lossy_downgrade(
+async def test_0074_to_0077_upgrade_a_release_database_and_refuse_a_lossy_downgrade(
     test_db_url: str,
 ) -> None:
     await asyncio.to_thread(exercise, test_db_url)

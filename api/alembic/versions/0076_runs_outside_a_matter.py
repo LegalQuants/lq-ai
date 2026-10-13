@@ -1,7 +1,7 @@
 """A governed run may belong to no matter (ADR 0038 D1, D5).
 
-Revision ID: 0075
-Revises: 0074
+Revision ID: 0076
+Revises: 0075
 
 A run started from a chat that is in no matter has no project. This revision
 lets ``orchestration_roots.project_id`` be null. Nothing else changes: the
@@ -20,8 +20,8 @@ Downgrade refuses while a run without a matter is retained.
 
 from alembic import op
 
-revision = "0075"
-down_revision = "0074"
+revision = "0076"
+down_revision = "0075"
 branch_labels = None
 depends_on = None
 
@@ -34,7 +34,7 @@ def downgrade() -> None:
     op.execute("""
         DO $$ BEGIN
           IF EXISTS (SELECT 1 FROM orchestration_roots WHERE project_id IS NULL) THEN
-            RAISE EXCEPTION '0075 downgrade requires removing runs outside a matter first';
+            RAISE EXCEPTION '0076 downgrade requires removing runs outside a matter first';
           END IF;
         END $$;
         ALTER TABLE orchestration_roots ALTER COLUMN project_id SET NOT NULL;
