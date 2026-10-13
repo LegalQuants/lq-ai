@@ -3430,6 +3430,22 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 
 **Acceptance criteria:** Mutation testing runs nightly; per-release mutation score is published in the release notes and rendered as a README badge alongside the OpenSSF Scorecard.
 
+**First-wave scope agreed (2026-10-13; PR #434, pending merge and CI validation):** Deliver scoped nightly Python mutation testing as an informational measure using opt-in, frozen `mutation` dependency groups. Select the proposed DB-free API encryption/citation suites and Gateway routing/tier/audit/anonymization suites. Surviving mutants do not block PRs; tool failures or incomplete measurements publish no score. Keep the 80% target as an improvement goal. The score describes its recorded module/test scope, not whole-product assurance. Credit: @SaifAlYounan.
+
+**Outstanding — DE-229 is not complete; track remaining acceptance separately from first-wave issue #380:**
+
+- [ ] Establish the first valid CI baseline for both packages; record actual runtime and review the survivor/no-test/timeout counts.
+- [ ] Reproduce the reported seed-migration skills-path problem in mutmut's copied environment, then repair it with a regression test; no separate DE number is assigned here.
+- [ ] Extend API coverage to authentication/authorization, audit and DB-backed citation paths after the environment prerequisite is fixed.
+- [ ] Include the Gateway repository-config suites and slow spaCy integration/round-trip suites excluded from the first wave; provision the NLP model explicitly instead of downloading it implicitly during tests.
+- [ ] Add the retained TypeScript/Stryker scope once its selected suites can run reliably.
+- [ ] Publish durable per-release reports/raw counts and the README badge from a valid baseline; retain the §5.8 publication/feed commitment.
+- [ ] Improve tests for meaningful survivors; record exclusions or equivalent mutations explicitly instead of treating the percentage as proof of security.
+
+Issue #380 covers the scoped nightly Python first wave and closes when PR #434 merges. The remaining checklist belongs in follow-up issue [#718](https://github.com/LegalQuants/lq-ai/issues/718), not in the closure criteria for #380.
+
+The workflow and release procedure are implementation in this PR, not evidence that any CI baseline or published score already exists. Full acceptance above remains unchanged. There is no PR-time diff-based gate in this delivery.
+
 #### DE-230 — Property-based testing for Citation Engine and Anonymization Layer invariants
 
 **Priority:** P1 · **Effort:** M
