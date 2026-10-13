@@ -205,8 +205,12 @@ async def _data_terms(
     strictest of the matters that hold the run's selected documents (ADR
     0038, ruling 4): the run's floor may not be weaker than theirs, and it is
     privileged exactly when one of them is. The privilege flag turns
-    pseudonymization off at the gateway, so a run must not carry it with no
-    privileged matter behind it, and must carry it when there is one.
+    pseudonymization off at the gateway, so a run outside any matter must not
+    carry it with no privileged matter behind it, and must carry it when there
+    is one. A run in a matter is held only the second way, as it was before
+    this rule: it must be privileged when its matter or a lending matter is,
+    and it is not stopped when the matter that made it privileged stops being
+    so. That it then keeps pseudonymization off is an open point (ADR 0038 D5).
 
     Called at every admission. A matter whose terms tighten, or a selected
     file that is filed in a stricter matter, stops the run before its next
@@ -624,7 +628,13 @@ class OrchestrationStore:
                         await audit_action(
                             db,
                             user_id=actor_id,
-                            project=project,
+                            # Marked as the run's own rows are: attaching a
+                            # privileged matter's knowledge-base file to a
+                            # matter that is not privileged is privileged
+                            # activity too.
+                            **await run_privilege(
+                                db, snapshot.project_id, snapshot.root.privileged
+                            ),
                             action="project.file_attached",
                             resource_type="project",
                             resource_id=str(snapshot.project_id),

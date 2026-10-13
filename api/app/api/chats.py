@@ -75,12 +75,7 @@ from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
 from app.autonomous.guard import _args_digest
-from app.autonomous.orchestration.reading import (
-    NO_FLOOR,
-    WITHHELD_ANSWER,
-    MatterTerms,
-    written_under_stricter_terms,
-)
+from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, thread_for_turn
 from app.chat.tool_loop import (
     LoopConfirmation,
     LoopFinal,
@@ -258,9 +253,11 @@ async def _load_history_messages(
     ``terms`` are the data terms of the turn being sent: its matter's
     inference-tier floor and privilege flag, or none for a chat in no matter.
     A governed run's answer that was written under stricter terms is replaced
-    by :data:`WITHHELD_ANSWER`, as it is for a later run's planning call
-    (ADR 0038 D5): the answer may hold what a matter's file said, and this
-    turn goes out on its own terms. With no ``terms`` nothing is withheld.
+    by a note, as it is for a later run's planning call (ADR 0038 D5): the
+    answer may hold what a matter's file said, and this turn goes out on its
+    own terms. The answer's terms are those of the matters behind it
+    (:func:`~app.autonomous.orchestration.reading.answer_terms`). With no
+    ``terms`` nothing is withheld.
     """
     if token_budget <= 0 or max_messages <= 0:
         return []
@@ -269,6 +266,7 @@ async def _load_history_messages(
             Message.role,
             Message.content,
             Message.autonomous_session_id,
+            OrchestrationRoot.project_id,
             OrchestrationRoot.planning_snapshot,
         )
         .outerjoin(
@@ -283,19 +281,12 @@ async def _load_history_messages(
         )
         .order_by(Message.created_at.asc(), Message.id.asc())
     )
-    rows = (await db.execute(stmt)).all()
-    history: list[tuple[str, str]] = [
-        (
-            role,
-            WITHHELD_ANSWER
-            if terms is not None
-            and session_id is not None
-            and written_under_stricter_terms(snapshot, terms)
-            else content,
-        )
-        for role, content, session_id, snapshot in rows
+    rows = [
+        (role, content, session_id, project_id, snapshot)
+        for role, content, session_id, project_id, snapshot in (await db.execute(stmt)).all()
         if content
     ]
+    history = await thread_for_turn(db, rows, terms)
     selected = _select_history_within_budget(
         history, token_budget=token_budget, max_messages=max_messages
     )

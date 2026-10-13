@@ -278,6 +278,103 @@ async def borrowed_terms(
     return strictest((await db.execute(query)).all())
 
 
+async def answer_terms(
+    db: AsyncSession, *, project_id: UUID | None, snapshot: object
+) -> MatterTerms | None:
+    """The matters' terms behind an earlier run's answer, for a turn that is not a run.
+
+    A later run is compared with what the earlier run's intake recorded
+    (:func:`written_under_stricter_terms`): both floors then include the
+    profile's own, which the operator sets, so they compare like with like. An
+    ordinary chat turn has no profile floor. Compared with the recorded floor,
+    it would be refused every answer wherever the operator's floor is stricter
+    than the matter's, which is the default. So the floor here is the matters'
+    alone, as they are now: for a run in a matter, that matter's and those of
+    the matters it borrowed from (:func:`borrowed_terms`); for a run outside
+    any matter, those of the matters that hold its selected documents
+    (:func:`selection_terms`). The privilege flag is the recorded one or the
+    present one, whichever is set.
+
+    ``project_id`` is the run's matter and ``snapshot`` its intake. None when
+    the intake cannot be read: the answer is then withheld, never shown on a
+    guess.
+    """
+    scope = snapshot.get("root") if isinstance(snapshot, dict) else None
+    resources = scope.get("resources") if isinstance(scope, dict) else None
+    listed = resources.get("document_ids") if isinstance(resources, dict) else None
+    if not isinstance(scope, dict) or not isinstance(listed, list):
+        return None
+    recorded = scope.get("privileged")
+    if type(recorded) is not bool:
+        return None
+    try:
+        document_ids = [UUID(str(value)) for value in listed]
+    except ValueError:
+        return None
+    if project_id is None:
+        now = await selection_terms(db, document_ids)
+    else:
+        own = (
+            await db.execute(
+                select(Project.minimum_inference_tier, Project.privileged).where(
+                    Project.id == project_id
+                )
+            )
+        ).one_or_none()
+        if own is None:
+            return None
+        borrowed = await borrowed_terms(db, project_id, document_ids)
+        now = MatterTerms(
+            minimum_inference_tier=min(own[0] or NO_FLOOR, borrowed.minimum_inference_tier),
+            privileged=bool(own[1]) or borrowed.privileged,
+        )
+    return MatterTerms(
+        minimum_inference_tier=now.minimum_inference_tier,
+        privileged=recorded or now.privileged,
+    )
+
+
+def withheld_from(answer: MatterTerms | None, turn: MatterTerms) -> bool:
+    """Whether an answer written under ``answer`` is kept from a turn sent on ``turn``.
+
+    Its floor was lower, or it was privileged and the turn is not. Terms that
+    could not be read (None) count as stricter.
+    """
+    if answer is None:
+        return True
+    return answer.minimum_inference_tier < turn.minimum_inference_tier or (
+        answer.privileged and not turn.privileged
+    )
+
+
+async def thread_for_turn(
+    db: AsyncSession,
+    rows: Collection[tuple[str, str, UUID | None, UUID | None, object]],
+    turn: MatterTerms | None,
+) -> list[tuple[str, str]]:
+    """Earlier messages as an ordinary turn may send them: a stricter run's answer withheld.
+
+    ``rows`` are ``(role, content, autonomous_session_id, run's project_id,
+    run's intake)`` in the order wanted; the last two come from the run's root
+    and are None for a message that is not a run's. A run's answer written
+    under stricter terms than ``turn`` is replaced by :data:`WITHHELD_ANSWER`
+    (ADR 0038 D5). With no ``turn`` nothing is withheld. Used by every path of
+    ordinary chat that sends the thread to a model, so they share one rule.
+    """
+    thread: list[tuple[str, str]] = []
+    for role, content, session_id, project_id, snapshot in rows:
+        if (
+            turn is not None
+            and session_id is not None
+            and withheld_from(
+                await answer_terms(db, project_id=project_id, snapshot=snapshot), turn
+            )
+        ):
+            content = WITHHELD_ANSWER
+        thread.append((role, content))
+    return thread
+
+
 def read_locks(project_id: UUID | None) -> tuple[Any, ...]:
     """The tables :func:`readable_documents` rows are share-locked on."""
     return (Document, File) if project_id is None else (Document, File, ProjectFile)

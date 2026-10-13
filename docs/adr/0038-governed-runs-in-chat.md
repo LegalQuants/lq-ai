@@ -569,12 +569,23 @@ note in its place, which the owner also sees when reading what was sent. A follo
 keeps the earlier run's documents has that run's terms and is shown its answer, and the
 composer starts a follow-up from those documents. An earlier run whose terms cannot be
 read is treated as stricter. The rule applies to every run; between runs of one matter it
-changes nothing unless the matter's terms were loosened in between. An ordinary turn in
-the same chat follows the same rule (ruled 2026-10-13). An ordinary turn replays the
-thread to the provider, and its terms are its chat's matter's floor and privilege flag, or
-none for a chat in no matter. Where the earlier run's terms were stricter, the replayed
-thread holds the note in place of the answer. The owner's own messages are replayed as
-before.
+changes nothing unless the matter's terms were loosened in between.
+
+An ordinary turn in the same chat follows the same rule (ruling 13, 2026-10-13). An
+ordinary turn replays the thread to the provider, and its terms are its chat's matter's
+floor and privilege flag, or none for a chat in no matter. Where the terms behind the
+earlier answer were stricter, the replayed thread holds the note in place of the answer.
+The owner's own messages are replayed as before. The comparison is not the one between
+two runs. A run records the stricter of its matters' floor and the profile's own floor,
+which the operator sets and which is 1 by default, and two runs compare like with like.
+An ordinary turn has no profile floor, and compared with the recorded floor it would be
+sent no run's answer at all under the default setting. So for an ordinary turn the
+answer's floor is that of the matters behind it, as they are now: the run's matter and
+any it borrowed from, or the matters that hold its selected documents. Its privilege flag
+is the recorded one or the present one, whichever is set. The prompt enhancer sends the
+chat's recent messages to a model as well, with no floor and no privilege flag whatever
+matter the chat is in, so it is sent the note for any answer written under a floor or
+under privilege.
 
 One point in this is a choice made while building, which the maintainer has not ruled on:
 where the selected files come from matters with different terms, the strictest apply. An
@@ -596,8 +607,14 @@ accepted and held at every admission, with the other matter share-locked as the 
 is; a matter whose terms tighten stops the run before its next call. A route that cannot
 meet them is refused before anything is stored. The picker lists such a file with the
 other matter's name, floor and privilege flag. Where the run is privileged only because
-the other matter is, its audit rows are privilege-marked with the basis a run outside any
-matter uses.
+the other matter is, its audit rows, and the row that records attaching the file to its
+matter, are privilege-marked with the basis a run outside any matter uses.
+
+One point is open. A run in a matter is stopped when privilege is gained after approval
+and not when it is lost, as was already so for its own matter. A run that is privileged
+only because a lending matter is therefore stays privileged, with pseudonymization off,
+if that matter later drops the flag. A run outside any matter is stopped in both cases.
+Whether a run in a matter should be is the maintainer's to rule.
 
 Three limits remain. A file that a knowledge-base search finds during a run does not
 change the run's terms, and the search's own passage check still counts upload and
@@ -758,7 +775,8 @@ turns. These limits of the branch must close first.
 - **A matter's terms follow a run's answer into later turns, and no further.** A run that
   read a matter's file writes its answer into a chat that is in no matter. A later run or
   ordinary turn in that chat is sent the answer only if its terms are the same or stricter
-  (D5). The comparison is with the chat's matter, not with the route a turn happens to
+  (D5), and the prompt enhancer, whose request carries no terms, is sent no answer written
+  under any. The comparison is with the chat's matter, not with the route a turn happens to
   take, so a turn sent to a local model from a chat in no matter is still not sent it. The
   answer stays in the chat for its owner to read, and what the owner copies into a new
   message is the owner's own text. Ordinary chat applies no matter's terms to a file it
@@ -1106,6 +1124,8 @@ pull request, followed by one commit for each of the four rulings that needed co
   public-source tool. Setting the same opt-in in ordinary chat is not the answer: it would
   pseudonymize published sources and restore real names into calls that leave the
   deployment.
+- Also open for the maintainer: whether a run in a matter that is privileged only because
+  a lending matter is should be stopped when that matter drops the flag (D5).
 - Stated limits that are decided and not built: a running run is not stopped by a change
   of its owner's role, and the lever that stops it is the owner's Autonomous opt-in (D1,
   ruled 2026-10-12); `auditor.*` audit rows are not privilege-marked, here or for ordinary

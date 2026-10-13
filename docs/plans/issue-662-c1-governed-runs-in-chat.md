@@ -563,7 +563,15 @@ that it can be reviewed apart, and none has had maintainer or security review.
   other matter is privileged). Tests in `test_matter_terms.py` cover a floor alone,
   privilege alone and both, a second run on the attached file, a route that cannot meet
   the terms, a matter that tightens or loosens after approval, the audit rows and the
-  picker. Neither ruling has been driven in a browser or run on the development stack.
+  picker. An independent read of the two changes then found three things, each fixed: the
+  prompt enhancer also sends the chat's recent messages and was not covered; an ordinary
+  turn compared against the floor a run records, which includes the operator's profile
+  floor (1 by default), so it would have been sent no run's answer at all, and the tests
+  had hidden that by setting the profile floor to none; and the row that records attaching
+  a lending matter's file was not privilege-marked. The read also raised one point that is
+  left open in ADR 0038 D5: a run in a matter keeps a borrowed privilege flag after the
+  lending matter drops it. Neither ruling has been driven in a browser or run on the
+  development stack.
   One choice is still the build's and not the maintainer's: the strictest terms where
   matters differ. Run once on the development
   stack: a privileged matter with a floor of 1, a file filed in it, and a chat in no

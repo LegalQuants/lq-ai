@@ -49,7 +49,10 @@ from app.autonomous.orchestration.reading import (
     NO_FLOOR,
     WITHHELD_ANSWER,
     MatterTerms,
+    answer_terms,
     selection_terms,
+    thread_for_turn,
+    withheld_from,
     written_under_stricter_terms,
 )
 from app.autonomous.orchestration.store import _data_terms
@@ -846,6 +849,18 @@ async def test_the_audit_rows_of_a_run_made_privileged_by_a_lending_matter_are_m
     assert {(row.privilege_marked, row.privilege_basis) for row in rows} == {
         (True, RUN_PRIVILEGE_BASIS)
     }, [(row.action, row.privilege_basis) for row in rows]
+    # So is the row that records attaching the lending matter's file to this one
+    # (found in review): it is written for the matter, not for the run's session.
+    async with api.env.factory() as db:
+        attached = (
+            await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.action == "project.file_attached",
+                    AuditLog.details["root_id"].astext == value["root_id"],
+                )
+            )
+        ).one()
+    assert (attached.privilege_marked, attached.privilege_basis) == (True, RUN_PRIVILEGE_BASIS)
 
     # A run in the same matter without the file is marked as before: not at all.
     api.gateway.expected_documents = [{"number": 1, "filename": "ours.txt"}]
@@ -1081,7 +1096,31 @@ async def test_an_answer_written_under_a_matters_terms_is_not_replayed_to_an_ord
     assert ("user", first["planning"]["goal"]) in await replayed(weaker)
 
     # And it is what the route sends, not only what the loader returns.
-    route = respx.post(f"{get_settings().lq_ai_gateway_url}/v1/chat/completions").mock(
+    route = ordinary_gateway()
+    response = await api.client.post(
+        f"{CHATS}/{chat_id}/messages", json={"content": "Shorten that.", "model": "smart"}
+    )
+    assert response.status_code == 200, response.text
+    sent = route.calls[0].request.read().decode()
+    assert "ONLY-IN-THE-MATTER" not in sent
+    assert "An earlier answer is not shown here" in sent
+    assert first["planning"]["goal"] in sent
+
+    # The prompt enhancer sends the chat's recent messages too (found in review). Its
+    # request carries no floor and no privilege flag, so it is sent the note as well.
+    await api.client.post(
+        "/api/v1/enhance-prompt", json={"raw_input": "Shorten that.", "chat_id": str(chat_id)}
+    )
+    assert route.call_count == 2
+    enhanced = route.calls.last.request.read().decode()
+    assert "Inputs for Enhance Prompt" in enhanced
+    assert "ONLY-IN-THE-MATTER" not in enhanced
+    assert "An earlier answer is not shown here" in enhanced
+
+
+def ordinary_gateway() -> respx.Route:
+    """The gateway as an ordinary chat request reaches it; the route records what was sent."""
+    return respx.post(f"{get_settings().lq_ai_gateway_url}/v1/chat/completions").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -1103,14 +1142,48 @@ async def test_an_answer_written_under_a_matters_terms_is_not_replayed_to_an_ord
             },
         )
     )
-    response = await api.client.post(
-        f"{CHATS}/{chat_id}/messages", json={"content": "Shorten that.", "model": "smart"}
-    )
-    assert response.status_code == 200, response.text
-    sent = route.calls[0].request.read().decode()
-    assert "ONLY-IN-THE-MATTER" not in sent
-    assert "An earlier answer is not shown here" in sent
-    assert first["planning"]["goal"] in sent
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        None,
+        {},
+        {"root": "x"},
+        # No resources, or documents that are not a list of ids.
+        {"root": {"privileged": False}},
+        {"root": {"privileged": False, "resources": {"document_ids": "all"}}},
+        {"root": {"privileged": False, "resources": {"document_ids": ["not-an-id"]}}},
+        # A privilege flag that is not a flag.
+        {"root": {"privileged": "false", "resources": {"document_ids": []}}},
+    ],
+)
+async def test_an_answer_whose_terms_cannot_be_read_is_withheld_from_an_ordinary_turn(
+    harness: SimpleNamespace, snapshot: object
+) -> None:
+    """Withheld, never sent on a guess, whatever the turn's own terms are."""
+    async with harness.env.factory() as db:
+        assert await answer_terms(db, project_id=None, snapshot=snapshot) is None
+        rows = [
+            ("user", "Mine.", None, None, None),
+            (ASSISTANT, "ONLY-IN-THE-MATTER", uuid4(), None, snapshot),
+        ]
+        strictest_turn = MatterTerms(minimum_inference_tier=1, privileged=True)
+        assert await thread_for_turn(db, rows, strictest_turn) == [
+            ("user", "Mine."),
+            (ASSISTANT, WITHHELD_ANSWER),
+        ]
+        # A run in a matter that no longer exists has no terms to read either.
+        gone = {"root": {"privileged": False, "resources": {"document_ids": []}}}
+        assert await answer_terms(db, project_id=uuid4(), snapshot=gone) is None
+        # With no turn terms nothing is compared, and nothing is withheld.
+        assert (await thread_for_turn(db, rows, None))[1] == (ASSISTANT, "ONLY-IN-THE-MATTER")
+    assert withheld_from(None, MatterTerms()) is True
+    assert withheld_from(MatterTerms(), MatterTerms()) is False
+    assert withheld_from(MatterTerms(2, False), MatterTerms(3, False)) is True
+    assert withheld_from(MatterTerms(3, False), MatterTerms(2, False)) is False
+    assert withheld_from(MatterTerms(5, True), MatterTerms(1, False)) is True
+    assert withheld_from(MatterTerms(5, True), MatterTerms(5, True)) is False
 
 
 def replayed_answer(history: list[tuple[str, str]]) -> str:
@@ -1118,29 +1191,42 @@ def replayed_answer(history: list[tuple[str, str]]) -> str:
     return content
 
 
-async def test_an_ordinary_turn_in_the_runs_own_matter_is_shown_its_answer(
-    harness: SimpleNamespace,
+@pytest.mark.parametrize("matter_floor", [None, 2])
+@respx.mock
+async def test_an_ordinary_turn_in_the_runs_own_matter_is_sent_its_answer(
+    harness: SimpleNamespace, matter_floor: int | None
 ) -> None:
-    """Nothing is withheld from a follow-up in the matter the run ran in."""
+    """Nothing is withheld from a follow-up in the matter the run ran in, or in none.
+
+    Found in review. A run records the stricter of its matter's floor and the
+    profile's own, which the operator sets and which is 1 by default. Compared
+    with that, an ordinary turn was refused every answer in any matter whose
+    floor is weaker than 1, and in a chat in no matter. The answer's terms are
+    the matters' alone, so the profile's floor is set to its default here.
+    """
     api = harness
-    answer = "## Answer\n\nFees are due in thirty days."
+    api.runtime.settings.new_harness_minimum_tier = 1
+    answer = "## Answer\n\nSENT-TO-THE-FOLLOW-UP: fees are due in thirty days."
     api.gateway.synthesis_answer = answer
     api.gateway.expected_documents = []
     api.gateway.child_script = [None]
-    await set_terms(api, api.env.project_id, minimum_inference_tier=2)
-    chat_id = await new_chat(api)
-    first = await start_in_chat(api, chat_id, profile=PROFILE)
-    assert (await run_to_completion(api, first))["status"] == "completed"
-    async with api.env.factory() as db:
-        history = await _load_history_messages(
-            db,
-            chat_id=chat_id,
-            exclude_message_id=uuid4(),
-            token_budget=100_000,
-            max_messages=50,
-            terms=MatterTerms(minimum_inference_tier=2, privileged=False),
+    await set_terms(api, api.env.project_id, minimum_inference_tier=matter_floor)
+    route = ordinary_gateway()
+    for in_project in (True, False):
+        chat_id = await new_chat(api, in_project=in_project)
+        first = await start_in_chat(api, chat_id, profile=PROFILE)
+        # Recorded with the profile's floor, which is not the matter's.
+        assert first["planning"]["root"]["minimum_inference_tier"] == 1
+        assert (await run_to_completion(api, first))["status"] == "completed"
+        response = await api.client.post(
+            f"{CHATS}/{chat_id}/messages", json={"content": "Shorten that.", "model": "smart"}
         )
-    assert (ASSISTANT, answer) in [(m.role, m.content) for m in history]
+        assert response.status_code == 200, response.text
+        assert route.call_count == (1 if in_project else 2)
+        sent = route.calls.last.request.read().decode()
+        assert str(chat_id) in sent
+        assert "SENT-TO-THE-FOLLOW-UP" in sent, in_project
+        assert "An earlier answer is not shown here" not in sent
 
 
 async def test_an_earlier_answer_is_shown_where_the_terms_are_the_same_or_stricter(
