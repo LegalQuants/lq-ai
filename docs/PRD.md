@@ -1529,6 +1529,26 @@ The LQ.AI **backend (FastAPI) owns authentication**. The web client (the OpenWeb
 - Web client (OpenWebUI fork) and Word add-in use short-lived JWT access tokens (~15 min) plus longer-lived refresh tokens (default 7 days, hashed at rest in the `user_sessions` table). Refresh tokens are rotated on each refresh.
 - Programmatic clients use API tokens with scoped permissions; tokens are listable and revocable per-user.
 - Every API request authenticates via `Authorization: Bearer <jwt>` in the standard FastAPI dependency.
+- Access and MFA challenge tokens carry the user's `credential_version`, checked against
+  the identity row. Admin password reset, self-service password change, and CLI password
+  reset increment it and revoke refresh sessions in the same transaction. Earlier tokens
+  remain invalid after the user completes the forced password change. Token issuance and
+  password changes serialize on the user row to prevent a concurrent refresh from escaping
+  revocation. Existing JWTs without the version claim require a new login or refresh after
+  this change is deployed; refresh tokens are unchanged.
+
+**Small-deployment user administration.** Trusted admins can provision local accounts via
+`POST /api/v1/admin/users` and reset any live account (including admins or themselves) via
+`POST /api/v1/admin/users/{user_id}/reset-password`. These operations generate an initial
+password, store only its bcrypt hash, force a password change, and write an audit row
+atomically. Existing MFA enrollment survives password reset. The initial password is
+returned in that response only, with `Cache-Control: no-store`; the admin delivers it through
+a secure channel. This is an admin-mediated flow; it adds no public signup or email service.
+The existing Role management card under `/lq-ai/admin/developer` exposes Create user
+(email, optional display name, and role) and a per-user Reset password confirmation.
+The generated password is held only in component memory and displayed until dismissal
+or navigation. Self-reset keeps it visible before clearing the session and returning
+the admin to sign-in.
 
 **MFA-mandatory option** (M1): operators can configure the deployment to require multi-factor authentication for all logins. The backend implements TOTP via `pyotp` (M1) with WebAuthn as a tracked enhancement (DE-### TBD). Recovery codes are single-use, hashed at rest, and rotated when the user re-enrolls. Configuration is documented in the deployment guide as a recommended default for any deployment handling client-confidential data.
 
@@ -3504,6 +3524,8 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Acceptance criteria:** Property tests in `api/tests/property/` and `gateway/tests/property/`; CI runs them with a documented time budget; properties are documented in `docs/security/property-tests.md`. Depends on the underlying pipelines being wired (§3.3 Citation Engine and §4.7 Anonymization Layer at M2).
 
 #### DE-231 — Golden / snapshot testing for built-in skills with model-version regression
+
+> **Status: SHIPPED (provisional snapshots — first live run calibrates).** 30 synthetic fixture/snapshot pairs across all 10 starter skills (`skills/*/acceptance/`), a structural-range harness at `tests/golden/` (keyless-skip by default; `LQ_GOLDEN_RECORD=1` writes observed sidecars), and the nightly `skill-golden.yml` (runs only when provider-key secrets exist — never fakes a run; below-threshold auto-files the release-blocking issue). All ranges derive from SKILL.md output contracts and are machine-enforced as `provisional` until a maintainer live run calibrates them. Multi-model matrix is the documented follow-on.
 
 **Priority:** P1 · **Effort:** M
 

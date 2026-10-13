@@ -110,6 +110,7 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/users/{user_id}/role",
         # Wave B v2 — admin user list for DevRoleManagementCard
         "/api/v1/admin/users",
+        "/api/v1/admin/users/{user_id}/reset-password",
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
@@ -377,11 +378,12 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/community-skills
     # /api/v1/admin/community-skills/{slug}
     # /api/v1/admin/community-skills/{slug}/install
-    # ADR 0038 adds five paths (157 -> 162): closing an uncertain run, the chat
+    # Admin provisioning adds the reset-password path (157 -> 158).
+    # ADR 0038 adds five paths (158 -> 163): closing an uncertain run, the chat
     # run intake, its two composer reads, and the admin profile-registry read.
-    # ADR 0038 adds two more (162 -> 164): the owner's read of how one session
+    # ADR 0038 adds two more (163 -> 165): the owner's read of how one session
     # of a run was set up, and the text of an engine prompt file.
-    assert len(actual) == 164
+    assert len(actual) == 165
 
 
 @pytest.mark.unit

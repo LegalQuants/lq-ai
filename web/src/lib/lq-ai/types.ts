@@ -829,6 +829,29 @@ export interface UsageQuery {
 
 // ----- Admin users -----
 
+export interface AdminUserCreateRequest {
+	email: string;
+	display_name?: string | null;
+	role?: UserRole | 'auditor';
+}
+
+export interface AdminUserCreatedResponse {
+	user_id: string;
+	email: string;
+	display_name: string | null;
+	role: UserRole | 'auditor';
+	is_admin: boolean;
+	must_change_password: boolean;
+	initial_password: string;
+}
+
+export interface AdminPasswordResetResponse {
+	user_id: string;
+	email: string;
+	initial_password: string;
+	sessions_revoked: number;
+}
+
 export interface AdminUserRow {
 	id: string;
 	email: string;

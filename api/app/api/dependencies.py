@@ -59,6 +59,7 @@ async def get_current_user(
     - bad signature, expired, or wrong-type JWT
     - user id in JWT does not exist in the DB
     - user has been soft-deleted (`deleted_at IS NOT NULL`)
+    - token credential version predates a password change or reset
     """
     claims = decode_access_token(token)
     if claims is None:
@@ -66,7 +67,11 @@ async def get_current_user(
 
     result = await db.execute(select(User).where(User.id == claims.user_id))
     user = result.scalar_one_or_none()
-    if user is None or user.deleted_at is not None:
+    if (
+        user is None
+        or user.deleted_at is not None
+        or claims.credential_version != user.credential_version
+    ):
         raise _unauthorized()
 
     return user

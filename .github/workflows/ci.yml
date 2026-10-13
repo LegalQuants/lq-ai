@@ -7,6 +7,7 @@ name: CI
 #   - web/    : svelte-check + Vitest
 #   - api/    : ruff + mypy (standard mode) + pytest (with Postgres) + coverage gate
 #   - gateway/: ruff + mypy --strict + pytest + coverage gate
+#   - tests/golden + tests/injection: keyless inventory and security regressions
 #   - api/Dockerfile.release: the skills-corpus guard (builds the `skills`
 #     stage only, so no dependency install; see scripts/release-image-check.sh)
 #
@@ -43,6 +44,40 @@ permissions:
   contents: read
 
 jobs:
+  keyless-eval-checks:
+    name: Evaluation harness (keyless regressions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      LQ_GOLDEN_LIVE: "0"
+      LQ_INJECTION_LIVE: "0"
+      LQ_EVAL_GATEWAY_READY: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install hash-locked harness dependencies
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r tests/eval-requirements.txt
+
+      - name: Run keyless golden and injection suites
+        # No Compose stack, API password or provider keys. The security
+        # regressions exercise session/failure paths with fake API clients.
+        run: >-
+          python -m pytest tests/golden tests/injection
+          -m "not golden_live and not injection_live" -q
+
   web-checks:
     name: Web (svelte-check + Vitest)
     runs-on: ubuntu-latest

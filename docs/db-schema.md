@@ -30,6 +30,7 @@ CREATE TABLE users (
     email                 CITEXT NOT NULL UNIQUE,
     display_name          TEXT,
     hashed_password       TEXT NOT NULL,
+    credential_version    INTEGER NOT NULL DEFAULT 0,  -- 0073: invalidates issued JWTs on password change
     is_admin              BOOLEAN NOT NULL DEFAULT FALSE,
     role                  TEXT NOT NULL DEFAULT 'member',       -- PRD §5.2 RBAC; CHECK (role IN ('admin','member','viewer','auditor'))
     mfa_enabled           BOOLEAN NOT NULL DEFAULT FALSE,
@@ -61,6 +62,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 | Column | Migration | Notes |
 |---|---|---|
 | `role` | 0017; widened 0065 | RBAC per PRD §5.2 (`admin`, `member`, `viewer`, `auditor`). Kept in sync with `is_admin` (role=`admin` iff `is_admin=true`). `auditor` (0065) is a read-only, deployment-wide cross-user reviewer role — non-mutating like `viewer`, but distinct: see the cross-user auditor spec. |
+| `credential_version` | 0073 | Starts at zero for existing and new users; incremented under a user-row lock on admin reset, self-service password change, and CLI reset. Access and MFA JWTs must match it. Refresh sessions are revoked in the same transaction. |
 | `reasoning_visibility` | 0015 | Enhance Prompt reasoning display mode (§3.2). Default `disclosure` = collapsed behind toggle. |
 | `featured_tools` | 0019 | Dashboard tool surfacing: `prominent` (cards) vs. `inline` (toolbar only). |
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |
@@ -71,12 +73,14 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 `must_change_password` is set to TRUE for:
 - the auto-created first-run admin (Task B2 / migration `0002`),
 - any user touched by `python -m app.cli reset-admin-password`.
+- users provisioned or reset through the admin user API.
 
 Authenticated endpoints (other than `GET /users/me`, `POST /auth/logout`, and `POST /auth/change-password`) return HTTP 403 with `error.code = "password_change_required"` while this flag is true. The flag is cleared by a successful `POST /auth/change-password`.
 
 ### `user_sessions`
 
-Refresh tokens, hashed; access tokens are stateless JWTs.
+Refresh tokens, hashed; access JWTs are not stored, but their credential version is checked
+against the user row on every request.
 
 ```sql
 CREATE TABLE user_sessions (
