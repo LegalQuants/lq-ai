@@ -26,7 +26,7 @@ from tests.test_matter_members import (
 
 async def test_admin_can_manage_without_content_access(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     admin = await _mk_user(db_session, is_admin=True, role="admin")
     response = await client.get("/api/v1/admin/matters", headers=_bearer(admin))
     assert response.status_code == 200
@@ -52,12 +52,14 @@ async def test_admin_can_manage_without_content_access(
             AuditLog.action == "matter.member_added", AuditLog.user_id == admin.id
         )
     )
+    assert audit is not None
+    assert audit.details is not None
     assert audit.details["reason"] == "Staff the matter"
 
 
 async def test_admin_intervention_requires_reason(
     client: AsyncClient, db_session: AsyncSession, colleague: User, matter: Project
-):
+) -> None:
     admin = await _mk_user(db_session, is_admin=True, role="admin")
     response = await client.post(
         f"/api/v1/projects/{matter.id}/members",
@@ -70,7 +72,7 @@ async def test_admin_intervention_requires_reason(
 
 async def test_screened_admin_cannot_unblock_self(
     client: AsyncClient, db_session: AsyncSession, owner: User, matter: Project
-):
+) -> None:
     admin = await _mk_user(db_session, is_admin=True, role="admin")
     other = await _mk_user(db_session, is_admin=True, role="admin")
     response = await client.post(
@@ -97,7 +99,7 @@ async def test_screened_admin_cannot_unblock_self(
 
 async def test_transfer_can_screen_former_owner(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     admin = await _mk_user(db_session, is_admin=True, role="admin")
     chat = Chat(owner_id=owner.id, project_id=matter.id, title="Retained work")
     db_session.add(chat)
@@ -135,14 +137,14 @@ async def test_transfer_can_screen_former_owner(
 
 async def test_auditor_cannot_administer(
     client: AsyncClient, db_session: AsyncSession, matter: Project
-):
+) -> None:
     auditor = await _mk_user(db_session, role="auditor")
     assert (await client.get("/api/v1/admin/matters", headers=_bearer(auditor))).status_code == 403
 
 
 async def test_screen_applies_to_own_chat_and_receipts(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     chat = Chat(owner_id=colleague.id, project_id=matter.id, title="My prior work")
     db_session.add(chat)
     db_session.add(
@@ -164,7 +166,7 @@ async def test_screen_applies_to_own_chat_and_receipts(
 
 async def test_sandbox_rejects_roster_mutations(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     matter.is_sandbox = True
     await db_session.flush()
     response = await client.post(
@@ -177,7 +179,7 @@ async def test_sandbox_rejects_roster_mutations(
 
 async def test_shared_deletion_does_not_remove_storage(
     db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     from app.workers.user_deletion import _hard_delete_user
 
     db_session.add(
@@ -193,7 +195,7 @@ async def test_shared_deletion_does_not_remove_storage(
     assert await db_session.get(Project, matter.id) is not None
 
 
-async def test_erasure_rollback_preserves_storage(db_session: AsyncSession, owner: User):
+async def test_erasure_rollback_preserves_storage(db_session: AsyncSession, owner: User) -> None:
     from app.models.file import File
     from app.models.storage_deletion import StorageDeletion
     from app.workers.user_deletion import _hard_delete_user
@@ -222,7 +224,7 @@ async def test_erasure_rollback_preserves_storage(db_session: AsyncSession, owne
 
 async def test_screen_follows_attached_files_and_kbs(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     from app.models.file import File
     from app.models.knowledge import KnowledgeBase
     from app.models.project import ProjectFile
@@ -264,7 +266,7 @@ async def test_screen_follows_attached_files_and_kbs(
 
 async def test_retrieval_cannot_reexpose_screened_attachment(
     db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     from app.knowledge.retrieval import hybrid_search
     from app.models.file import File
     from app.models.knowledge import KnowledgeBase
@@ -330,7 +332,7 @@ async def test_retrieval_cannot_reexpose_screened_attachment(
 @pytest.mark.parametrize("account_role", ["viewer", "auditor"])
 async def test_membership_does_not_widen_readonly_account(
     client: AsyncClient, db_session: AsyncSession, owner: User, matter: Project, account_role: str
-):
+) -> None:
     reader = await _mk_user(db_session, role=account_role)
     db_session.add(
         ProjectMember(
@@ -351,7 +353,7 @@ async def test_membership_does_not_widen_readonly_account(
 
 async def test_owned_shared_resources_require_matter_write(
     client: AsyncClient, db_session: AsyncSession, owner: User, colleague: User, matter: Project
-):
+) -> None:
     from app.models.file import File
     from app.models.knowledge import KnowledgeBase
 
