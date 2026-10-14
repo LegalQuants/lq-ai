@@ -289,8 +289,12 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
  * `MessageBubble.svelte` keys off `kind === 'refusal'`. Optional on the
  * canonical Message type because pre-T4 rows + the streaming draft path
  * don't populate it; consumers default to the role-driven path when missing.
+ *
+ * `run` (ADR 0038 D1) is the assistant reply to a governed run: it is bound to
+ * the run's root autonomous session, has no content until the run delivers an
+ * answer, and is presented by the run components rather than as a plain bubble.
  */
-export type MessageKind = 'user' | 'ai' | 'refusal' | 'system';
+export type MessageKind = 'user' | 'ai' | 'refusal' | 'system' | 'run';
 
 export interface Message {
 	id: string;
@@ -305,6 +309,11 @@ export interface Message {
 	 * missing `kind` as equivalent to the role-driven path.
 	 */
 	kind?: MessageKind;
+	/**
+	 * The root autonomous session this message is bound to (ADR 0038 D1). Set on
+	 * `kind: 'run'` messages; null on ordinary turns.
+	 */
+	autonomous_session_id?: string | null;
 	applied_skills?: string[];
 	routed_inference_tier?: 1 | 2 | 3 | 4 | 5 | null;
 	routed_provider?: string | null;

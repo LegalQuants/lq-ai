@@ -10,6 +10,7 @@ from uuid import uuid4
 import pytest_asyncio
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from tests.autonomous.orchestration.model_harness import model_demo  # noqa: F401
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import (
@@ -33,7 +34,9 @@ from app.autonomous.orchestration.store import OrchestrationStore
 from app.errors import Forbidden
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
+from app.models.chat import Chat
 from app.models.file import File
+from app.models.knowledge import KnowledgeBase
 from app.models.project import Project
 from app.models.user import User
 from app.skills.loader import load_registry
@@ -142,6 +145,13 @@ async def env(test_engine: AsyncEngine) -> AsyncIterator[SimpleNamespace]:
             # SET NULLs audit.user_id and leaks rows into later admin API tests.
             await db.execute(delete(AuditLog).where(AuditLog.user_id == owner_id))
             await db.execute(delete(AutonomousSession).where(AutonomousSession.user_id == owner_id))
+            # A run hosted in a chat writes messages, and the fictional
+            # agreement is filed as a real file; both restrict the owner's delete.
+            await db.execute(delete(Chat).where(Chat.owner_id == owner_id))
+            # A knowledge base restricts its owner's delete; its attachments
+            # to files and matters go with it.
+            await db.execute(delete(KnowledgeBase).where(KnowledgeBase.owner_id == owner_id))
+            await db.execute(delete(File).where(File.owner_id == owner_id))
             await db.execute(delete(Project).where(Project.owner_id == owner_id))
             await db.execute(delete(User).where(User.id == owner_id))
 

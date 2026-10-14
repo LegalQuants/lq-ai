@@ -164,7 +164,7 @@ CREATE TABLE projects (
     minimum_inference_tier   SMALLINT,
     max_egress_tier          SMALLINT,  -- 0070: matter-scoped tool-egress ceiling, 1-5, NULL = none
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
-    share_scope              TEXT NOT NULL DEFAULT 'personal',  -- 0074: personal | members | org
+    share_scope              TEXT NOT NULL DEFAULT 'personal',  -- 0078: personal | members | org
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at              TIMESTAMPTZ,  -- soft-delete; NULL means active
@@ -183,7 +183,7 @@ CREATE TABLE projects (
     CONSTRAINT chk_projects_slug_len CHECK (
         char_length(slug) > 0 AND char_length(slug) <= 80
     ),
-    -- Migration 0074.
+    -- Migration 0078.
     CONSTRAINT chk_projects_share_scope_enum CHECK (
         share_scope IN ('personal', 'members', 'org')
     ),
@@ -220,9 +220,9 @@ CREATE TRIGGER trg_projects_set_updated_at
 | Column | Migration | Notes |
 |---|---|---|
 | `is_sandbox` | 0022 | System-managed flag for the per-user skill try-it sandbox (`slug='__sandbox__'`). `POST /projects/sandbox/ensure` creates or returns the row. Sandbox projects are excluded from the default `GET /projects` list; the `include_sandbox` / `only_sandbox` query params control visibility. |
-| `share_scope` | 0074 | Ambient grant over the matter. `personal` — owner + explicit `project_members` rows only. `members` — same reach; marks a matter as deliberately restricted rather than never shared. `org` — every non-blocked user in the deployment gets **read**; writing still requires an explicit membership row. A `blocked` membership row overrides all three. New matters take `LQ_AI_MATTER_DEFAULT_SHARE_SCOPE` (default `personal`) unless the caller sets one. Only a matter lead may change it. |
+| `share_scope` | 0078 | Ambient grant over the matter. `personal` — owner + explicit `project_members` rows only. `members` — same reach; marks a matter as deliberately restricted rather than never shared. `org` — every non-blocked user in the deployment gets **read**; writing still requires an explicit membership row. A `blocked` membership row overrides all three. New matters take `LQ_AI_MATTER_DEFAULT_SHARE_SCOPE` (default `personal`) unless the caller sets one. Only a matter lead may change it. |
 
-### `project_members` (migration 0074)
+### `project_members` (migration 0078)
 
 The matter roster. PRD §3.11 listed `share_scope` in the Project data
 model and named `POST /api/v1/projects/{id}/share`; §3.11's M1 status
@@ -284,7 +284,7 @@ unaudited widening of cross-user access smuggled in under a collaboration
 feature. The deployment-wide `auditor` role (migration 0065) retains legacy rights for non-matter ledger and receipt surfaces; matter-linked
 content requires matter access before any privileged-reader shortcut.
 
-**Backfill.** 0074 writes one `lead` row per existing project for its
+**Backfill.** 0078 writes one `lead` row per existing project for its
 owner (`added_by_user_id = owner_id`, `created_at = projects.created_at`),
 so the resolver returns exactly the pre-migration answer for every
 existing row.
@@ -489,6 +489,46 @@ CREATE TABLE messages (
 
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 ```
+
+#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0074; ADR 0038 proposed)
+
+The sketch above does not show `messages.kind`. Migration 0020 added it, with
+`chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
+[0074](../api/alembic/versions/0074_runs_in_chat.py) changes `messages` as below.
+It is implemented, and
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not
+ratified.
+
+```sql
+ALTER TABLE messages DROP CONSTRAINT chk_messages_kind;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_kind
+  CHECK (kind IN ('user', 'ai', 'refusal', 'system', 'run'));
+ALTER TABLE messages ADD COLUMN autonomous_session_id uuid
+  CONSTRAINT fk_messages_autonomous_session_id
+  REFERENCES autonomous_sessions(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_run_binding
+  CHECK (autonomous_session_id IS NULL OR (kind = 'run' AND role = 'assistant'));
+CREATE UNIQUE INDEX uq_messages_autonomous_session
+  ON messages(autonomous_session_id) WHERE autonomous_session_id IS NOT NULL;
+```
+
+- A governed run's reply is one assistant message of kind `run`.
+  `autonomous_session_id` links it to the run's root autonomous session and is
+  NULL on every other message. Deleting the session leaves the message and
+  clears the link (`ON DELETE SET NULL`).
+- `chk_messages_run_binding` allows the link only on an assistant message of
+  kind `run`. The partial unique index `uq_messages_autonomous_session` allows
+  one message per session and indexes only rows where the link is set.
+- `chats.autonomous_session_id` is not reused for this: it marks hidden,
+  session-owned chats and removes them from chat lists.
+- The message holds the link. Run records stay authoritative. At delivery one
+  transaction writes the answer into `content`, the message's `applied_skills`,
+  tier, provider, model, token and cost fields, and its `work_product_attribution`
+  row, together with the delivery audit row. A run that ends without an answer
+  leaves `content` empty, and history replay skips assistant messages with no
+  content.
+- Downgrade refuses while any message has `kind = 'run'` or a session link;
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
 
 ### `inference_routing_log` FK closure (Task C3)
 
@@ -1403,6 +1443,38 @@ CREATE INDEX idx_inference_log_provider_time ON inference_routing_log(routed_pro
 CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) WHERE refused = TRUE;
 ```
 
+The sketch omits `purpose`. Migration 0029 added it as `purpose VARCHAR(32)`, nullable,
+with `idx_inference_log_model_purpose_timestamp` on `(routed_model, purpose, timestamp DESC)`.
+It labels the kind of traffic so cost calibration and receipts can tell the kinds
+apart. The gateway sets it from the request's `lq_ai_purpose` field, or to
+`embedding` on the embeddings path. A request with no label records `chat`, and so
+does a label outside the gateway's closed set, so a caller cannot add a value by
+sending a string. A row written before migration 0029 has NULL, which cost
+calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
+(`gateway/app/api/inference.py`):
+
+| Value | Recorded for |
+|---|---|
+| `chat` | Ordinary chat completions; also the fallback for no label or an unknown one |
+| `embedding` | Embeddings calls |
+| `judge_paraphrase` | Citation Engine paraphrase and ensemble judge calls (stages 3 and 4) |
+| `judge_case_content` | Citation Engine whole-opinion judge for case law |
+| `judge_authority_content` | The same judge for other authority sources |
+| `judge_treatment` | Case-law treatment-layer judge |
+| `tabular_extraction` | Tabular Review cell extraction |
+| `tabular_bulk_op` | Tabular Review bulk operations: redline reports and summary memos |
+| `playbook_executor` | Playbook executor |
+| `playbook_easy_extract` | Easy Playbook extraction |
+| `autonomous_executor` | A legacy single autonomous session's model calls |
+| `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
+
+Only `chat`, `embedding`, `judge_paraphrase` and `tabular_bulk_op` were in the set
+before ADR 0038 (proposed). The other labels were already sent by the backend and
+recorded as `chat`; recording them as themselves is implemented. Two
+Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
+`playbook_easy_assemble_describe_tier`, are longer than the 32-character column
+and are not in the set, so those rows still record `chat`.
+
 ---
 
 ### `tool_egress_log`
@@ -1901,7 +1973,10 @@ Revision **0067** includes `profile` (`demonstration` by default, or
 call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
 Sample roots continue to require a current prepared revision and no planning
-snapshot. A root in `planning` cannot reference a prepared revision.
+snapshot. A root in `planning` cannot reference a prepared revision. Migration 0074
+later replaces the enumerated `profile` check, 0075 adds the `closed` status, 0076
+lets `project_id` be null and 0077 lets a registry run complete without a plan; see
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -1923,7 +1998,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 
 | Table | Keys and fields | Constraints and lifecycle |
 |---|---|---|
-| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id` (nullable from 0076), unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
 | `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
@@ -2051,6 +2126,116 @@ of `minimum_inference_tier` and `privileged`.
 A scope ceiling of `0` refuses in the API and is never sent to the gateway.
 An unreadable policy fail-closes: no dispatch, refused audit row with
 `ceiling_source="unresolved"`.
+
+### Governed runs in chat and closing a run (0074 to 0077; ADR 0038 proposed)
+
+Implemented; [ADR 0038](adr/0038-governed-runs-in-chat.md)
+is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
+already carries the orchestration tables. The authoritative DDL for the first two is in
+[`0074_runs_in_chat.py`](../api/alembic/versions/0074_runs_in_chat.py) and
+[`0075_close_uncertain_runs.py`](../api/alembic/versions/0075_close_uncertain_runs.py);
+0076 and 0077 are described further down, each with its file.
+This section names the constraints they replace. The `messages` changes of 0074 are
+described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0074-adr-0038-proposed).
+
+**0074: registry profiles.** The profile is validated against the application's
+closed profile registry, so the database keeps only its shape.
+
+| Constraint on `orchestration_roots` | Before | After |
+|---|---|---|
+| `orchestration_roots_profile_check` | `profile IN ('demonstration','model_demo_v1')` | `profile ~ '^[a-z][a-z0-9_]{0,63}$'` |
+| `ck_orchestration_planning` | A model-planned root: `profile = 'model_demo_v1'` and a planning snapshot | A model-planned root: `profile <> 'demonstration'` and a planning snapshot |
+
+`demonstration` stays reserved for the earlier sample profile, which was removed; a
+registry profile cannot use it. The registered profiles are `model_demo_v1`, the
+fictional agreement, and `new_harness_v1`, the profile the chat composer offers as the
+experimental New harness model.
+
+**0075: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
+outcome is never repeated, and its reservation is retained. Closing is the owner's way
+to end such a run without a retry.
+
+| Constraint | Change |
+|---|---|
+| `orchestration_roots_status_check` | `status` also accepts `closed`. |
+| `ck_orchestration_planning` | A root with no current plan revision may also have status `closed`: it was closed while its planning call was uncertain. |
+| `orchestration_effects_status_check` | `status` also accepts `closed`. |
+| `orchestration_effects_check` | The row-shape rule gains the `closed` branch below. |
+
+```sql
+CHECK (
+  (status = 'completed' AND charged_usd IS NOT NULL AND result IS NOT NULL
+    AND completed_at IS NOT NULL)
+  OR (status = 'closed' AND charged_usd IS NOT NULL AND result IS NULL
+    AND completed_at IS NOT NULL)
+  OR (status IN ('admitted','uncertain') AND charged_usd IS NULL AND result IS NULL
+    AND completed_at IS NULL))
+```
+
+A `closed` effect is one whose outcome was never established. Its reservation was
+settled as a charge (`charged_usd` holds the reserved amount), it has no `result`, and
+`completed_at` is set. Closing a run does this to each unresolved effect, ends the
+root as `closed` with stop reason `owner_closed`, and sets the run's running sessions
+to `halted`. `closed` is outside the partial unique indexes
+`uq_orchestration_active_owner` (one active root per owner) and
+`uq_orchestration_one_inflight` (one admitted or uncertain effect per session), so
+closing releases the owner's single active-run allowance and a closed effect no longer
+blocks its session.
+
+**0076: a run outside a matter.** Authoritative DDL:
+[`0076_runs_outside_a_matter.py`](../api/alembic/versions/0076_runs_outside_a_matter.py).
+`orchestration_roots.project_id` becomes nullable. A run started from a chat that is in
+no matter has no project, and neither do its sessions (`autonomous_sessions.project_id`
+was already nullable, and the tree trigger from 0067 compares projects with
+`IS DISTINCT FROM`). The foreign key and its `ON DELETE RESTRICT` are unchanged, so a
+matter still cannot be deleted from under a run that belongs to it.
+
+The column says only that there is no matter. What follows from that is enforced by the
+application, at intake, on every policy check while the run is live, and at each read:
+
+| Rule | Where |
+|---|---|
+| It reads the owner's undeleted files wherever they are filed (ADR 0038, ruling 4). | `reading.readable_documents`, used by `policy.CurrentPolicy` and `boundary.constrain_call`; intake lists and refuses with the same predicates (`reading.filed_in_a_matter`, `reading.filed_in_another_matter`) |
+| It runs under the strictest terms of the matters that hold its selected documents (`files.project_id`, a `project_files` row, or a knowledge base the matter has attached through `project_knowledge_bases`, archived or not): the lowest `projects.minimum_inference_tier` any of them sets, and privileged if any is. With none, it is not privileged and its floor is the profile's own. | `reading.selection_terms`, set by `begin_run` |
+| Those terms are worked out again at every admission. A floor that has tightened, or a privilege flag that no longer matches, stops the run. A privilege flag with no privileged matter behind it is refused. | `store._data_terms` |
+| Nothing is attached to a matter for it. | `store.start_planning` |
+
+A file that belongs to a matter carries that matter's tier floor and privilege flag, and
+a run with no matter takes them on when it reads the file. A profile says
+whether it may start outside a matter (`project_scope = "any"`); New harness may, and
+the fictional profile, which is limited to one dedicated matter, may not.
+
+**0077: a run answered without a plan.** Authoritative DDL:
+[`0077_runs_answered_without_a_plan.py`](../api/alembic/versions/0077_runs_answered_without_a_plan.py).
+`ck_orchestration_planning` is replaced once more. Until 0077 a registry run with no plan
+revision (`current_revision IS NULL`) could end only as `uncertain`, `halted`, `failed`,
+`expired` or `closed`. It may now also end `completed`: the orchestrator answered the
+request by itself, so there is no `orchestration_plans` row, no admission and no child
+session. No column or table is added. The answer is the bound chat message's content, and
+the root session's `result` holds `{"kind": "orchestration_direct_answer", "verification":
+"unverified", "summary": ...}`.
+
+The constraint cannot say that such a run made one model call and admitted no child. The
+application holds that: the planning call is the only effect a run may admit before it has
+an approved plan (`store.begin_effect`), and children are admitted only under one
+(`store.admit_children`). A sample (`demonstration`) root still requires a prepared
+revision, and no run can wait for approval, be queued or run without one.
+
+Knowledge-base search adds no schema. The knowledge bases a run may search and its frozen
+terms are in `orchestration_roots.planning_snapshot` and the plan snapshot. A search
+step's `orchestration_effects.result` holds the passages the search returned, as a document
+read's holds the text it returned. The source number a search gives a file is in that
+result's step note (`result.step.summary`), with the file's identifiers and name and no
+passage text; it is read back from there when a delivered answer's quotations are checked.
+Of a search step's result, the step note is the only part that a view of the run or the
+owner's export returns.
+
+**Downgrade.** All four migrations refuse to downgrade while the rows they introduced
+are retained, as 0067 does: 0074 while any message has `kind = 'run'` or a session link,
+or any root has a profile other than `demonstration` and `model_demo_v1`; 0075 while any
+root or effect has status `closed`; 0076 while any root has no project; 0077 while any
+root is `completed` with no plan revision. Nothing is dropped silently; those runs need an
+explicit export and removal first.
 
 ### `autonomous_schedules` (M4)
 
@@ -2491,7 +2676,7 @@ Migration conventions:
 *Schema maintained alongside the PRD. Substantive changes are documented in PRD §9 deferred-enhancements (if forward-looking) or in the changelog of the migration that lands them.*
 
 
-### `storage_deletion_queue` (migration 0074)
+### `storage_deletion_queue` (migration 0078)
 
 Durable object-store erasure outbox: `storage_path` text primary key,
 `created_at` timestamptz. Requests commit with relational user deletion; the daily
@@ -2499,7 +2684,7 @@ deletion worker removes committed objects and retries failed removals. Roster
 `added_by_user_id` is nullable with ON DELETE SET NULL; invitation audit events survive.
 
 
-Migration 0074 also adds `messages.directed_by_user_id` (nullable UUID FK to users,
+Migration 0078 also adds `messages.directed_by_user_id` (nullable UUID FK to users,
 ON DELETE SET NULL). Existing rows backfill from the chat's original owner.
 Authenticated HTTP producers stamp their director explicitly; a BEFORE INSERT
 trigger supplies the current chat owner for internal producers. Custody transfer

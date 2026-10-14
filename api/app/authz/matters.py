@@ -114,7 +114,7 @@ def resolve_access(
     if membership_role == BLOCKED_ROLE:
         return "none", "blocked"
 
-    # 2. The owner is always lead. The 0074 backfill also writes an explicit
+    # 2. The owner is always lead. The 0078 backfill also writes an explicit
     #    lead row, so this is normally belt-and-braces — but it keeps a
     #    project whose membership row was deleted by hand from becoming
     #    unreachable by its own owner.
@@ -389,3 +389,39 @@ async def require_autonomous_source(
         raise NotFound("Autonomous source not found.")
     if source.project_id is not None:
         await require_matter(db, source.project_id, user, include_archived=True)
+
+
+async def require_chat_run_access(db: AsyncSession, chat_id: uuid.UUID, user: User) -> None:
+    """A retained run answer and its receipts keep their source-matter authority."""
+    from app.models.chat import Message
+    from app.models.orchestration import OrchestrationRoot
+
+    rows = await db.execute(
+        select(OrchestrationRoot.project_id, OrchestrationRoot.planning_snapshot)
+        .join(Message, Message.autonomous_session_id == OrchestrationRoot.session_id)
+        .where(Message.chat_id == chat_id)
+    )
+    for project_id, snapshot in rows:
+        if project_id is not None:
+            await require_matter(db, project_id, user, include_archived=True)
+        # File-only selection suggestions resolve through the live document
+        # row. Malformed suggestions name no resource and intake omits them.
+        from app.models.document import Document
+
+        documents: list[uuid.UUID] = []
+        files: list[uuid.UUID] = []
+        for entry in (snapshot or {}).get("documents", []):
+            if not isinstance(entry, dict):
+                continue
+            try:
+                if entry.get("document_id") is not None:
+                    documents.append(uuid.UUID(str(entry["document_id"])))
+                elif entry.get("file_id") is not None:
+                    files.append(uuid.UUID(str(entry["file_id"])))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        if files:
+            documents.extend(
+                (await db.scalars(select(Document.id).where(Document.file_id.in_(files)))).all()
+            )
+        await require_document_matter_access(db, documents, user)

@@ -90,6 +90,22 @@ def _registry(request: Request) -> MutableSkillRegistry:
 # gateway-side parser doesn't need to know which source it's reading.
 
 
+def _run_orchestrator_skills() -> frozenset[str]:
+    """Built-in skills that instruct a run profile's orchestrator (ADR 0038 D3).
+
+    Such a skill is that profile's own prompt. It plans and combines for a
+    governed run and does nothing useful attached to an ordinary message, so
+    the catalogue listing and the composer's autocomplete leave it out. It is
+    still an installed skill: it can be read by name, and the profile pins it.
+    A skill that instructs a run's tasks (Contract QA) is an ordinary skill and
+    stays listed.
+    """
+    # Imported here: the profile registry imports the skill registry.
+    from app.autonomous.orchestration.profiles import registered_profiles
+
+    return frozenset(p.root_skill for p in registered_profiles() if p.root_skill)
+
+
 def _summary_from_user_skill(row: UserSkill) -> dict[str, Any]:
     """Return the ``SkillSummary`` shape for a user-scope row, with
     ``None``/empty optionals dropped per the existing summary contract.
@@ -284,10 +300,11 @@ async def list_skills(
     if scope in ("user", "team"):
         return JSONResponse(content=user_summaries)
 
+    internal = _run_orchestrator_skills()
     builtin_summaries = [
         filter_summary_for_response(s)
         for s in registry.list_summaries(tag=tag)
-        if s.name not in shadowed_slugs
+        if s.name not in shadowed_slugs and s.name not in internal
     ]
 
     if scope == "builtin":
@@ -408,8 +425,9 @@ async def _list_merged_skills_for_user(
 
     holder = _registry(request)
     registry = holder.current()
+    internal = _run_orchestrator_skills()
     for summary in registry.list_summaries():
-        if summary.name in shadowed_slugs:
+        if summary.name in shadowed_slugs or summary.name in internal:
             continue
         out.append(
             {

@@ -499,3 +499,38 @@ async def test_worker_refuses_missing_actor_before_dispatch(db_session: AsyncSes
     with pytest.raises(NotFound):
         await guarded.chat_completion(request)
     gateway.chat_completion.assert_not_called()
+
+
+@pytest.mark.parametrize("direct", [False, True])
+async def test_governed_run_sources_respect_live_matter_access(
+    db_session: AsyncSession, owner: User, colleague: User, matter: Project, direct: bool
+) -> None:
+    from app.autonomous.orchestration.intake import list_documents
+    from app.autonomous.orchestration.reading import readable_documents
+
+    document, _ = await _make_doc_with_chunk(
+        db_session, owner=colleague, content="Synthetic screened run source", page_start=1
+    )
+    file = await db_session.get(File, document.file_id)
+    assert file is not None
+    if direct:
+        file.project_id = matter.id
+    else:
+        kb = KnowledgeBase(owner_id=colleague.id, name="Screened run source", project_id=matter.id)
+        db_session.add(kb)
+        await db_session.flush()
+        db_session.add(KnowledgeBaseFile(kb_id=kb.id, file_id=file.id))
+        await screen(db_session, matter, owner, colleague)
+    await db_session.flush()
+    assert (
+        await list_documents(
+            db_session, owner_id=colleague.id, project_id=None, candidate_file_ids=(file.id,)
+        )
+        == []
+    )
+    assert (
+        await db_session.scalar(
+            readable_documents(owner_id=colleague.id, project_id=None, document_ids=(document.id,))
+        )
+        is None
+    )

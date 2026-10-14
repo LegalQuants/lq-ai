@@ -306,13 +306,55 @@ class Settings(BaseSettings):
         default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
     )
 
+    # ADR 0038 D1, D3 — New harness, the run profile the chat composer offers
+    # as an experimental model. It has its own switch and its own pinned
+    # route: enabling the fictional profile above never enables this one, and
+    # nothing is inherited from it.
+    new_harness_enabled: bool = Field(default=False, validation_alias="LQ_AI_NEW_HARNESS_ENABLED")
+    new_harness_provider: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_PROVIDER")
+    new_harness_model: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_MODEL")
+    new_harness_budget_usd: Decimal = Field(
+        default=Decimal("5.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_NEW_HARNESS_BUDGET_USD",
+    )
+    new_harness_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_NEW_HARNESS_MINIMUM_TIER"
+    )
+    new_harness_timeout_seconds: int = Field(
+        default=300,
+        ge=1,
+        le=900,
+        validation_alias="LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS",
+    )
+    new_harness_reasoning_effort: Literal["", "none", "minimal", "low", "medium", "high"] = Field(
+        default="",
+        validation_alias="LQ_AI_NEW_HARNESS_REASONING_EFFORT",
+        description=(
+            "How much hidden reasoning a New harness call asks the model for. The "
+            "gateway maps it to Ollama's think, sends it as it is to OpenAI and Azure "
+            "OpenAI, and sends nothing for it to Anthropic. Hidden reasoning counts "
+            "against the output limit. Empty, the default, sends nothing and leaves the "
+            "model's own default. What a level does depends on the model: some treat "
+            "every level as on, and a model that does not take the setting may refuse "
+            "every call. Try a value against the pinned model before relying on it."
+        ),
+    )
+
     orchestration_deployment_children: int | None = Field(
         default=None,
         ge=1,
         le=32,
         validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
-        description="Explicit shared child capacity. Required before enabling the demonstration.",
+        description="Explicit shared child capacity. Required before enabling any run profile.",
     )
+
+    @property
+    def orchestration_enabled(self) -> bool:
+        """True when the operator has switched on at least one run profile."""
+        return self.orchestration_chat_enabled or self.new_harness_enabled
 
     @field_validator("orchestration_deployment_children", mode="before")
     @classmethod

@@ -162,6 +162,37 @@
 		resolveSkillInputsForSend,
 		skillInputsUnavailableMessage
 	} from '$lib/lq-ai/chat/skillInputs';
+	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
+	import type {
+		OrchestrationChatRun,
+		RunDocumentsRead,
+		RunProfilesRead
+	} from '$lib/lq-ai/api/orchestration';
+	import {
+		ACTIVE_RUN_POLL_MS,
+		NEW_HARNESS_ID,
+		NEW_HARNESS_LABEL,
+		RESEND_NEEDS_MODEL,
+		answersDirectly,
+		buildStartBody,
+		candidateFileIds,
+		composerMode,
+		defaultDocumentSelection,
+		documentsReadSignature,
+		harnessOption,
+		minDocuments,
+		newRequestId,
+		proposeBlocker,
+		requestFor,
+		requestSignature,
+		sendWording,
+		syncActiveRun,
+		takesDocuments,
+		toggleDocument,
+		type PendingRequest
+	} from '$lib/lq-ai/run/composer';
+	import { chatHref } from '$lib/lq-ai/run/links';
+	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -179,6 +210,10 @@
 		readPersistedOpen as readReceiptsDrawerOpen
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
+	import RunActiveNotice from '$lib/lq-ai/components/run/RunActiveNotice.svelte';
+	import RunDocumentPicker from '$lib/lq-ai/components/run/RunDocumentPicker.svelte';
+	import RunKnowledgeBases from '$lib/lq-ai/components/run/RunKnowledgeBases.svelte';
+	import RunModePanel from '$lib/lq-ai/components/run/RunModePanel.svelte';
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
@@ -370,6 +405,12 @@
 		// composer path keeps streaming + applied-skills + model selection
 		// consistent with a normal turn. Future: surface a "re-running…"
 		// indicator on the refusal row while the stream is in flight.
+		// This sends an ordinary message again. Beside New harness, Send starts a
+		// run, which is not what was asked for.
+		if (harnessChosen) {
+			sendError = RESEND_NEEDS_MODEL;
+			return;
+		}
 		const list = get(messagesStore);
 		const idx = list.findIndex((m) => m.id === msg.id);
 		if (idx <= 0) return;
@@ -378,7 +419,7 @@
 			const isUser = candidate.kind === 'user' || candidate.role === 'user';
 			if (isUser && candidate.content) {
 				composerText = candidate.content;
-				void sendMessage();
+				void sendChatMessage();
 				return;
 			}
 		}
@@ -403,6 +444,294 @@
 			messagesStore.update(($m) => $m.map((m) => (m.id === replacing.id ? newAiMessage : m)));
 		}
 		closeOverrideModal();
+	}
+
+	// ---- governed runs (ADR 0038 D1) ----
+	// A run is a governed task: a model proposes a plan, the owner approves that exact
+	// plan, and tasks run under it. The thread shows it as a message (RunMessage); the
+	// composer starts it when New harness is the chat's model. With an ordinary model
+	// chosen, nothing below changes how a message
+	// is sent.
+	let runProfiles: RunProfilesRead | null = null;
+	let runProfilesChatId: string | null = null;
+	let runProfilesLoading = false;
+	// Whether a read for the active chat has finished, with or without a result.
+	// Until it has, a chat whose model is New harness waits instead of sending.
+	let runProfilesChecked = false;
+	let runProfilesError: string | null = null;
+	let runDocuments: RunDocumentsRead | null = null;
+	let runDocumentsLoading = false;
+	let runDocumentsError: string | null = null;
+	// What the document list was last read for; null until it is read (and again after
+	// New harness is chosen or the chat changes). A change in the chat's attached files makes it stale.
+	let runDocumentsSignature: string | null = null;
+	let runDocumentsTicket = 0;
+	let selectedDocumentIds: string[] = [];
+	// Whether the person has ticked or unticked a document in this draft. Until they have,
+	// the selection is the default one (`defaultDocumentSelection`); after, it is theirs.
+	let selectionTouched = false;
+	// Counts the drafts, so the document picker is drawn afresh (and decides again whether it
+	// starts open) for each one.
+	let draftNumber = 0;
+	// The request being proposed. Kept until it succeeds, so a retry after a lost
+	// response returns the same run instead of starting a second one.
+	let runRequest: PendingRequest | null = null;
+	// The chats whose request is on its way. Kept per chat: a request in flight in one chat
+	// neither labels nor blocks Send in another.
+	let proposingChats: ReadonlySet<string> = new Set();
+	$: proposing = activeChat ? proposingChats.has(activeChat.id) : false;
+	let closingActiveRun = false;
+	let activeRunError: string | null = null;
+
+	/**
+	 * Read which profiles this chat can start, and which run holds the owner's
+	 * allowance. A quiet read is the background refresh while a run is active: it
+	 * shows no loading state, and a failure leaves what is shown as it is.
+	 */
+	async function loadRunProfiles(chatId: string, options: { quiet?: boolean } = {}): Promise<void> {
+		const quiet = options.quiet === true;
+		if (!quiet) runProfilesLoading = true;
+		try {
+			const value = await orchestrationChatApi.runProfiles(chatId);
+			if (chatId !== runProfilesChatId) return;
+			runProfiles = value;
+			runProfilesError = null;
+			runProfilesChecked = true;
+		} catch (e) {
+			if (chatId !== runProfilesChatId || quiet) return;
+			if ((e as { status?: number } | null)?.status === 404) {
+				// An API without the route has no runs to offer: no control, not a dead one.
+				runProfiles = null;
+				runProfilesError = null;
+			} else {
+				runProfilesError = e instanceof Error ? e.message : String(e);
+			}
+			runProfilesChecked = true;
+		} finally {
+			if (!quiet && chatId === runProfilesChatId) runProfilesLoading = false;
+		}
+	}
+
+	// While a run holds the owner's allowance, the notice about it is kept current:
+	// at once from the run's own message when that is in this thread, and by a slow
+	// read otherwise, so a run in another chat is seen to move on and to end.
+	let activeRunTimer: ReturnType<typeof setInterval> | undefined;
+
+	function stopActiveRunPoll(): void {
+		clearInterval(activeRunTimer);
+		activeRunTimer = undefined;
+	}
+
+	function startActiveRunPoll(): void {
+		if (activeRunTimer !== undefined) return;
+		activeRunTimer = setInterval(() => {
+			if (typeof document !== 'undefined' && document.hidden) return;
+			if (runProfilesChatId && !runProfilesLoading) {
+				void loadRunProfiles(runProfilesChatId, { quiet: true });
+			}
+		}, ACTIVE_RUN_POLL_MS);
+	}
+
+	onDestroy(stopActiveRunPoll);
+
+	/** Every read of a run shown in this thread: keep the composer's notice in step. */
+	function handleRunUpdate(_message: Message, run: OrchestrationChatRun): void {
+		if (runProfiles) runProfiles = syncActiveRun(runProfiles, run);
+	}
+
+	/** Forget the document list and selection: they belong to one chat's draft. */
+	function resetRunDraft(): void {
+		selectedDocumentIds = [];
+		selectionTouched = false;
+		draftNumber += 1;
+		runDocuments = null;
+		runDocumentsError = null;
+		runDocumentsSignature = null;
+		runDocumentsTicket += 1;
+		runDocumentsLoading = false;
+	}
+
+	/**
+	 * The draft ends when its request is sent. The next one starts from the default
+	 * selection again, and the list is read again so that the run just started, now the
+	 * last in this chat, is the one it is suggested from.
+	 */
+	function endRunDraft(): void {
+		selectedDocumentIds = [];
+		selectionTouched = false;
+		draftNumber += 1;
+		runDocumentsSignature = null;
+	}
+
+	async function loadRunDocuments(): Promise<void> {
+		const chat = $activeChatStore;
+		if (!chat) return;
+		// Recorded before the read, so a failed read is not retried in a loop; the
+		// picker's refresh button reads again on demand.
+		runDocumentsSignature = documentsReadSignature(chatFiles, composerAttachedKbIds);
+		// The chat's own files as they were when the read was asked for.
+		const attached = candidateFileIds(chatFiles);
+		const ticket = ++runDocumentsTicket;
+		runDocumentsLoading = true;
+		runDocumentsError = null;
+		try {
+			const value = await orchestrationChatApi.runDocuments(chat.id, attached);
+			if (ticket !== runDocumentsTicket) return;
+			runDocuments = value;
+			// Until the person changes the selection, it is the default one; after, it is
+			// theirs, and only loses what is no longer listed or readable.
+			selectedDocumentIds = defaultDocumentSelection({
+				read: value,
+				attachedFileIds: attached,
+				selected: selectedDocumentIds,
+				touched: selectionTouched
+			});
+		} catch (e) {
+			if (ticket !== runDocumentsTicket) return;
+			runDocumentsError = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (ticket === runDocumentsTicket) runDocumentsLoading = false;
+		}
+	}
+
+	function toggleRunDocument(fileId: string): void {
+		selectionTouched = true;
+		selectedDocumentIds = toggleDocument(
+			selectedDocumentIds,
+			fileId,
+			runDocuments?.max_documents ?? selectedRunProfile?.max_documents ?? 8
+		);
+	}
+
+	/** Read the chat's thread again, so the user's request and the run's message appear. */
+	async function reloadThread(chatId: string): Promise<boolean> {
+		try {
+			const items = await fetchMessages((cursor) =>
+				messagesApi.listMessages(chatId, { limit: 100, cursor })
+			);
+			if ($activeChatStore?.id === chatId && !streamingMessageId) messagesStore.set(items);
+			return true;
+		} catch (e) {
+			console.error('lq-ai: failed to reload messages', e);
+			return false;
+		}
+	}
+
+	async function proposeRun(): Promise<void> {
+		const chat = $activeChatStore;
+		const profile = selectedRunProfile;
+		if (!chat || proposingChats.has(chat.id)) return;
+		if (!profile) {
+			// New harness is the chat's model but cannot be used right now. Say why;
+			// never send the request to some other model instead.
+			sendError = harnessBlock ?? proposeBlocker({ profile: null, goal: '', selectedCount: 0 });
+			return;
+		}
+		const goal = composerText.trim();
+		const blocked = proposeBlocker({
+			profile,
+			goal,
+			selectedCount: selectedDocumentIds.length
+		});
+		if (blocked) {
+			sendError = blocked;
+			return;
+		}
+		const fileIds = takesDocuments(profile) ? [...selectedDocumentIds] : [];
+		// The same request keeps its id; a changed one gets a new id (the server refuses
+		// an id reused with different input).
+		const request = requestFor(
+			runRequest,
+			requestSignature({ chatId: chat.id, profile: profile.profile, goal, fileIds }),
+			newRequestId
+		);
+		runRequest = request;
+		sendError = null;
+		proposingChats = new Set([...proposingChats, chat.id]);
+		try {
+			await orchestrationChatApi.startRun(
+				chat.id,
+				buildStartBody({ requestId: request.id, profile, goal, fileIds })
+			);
+			runRequest = null;
+			// New harness stays the chat's model, as any model does after Send. The draft
+			// is over: the next one starts from the default selection.
+			if ($activeChatStore?.id === chat.id) {
+				// Only what was sent is cleared: text typed while the request was on its way stays.
+				if (composerText.trim() === goal) composerText = '';
+				endRunDraft();
+			}
+			const refreshed = await reloadThread(chat.id);
+			if (!refreshed && $activeChatStore?.id === chat.id) {
+				sendError =
+					'The run was started, but this thread could not be refreshed. Reload the chat to see it.';
+			}
+			await loadRunProfiles(chat.id);
+		} catch (e) {
+			// The request id is kept, so pressing Send again is a retry of this request.
+			// The error belongs to the chat it was sent from, not to one opened since.
+			if ($activeChatStore?.id === chat.id) {
+				sendError = e instanceof Error ? e.message : sendWording(answersDirectly(profile)).failure;
+			}
+			void loadRunProfiles(chat.id);
+		} finally {
+			const rest = new Set(proposingChats);
+			rest.delete(chat.id);
+			proposingChats = rest;
+		}
+	}
+
+	/** A run in this thread reached a finished state: read its row again, then the profiles. */
+	async function handleRunSettled(message: Message, _run: OrchestrationChatRun): Promise<void> {
+		const chatId = message.chat_id;
+		try {
+			const items = await fetchMessages(
+				(cursor) => messagesApi.listMessages(chatId, { limit: 100, cursor }),
+				{ stopAtId: message.id }
+			);
+			const fresh = items.find((m) => m.id === message.id);
+			if (fresh && $activeChatStore?.id === chatId) {
+				messagesStore.update(($m) => replaceMessage($m, fresh));
+			}
+		} catch (e) {
+			console.error('lq-ai: failed to refresh a run message', e);
+		}
+		if ($activeChatStore?.id === chatId) await loadRunProfiles(chatId);
+	}
+
+	async function closeActiveRun(): Promise<void> {
+		const active = runProfiles?.active_run;
+		const chat = $activeChatStore;
+		if (!active || !chat || closingActiveRun) return;
+		closingActiveRun = true;
+		activeRunError = null;
+		try {
+			await orchestrationChatApi.close(active.root_id);
+		} catch (e) {
+			activeRunError = e instanceof Error ? e.message : 'Could not close the run.';
+		} finally {
+			closingActiveRun = false;
+		}
+		await loadRunProfiles(chat.id);
+	}
+
+	async function openActiveRunChat(): Promise<void> {
+		const chatId = runProfiles?.active_run?.chat_id;
+		if (!chatId) return;
+		const known = get(chatsStore).find((c) => c.id === chatId);
+		if (known && (!projectIdFilter || known.project_id === projectIdFilter)) {
+			await selectChat(known);
+			return;
+		}
+		if (!projectIdFilter) {
+			try {
+				await selectChat(await chatsApi.getChat(chatId));
+				return;
+			} catch (e) {
+				console.error('lq-ai: failed to open the chat holding the active run', e);
+			}
+		}
+		await goto(chatHref(chatId));
 	}
 
 	// ---- bootstrap ----
@@ -433,8 +762,19 @@
 	function selectModel(id: string): void {
 		const chat = $activeChatStore;
 		if (!chat) return;
+		const wasHarness = modelByChat[chat.id] === NEW_HARNESS_ID;
 		modelByChat = { ...modelByChat, [chat.id]: id };
 		writePersistedModel(chat.id, id);
+		if (wasHarness !== (id === NEW_HARNESS_ID)) {
+			// Entering or leaving New harness: neither draft carries over. Skills,
+			// "Keep skills on" and the enhancer are not shown beside New harness.
+			resetRunDraft();
+			runRequest = null;
+			sendError = null;
+			inputsError = null;
+			pendingEnhancement = null;
+			onSlashDismiss();
+		}
 	}
 
 	async function selectChat(chat: Chat) {
@@ -442,6 +782,8 @@
 		streamingMessageId = null;
 		sendError = null;
 		attachmentWarning = null;
+		// An open slash popover listens on the window; it must not outlive its chat.
+		onSlashDismiss();
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
@@ -458,10 +800,13 @@
 		// a persisted id the current catalog still offers, so the picker can
 		// never show a model the send path would silently drop.
 		if (!(chat.id in modelByChat)) {
-			const persisted = readAvailablePersistedModel(
-				chat.id,
-				availableModels.data.map((m) => m.id)
-			);
+			// New harness is offered by the run-profiles read, not the gateway's
+			// catalog; whether it can be used in this chat is decided when that
+			// read returns (see `mode`).
+			const persisted = readAvailablePersistedModel(chat.id, [
+				...availableModels.data.map((m) => m.id),
+				NEW_HARNESS_ID
+			]);
 			if (persisted) {
 				modelByChat = { ...modelByChat, [chat.id]: persisted };
 			}
@@ -744,9 +1089,23 @@
 		});
 	}
 
+	/** Send, from the button. With New harness as the chat's model it asks for a plan. */
 	async function sendMessage() {
+		if (harnessChosen) {
+			await proposeRun();
+			return;
+		}
+		await sendChatMessage();
+	}
+
+	/**
+	 * One ordinary chat turn to the chat's provider model. It refuses beside New
+	 * harness, so the harness id is never sent as a model and a request made to New
+	 * harness is never answered by another model.
+	 */
+	async function sendChatMessage() {
 		const chat = $activeChatStore;
-		if (!chat) return;
+		if (!chat || harnessChosen) return;
 		if (!composerText.trim()) return;
 
 		// Hold the send until every attached skill's input schema is on hand.
@@ -945,13 +1304,17 @@
 	// the "Continue" button after an OAuth return (`?mcp_connected`). Reuses the
 	// normal send path so streaming + skills + model selection stay consistent.
 	export function resendLastUserMessage(): void {
+		if (harnessChosen) {
+			sendError = RESEND_NEEDS_MODEL;
+			return;
+		}
 		const list = get(messagesStore);
 		for (let i = list.length - 1; i >= 0; i--) {
 			const candidate = list[i];
 			const isUser = candidate.kind === 'user' || candidate.role === 'user';
 			if (isUser && candidate.content) {
 				composerText = candidate.content;
-				void sendMessage();
+				void sendChatMessage();
 				return;
 			}
 		}
@@ -1006,6 +1369,8 @@
 		// popover is open so the operator can finish skill selection
 		// without accidentally launching Enhance Prompt.
 		if (slashOpen) return;
+		// The prompt enhancer is not offered beside New harness.
+		if (harnessChosen) return;
 		if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
 			e.preventDefault();
 			expansionPanel?.open();
@@ -1034,7 +1399,9 @@
 		// handler fires; we read from the textarea directly anyway so the
 		// caret position and value are guaranteed consistent.
 		const detection = detectSlashAt(ta.value, ta.selectionStart);
-		if (detection.open) {
+		// A run does not use the chat's attached skills, so the slash popover stays
+		// closed beside New harness rather than attach one out of sight.
+		if (detection.open && !harnessChosen) {
 			slashOpen = true;
 			slashQuery = detection.query;
 			slashStartIndex = detection.slashIndex;
@@ -1131,11 +1498,88 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
+	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
+	// active chat changes (and again after a run ends or a run is proposed). New
+	// harness is one of the chat's models: the choice is remembered per chat like any
+	// other, and applies only while the server offers it here. The selected documents
+	// and the request id belong to one chat's draft.
+	$: storedModelId = activeChat ? (modelByChat[activeChat.id] ?? null) : null;
+	$: harness = harnessOption(runProfiles);
+	// `mode` is the one place that decides where Send goes. `harnessChosen` is true
+	// whenever New harness is the chat's model, usable or not: the ordinary send
+	// path is then closed. `runMode` is true only while it can be used here.
+	$: mode = composerMode({
+		storedModelId,
+		read: runProfiles,
+		checked: runProfilesChecked,
+		error: runProfilesError
+	});
+	$: harnessChosen = mode.kind === 'harness';
+	$: runMode = mode.kind === 'harness' && mode.state === 'ready';
+	$: selectedRunProfile =
+		mode.kind === 'harness' && mode.state === 'ready' ? mode.option.profile : null;
+	$: harnessBlock = mode.kind === 'harness' && mode.state !== 'ready' ? mode.reason : null;
+	$: harnessRecheck = mode.kind === 'harness' && mode.state === 'unavailable' && !mode.option;
+	// Whether New harness answers by itself is what the server says of its profile. Where the read
+	// has not come back (or fails) there is no profile, so the picker says what it always said.
+	$: pickerHarness = harness
+		? {
+				id: NEW_HARNESS_ID,
+				label: NEW_HARNESS_LABEL,
+				resolves: harness.resolves,
+				disabledReason: harness.disabledReason,
+				answersDirectly: answersDirectly(harness.profile)
+			}
+		: harnessChosen
+			? {
+					id: NEW_HARNESS_ID,
+					label: NEW_HARNESS_LABEL,
+					resolves: null,
+					disabledReason: harnessBlock,
+					answersDirectly: false
+				}
+			: null;
+	// The slash popover attaches skills, which New harness does not use.
+	$: if (harnessChosen && slashOpen) onSlashDismiss();
+	$: activeRun = runProfiles?.active_run ?? null;
+	$: if (activeRun) startActiveRunPoll();
+	else stopActiveRunPoll();
+	$: proposeBlock = proposeBlocker({
+		profile: selectedRunProfile,
+		goal: composerText,
+		selectedCount: selectedDocumentIds.length
+	});
+	// Why Send waits beside New harness, or null when it can go.
+	$: sendBlock = harnessBlock ?? (runMode ? proposeBlock : null);
+	$: if ((activeChat?.id ?? null) !== runProfilesChatId) {
+		runProfilesChatId = activeChat?.id ?? null;
+		runProfiles = null;
+		runProfilesError = null;
+		runProfilesChecked = false;
+		activeRunError = null;
+		runRequest = null;
+		resetRunDraft();
+		if (runProfilesChatId) void loadRunProfiles(runProfilesChatId);
+	}
+	// A profile that reads documents the owner selects, or may: read the list when New
+	// harness is chosen, and again when the chat's attached files change.
+	$: if (
+		runMode &&
+		takesDocuments(selectedRunProfile) &&
+		documentsReadSignature(chatFiles, composerAttachedKbIds) !== runDocumentsSignature
+	) {
+		void loadRunDocuments();
+	}
+
 	// D0 — current selection for the active chat. Falls back to the
 	// picker's default (``smart`` if available, else the first row) when
-	// the user hasn't picked yet for this chat.
+	// the user hasn't picked yet for this chat. New harness is not a provider model,
+	// so it is never this value. While New harness is the chat's model this value
+	// is not sent anywhere: `sendChatMessage` refuses.
 	$: currentModelId = activeChat
-		? (modelByChat[activeChat.id] ?? defaultSelection(groupModels(availableModels))?.id ?? null)
+		? ((storedModelId !== NEW_HARNESS_ID ? storedModelId : null) ??
+			defaultSelection(groupModels(availableModels))?.id ??
+			null)
 		: null;
 
 	// Wave D.1 T15 — role for the refusal-bubble override-button gate.
@@ -1224,6 +1668,7 @@
 
 		<MessageList
 			{messages}
+			newHarness={harnessChosen}
 			{streamingMessageId}
 			onAppliedSkillClicked={handleAppliedSkillClicked}
 			{currentUserRole}
@@ -1236,56 +1681,115 @@
 			onGateApprove={() => decideToolCall('approve')}
 			onGateDeny={() => decideToolCall('deny')}
 			onGateConnect={connectMcp}
+			onRunSettled={handleRunSettled}
+			onRunUpdate={handleRunUpdate}
 		/>
 
 		{#if activeChat}
 			<div
 				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
+				class:lq-composer-fit={selectedRunProfile !== null}
 				data-testid="lq-ai-composer"
 			>
 				<div class="flex items-center justify-between">
-					<ModelPicker
-						models={availableModels}
-						selectedId={currentModelId}
-						onSelect={selectModel}
-					/>
-					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
+					<div class="flex items-center gap-2 flex-wrap">
+						<!-- ADR 0038 D1 — New harness is an experimental entry in this picker. -->
+						<ModelPicker
+							models={availableModels}
+							selectedId={harnessChosen ? NEW_HARNESS_ID : currentModelId}
+							harness={pickerHarness}
+							onSelect={selectModel}
+						/>
+						{#if runProfilesError && !harnessChosen}
+							<span class="text-xs lq-run-hint" data-testid="lq-ai-run-profiles-error">
+								New harness could not be checked: {runProfilesError}
+							</span>
+						{/if}
+					</div>
+					{#if !harnessChosen}
+						<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
-					<button
-						type="button"
-						role="switch"
-						aria-checked={stickyEnabled}
-						on:click={toggleSticky}
-						data-testid="lq-ai-sticky-toggle"
-						title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
-						class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
-							? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
-							: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
-					>
-						<span
-							class="inline-block w-2 h-2 rounded-full {stickyEnabled
-								? 'bg-emerald-500'
-								: 'bg-gray-300 dark:bg-gray-600'}"
-						></span>
-						Keep skills on
-					</button>
+						<button
+							type="button"
+							role="switch"
+							aria-checked={stickyEnabled}
+							on:click={toggleSticky}
+							data-testid="lq-ai-sticky-toggle"
+							title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+							class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
+								? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
+								: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
+						>
+							<span
+								class="inline-block w-2 h-2 rounded-full {stickyEnabled
+									? 'bg-emerald-500'
+									: 'bg-gray-300 dark:bg-gray-600'}"
+							></span>
+							Keep skills on
+						</button>
+					{/if}
 				</div>
 
-				<SkillPicker
-					availableSkills={$skillsStore}
-					selectedSkillNames={attachedSkillNames}
-					{projectAttachedSkills}
-					{skillDetails}
-					{skillInputs}
-					readyFileNames={attachedReadyNames}
-					processingFileNames={attachedProcessingNames}
-					{failedSkillNames}
-					onAttach={attachSkill}
-					onDetach={detachSkill}
-					onRetry={loadSkillDetail}
-					onUpdateInputs={updateSkillInputs}
-				/>
+				<!-- ADR 0038 D1 — names the run that is blocking a new one, in any chat. -->
+				{#if activeRun}
+					<RunActiveNotice
+						active={activeRun}
+						currentChatId={activeChat.id}
+						busy={closingActiveRun}
+						error={activeRunError}
+						onOpen={openActiveRunChat}
+						onClose={closeActiveRun}
+					/>
+				{/if}
+
+				{#if selectedRunProfile}
+					<!-- The one part of the composer that gives way: see `.lq-composer-fit`. -->
+					<div class="lq-harness-strip" data-testid="lq-ai-harness-strip">
+						<RunModePanel
+							profile={selectedRunProfile}
+							documentsRead={runDocuments}
+							selectedDocuments={selectedDocumentIds.length}
+						>
+							{#if takesDocuments(selectedRunProfile)}
+								<!-- One picker per draft: whether it starts open is decided when it is drawn. -->
+								{#key draftNumber}
+									<RunDocumentPicker
+										documents={runDocuments?.documents ?? []}
+										selected={selectedDocumentIds}
+										max={runDocuments?.max_documents ?? selectedRunProfile.max_documents ?? 8}
+										min={minDocuments(selectedRunProfile)}
+										inMatter={runDocuments
+											? runDocuments.project_id !== null
+											: composerProjectId !== null}
+										loading={runDocumentsLoading}
+										error={runDocumentsError}
+										onToggle={toggleRunDocument}
+										onRefresh={() => void loadRunDocuments()}
+									/>
+								{/key}
+								<!-- Not picked: a run lists every knowledge base attached to the matter. -->
+								<RunKnowledgeBases read={runDocuments} />
+							{/if}
+						</RunModePanel>
+					</div>
+				{:else if !harnessChosen}
+					<!-- Not beside New harness, usable or not: a run does not use the chat's skills. -->
+					<SkillPicker
+						availableSkills={$skillsStore}
+						selectedSkillNames={attachedSkillNames}
+						{projectAttachedSkills}
+						{skillDetails}
+						{skillInputs}
+						readyFileNames={attachedReadyNames}
+						processingFileNames={attachedProcessingNames}
+						{failedSkillNames}
+						onAttach={attachSkill}
+						onDetach={detachSkill}
+						onRetry={loadSkillDetail}
+						onUpdateInputs={updateSkillInputs}
+					/>
+				{/if}
 
 				<SavedPromptsPanel
 					onInsert={(text) => {
@@ -1296,6 +1800,7 @@
 				{#if sendError ?? inputsError}
 					<div
 						class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+						role="alert"
 						data-testid="lq-ai-send-error"
 					>
 						{sendError ?? inputsError}
@@ -1316,13 +1821,13 @@
 						<textarea
 							class="lq-composer w-full text-sm resize-none"
 							rows="3"
-							placeholder="Type a message…"
+							placeholder={harnessChosen ? 'Ask New harness…' : 'Type a message…'}
 							bind:value={composerText}
 							data-testid="lq-ai-composer-input"
 							on:keydown={handleComposerKeydown}
 							on:input={onComposerInput}
 						></textarea>
-						{#if slashOpen}
+						{#if slashOpen && !harnessChosen}
 							<div class="lq-composer-popover" data-testid="lq-ai-slash-popover-anchor">
 								<SlashPopover
 									query={slashQuery}
@@ -1342,7 +1847,7 @@
 							Stop
 						</button>
 					{:else}
-						{#if composerProjectId}
+						{#if composerProjectId && !harnessChosen}
 							<button
 								type="button"
 								class="lq-btn-secondary text-sm"
@@ -1354,18 +1859,20 @@
 								📎
 							</button>
 						{/if}
-						<button
-							type="button"
-							class="lq-btn-secondary text-sm"
-							aria-label={enhanceButtonAriaLabel}
-							title={enhanceButtonTitle}
-							on:click={() => expansionPanel?.open()}
-							disabled={!composerText.trim() || !!streamingMessageId}
-							data-testid="lq-ai-enhance-btn"
-							data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
-						>
-							✨
-						</button>
+						{#if !harnessChosen}
+							<button
+								type="button"
+								class="lq-btn-secondary text-sm"
+								aria-label={enhanceButtonAriaLabel}
+								title={enhanceButtonTitle}
+								on:click={() => expansionPanel?.open()}
+								disabled={!composerText.trim() || !!streamingMessageId}
+								data-testid="lq-ai-enhance-btn"
+								data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
+							>
+								✨
+							</button>
+						{/if}
 						<button
 							type="button"
 							class="lq-btn-secondary text-sm"
@@ -1376,27 +1883,52 @@
 						>
 							📜
 						</button>
+						<!-- One Send. With New harness chosen it starts a run: one model call, and no task before a plan is approved (ADR 0038 D1). -->
 						<button
 							type="button"
 							class="lq-btn-send text-sm font-medium disabled:opacity-50"
 							on:click={sendMessage}
-							disabled={!composerText.trim()}
+							disabled={harnessChosen ? sendBlock !== null || proposing : !composerText.trim()}
+							title={harnessChosen
+								? (sendBlock ?? sendWording(answersDirectly(selectedRunProfile)).sendTitle)
+								: undefined}
 							data-testid="lq-ai-send-btn"
+							data-run-mode={harnessChosen ? 'true' : undefined}
 						>
-							Send
+							{proposing ? 'Sending…' : 'Send'}
 						</button>
 					{/if}
 				</div>
+				{#if harnessBlock}
+					<!-- New harness is this chat's model but cannot be used now. Send waits. -->
+					<p class="text-xs lq-run-hint" role="status" data-testid="lq-ai-harness-block">
+						{harnessBlock}
+						{#if harnessRecheck && activeChat}
+							<button
+								type="button"
+								class="lq-run-recheck"
+								data-testid="lq-ai-harness-recheck"
+								on:click={() => activeChat && void loadRunProfiles(activeChat.id)}
+							>
+								Check again
+							</button>
+						{/if}
+					</p>
+				{:else if runMode && proposeBlock && composerText.trim()}
+					<p class="text-xs lq-run-hint" data-testid="lq-ai-run-propose-hint">{proposeBlock}</p>
+				{/if}
 
-				<EnhancePromptExpansion
-					bind:this={expansionPanel}
-					originalText={composerText}
-					chatId={activeChat?.id ?? null}
-					onUseEnhanced={handleUseEnhanced}
-					onEditEnhanced={handleEditEnhanced}
-					onKeepOriginal={handleKeepOriginal}
-					onDismiss={handleEnhanceDismiss}
-				/>
+				{#if !harnessChosen}
+					<EnhancePromptExpansion
+						bind:this={expansionPanel}
+						originalText={composerText}
+						chatId={activeChat?.id ?? null}
+						onUseEnhanced={handleUseEnhanced}
+						onEditEnhanced={handleEditEnhanced}
+						onKeepOriginal={handleKeepOriginal}
+						onDismiss={handleEnhanceDismiss}
+					/>
+				{/if}
 			</div>
 		{/if}
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
@@ -1405,6 +1937,7 @@
 	{#if activeChat}
 		<AttachedFilesPanel
 			{chatFiles}
+			newHarness={harnessChosen}
 			{projectFiles}
 			{uploading}
 			{attachLimitReached}
@@ -1459,6 +1992,41 @@
 		bottom: calc(100% + 4px);
 		left: 0;
 		z-index: 50;
+	}
+
+	/* ADR 0038 D1 — beside New harness the composer is never taller than the room the
+	   chat column has. The column does not scroll, so anything taller would push the
+	   message box and Send out of the window with no way to reach them. The strip is
+	   the one part that gives way: what is opened in it scrolls inside it. The
+	   composer itself keeps `overflow: visible`, because the model list and the slash
+	   popover open out of it. */
+	.lq-composer-fit {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.lq-composer-fit > :global(*) {
+		flex-shrink: 0;
+	}
+	.lq-composer-fit > .lq-harness-strip {
+		flex-shrink: 1;
+		min-height: 6rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	/* ADR 0038 D1 — why Send waits beside New harness, shown under the composer. */
+	.lq-run-hint {
+		color: var(--lq-text-secondary);
+	}
+	.lq-run-recheck {
+		margin-left: 0.25rem;
+		color: var(--lq-accent);
+		text-decoration: underline;
+		background: none;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
 	}
 
 	.lq-composer {

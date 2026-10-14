@@ -33,7 +33,16 @@ log = logging.getLogger(__name__)
 
 
 async def enqueue_orchestration_job(root_id: uuid.UUID, session_id: uuid.UUID) -> bool:
-    """Best-effort wakeup after durable commit; the bounded sweep repairs loss."""
+    """Best-effort wakeup after durable commit; the bounded sweep repairs loss.
+
+    The caller's W3C trace context rides along as the job's third argument, so
+    the worker's spans join the trace of the request (or the worker invocation)
+    that queued it (ADR 0038 D2). It is empty when tracing is not configured.
+    """
+    from opentelemetry.propagate import inject
+
+    carrier: dict[str, str] = {}
+    inject(carrier)
     try:
         async with asyncio.timeout(3):
             pool = await _get_m3a6_pool()
@@ -41,6 +50,7 @@ async def enqueue_orchestration_job(root_id: uuid.UUID, session_id: uuid.UUID) -
                 "orchestration_session_job",
                 str(root_id),
                 str(session_id),
+                carrier,
                 _job_id=f"orchestration:{session_id}",
             )
         return True

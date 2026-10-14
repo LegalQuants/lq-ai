@@ -72,6 +72,9 @@ including retrieval through another KB. Screen checks precede owner shortcuts fo
 citation/source reads and saved skill files. Chat listings exclude denied matters.
 Autonomous calls recheck current matter contribution access at the governance
 checkpoint; orchestration rechecks during admission/effects and owner reads.
+Run-in-chat intake, selected-source reads, retained answers and receipts retain
+their matter checks. Admin/auditor run reads check the actual caller before
+using the owner identity to load the result; role status alone grants no matter access.
 Already-dispatched external calls cannot be recalled, and downloaded copies cannot
 be retroactively revoked.
 

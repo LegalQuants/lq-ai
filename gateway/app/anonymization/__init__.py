@@ -10,11 +10,14 @@ the originals on the response path so:
   rehydration step on the way back substitutes originals back in
   before the response is returned to the api/.
 
-Per decision M2-1 (locked at M2 kickoff): only chat/skill content is
-pseudonymized. Retrieved-document content stays un-pseudonymized so
-the existing retrieval surface continues to render real document text
-to the user. The alternative (Option A — pseudonymize the document
-corpus too) is filed as DE-269 for future consideration.
+Per decision M2-1 (locked at M2 kickoff): in ordinary chat only
+chat/skill content is pseudonymized. Retrieved-document content stays
+un-pseudonymized so the existing retrieval surface continues to render
+real document text to the user. The alternative (Option A — pseudonymize
+the document corpus too) is filed as DE-269 for future consideration. A
+governed run (ADR 0038) differs: it holds its tool arguments as originals
+(``lq_ai_restore_tool_arguments``), and its tool results and earlier
+tool-call arguments are pseudonymized with the rest of the request.
 
 Module layout:
 

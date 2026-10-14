@@ -1,7 +1,7 @@
 """project_members + projects.share_scope — matter-scoped collaboration
 
-Revision ID: 0074
-Revises: 0073
+Revision ID: 0078
+Revises: 0077
 Create Date: 2026-08-20
 
 PRD §3.11 lists ``share_scope`` in the Project data model and names
@@ -60,8 +60,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic
-revision: str = "0074"
-down_revision: str | None = "0073"
+revision: str = "0078"
+down_revision: str | None = "0077"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -20,6 +20,10 @@ The export bundle contains:
   user can audit their own actions.
 * ``skills.json`` — empty array under M1 (skills are filesystem-canonical
   per ADR 0004; no per-user DB rows).
+* ``orchestration_runs.json`` — the user's governed runs (ADR 0038 D5,
+  ADR 0016 P9): each run's planning intake, plan revisions and approvals,
+  child results, the root's combined result, per-step receipts and the
+  contents of the run's working files.
 * ``README.md`` — bundle manifest.
 
 A best-effort export: if a particular row family fails to serialize
@@ -111,9 +115,142 @@ def _serialize_message(message: Message) -> dict[str, Any]:
         "directed_by_user_id": str(message.directed_by_user_id)
         if message.directed_by_user_id
         else None,
+        "kind": message.kind,
+        # Set on a run message: the run in ``orchestration_runs.json``.
+        "autonomous_session_id": str(message.autonomous_session_id)
+        if message.autonomous_session_id
+        else None,
         "content": message.content,
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+async def _serialize_runs(session: AsyncSession, user: User) -> list[dict[str, Any]]:
+    """The user's governed runs: plans, child results, receipts and run files.
+
+    The owner's own work product (ADR 0016 P9). Step receipts carry the same
+    bounded notes the run view shows; raw tool results and provider responses
+    are not exported, as they are not shown.
+    """
+    from app.models.autonomous import AutonomousSession
+    from app.models.orchestration import (
+        OrchestrationAccount,
+        OrchestrationEffect,
+        OrchestrationFile,
+        OrchestrationPlan,
+        OrchestrationRoot,
+    )
+
+    runs = []
+    roots = await session.scalars(
+        select(OrchestrationRoot)
+        .where(OrchestrationRoot.owner_id == user.id)
+        .order_by(OrchestrationRoot.created_at, OrchestrationRoot.session_id)
+    )
+    for root in roots.all():
+        bound = (
+            await session.execute(
+                select(Message.chat_id, Message.id).where(
+                    Message.autonomous_session_id == root.session_id
+                )
+            )
+        ).one_or_none()
+        plans = await session.scalars(
+            select(OrchestrationPlan)
+            .where(OrchestrationPlan.root_id == root.session_id)
+            .order_by(OrchestrationPlan.revision)
+        )
+        sessions = []
+        members = await session.scalars(
+            select(AutonomousSession)
+            .where(AutonomousSession.root_session_id == root.session_id)
+            .order_by(AutonomousSession.delegation_depth, AutonomousSession.child_order)
+        )
+        for member in members.all():
+            account = await session.get(OrchestrationAccount, member.id)
+            effects = await session.scalars(
+                select(OrchestrationEffect)
+                .where(OrchestrationEffect.session_id == member.id)
+                .order_by(OrchestrationEffect.created_at, OrchestrationEffect.effect_key)
+            )
+            files = await session.scalars(
+                select(OrchestrationFile)
+                .where(OrchestrationFile.session_id == member.id)
+                .order_by(OrchestrationFile.name)
+            )
+            sessions.append(
+                {
+                    "session_id": str(member.id),
+                    "role": "root" if member.id == root.session_id else "child",
+                    "child_order": member.child_order,
+                    "status": member.status,
+                    "phase": member.current_phase,
+                    "result": member.result,
+                    "allocation_usd": str(account.allocation_usd) if account else None,
+                    "spent_usd": str(account.spent_usd) if account else None,
+                    "reserved_usd": str(account.reserved_usd) if account else None,
+                    "effects": [
+                        {
+                            "effect_key": effect.effect_key,
+                            "intent": effect.intent,
+                            "phase": effect.phase,
+                            "status": effect.status,
+                            "reserved_usd": str(effect.reserved_usd),
+                            "charged_usd": str(effect.charged_usd)
+                            if effect.charged_usd is not None
+                            else None,
+                            "created_at": _iso(effect.created_at),
+                            "completed_at": _iso(effect.completed_at),
+                            "outcome": (effect.result or {}).get("outcome"),
+                            "step": (effect.result or {}).get("step"),
+                        }
+                        for effect in effects.all()
+                    ],
+                    "files": [
+                        {
+                            "name": file.name,
+                            "revision": file.revision,
+                            "digest": file.digest,
+                            "size_bytes": file.size_bytes,
+                            "shared": file.shared,
+                            "updated_at": _iso(file.updated_at),
+                            "content": file.content,
+                        }
+                        for file in files.all()
+                    ],
+                }
+            )
+        runs.append(
+            {
+                "root_id": str(root.session_id),
+                "profile": root.profile,
+                "status": root.status,
+                "stop_reason": root.stop_reason,
+                "project_id": str(root.project_id) if root.project_id else None,
+                "chat_id": str(bound.chat_id) if bound else None,
+                "message_id": str(bound.id) if bound else None,
+                "created_at": _iso(root.created_at),
+                "updated_at": _iso(root.updated_at),
+                "planning": root.planning_snapshot,
+                "plans": [
+                    {
+                        "revision": plan.revision,
+                        "status": plan.status,
+                        "plan_hash": plan.plan_hash,
+                        "plan": plan.snapshot,
+                        "approval": plan.approval,
+                        "created_at": _iso(plan.created_at),
+                    }
+                    for plan in plans.all()
+                ],
+                "sessions": sessions,
+            }
+        )
+    return runs
 
 
 def _serialize_project(project: Project) -> dict[str, Any]:
@@ -232,6 +369,12 @@ original bytes for any files you uploaded.
                             `skills/` directory rather than the database.
 - `skill_workspaces.json` — your optional saved skill work, including file
                             contents, namespaces and revisions.
+- `orchestration_runs.json` — your governed runs: each run's request and
+                            plan, your approvals, each task's result, the
+                            combined result, step receipts and the contents
+                            of the run's working files. A run hosted in a
+                            chat is linked from its message in
+                            `messages.json`.
 
 ## Validity
 
@@ -420,6 +563,12 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
                 }
             )
         zf.writestr("skill_workspaces.json", json.dumps(saved_work, ensure_ascii=False, indent=2))
+
+        # Governed runs (ADR 0038 D5): plans, child results and run files.
+        zf.writestr(
+            "orchestration_runs.json",
+            json.dumps(await _serialize_runs(session, user), ensure_ascii=False, indent=2),
+        )
 
     return buffer.getvalue()
 

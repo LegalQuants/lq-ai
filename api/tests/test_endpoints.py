@@ -105,6 +105,17 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/autonomous/orchestration/chat-runs"),
     ("GET", "/api/v1/autonomous/orchestration/chat-runs/{root_id}"),
     ("POST", "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt"),
+    # ADR 0038 — governed runs in chat: closing an uncertain run, chat intake
+    # and composer reads, and the operator's read of the profile registry.
+    ("POST", "/api/v1/autonomous/orchestration/chat-runs/{root_id}/close"),
+    ("GET", "/api/v1/chats/{chat_id}/run-profiles"),
+    ("GET", "/api/v1/chats/{chat_id}/run-documents"),
+    ("POST", "/api/v1/chats/{chat_id}/runs"),
+    ("GET", "/api/v1/admin/orchestration/profiles"),
+    # ADR 0038 D2, D3: the owner's read of how a run was set up, and the text
+    # of an engine prompt file.
+    ("GET", "/api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace"),
+    ("GET", "/api/v1/autonomous/orchestration/prompts/{family}/{name}"),
     ("GET", "/api/v1/skill-workspaces"),
     ("DELETE", "/api/v1/skill-workspaces/{workspace_id}"),
     ("GET", "/api/v1/skill-workspaces/{workspace_id}/files/{name}"),

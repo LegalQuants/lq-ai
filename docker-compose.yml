@@ -286,6 +286,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
       LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
       LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
@@ -429,6 +439,11 @@ services:
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Observability. The worker executes governed runs, so it exports spans
+      # like the api does; a run's trace then connects the request, this worker,
+      # the gateway and the provider (ADR 0038 D2). Empty disables export.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME:-lq-ai-arq-worker}
       # Skills loader — the worker's on_startup installs the skill
       # registry via the shared bootstrap (app/skills/bootstrap.py) so
       # skill_ref autonomous sessions resolve on this process. Mounted
@@ -444,6 +459,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
       LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
       LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}

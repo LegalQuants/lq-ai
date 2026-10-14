@@ -161,8 +161,12 @@ class Message(Base):
             name="chk_messages_role",
         ),
         CheckConstraint(
-            "kind IN ('user', 'ai', 'refusal', 'system')",
+            "kind IN ('user', 'ai', 'refusal', 'system', 'run')",
             name="chk_messages_kind",
+        ),
+        CheckConstraint(
+            "autonomous_session_id IS NULL OR (kind = 'run' AND role = 'assistant')",
+            name="chk_messages_run_binding",
         ),
         CheckConstraint(
             "routed_inference_tier IS NULL OR (routed_inference_tier BETWEEN 1 AND 5)",
@@ -201,6 +205,21 @@ class Message(Base):
         server_default=text("'user'"),
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    autonomous_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "autonomous_sessions.id",
+            ondelete="SET NULL",
+            name="fk_messages_autonomous_session_id",
+        ),
+        nullable=True,
+        index=False,  # partial unique index created in migration 0074
+    )
+    """ADR 0038 D1: set only on a ``kind='run'`` assistant message. It links
+    the message to the root autonomous session of a governed run. Run records
+    stay authoritative; the message holds the link and, after delivery, the
+    answer. ``content`` stays empty for a run that ends without an answer, so
+    history replay skips it."""
     applied_skills: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
         nullable=False,

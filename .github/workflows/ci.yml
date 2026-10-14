@@ -153,6 +153,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Mutation report regression checks (stdlib only)
+        working-directory: ${{ github.workspace }}
+        run: python -m unittest discover -s tests -p test_mutation_report.py -v
+
       - name: Cache uv download cache
         # Keyed strictly on api/uv.lock so the cache only invalidates when
         # dependencies change. The uv download cache (~/.cache/uv) holds

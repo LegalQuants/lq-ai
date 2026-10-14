@@ -42,7 +42,7 @@ retrieved source chunks are carried in a system message marked
 `lq_ai_skip_anonymization=True` and reach the provider verbatim for citation
 grounding ([M2-1 decision](../security/anonymization.md#retrieval-context-skip-m2-d2)).
 If those chunks contain PII, the class rates below do not describe that exposure.
-The gateway also leaves tool messages untouched. These numbers must not be used
+The gateway also leaves tool messages untouched, except for a caller that holds its tool arguments as originals (a governed run), whose tool results and earlier call arguments are pseudonymized and are not what these numbers measure. These numbers must not be used
 as end-to-end, provider-payload leakage probabilities.
 
 Corpus classes mirror the recognizer set the gateway actually registers — six kept
@@ -233,7 +233,7 @@ count on them:
   Privileged chats and per-request opt-outs skip anonymization entirely —
   those paths send original text by design (PRD §4.7 Decision A).
 - **Message scope:** even when anonymization runs, retrieved source chunks
-  marked `lq_ai_skip_anonymization=True` and tool messages remain unchanged.
+  marked `lq_ai_skip_anonymization=True` and tool messages remain unchanged (for a caller that does not set `lq_ai_restore_tool_arguments`).
   The deterministic request-path test in
   `gateway/tests/anonymization/test_provider_payload_isolation.py` pins the
   retrieval exception. The rates above apply to eligible chat/skill text only.

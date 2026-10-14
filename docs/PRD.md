@@ -333,6 +333,8 @@ This section specifies each major capability. Every capability section follows t
 
 **M1 status:** Shipped. Multi-turn chat with persistent history, full-text search over chat history, streaming SSE responses, and matter (project) workspace at `/lq-ai/matters/[id]` are all wired end-to-end. An operator can verify the backend at `api/app/api/chats.py` and `api/app/api/projects.py`; the Cypress E2E suite covers the surface in `web/cypress/e2e/wave-a-chrome.cy.ts` and `web/cypress/e2e/wave-c-matters.cy.ts`. Note: share-with-group and playbook attachment are deferred; the section below describes the full v1 design. See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface) for the per-capability verification table.
 
+**Proposed extension, in no release: governed runs in chat.** [ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not ratified. An implementation exists, behind operator switches that default to off, with no maintainer or security review and no recorded human acceptance. The model picker in the chat composer has one experimental entry, "New harness", first in the list. While it is chosen, the skill picker, "Keep skills on" and the prompt enhancer are not offered, and Send starts a governed run. The chat may be inside a Project or in none. The request is an ordinary user message, and the reply is one assistant message of kind `run` in the same thread. One model call, the orchestrator, is shown the request, the chat's recent messages (at most 20), the names of any selected documents and the names of the Project's knowledge bases. It either answers by itself, when the request needs nothing read (no plan and no approval; the answer is unverified and says that nothing was read), or hands over a plan of one to four tasks. The run message is one column of lines: the plan, which the owner approves as that exact plan, one line for each task, and the answer. Each line opens on its trace, and the owner can read how each call was set up, including its system prompt. At delivery the message receives the same tier, provider, model, token and cost fields as any assistant message, and the chain-of-custody row of §3.3. New harness applies no installed skill, so its answer carries no skill chip. Follow-up questions are ordinary turns that can see the delivered answer; a run that ends without an answer leaves the message empty, so it is not replayed. An answer a run wrote under a matter's terms that the follow-up's chat does not have is replaced by a note in what the follow-up sends (ADR 0038 D5). A direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and D2, which are Accepted; ADR 0038 D1 gives the words, and they are ratified with it. Design, build record and what was not verified: [plan](plans/issue-662-c1-governed-runs-in-chat.md#implementation-status).
+
 **Description.** Multi-turn chat with persistent history, organized in a sidebar grouped by recency. Users can rename, delete, search, and share chats. Each chat is associated with the user who created it and optionally shared with groups or the whole organization. Chats can have files, skills, and playbooks attached.
 
 **User stories.**
@@ -939,6 +941,8 @@ Its [UAT runbook](runbooks/adr35-chat-uat.md) distinguishes controlled-provider
 regression tests, a real local-model browser run and human acceptance. Persistent
 skill workspaces, bundled helpers and live retrieval are not exercised by this
 profile. The earlier sample recording is historical evidence of workflow mechanics only.
+
+**Proposed extension, in no release: profiles, tools and an orchestrator model in chat.** [ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not ratified. An implementation exists, behind operator switches that default to off, with no maintainer or security review. It adds a closed registry of operator-enabled profiles (what instructs each role, the tools granted in each phase, what a run may read, limits and a model route) and a registry of governed tools, so supporting another skill in runs means adding a profile, not engine code; `GET /api/v1/admin/orchestration/profiles` reports each profile's operator state. Inside an approved plan, a sub-agent may call only the tools its profile grants: native tool calls, each a durable effect through `guarded_tool_call` with its own reservation, and a refused or failed call is returned to the model and recorded. The plan card lists each task's tools, documents and knowledge bases, so approving the exact plan is consent for them. An owner can close an uncertain run: nothing is retried, the unresolved reservation becomes a charge, retained work stays readable and the owner's single active-run allowance is released. The one profile the chat composer offers is `new_harness_v1`, "New harness" (§3.1), behind its own switch. Its orchestrator and sub-agents are instructed by versioned engine prompt files, not skills. The orchestrator hands over its plan as one `propose_plan` tool call, or answers by itself when the request needs nothing read. A sub-agent can read the documents the owner selected (none to eight), search the Project's knowledge bases by keyword, and keep notes. The delivered answer's quotations are checked against the file they name with the Citation Engine's exact and tolerant stages only, and the application reports which matched. Pseudonymization follows the operator's gateway setting and covers a run's whole request, what its tasks read and the arguments of earlier tool calls included. Its tests use a controlled provider, and there have been single development runs on local models. It has had no run on a configured provider, and nothing here establishes that it works on real matters or that its answers are correct. Design and build record: [plan](plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). Stated limits: ADR 0038 D7.
 
 **M4 status: SHIPPED.** The opt-in background executor runs real in-loop work end-to-end. The five-phase LangGraph state machine (intake → analysis → drafting → ethics_review → delivery) lives in `api/app/autonomous/executor.py` (`run_autonomous_session`) + `nodes.py`; every external action routes through the single `guarded_tool_call` chokepoint (`api/app/autonomous/guard.py`) enforcing R5 (external halt + idle watchdog → `SessionHalted`), R6 (`PHASE_GRANTS` phase-gated tool grants → `ToolNotGranted`), and R4 (per-session **and** per-trigger cost cap → `CostCapReached`). The four primitives ship: watches (`api/app/autonomous/watch_trigger.py`, table `autonomous_watches` — migration `0039`), schedules (`api/app/autonomous/cron.py`, table `autonomous_schedules`), per-user memory (`autonomous_memory`), and the precedent board (`precedent_entries` — migration `0039`; `project_context_proposals` — migration `0041`). Honest per-session receipts carry `terminal_reason` (completed / cost_cap_reached / external_halt) via `api/app/autonomous/receipt.py` (`build_receipt` / `build_receipt_safe`). The layer is per-user opt-in, off by default (`User.autonomous_enabled` — migration `0044`), with a full web dashboard at `web/src/routes/lq-ai/autonomous/`. Migration head at M4 close is `0045`. See [HONEST-STATE.md §5](HONEST-STATE.md#5-m4--autonomous-layer-shipped). As of M4 close the **Contract Repository auto-relationship graph** (§3.16) and the MCP-client subsystem (§8.5) remained deferred; the **MCP-client subsystem subsequently shipped** in the legal-research + connectors milestone (#158–#193 — see [DE-200](#de-200--mcp-client-subsystem-in-the-lq-ai-backend) and [HONEST-STATE.md §5.5](HONEST-STATE.md)), while the contract relationship graph remains deferred.
 
@@ -2258,6 +2262,42 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 **Acceptance criteria:** Model field offers autocomplete with the actual provider's model list when the provider is selected; the field remains free-text-editable; one Cypress E2E covers the admin Edit-alias modal exercising the autocomplete.
 
+#### DE-406 — Minimize the panes of the matter workspace
+
+**Status:** Open. Raised by the maintainer on 2026-10-09 while using New harness (ADR 0038, proposed) in a matter chat.
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** A chat opened in a matter is drawn between three other panes: the matter's details, files, knowledge bases and skills on the left; the matter's chat list beside it; and "Attached files" on the right. None of them can be closed, so on a laptop screen the thread and the composer get about a third of the width, and a run's plan, lines and receipts are read in that space. The user preference `workspace_layout` (`three_pane`, `two_pane`, `one_pane`) is stored and can be set under Settings → Appearance, but no page or component reads it, so choosing a value changes nothing.
+
+**Specific scope:** Give each side pane of the matter workspace a control that minimizes it to a narrow rail and restores it, reachable by keyboard and labelled for a screen reader. The state is kept for each user and survives a reload. Decide in the same change what `workspace_layout` means: either it sets which panes start minimized, or it is removed from Settings. A minimized pane still shows what the user must not miss: a count of attached files, and a file whose ingestion failed. No change to what a pane contains, and no change to a chat outside a matter.
+
+**Acceptance criteria:** Each side pane of a matter chat can be minimized and restored with the pointer and with the keyboard; the thread takes the freed width; the state is still there after a reload; `workspace_layout` either has an effect that the settings page describes or is gone from it; a failed file is still signalled while its pane is minimized; component tests cover the states, and the behaviour is checked in a browser at a laptop width.
+
+#### DE-407 — Better recall for a run's knowledge-base search
+
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 7.
+
+**Priority:** P2 · **Effort:** M
+
+**Context:** A New harness task searches the matter's knowledge bases by keyword only, and a passage is found only when it holds every word of the query. In one development run on a local model, seven of nine searches found nothing. Ordinary chat's retrieval uses a query embedding as well; a run does not, because an embedding is a model call, and every model call of a run must be priced, bound to an inference tier and reserved against the run's allowance (ADR 0035 D6).
+
+**Specific scope:** Two steps that can land apart. First, looser keyword matching that needs no model call: passages holding some of the query's words, ranked, with the rules for withheld passages unchanged. Second, a query embedding for a run as a priced, tier-bound effect with its own binding and allowance, disclosed on the plan card. The second step is on the authorization path and the gateway and needs security review.
+
+**Acceptance criteria:** On a fixed set of questions over the test knowledge base, the share of searches that return a relevant passage is measured before and after and reported; a withheld passage is still withheld and counted; an embedding call, if built, appears in the run's receipts with its cost and tier, and a run whose allowance cannot fund it searches by keyword and says so.
+
+#### DE-408 — Move the resource routes and the chat path onto the access module
+
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 11. Depends on ADR 0038 D8, which is not built.
+
+**Priority:** P2 · **Effort:** L
+
+**Context:** ADR 0038 D8 proposes one module that answers who may read what, and moves the run engine onto it first. The resource routes (files, knowledge bases, matters, chats, playbooks) and the chat path each keep their own ownership check until they are moved. While they do, a change to access has to be made in the module and in each of those places.
+
+**Specific scope:** Move each route file's own visibility helper, and the chat path's file and knowledge-base reads, onto the access module, one file to a change, with no change to anyone's access. Authorization path; each change needs security review.
+
+**Acceptance criteria:** No route file and no chat-path module compares an owner identifier itself; a test fails one that does; the existing authorization tests pass unchanged before and after each move.
+
 ### PRD-process and capability refinements
 
 #### DE-020 — Standardize the optional-input pattern across skills
@@ -2885,6 +2925,49 @@ If the source-document corpus contains entities the operator considers sensitive
 
 **Acceptance criteria:** Spot-check empirical study comparing model output quality on Option A vs M2-1 for at least three skills (NDA Review, MSA Review SaaS, DPA Checklist Review); cross-conversation pseudonym stability decision documented or filed as DE-XXX; audit-log shape extended if needed; `docs/security/anonymization.md` and `docs/citation-engine.md` updated to reflect Option A as the new default; existing M2-B3 / M2-C3 / M2-D2 round-trip tests passing with the new shape.
 
+**Update (governed runs, ADR 0038).** A governed run does not follow M2-1: it holds its tool arguments as originals and says so (`lq_ai_restore_tool_arguments`), and the gateway then pseudonymizes what a task reads, with the rest of the request, wherever the operator's setting applies pseudonymization at the route's tier (the text of a `tool` message and the arguments of earlier tool calls; [anonymization.md](security/anonymization.md)). Ordinary chat is unchanged, and the retrieval context stays un-pseudonymized. How this affects the citation checks and the answers of a run has not been measured; UAT-41 records what is seen, and it is the first evidence this entry can use. DE-409 asks the wider question, of which this entry is one part: what decides whether a piece of content is pseudonymized at all.
+
+#### DE-409 — Decide pseudonymization by where content comes from and where it goes
+
+**Priority:** P1 · **Effort:** L (a design and an ADR first) · **Status (2026-10-13): filed; found while reviewing ADR 0038. The rule described is the released gateway's, not a defect of governed runs.**
+
+**Context:** The gateway decides what to pseudonymize by a message's role and by who is calling. It does not look at where the content came from or where it is going. On a route that pseudonymizes (§4.7), as read from the code at `main` `f36c0c09c` and not reproduced on a running stack:
+
+- The text of `user`, `assistant` and `system` messages is pseudonymized, and the text of the reply is restored.
+- The retrieval context is exempt (Decision M2-1, DE-269). It is the owner's own documents.
+- The results of ordinary chat's tools are sent as the tool returned them, whatever they hold: published case law, an authority source, an MCP server's reply, a skill-bound tool's output.
+- The arguments of a tool call are returned as the model wrote them. The model was shown placeholders, so it can write `PERSON_0001` into a call, and the chat tool loop (`api/app/chat/tool_loop.py`) runs the tool with that.
+- [ADR 0014](adr/0014-gateway-egress-boundary-for-tool-providers.md) D5 already decides part of this for tool providers reached through the gateway: outbound arguments are anonymized by default, and fetched public text stays as published. In the code the gateway pseudonymizes a call's arguments only when the caller asks (`require_anonymization`), and refuses the call if it cannot. The only caller that asks is the autonomous engine's source-bound authority call (`api/app/autonomous/guard.py`). Ordinary chat's tool calls do not ask.
+
+[ADR 0038](adr/0038-governed-runs-in-chat.md) adds a per-request opt-in for a governed run, `lq_ai_restore_tool_arguments`, which restores the arguments of a reply's tool calls and pseudonymizes all the tool text the run sends. That is right for a run today only because every tool a run has works inside the deployment and returns the owner's own material. It is a switch per caller, so it has the same fault: the day a run is granted a public-source tool, published text would be pseudonymized.
+
+A tool call raises three questions, and the present rule does not tell them apart:
+
+1. **The arguments going out.** May the party that runs the tool see the owner's real names? A document read inside the deployment needs them. A search sent to an outside service is an egress.
+2. **The result going on to the model provider.** Whose information is it: the owner's, or a published source's?
+3. **The result as the model reads it.** Who wrote it, and can it steer the model?
+
+The answers do not line up. A counterparty's contract in a matter is the owner's confidential material and is not written by the owner. Published case law is public and is still not the owner's instructions. One MCP server can be a private source and an outside destination at once. And a call's arguments are written from everything the model has read, so an instruction hidden in a document can have the model put the owner's names into a query for an outside tool; restoring the placeholders in that call would send the real names out. Ordinary chat does not restore, which blocks that path today by accident and also means its tools are called with placeholders.
+
+**Specific scope:** a design, recorded as an ADR and routed as a security path, before any code. The shape proposed:
+
+- Each tool declares, where it is registered, where its arguments go (inside the deployment, or outside at an egress tier) and whose information its results are (the owner's, or public). Results are treated as untrusted unless declared otherwise.
+- The backend marks each tool message from that declaration and the gateway applies it. The per-message marker `lq_ai_skip_anonymization` already exists and may be enough to carry "public". A tool result with no mark on a pseudonymizing route is treated as the owner's.
+- Restoring arguments is separated from covering tool text, and is done only for a call that stays inside the deployment.
+- The same rule serves ordinary chat and governed runs, and replaces the per-request opt-in.
+
+Decisions the design must make:
+
+1. An outside call that needs a real name to be useful, case law about a named party for instance. ADR 0014 D5's default is that the arguments are anonymized, with an audited override per provider. The design says whether that default holds once arguments are restored for calls inside the deployment, and whether showing the owner the real query and asking is a third path.
+2. A published result that names the owner's client: send it as published (ADR 0014 D5), which lets the provider connect it to the pseudonymized request, or replace the names the request already mapped, which changes the source's wording.
+3. Why ADR 0014 D5's default for arguments is applied on one path only, and whether it becomes the gateway's rule for every outside call.
+4. What an MCP server is by default, and how an operator declares one that is both a private source and an outside destination.
+5. Whether the retrieval context comes under the same rule (DE-269) or stays a stated exemption.
+6. What a model may call after it has read untrusted content. Today the only defence is the prompt's wording.
+7. The cost on ordinary chat: the detector runs one analysis at a time, and ordinary chat sends far more requests than runs do.
+
+**Acceptance criteria:** An accepted ADR with a security-path review. `docs/security/anonymization.md` states one rule for both callers. Tests show that published source text reaches the model as published, that the owner's material in a tool result is pseudonymized for ordinary chat and for a run, and that a restored name reaches an outside tool only by the path decision 1 chooses, including a case where a document read earlier in the turn carries an instruction to send it. `lq_ai_restore_tool_arguments` is removed or narrowed to what the design keeps. The DE-240 leakage harness measures tool text. This lands before a governed run is granted any outside or public-source tool (#662 tracks C2 to C7). Related: DE-269, DE-397, ADR 0014 D5, ADR 0038 D5 and D7.
+
 #### DE-270 — Cryptography review: Fernet vs modern AEAD
 
 **Priority:** P3 · **Effort:** S
@@ -3438,6 +3521,22 @@ This subsection operationalizes the §1.9 engineering-discipline posture and the
 **Specific scope:** Configure mutmut (Python) and Stryker (TypeScript) to run nightly on the critical-path packages: Inference Gateway, Citation Engine (once wired), Anonymization Layer (once wired), the FastAPI authentication and authorization surface, the audit-log writer. Publish the mutation score per release. Set a target floor (e.g., ≥80% on the Gateway and Citation Engine).
 
 **Acceptance criteria:** Mutation testing runs nightly; per-release mutation score is published in the release notes and rendered as a README badge alongside the OpenSSF Scorecard.
+
+**First-wave scope agreed (2026-10-13; PR #434, pending merge and CI validation):** Deliver scoped nightly Python mutation testing as an informational measure using opt-in, frozen `mutation` dependency groups. Select the proposed DB-free API encryption/citation suites and Gateway routing/tier/audit/anonymization suites. Surviving mutants do not block PRs; tool failures or incomplete measurements publish no score. Keep the 80% target as an improvement goal. The score describes its recorded module/test scope, not whole-product assurance. Credit: @SaifAlYounan.
+
+**Outstanding — DE-229 is not complete; track remaining acceptance separately from first-wave issue #380:**
+
+- [ ] Establish the first valid CI baseline for both packages; record actual runtime and review the survivor/no-test/timeout counts.
+- [ ] Reproduce the reported seed-migration skills-path problem in mutmut's copied environment, then repair it with a regression test; no separate DE number is assigned here.
+- [ ] Extend API coverage to authentication/authorization, audit and DB-backed citation paths after the environment prerequisite is fixed.
+- [ ] Include the Gateway repository-config suites and slow spaCy integration/round-trip suites excluded from the first wave; provision the NLP model explicitly instead of downloading it implicitly during tests.
+- [ ] Add the retained TypeScript/Stryker scope once its selected suites can run reliably.
+- [ ] Publish durable per-release reports/raw counts and the README badge from a valid baseline; retain the §5.8 publication/feed commitment.
+- [ ] Improve tests for meaningful survivors; record exclusions or equivalent mutations explicitly instead of treating the percentage as proof of security.
+
+Issue #380 covers the scoped nightly Python first wave and closes when PR #434 merges. The remaining checklist belongs in follow-up issue [#718](https://github.com/LegalQuants/lq-ai/issues/718), not in the closure criteria for #380.
+
+The workflow and release procedure are implementation in this PR, not evidence that any CI baseline or published score already exists. Full acceptance above remains unchanged. There is no PR-time diff-based gate in this delivery.
 
 #### DE-230 — Property-based testing for Citation Engine and Anonymization Layer invariants
 
@@ -4021,6 +4120,194 @@ confidentiality requirements. See the
 [feature PRD](prds/issue-563-governed-orchestration.md) for the remaining release
 conditions. The earlier suggested orchestrator locations, JSONL audit alternative
 and M4 single-agent/multi-agent classification are superseded by ADR 0035.
+
+#### Governed runs in chat — deferred (DE-410 to DE-420)
+
+Recorded from the [plan's Deferred section](plans/issue-662-c1-governed-runs-in-chat.md#deferred)
+and from the items ADR 0038 D7 lists as not built, while
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed. The maintainer asked on
+2026-10-13 that they be numbered. ADR 0038 does not decide any of them, and none is
+implemented. The priorities and efforts below are provisional: they are the drafter's
+estimates, and the maintainer sets them. A query embedding for the knowledge-base search,
+which was in this list, is the second step of DE-407 and has no number of its own.
+
+#### DE-410 — Full prompt and tool-payload capture at the gateway
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** PRD §5.4 assigns the capture of full prompts and tool payloads to an optional
+self-hosted LLM-tracing sink at the gateway. That sink is not implemented: the `telemetry`
+block in the gateway configuration is read by no code, and the
+[observability guide](observability.md#6-whats-not-yet-shipped) says so. An ordinary turn
+keeps none of this today, and ADR 0038 D2 holds a run to the same level and no further.
+
+**Specific scope:** Implement the sink once, at the gateway, for ordinary turns and
+governed runs alike. Decide what is captured (the request as sent after pseudonymization,
+or before it), where it is stored, who may read it, how long it is kept, and how a
+privileged matter is treated.
+
+**Acceptance criteria:** An operator can turn the sink on and read one turn's and one run's
+full requests and tool payloads. The capture is off by default. What is stored and who can
+read it is stated in `docs/observability.md` and the security documents, and has had a
+security-path review.
+
+#### DE-411 — Sources and connectors in governed runs
+
+**Priority:** P1 (provisional; #662 names it as a later track) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** No case-law, authority or MCP tool is granted to a run, and ordinary chat has
+them (ADR 0038 D7). A run's tools all work inside the deployment and return the owner's
+own material, which is why the per-request pseudonymization opt-in is right for a run
+today.
+
+**Specific scope:** Grant a run tools that leave the deployment or return public sources,
+through the tool registry and the plan's grants. This depends on DE-409 (what is
+pseudonymized by source and destination) and on ADR 0038 D8 (the access module), and
+neither may be skipped.
+
+**Acceptance criteria:** A plan can grant a public-source tool to a task, the owner
+approves that grant, and the call is recorded in the tool call log with the run's
+identifiers. Published text reaches the model as published. No restored name reaches an
+outside tool except by the path DE-409 decides. Security-path review before release.
+
+#### DE-412 — Library skills assigned to sub-agents by the orchestrator
+
+**Priority:** P1 (provisional; #662 track C2) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** New harness applies no installed skill. Its two roles are instructed by
+versioned prompt files (ADR 0038 D3), and ADR 0035 D3 describes how a plan would name the
+skills its tasks apply. Bringing LegalQuants OSS skills into LQ.AI is the purpose #662
+gives for the whole track.
+
+**Specific scope:** Let the orchestrator name a library skill for a task, with the owner's
+approval covering it. Decide how a skill's required inputs, tier floor and tools are
+checked against the plan's grants, and how the answer's skill attribution is shown.
+
+**Acceptance criteria:** A plan that assigns an installed skill is approved and run, the
+task's call is assembled with that skill, the message shows the skill, and a skill the
+owner cannot use is refused at approval. Skills with legal substance still follow
+`skills/CONTRIBUTING.md`.
+
+#### DE-413 — Keep and show a model's reasoning text
+
+**Priority:** P3 (provisional) · **Effort:** M · **Status (2026-10-13): filed.**
+
+**Context:** The gateway can ask a model for a reasoning effort (ADR 0038 D3), and the
+reasoning text a model returns is neither kept nor shown. The trace shows each turn's text
+and tool calls (ADR 0038 D7).
+
+**Specific scope:** Decide whether reasoning text is kept, for how long, and where it is
+shown. It is model output written from what the model read, so it carries the same data
+terms as the answer.
+
+**Acceptance criteria:** A written decision. If it is kept: it is stored under the run's
+terms, shown in the trace behind a fold, covered by the data export, and withheld wherever
+the answer would be.
+
+#### DE-414 — Bundled helpers and persistent skill workspaces on real documents
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed; waits on ADR 0035 D8c and D8d.**
+
+**Context:** A run on real documents gets document reads and run files only. ADR 0035 D8c
+and D8d set the gates for helpers that execute and for workspaces that persist, and those
+gates are not met.
+
+**Specific scope:** Meet ADR 0035's helper-specific gates, then grant a helper or a
+persistent workspace to a task through the plan.
+
+**Acceptance criteria:** As ADR 0035 D8c and D8d state them, with security-path review of
+the script runner path.
+
+#### DE-415 — A tool loop for the orchestrator, and a single-agent profile
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** The orchestrator makes one planning call with one tool, `propose_plan`. It
+cannot read a document or search by itself, so it answers a question about a document only
+from a plan's results, and nothing but its prompt makes it plan for such a question (ADR
+0038 D1, D7).
+
+**Specific scope:** Decide whether the orchestrator may read or search before it plans,
+under what approval, and whether a profile with one agent and no plan is offered. Both
+change what the owner approves, so this needs its own ADR decision.
+
+**Acceptance criteria:** An accepted decision. If built: what the orchestrator read before
+planning is shown to the owner, is bounded by the same read rule as a task's, and is
+covered by tests for a hostile document.
+
+#### DE-416 — Move the chat tool loop and the matter-session planner onto the tool registry
+
+**Priority:** P2 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** Three paths call tools: ordinary chat's loop (`api/app/chat/tool_loop.py`),
+the matter session's closed-choice planner (ADR 0020 D1) and a run's sub-agent loop on the
+tool registry. Each has its own allowlist and dispatch.
+
+**Specific scope:** One registry of tools, with each tool's grants, tier and declarations
+(DE-409) in one place, used by all three paths. ADR 0020 D1 is not amended by ADR 0038, so
+moving the planner needs its own decision.
+
+**Acceptance criteria:** One definition per tool. The three paths' existing tests pass
+unchanged in behaviour. A new tool is added in one place.
+
+#### DE-417 — Runs started by schedules or watches; recursion; streamed progress
+
+**Priority:** P3 (provisional) · **Effort:** L · **Status (2026-10-13): filed.**
+
+**Context:** A run is started by its owner sending a request, has one level of
+sub-agents, and delivers its answer when it finishes (ADR 0038 D7). ADR 0035 defers
+streaming.
+
+**Specific scope:** Three separate questions, kept in one entry until one is taken up: a
+run with no person present to approve its plan; a sub-agent that plans further work; and
+progress streamed to the page while the run is live.
+
+**Acceptance criteria:** A decision for each before any is built. An unattended run in
+particular needs a rule for approval that ADR 0035's owner approval does not give.
+
+#### DE-418 — An operator screen for reconciling uncertain runs
+
+**Priority:** P2 (provisional) · **Effort:** M · **Status (2026-10-13): filed.**
+
+**Context:** A provider timeout can leave an effect uncertain. The owner can close an
+uncertain run (ADR 0038 D6). An operator has no screen that lists such runs across owners
+or shows what each one may have spent.
+
+**Specific scope:** A read-only operator view of uncertain and closed runs with their
+recorded reservations, and a written reconciliation procedure. Neither exists today; the
+[UAT record](uat/adr35-chat/README.md) notes that there is no reconciliation screen.
+
+**Acceptance criteria:** An operator can find every uncertain run, see its reserved and
+charged amounts, and follow a documented step to reconcile it. Cross-owner reads are
+audited.
+
+#### DE-419 — Word input for governed runs
+
+**Priority:** P2 (provisional) · **Effort:** S once ADR 0017 lands · **Status (2026-10-13): filed; waits on [ADR 0017](adr/0017-docx-ingest-via-pandoc.md).**
+
+**Context:** A run reads documents whose text the ingestion pipeline has extracted. Word
+files wait on ADR 0017, so a run lists a `.docx` as unreadable with the reason.
+
+**Specific scope:** Once Word ingestion exists, confirm that a run reads such a document
+and that quotations are checked against its extracted text.
+
+**Acceptance criteria:** A selected Word document is read by a task and a quotation from
+it is checked, with a test.
+
+#### DE-420 — Replace the chat-completion path with governed runs
+
+**Priority:** P1 (provisional; the stated direction) · **Effort:** L · **Status (2026-10-13): filed; ADR 0038 D7 leaves it to a later decision.**
+
+**Context:** The expected direction is that governed runs replace the chat-completion path
+over several releases. ADR 0038 does not authorize that, and D7 lists the limits that must
+close first.
+
+**Specific scope:** A decision of its own, taken when D7's limits are closed: what an
+ordinary turn becomes, how streaming, skills, tools and research are carried over, and how
+existing chats behave.
+
+**Acceptance criteria:** An accepted ADR that names the limits closed, the migration for
+existing chats, and the release in which the old path is removed.
 
 #### DE-295 — Word add-in code-signing certificate + signed manifest CI (community-led)
 

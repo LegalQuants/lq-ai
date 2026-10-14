@@ -102,6 +102,7 @@ _LQ_AI_EXTENSION_KEYS = frozenset(
         "lq_ai_purpose",
         "lq_ai_privileged",
         "lq_ai_file_ids",
+        "lq_ai_restore_tool_arguments",
     }
 )
 

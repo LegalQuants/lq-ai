@@ -16,7 +16,9 @@ Presidio engine is covered in ``tests/anonymization/test_engine_integration.py``
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -222,6 +224,350 @@ async def test_non_streaming_pseudonymizes_request_and_rehydrates_response(
     # Audit log row carries the flag.
     assert len(recorder.rows) == 1
     assert recorder.rows[0].anonymization_applied is True
+
+
+# ---------------------------------------------------------------------------
+# A tool loop — what a tool read and what the model asked of it leave pseudonymized.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_a_tool_result_and_an_earlier_calls_arguments_reach_the_provider_pseudonymized(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """The provider payload holds no original name, in any message.
+
+    The conversation is what a governed run's child sends on its second turn:
+    the task, its own earlier call with the arguments the caller restored, and
+    the document the call read. The caller holds its arguments as originals, so it
+    sets the restore opt-in, which is also what puts its tool text under the pre-pass.
+    All three are pseudonymized by one mapper, so the same name is the same
+    pseudonym in each.
+    """
+
+    client, recorder, app = http_client
+    task = "Did John Smith sign?"
+    _install_stub_anonymizer(
+        app,
+        {
+            task: [_Span("PERSON", 4, 14)],
+            # The detector is given each string value, not the JSON around it.
+            "John Smith": [_Span("PERSON", 0, 10)],
+            "John Smith signed on 1 May.": [_Span("PERSON", 0, 10)],
+        },
+    )
+    upstream = _mock_anthropic(response_text="PERSON_0001 signed on 1 May.")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [
+                {"role": "user", "content": task},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "search_knowledge_base",
+                                "arguments": json.dumps({"query": "John Smith"}),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": json.dumps({"passage": "John Smith signed on 1 May."}),
+                },
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_knowledge_base",
+                        "description": "Search.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+            "lq_ai_restore_tool_arguments": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["choices"][0]["message"]["content"] == "John Smith signed on 1 May."
+    assert body["anonymization_applied"] is True
+    sent = json.dumps(json.loads(upstream.calls.last.request.content))
+    assert "John Smith" not in sent
+    assert sent.count("PERSON_0001") == 3
+    assert recorder.rows[0].anonymization_applied is True
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_ordinary_chat_tool_text_reaches_the_provider_as_it_is(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """A caller that does not hold its tool arguments (the chat research loop) is unchanged.
+
+    Its tool results are published sources and its follow-up calls repeat what they
+    return, with no restore to put a name back, so the gateway leaves them as they are
+    while it pseudonymizes the rest of the request as it always did.
+    """
+
+    client, recorder, app = http_client
+    task = "Did John Smith sign?"
+    _install_stub_anonymizer(
+        app,
+        {
+            task: [_Span("PERSON", 4, 14)],
+            "John Smith": [_Span("PERSON", 0, 10)],
+            "John Smith signed on 1 May.": [_Span("PERSON", 0, 10)],
+        },
+    )
+    upstream = _mock_anthropic(response_text="PERSON_0001 signed on 1 May.")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [
+                {"role": "user", "content": task},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "search_case_law",
+                                "arguments": json.dumps({"query": "John Smith"}),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": json.dumps({"passage": "John Smith signed on 1 May."}),
+                },
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_case_law",
+                        "description": "Search.",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["anonymization_applied"] is True
+    sent = json.dumps(json.loads(upstream.calls.last.request.content))
+    # The task is pseudonymized; the call and its result are not.
+    assert sent.count("PERSON_0001") == 1
+    assert sent.count("John Smith") == 2
+    assert recorder.rows[0].anonymization_applied is True
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_a_slow_pre_pass_does_not_stop_the_event_loop(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """The detector takes seconds on a long tool result; other requests must not wait for it.
+
+    A stub detector sleeps for 0.6 s. While it does, a ticker on the same loop keeps
+    running. Were the pre-pass run on the loop, the ticker would get one tick.
+    """
+
+    client, _recorder, app = http_client
+    user_msg = "John Smith signed the agreement."
+
+    class Slow(_StubAnalyzer):
+        def analyze(self, *, text: str, language: str = "en", **kwargs: object) -> list[_Span]:
+            time.sleep(0.6)
+            return super().analyze(text=text, language=language)
+
+    app.state.anonymizer = Anonymizer(analyzer=Slow({user_msg: [_Span("PERSON", 0, 10)]}))
+    _mock_anthropic(response_text="PERSON_0001 has signed.")
+    ticks: list[float] = []
+
+    async def ticker() -> None:
+        while True:
+            ticks.append(time.perf_counter())
+            await asyncio.sleep(0.05)
+
+    task = asyncio.create_task(ticker())
+    try:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "smart", "messages": [{"role": "user", "content": user_msg}]},
+        )
+    finally:
+        task.cancel()
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "John Smith has signed."
+    assert len(ticks) >= 6, f"the event loop was blocked: {len(ticks)} ticks in 0.6 s"
+
+
+# ---------------------------------------------------------------------------
+# Tool-call arguments — restored only on the caller's opt-in (ADR 0038 D7).
+# ---------------------------------------------------------------------------
+
+_PLAN_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "propose_plan",
+        "description": "Hand over the plan.",
+        "parameters": {"type": "object", "properties": {"tasks": {"type": "array"}}},
+    },
+}
+
+
+def _mock_anthropic_plan_call(*, topic: str) -> respx.Route:
+    """Mock Anthropic Messages with a 200 whose reply is one ``propose_plan`` call."""
+
+    return respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_test",
+                "model": "claude-opus-4-7",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "propose_plan",
+                        "input": {"tasks": [{"topic": topic}]},
+                    }
+                ],
+                "stop_reason": "tool_use",
+                "usage": {"input_tokens": 5, "output_tokens": 5},
+            },
+        )
+    )
+
+
+def _plan_arguments(body: dict) -> str:
+    calls = body["choices"][0]["message"]["tool_calls"]
+    assert len(calls) == 1 and calls[0]["function"]["name"] == "propose_plan"
+    arguments = calls[0]["function"]["arguments"]
+    assert isinstance(arguments, str)
+    return arguments
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_tool_call_arguments_are_restored_when_the_caller_asks(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """The provider sees and writes PERSON_0001; the caller's plan names John Smith."""
+
+    client, recorder, app = http_client
+    user_msg = "John Smith signed the agreement."
+    _install_stub_anonymizer(app, {user_msg: [_Span("PERSON", 0, 10)]})
+    upstream = _mock_anthropic_plan_call(topic="Whether PERSON_0001 had authority to sign")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": user_msg}],
+            "tools": [_PLAN_TOOL],
+            "lq_ai_restore_tool_arguments": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["anonymization_applied"] is True
+    assert json.loads(_plan_arguments(body)) == {
+        "tasks": [{"topic": "Whether John Smith had authority to sign"}]
+    }
+    # The request was pseudonymized as usual, and the opt-in is the gateway's
+    # own field: nothing of it reaches the provider.
+    sent = json.loads(upstream.calls.last.request.content)
+    assert _anthropic_user_content(upstream.calls.last) == "PERSON_0001 signed the agreement."
+    assert "lq_ai_restore_tool_arguments" not in json.dumps(sent)
+    assert "John Smith" not in json.dumps(sent)
+    assert recorder.rows[0].anonymization_applied is True
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_tool_call_arguments_are_left_as_written_without_the_opt_in(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """The default is unchanged: a tool call's arguments keep the pseudonym."""
+
+    client, _recorder, app = http_client
+    user_msg = "John Smith signed the agreement."
+    _install_stub_anonymizer(app, {user_msg: [_Span("PERSON", 0, 10)]})
+    _mock_anthropic_plan_call(topic="Whether PERSON_0001 had authority to sign")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": user_msg}],
+            "tools": [_PLAN_TOOL],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["anonymization_applied"] is True
+    assert json.loads(_plan_arguments(body)) == {
+        "tasks": [{"topic": "Whether PERSON_0001 had authority to sign"}]
+    }
+
+
+@pytest.mark.integration
+@respx.mock
+async def test_the_opt_in_does_nothing_for_a_request_that_was_not_pseudonymized(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter, FastAPI],
+) -> None:
+    """No mapping exists for a skipped request, so there is nothing to restore from.
+
+    Text shaped like a pseudonym is then just text, and comes back as written.
+    """
+
+    client, _recorder, app = http_client
+    user_msg = "John Smith signed the agreement."
+    _install_stub_anonymizer(app, {user_msg: [_Span("PERSON", 0, 10)]})
+    upstream = _mock_anthropic_plan_call(topic="Whether PERSON_0001 had authority to sign")
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": user_msg}],
+            "tools": [_PLAN_TOOL],
+            "lq_ai_privileged": True,
+            "lq_ai_restore_tool_arguments": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["anonymization_applied"] is False
+    assert _anthropic_user_content(upstream.calls.last) == user_msg
+    assert json.loads(_plan_arguments(body)) == {
+        "tasks": [{"topic": "Whether PERSON_0001 had authority to sign"}]
+    }
 
 
 # ---------------------------------------------------------------------------
