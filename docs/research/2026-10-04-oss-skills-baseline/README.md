@@ -1,7 +1,8 @@
 # LQ.AI v0.8.0 ordinary-chat capability baseline
 
-Recorded 4 October 2026; updated 5 October 2026 with the delayed P5 result. All recorded times are
-UTC.
+Recorded 4 October 2026; updated 5 October 2026 with the delayed P5 result. On 14 October 2026 the
+P6 wording was corrected to the state of the code and the criteria link was pinned; no result
+changed. All recorded times are UTC.
 
 Research evidence for [epic #662](https://github.com/LegalQuants/lq-ai/issues/662). Read the
 [capability assessment](../issue-662-oss-skill-capabilities.md) for the implementation and adoption
@@ -102,9 +103,9 @@ authenticated chat API; task-list UI navigation was not exercised.
 ### P6 — Web search and official quotation: failed
 
 No official page was retrieved or quoted. Qwen said it could not fetch the page but also named tools
-without evidence that they existed. No actual retrieval was recorded. Public web search was not
-configured for this test path; this result does not establish whether other LQ.AI research
-integrations could be configured.
+without evidence that they existed. No actual retrieval was recorded. LQ.AI has no built-in web fetch
+or search tool; a public page is reachable only through an operator-added MCP server, and none was
+configured for this test path.
 
 ### P7 — Packaged companions: failed
 
@@ -222,7 +223,7 @@ research evidence; the larger orchestration effort remains related foundation wo
 
 ## Sources and reproducibility
 
-- Primary criteria: the [live 14-probe suite](https://houfu.github.io/lq-plugin-cowork/probes.html) and [testing guide](https://houfu.github.io/lq-plugin-cowork/testing.html).
+- Primary criteria: the [14-probe suite as captured](https://github.com/houfu/lq-plugin-cowork/blob/9b1e80c868223a42f400052f10efa82e9822fd4b/probes.yaml) (`main` before Cowork PR #26 merged; the published [probes page](https://houfu.github.io/lq-plugin-cowork/probes.html) now shows the 27-probe suite) and [testing guide](https://houfu.github.io/lq-plugin-cowork/testing.html).
 - [Cowork PR #26](https://github.com/houfu/lq-plugin-cowork/pull/26) was captured at `b9ed8af9ea205344e1e3f6ff39161926888f25f4`. It contains 27 probes and stronger criteria in places. Its extra 13 probes and official 31-skill verdict calculation were not run or claimed here.
 - Original OSS skill pin: `fa5a6681dc3cc9a08fa9ed48a5fd213057edafa0`.
 - LQ.AI release source: v0.8.0, `c6b1c9bdda8d65ff55e7efd51f949d766c48b129`. Four relevant API files matched the running image byte-for-byte; this is not full build-provenance attestation.
