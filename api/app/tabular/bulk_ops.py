@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz.documents import DocumentWorkflowGateway
 from app.models.inference import InferenceRoutingLog
 from app.models.tabular import TabularBulkOp, TabularExecution
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
@@ -604,6 +605,8 @@ async def run_tabular_bulk_op(
             await _mark_failed(db, bulk_op, "parent execution not found")
             return
 
+        gateway = DocumentWorkflowGateway(gateway, db, bulk_op.user_id, execution.document_ids)
+        await gateway.authorize()
         rows_raw = (execution.results or {}).get("rows")
         if not isinstance(rows_raw, list) or not rows_raw:
             await _mark_failed(db, bulk_op, "parent execution has no results grid")
@@ -662,6 +665,7 @@ async def run_tabular_bulk_op(
                 minimum_inference_tier=floor,
             )
 
+        await gateway.authorize()
         bulk_op.results = shape_bulk_op_results(items)
         bulk_op.cost_actual_usd = _sum_item_costs(items)
         bulk_op.status = "completed"

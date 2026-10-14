@@ -62,8 +62,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import require_document_matter_access
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
+from app.errors import Forbidden, NotFound
 from app.models.document import Document, DocumentChunk
 from app.models.tabular import TabularBulkOp, TabularExecution
 from app.schemas.tabular import (
@@ -207,6 +209,7 @@ async def _load_caller_owned_documents(
     if not user.is_admin:
         stmt = stmt.where(FileModel.owner_id == user.id)
     rows = (await db.execute(stmt)).scalars().all()
+    await require_document_matter_access(db, document_ids, user, need="write")
     return list(rows)
 
 
@@ -250,7 +253,7 @@ async def preview_tabular_cost(
     time; preview doesn't load the documents.
     """
 
-    _ = user  # gate-only; no per-user logic on preview
+    await require_document_matter_access(db, body.document_ids, user)
 
     _, columns = _resolve_columns(
         request,
@@ -390,7 +393,14 @@ async def list_tabular_executions(
         )
     stmt = stmt.order_by(TabularExecution.created_at.desc()).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
-    return [_to_summary(row) for row in rows]
+    visible = []
+    for row in rows:
+        try:
+            await require_document_matter_access(db, row.document_ids, user)
+        except (NotFound, Forbidden):
+            continue
+        visible.append(_to_summary(row))
+    return visible
 
 
 @router.get(
@@ -512,6 +522,7 @@ async def _load_bulk_op_target(
     """
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
+    await require_document_matter_access(db, row.document_ids, user, need="write")
     if row.status != "completed":
         raise HTTPException(
             status_code=409,
@@ -637,7 +648,14 @@ async def list_tabular_bulk_ops(
         .limit(limit)
         .offset(offset)
     )
-    return [TabularBulkOpResponse.model_validate(row) for row in rows]
+    visible = []
+    for row in rows:
+        try:
+            await _authorize_bulk_sources(db, row, user)
+        except (NotFound, Forbidden):
+            continue
+        visible.append(TabularBulkOpResponse.model_validate(row))
+    return visible
 
 
 @router.get(
@@ -657,6 +675,7 @@ async def get_tabular_bulk_op(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Bulk operation not found")
+    await _authorize_bulk_sources(db, row, user)
     return TabularBulkOpResponse.model_validate(row)
 
 
@@ -1037,6 +1056,7 @@ async def _load_caller_execution(
         raise HTTPException(status_code=404, detail="execution not found")
     if not user.is_admin and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="execution not found")
+    await require_document_matter_access(db, row.document_ids, user)
     return row
 
 
@@ -1194,3 +1214,12 @@ def _to_summary(row: TabularExecution) -> TabularExecutionSummary:
 
 
 __all__ = ["router"]
+
+
+async def _authorize_bulk_sources(db: AsyncSession, row: TabularBulkOp, user: ActiveUser) -> None:
+    ids = [
+        uuid.UUID(item["document_id"])
+        for item in (row.provenance or {}).get("documents", [])
+        if item.get("document_id")
+    ]
+    await require_document_matter_access(db, ids, user)

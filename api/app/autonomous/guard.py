@@ -1484,6 +1484,23 @@ async def _assert_kb_owned(
             raise AuditedRetrievalOwnershipDenied(message)
         raise ValueError(message)
 
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden, NotFound
+    from app.models.user import User
+
+    project_id = await db.scalar(select(KnowledgeBase.project_id).where(KnowledgeBase.id == kb_id))
+    if project_id is not None:
+        actor = await db.get(User, owner_id)
+        try:
+            if actor is None:
+                raise NotFound("Resource not found.")
+            await require_matter(db, project_id, actor, include_archived=True)
+        except (NotFound, Forbidden) as exc:
+            if retrieval_session is not None:
+                await audit_retrieval_ownership_denial(db, retrieval_session)
+                raise AuditedRetrievalOwnershipDenied("Resource matter access denied.") from exc
+            raise ValueError("Resource matter access denied.") from exc
+
 
 async def _assert_file_owned(
     db: AsyncSession,
@@ -1515,6 +1532,23 @@ async def _assert_file_owned(
             await audit_retrieval_ownership_denial(db, retrieval_session)
             raise AuditedRetrievalOwnershipDenied(message)
         raise ValueError(message)
+
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden, NotFound
+    from app.models.user import User
+
+    project_id = await db.scalar(select(FileModel.project_id).where(FileModel.id == file_id))
+    if project_id is not None:
+        actor = await db.get(User, owner_id)
+        try:
+            if actor is None:
+                raise NotFound("Resource not found.")
+            await require_matter(db, project_id, actor, include_archived=True)
+        except (NotFound, Forbidden) as exc:
+            if retrieval_session is not None:
+                await audit_retrieval_ownership_denial(db, retrieval_session)
+                raise AuditedRetrievalOwnershipDenied("Resource matter access denied.") from exc
+            raise ValueError("Resource matter access denied.") from exc
 
 
 async def _handle_retrieve_chunks(

@@ -51,7 +51,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser, is_privileged_reader
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
-from app.authz.matters import matter_scope_filter
+from app.authz.matters import (
+    denied_kb_ids,
+    matter_scope_filter,
+    readable_autonomous_session_ids,
+    require_autonomous_source,
+    require_matter,
+)
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
@@ -153,6 +159,7 @@ async def _load_owned_memory(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous memory entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -184,6 +191,7 @@ async def _load_owned_precedent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="precedent entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -268,6 +276,7 @@ async def _load_owned_kb(
     stmt = select(KnowledgeBase).where(
         KnowledgeBase.id == kb_id,
         KnowledgeBase.owner_id == user_id,
+        KnowledgeBase.id.not_in(denied_kb_ids(user_id)),
         KnowledgeBase.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
@@ -276,6 +285,11 @@ async def _load_owned_kb(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="knowledge base not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="knowledge base not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -339,6 +353,11 @@ async def _load_owned_proposal(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project-context proposal not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -445,6 +464,11 @@ async def _load_owned_schedule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous schedule not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -476,6 +500,11 @@ async def _load_owned_watch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous watch not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -506,6 +535,7 @@ async def _load_owned_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous notification not found",
         )
+    await require_autonomous_source(db, row.session_id, user_id)
     return row
 
 
@@ -921,6 +951,8 @@ async def list_memory(
     base_where = [
         AutonomousMemory.user_id == user.id,
         AutonomousMemory.deleted_at.is_(None),
+        AutonomousMemory.source_session_id.is_(None)
+        | AutonomousMemory.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if state is not None:
         base_where.append(AutonomousMemory.state == str(state))
@@ -1119,6 +1151,8 @@ async def list_precedents(
     base_where = [
         PrecedentEntry.user_id == user.id,
         PrecedentEntry.dismissed_at.is_(None),
+        PrecedentEntry.source_session_id.is_(None)
+        | PrecedentEntry.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if pattern_kind is not None:
         base_where.append(PrecedentEntry.pattern_kind == pattern_kind)
@@ -1653,6 +1687,8 @@ async def list_schedules(
     base_where = [
         AutonomousSchedule.user_id == user.id,
         AutonomousSchedule.deleted_at.is_(None),
+        AutonomousSchedule.project_id.is_(None)
+        | AutonomousSchedule.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousSchedule.enabled.is_(enabled))
@@ -1919,6 +1955,8 @@ async def list_watches(
     base_where = [
         AutonomousWatch.user_id == user.id,
         AutonomousWatch.deleted_at.is_(None),
+        AutonomousWatch.project_id.is_(None)
+        | AutonomousWatch.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousWatch.enabled.is_(enabled))
@@ -2092,7 +2130,11 @@ async def list_notifications(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [AutonomousNotification.user_id == user.id]
+    base_where = [
+        AutonomousNotification.user_id == user.id,
+        AutonomousNotification.session_id.is_(None)
+        | AutonomousNotification.session_id.in_(readable_autonomous_session_ids(user)),
+    ]
     if unread:
         base_where.append(AutonomousNotification.read_at.is_(None))
 

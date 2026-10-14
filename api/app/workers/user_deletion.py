@@ -64,6 +64,7 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
     from sqlalchemy import or_
 
     from app.errors import Conflict
+    from app.models.knowledge import KnowledgeBaseFile
     from app.models.project import ProjectFile
     from app.models.project_knowledge_base import ProjectKnowledgeBase
 
@@ -160,7 +161,22 @@ async def _hard_delete_user(session: AsyncSession, user: User) -> None:
         .scalars()
         .first()
     )
-    if retained or foreign_files or foreign_kbs or shared_chats:
+    retained_kb_sources = await session.scalar(
+        select(File.id)
+        .join(KnowledgeBaseFile, KnowledgeBaseFile.file_id == File.id)
+        .join(KnowledgeBase, KnowledgeBase.id == KnowledgeBaseFile.kb_id)
+        .outerjoin(ProjectKnowledgeBase, ProjectKnowledgeBase.knowledge_base_id == KnowledgeBase.id)
+        .where(
+            File.owner_id == user.id,
+            or_(
+                KnowledgeBase.owner_id != user.id,
+                KnowledgeBase.project_id.not_in([p.id for p in owned]),
+                ProjectKnowledgeBase.project_id.not_in([p.id for p in owned]),
+            ),
+        )
+        .limit(1)
+    )
+    if retained or foreign_files or foreign_kbs or shared_chats or retained_kb_sources:
         raise Conflict(
             "User deletion requires reassignment of shared matter data and membership attribution before storage is removed."
         )

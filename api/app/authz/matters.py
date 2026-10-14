@@ -47,7 +47,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Literal
 
-from sqlalchemy import ColumnElement, Select, or_, select
+from sqlalchemy import ColumnElement, Select, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import Forbidden, NotFound, ValidationError
@@ -273,13 +273,19 @@ async def require_matter_management(db: AsyncSession, project_id: uuid.UUID, use
 def denied_file_ids(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
     """An explicit screen follows a file's direct scope and attachment links."""
     from app.models.file import File
+    from app.models.knowledge import KnowledgeBaseFile
     from app.models.project import ProjectFile
 
     blocked = select(ProjectMember.project_id).where(
         ProjectMember.user_id == user_id, ProjectMember.role == BLOCKED_ROLE
     )
     attached = select(ProjectFile.file_id).where(ProjectFile.project_id.in_(blocked))
-    return select(File.id).where(or_(File.project_id.in_(blocked), File.id.in_(attached)))
+    kb_sources = select(KnowledgeBaseFile.file_id).where(
+        KnowledgeBaseFile.kb_id.in_(denied_kb_ids(user_id))
+    )
+    return select(File.id).where(
+        or_(File.project_id.in_(blocked), File.id.in_(attached), File.id.in_(kb_sources))
+    )
 
 
 def denied_kb_ids(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
@@ -310,3 +316,76 @@ async def require_resource_write(
         ids.add(direct_project_id)
     for project_id in sorted(ids, key=str):
         await require_matter(db, project_id, user, need="write", include_archived=True)
+
+
+def file_matter_ids(file_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+    """All matters affected by a file, including KB source membership."""
+    from app.models.file import File
+    from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
+    from app.models.project import ProjectFile
+    from app.models.project_knowledge_base import ProjectKnowledgeBase
+
+    scopes = union(
+        select(File.project_id).where(File.id == file_id, File.project_id.is_not(None)),
+        select(ProjectFile.project_id).where(ProjectFile.file_id == file_id),
+        select(KnowledgeBase.project_id)
+        .join(KnowledgeBaseFile, KnowledgeBaseFile.kb_id == KnowledgeBase.id)
+        .where(KnowledgeBaseFile.file_id == file_id, KnowledgeBase.project_id.is_not(None)),
+        select(ProjectKnowledgeBase.project_id)
+        .join(KnowledgeBaseFile, KnowledgeBaseFile.kb_id == ProjectKnowledgeBase.knowledge_base_id)
+        .where(KnowledgeBaseFile.file_id == file_id),
+    ).subquery()
+    return select(scopes.c.project_id)
+
+
+async def require_document_matter_access(
+    db: AsyncSession,
+    document_ids: Sequence[uuid.UUID],
+    user: User | None,
+    *,
+    need: MatterAccess = "read",
+) -> None:
+    """Guard document workflows and their derived results, without an admin bypass.
+
+    Ownership/existence checks stay with each caller. Historical results whose
+    source documents were removed retain their existing read policy. Every live
+    source carries all of its direct, attachment and KB matter restrictions.
+    """
+    from app.models.document import Document
+
+    file_ids = (
+        await db.scalars(select(Document.file_id).where(Document.id.in_(document_ids)))
+    ).all()
+    ids: set[uuid.UUID] = set()
+    for file_id in file_ids:
+        ids.update((await db.scalars(file_matter_ids(file_id))).all())
+    if ids and (user is None or user.deleted_at is not None):
+        raise NotFound("Document not found.")
+    for project_id in sorted(ids, key=str):
+        assert user is not None
+        await require_matter(db, project_id, user, need=need, include_archived=True)
+
+
+def readable_autonomous_session_ids(user: User) -> Select[tuple[uuid.UUID]]:
+    """Matter authorization follows a session into memory, precedents and notices."""
+    from app.models.autonomous import AutonomousSession
+
+    return select(AutonomousSession.id).where(
+        AutonomousSession.project_id.is_(None)
+        | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user)))
+    )
+
+
+async def require_autonomous_source(
+    db: AsyncSession, source_session_id: uuid.UUID | None, user_id: uuid.UUID
+) -> None:
+    if source_session_id is None:
+        return
+    from app.models.autonomous import AutonomousSession
+
+    source = await db.get(AutonomousSession, source_session_id)
+    user = await db.get(User, user_id)
+    if source is None or user is None:
+        raise NotFound("Autonomous source not found.")
+    if source.project_id is not None:
+        await require_matter(db, source.project_id, user, include_archived=True)

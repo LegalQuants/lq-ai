@@ -4083,6 +4083,9 @@ async def run_inference_override(
     handler so the handler's transaction boundary is explicit).
     """
 
+    if chat.project_id is not None:
+        await require_matter(db, chat.project_id, user, need="write", include_archived=True)
+
     assistant_message_id = uuid.uuid4()
     request_id = (
         (request.headers.get("x-request-id") if request else None)

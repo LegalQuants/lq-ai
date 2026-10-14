@@ -44,13 +44,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
-from app.authz.matters import denied_file_ids, require_matter, require_resource_write
+from app.authz.matters import (
+    denied_file_ids,
+    file_matter_ids,
+    require_matter,
+    require_resource_write,
+)
 from app.config import get_settings
 from app.db.session import get_db
 from app.errors import Forbidden, NotFound, ValidationError
 from app.models.document import Document
 from app.models.file import File as FileModel
-from app.models.project import ProjectFile
 from app.models.user import User
 from app.schemas.files import FileMetadata
 from app.storage import (
@@ -549,7 +553,7 @@ async def _load_visible_file(
             db,
             actor,
             row.project_id,
-            select(ProjectFile.project_id).where(ProjectFile.file_id == row.id),
+            file_matter_ids(row.id),
         )
     return row
 
