@@ -3262,6 +3262,15 @@ Privacy and security implications dominate this entire subsection. Most items be
 
 **Priority:** P1 · **Effort:** L
 
+**Incremental foundation (ADR proposal PR #677 / issue #256):** the first backend slice adds
+an inactive, metadata-only `workspace_events` table and owner-scoped internal persistence/query
+services, with deduplication, atomic audit and personal-data lifecycle support. It uses the
+installation's existing Postgres connection; no hosted/shared database or new provider is
+introduced. See [the foundation contract and rollout gates](workspace-events.md). No producer,
+public event API, Today View or email ingestion is enabled by this slice. This does not meet the
+full multi-source acceptance criteria below. Other database engines/platform integrations remain
+a separate architecture decision.
+
 **Context:** The persistent workspace-state layer that consumes signals from connected sources and exposes a unified query API. Foundation for the Today view, Prioritization Engine, and agent dispatch.
 
 **Specific scope:** New backend service; consumes events via MCP-client subsystem; normalizes to Workspace Event schema (event_type, source, subject, timestamp, payload, metadata); persists in Postgres; exposes query API by user, time range, source, and event type; emits internal events for downstream consumers (Prioritization Engine, agents).
