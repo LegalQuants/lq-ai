@@ -1057,7 +1057,8 @@ ratification.
 
 The maintainer also decided how this ADR goes forward: a security-path checklist is
 drafted first, as its own change, because ADR 0034 names one and no file defined it; a
-walkthrough of the present design is recorded on a local model; and the ADR goes to the
+walkthrough of the present design is recorded on a local model (done on 2026-10-14; see
+"Supporting evidence"); and the ADR goes to the
 LQAI Committee call of 2026-10-18 for ratification. A run on a configured provider stays
 a condition for claiming live operation and is not a condition of ratification.
 
@@ -1228,7 +1229,11 @@ implementation.
 The [UAT record](../uat/adr35-chat/README.md) shows provider timeouts leaving runs
 uncertain, which D6 addresses. The recorded walkthrough of the first build was made
 before the redirection and showed the earlier design. It was removed from the branch
-on 2026-10-10, and no walkthrough of the present design is recorded.
+on 2026-10-10. A [walkthrough of the present design](../uat/adr38-runs-in-chat/README.md)
+was recorded on 2026-10-14 at `00dda1dd8`, on a local model and a development stack, with
+an agent driving the page: nine scenarios, one run each, covering the chat-hosting list
+above except an uncertain run, pseudonymization and a refused route. It is not human
+acceptance.
 [#662](https://github.com/LegalQuants/lq-ai/issues/662) and its research note describe the
 capability tracks that D3 serves. The [feature PRD](../prds/issue-563-governed-orchestration.md)
 defines the requirements this ADR extends.

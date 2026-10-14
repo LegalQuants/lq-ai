@@ -361,8 +361,9 @@ do not establish live inference or human acceptance.
 ## Evidence and sign-off
 
 The first build's recorded walkthrough was made on 2026-10-06, before the design
-changed, and was removed from the branch on 2026-10-10. A walkthrough of this build has
-not been recorded. Agents have run New harness on a scripted provider and on local models, which
+changed, and was removed from the branch on 2026-10-10. A walkthrough of this build was
+recorded on 2026-10-14 ([record](../uat/adr38-runs-in-chat/README.md)), with an agent
+driving the page on a local model; no person has followed this runbook. Agents have run New harness on a scripted provider and on local models, which
 is not human acceptance. Record the commit under test, the provider and model, the composer's
 figures, run and message identifiers, the model-dependent outcomes (the cases listed at the
 head of the acceptance script) and any failed attempts. Keep provider secrets out of the record.

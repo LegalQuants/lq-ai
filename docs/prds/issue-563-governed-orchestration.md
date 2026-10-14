@@ -102,8 +102,9 @@ The accepted scope above stands for released software.
 records what was built and how it was checked. Each of R8–R13 has controlled-provider test
 coverage. The browser behavior behind R8 and R9 was exercised
 in single runs driven by agents, on a scripted provider and on local models. The first
-build's recorded walkthrough was removed from the branch, and none of the present design
-is recorded. None of the six has a recorded human acceptance or a run on a configured
+build's recorded walkthrough was removed from the branch. One of the present design, driven
+by an agent on a local model, was recorded on 2026-10-14
+([record](../uat/adr38-runs-in-chat/README.md)). None of the six has a recorded human acceptance or a run on a configured
 provider (the maintainer used the present design on a local model on 2026-10-09 and said
 that it passes C1's acceptance statement), and
 the changes have had no maintainer or security review. R12 rests on controlled-provider
