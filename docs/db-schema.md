@@ -30,6 +30,7 @@ CREATE TABLE users (
     email                 CITEXT NOT NULL UNIQUE,
     display_name          TEXT,
     hashed_password       TEXT NOT NULL,
+    credential_version    INTEGER NOT NULL DEFAULT 0,  -- 0073: invalidates issued JWTs on password change
     is_admin              BOOLEAN NOT NULL DEFAULT FALSE,
     role                  TEXT NOT NULL DEFAULT 'member',       -- PRD §5.2 RBAC; CHECK (role IN ('admin','member','viewer','auditor'))
     mfa_enabled           BOOLEAN NOT NULL DEFAULT FALSE,
@@ -61,6 +62,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 | Column | Migration | Notes |
 |---|---|---|
 | `role` | 0017; widened 0065 | RBAC per PRD §5.2 (`admin`, `member`, `viewer`, `auditor`). Kept in sync with `is_admin` (role=`admin` iff `is_admin=true`). `auditor` (0065) is a read-only, deployment-wide cross-user reviewer role — non-mutating like `viewer`, but distinct: see the cross-user auditor spec. |
+| `credential_version` | 0073 | Starts at zero for existing and new users; incremented under a user-row lock on admin reset, self-service password change, and CLI reset. Access and MFA JWTs must match it. Refresh sessions are revoked in the same transaction. |
 | `reasoning_visibility` | 0015 | Enhance Prompt reasoning display mode (§3.2). Default `disclosure` = collapsed behind toggle. |
 | `featured_tools` | 0019 | Dashboard tool surfacing: `prominent` (cards) vs. `inline` (toolbar only). |
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |
@@ -71,12 +73,14 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 `must_change_password` is set to TRUE for:
 - the auto-created first-run admin (Task B2 / migration `0002`),
 - any user touched by `python -m app.cli reset-admin-password`.
+- users provisioned or reset through the admin user API.
 
 Authenticated endpoints (other than `GET /users/me`, `POST /auth/logout`, and `POST /auth/change-password`) return HTTP 403 with `error.code = "password_change_required"` while this flag is true. The flag is cleared by a successful `POST /auth/change-password`.
 
 ### `user_sessions`
 
-Refresh tokens, hashed; access tokens are stateless JWTs.
+Refresh tokens, hashed; access JWTs are not stored, but their credential version is checked
+against the user row on every request.
 
 ```sql
 CREATE TABLE user_sessions (
@@ -158,12 +162,16 @@ CREATE TABLE projects (
     context_md               TEXT,  -- free-form markdown
     privileged               BOOLEAN NOT NULL DEFAULT FALSE,
     minimum_inference_tier   SMALLINT,
+    max_egress_tier          SMALLINT,  -- 0070: matter-scoped tool-egress ceiling, 1-5, NULL = none
     is_sandbox               BOOLEAN NOT NULL DEFAULT FALSE,  -- 0022: system-managed try-it sandbox
     created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     archived_at              TIMESTAMPTZ,  -- soft-delete; NULL means active
     CONSTRAINT chk_projects_tier_range CHECK (
         minimum_inference_tier IS NULL OR (minimum_inference_tier BETWEEN 1 AND 5)
+    ),
+    CONSTRAINT chk_projects_max_egress_tier_range CHECK (  -- 0070
+        max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)
     ),
     CONSTRAINT chk_projects_privileged_implies_tier CHECK (
         (privileged = false) OR (minimum_inference_tier IS NOT NULL)
@@ -403,6 +411,46 @@ CREATE TABLE messages (
 
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 ```
+
+#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0074; ADR 0038 proposed)
+
+The sketch above does not show `messages.kind`. Migration 0020 added it, with
+`chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
+[0074](../api/alembic/versions/0074_runs_in_chat.py) changes `messages` as below.
+It is implemented, and
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not
+ratified.
+
+```sql
+ALTER TABLE messages DROP CONSTRAINT chk_messages_kind;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_kind
+  CHECK (kind IN ('user', 'ai', 'refusal', 'system', 'run'));
+ALTER TABLE messages ADD COLUMN autonomous_session_id uuid
+  CONSTRAINT fk_messages_autonomous_session_id
+  REFERENCES autonomous_sessions(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD CONSTRAINT chk_messages_run_binding
+  CHECK (autonomous_session_id IS NULL OR (kind = 'run' AND role = 'assistant'));
+CREATE UNIQUE INDEX uq_messages_autonomous_session
+  ON messages(autonomous_session_id) WHERE autonomous_session_id IS NOT NULL;
+```
+
+- A governed run's reply is one assistant message of kind `run`.
+  `autonomous_session_id` links it to the run's root autonomous session and is
+  NULL on every other message. Deleting the session leaves the message and
+  clears the link (`ON DELETE SET NULL`).
+- `chk_messages_run_binding` allows the link only on an assistant message of
+  kind `run`. The partial unique index `uq_messages_autonomous_session` allows
+  one message per session and indexes only rows where the link is set.
+- `chats.autonomous_session_id` is not reused for this: it marks hidden,
+  session-owned chats and removes them from chat lists.
+- The message holds the link. Run records stay authoritative. At delivery one
+  transaction writes the answer into `content`, the message's `applied_skills`,
+  tier, provider, model, token and cost fields, and its `work_product_attribution`
+  row, together with the delivery audit row. A run that ends without an answer
+  leaves `content` empty, and history replay skips assistant messages with no
+  content.
+- Downgrade refuses while any message has `kind = 'run'` or a session link;
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
 
 ### `inference_routing_log` FK closure (Task C3)
 
@@ -1149,6 +1197,7 @@ CREATE TABLE user_skills (
     frontmatter_extra JSONB NOT NULL DEFAULT '{}',
     body              TEXT NOT NULL,
     slash_alias       TEXT,                                       -- 0023: chat-composer trigger alias (e.g. '/nda')
+    installation_provenance JSONB,                              -- 0072: immutable installation snapshot
     forked_from       TEXT,                                       -- 0023: source skill slug when created via fork
     archived_at       TIMESTAMPTZ,                                -- soft-delete
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1188,6 +1237,7 @@ CREATE UNIQUE INDEX idx_user_skills_slash_alias_team_active
 |---|---|---|
 | `slash_alias` | 0023 | Optional chat-composer trigger alias. Must match `^/[a-z0-9-]{1,32}$` (enforced by `chk_user_skills_slash_alias_format`). Unique per active owner (partial unique indexes above). `POST` and `PATCH /user-skills` return 422 with `"slash_alias '...' is already used by another of your skills."` on collision. |
 | `forked_from` | 0023 | Slug of the source skill when this row was created via the fork button on the skill detail page. Stored as plain text — the source may be a filesystem-canonical built-in with no DB row (per ADR 0004). Set on create; read-only afterward. |
+| `installation_provenance` | 0072 | Nullable JSONB for community-installed skills: original installed fields, versioned SHA-256 content/review hashes, sanitized repository identity, known revision, skill path, declared author/attestation/license, installing admin, time, receiving scope/team and skill ID. API read-only; a database trigger rejects updates. A checkout revision or operator manifest is a declaration, not content verification. Downgrade refuses to discard populated provenance. |
 
 Resolution path during prompt assembly (`/internal/skills/{slug}?user_id=…`): user-scope row for the requesting user wins on slug match; falls through to the filesystem registry otherwise. D8.1's only addition is the `teams` FK target and a middle resolution slot for team-scope rows.
 
@@ -1237,8 +1287,8 @@ The most consequential table in the schema. Every privilege-affecting action lan
 
 ```sql
 CREATE TABLE audit_log (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
-    timestamp             TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    timestamp             TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),  -- wall-clock insert time, not transaction start (0069)
     user_id               UUID REFERENCES users(id) ON DELETE SET NULL,
     action                TEXT NOT NULL,           -- e.g. 'chat.create', 'message.send', 'skill.fork'
     resource_type         TEXT NOT NULL,           -- e.g. 'chat', 'project', 'skill'
@@ -1265,10 +1315,11 @@ CREATE INDEX idx_audit_log_tier ON audit_log(routed_inference_tier, timestamp DE
 
 The audit log is **append-only** at the application layer; the database does not enforce this directly (the maintainer-team can add a trigger if desired).
 
-The shared `audit_action` writer explicitly stamps `clock_timestamp()` at insert
-time. The schema default stays `now()`, but transaction-start timestamps cannot
-order multiple phase/effect events committed together; the writer records when
-each event is written without splitting its atomic transaction.
+The `timestamp` default records wall-clock insert time with `clock_timestamp()`
+(migration 0069). The shared `audit_action` writer uses this default unless the
+caller supplies an explicit timestamp; audit rows still share the caller's
+atomic transaction. Wall-clock values may tie or move backwards if the clock is
+adjusted, so timestamp sorting does not guarantee write order.
 
 **`details` JSONB conventions.**
 
@@ -1280,6 +1331,7 @@ The `details` column carries action-specific payloads. Documented keys by action
 | `user_skill.created` | `slug`, `scope`, `version` | Identifies the created row. `team_id` also present for `scope='team'` rows. |
 | `user_skill.updated` | `slug`, `scope`, `changed_fields`, `version_before`, `version_after` | `changed_fields` is a sorted array of mutated keys; `version_before`/`version_after` present only when `version` changed. `team_id` present for team-scope rows. |
 | `user_skill.deleted` | `slug`, `scope` | Identity of the archived row. |
+| `autonomous_session.tool_call` | `tool`, `outcome` | Retrieval ownership-predicate refusals use `tool='retrieve_chunks'`, `outcome='ownership_denied'` (#494) as the one closing row after `started`, without a duplicate generic `error` row (#656) or raw arguments/results. Ordinary failures retain their generic error audit. Actor and run are in `user_id` and `resource_id`; rows share the caller's transaction. See [audit logging](security/audit-logging.md) for scope and rollback limits. |
 
 ### `inference_routing_log`
 
@@ -1312,6 +1364,38 @@ CREATE INDEX idx_inference_log_tier_time ON inference_routing_log(routed_inferen
 CREATE INDEX idx_inference_log_provider_time ON inference_routing_log(routed_provider, timestamp DESC);
 CREATE INDEX idx_inference_log_refused ON inference_routing_log(timestamp DESC) WHERE refused = TRUE;
 ```
+
+The sketch omits `purpose`. Migration 0029 added it as `purpose VARCHAR(32)`, nullable,
+with `idx_inference_log_model_purpose_timestamp` on `(routed_model, purpose, timestamp DESC)`.
+It labels the kind of traffic so cost calibration and receipts can tell the kinds
+apart. The gateway sets it from the request's `lq_ai_purpose` field, or to
+`embedding` on the embeddings path. A request with no label records `chat`, and so
+does a label outside the gateway's closed set, so a caller cannot add a value by
+sending a string. A row written before migration 0029 has NULL, which cost
+calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
+(`gateway/app/api/inference.py`):
+
+| Value | Recorded for |
+|---|---|
+| `chat` | Ordinary chat completions; also the fallback for no label or an unknown one |
+| `embedding` | Embeddings calls |
+| `judge_paraphrase` | Citation Engine paraphrase and ensemble judge calls (stages 3 and 4) |
+| `judge_case_content` | Citation Engine whole-opinion judge for case law |
+| `judge_authority_content` | The same judge for other authority sources |
+| `judge_treatment` | Case-law treatment-layer judge |
+| `tabular_extraction` | Tabular Review cell extraction |
+| `tabular_bulk_op` | Tabular Review bulk operations: redline reports and summary memos |
+| `playbook_executor` | Playbook executor |
+| `playbook_easy_extract` | Easy Playbook extraction |
+| `autonomous_executor` | A legacy single autonomous session's model calls |
+| `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
+
+Only `chat`, `embedding`, `judge_paraphrase` and `tabular_bulk_op` were in the set
+before ADR 0038 (proposed). The other labels were already sent by the backend and
+recorded as `chat`; recording them as themselves is implemented. Two
+Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
+`playbook_easy_assemble_describe_tier`, are longer than the 32-character column
+and are not in the set, so those rows still record `chat`.
 
 ---
 
@@ -1526,11 +1610,15 @@ Substrate for the Tabular / Multi-Document Review surface
 execution walks a `documents × columns` grid and produces a
 row-per-document by column-per-spec result, run as a LangGraph workflow
 on the existing `arq:m3a6` queue (Decision C-3 from the Phase C prep
-doc: reuse the queue rather than add a second worker container). One
-table, introduced by migration `0036_tabular_executions.py`:
+doc: reuse the queue rather than add a second worker container). Two
+tables (migrations `0036_tabular_executions.py` and
+`0071_tabular_bulk_ops.py`):
 
 * `tabular_executions` — one row per execution; persists the inputs +
   status + assembled grid so the result view can re-render a week later.
+* `tabular_bulk_ops` — one row per bulk operation over a completed
+  execution (DE-304 / ADR 0040); persists the op params + per-item
+  results causally linked to the parent execution.
 
 ### `tabular_executions` (M3)
 
@@ -1608,6 +1696,38 @@ populated once status is `completed` (may carry partial output on
 
 Soft delete via `deleted_at` matches the `playbooks.deleted_at` posture
 from M3-A6's migration 0034.
+
+### `tabular_bulk_ops` (DE-304 / [ADR 0040](adr/0040-tabular-bulk-operations.md))
+
+One row per selected-column report/memo operation (migration 0071).
+
+```sql
+CREATE TABLE tabular_bulk_ops (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    execution_id UUID REFERENCES tabular_executions(id) ON DELETE SET NULL,
+    source_execution_id UUID NOT NULL,
+    provenance JSONB NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('redline_rows','summarize_column')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','completed','failed')),
+    params JSONB NOT NULL DEFAULT '{}'::jsonb,
+    results JSONB,
+    confirmed_cost_usd NUMERIC(10,4),
+    cost_actual_usd NUMERIC(10,4),
+    error_text TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+CREATE INDEX idx_tabular_bulk_ops_execution_recent ON tabular_bulk_ops (execution_id, created_at DESC);
+CREATE INDEX idx_tabular_bulk_ops_owner_recent ON tabular_bulk_ops (user_id, created_at);
+```
+
+`execution_id` is a nullable live link. `source_execution_id` preserves the original identity after hard deletion. `provenance` stores column/document metadata and the immutable skill snapshot (body, references, version, scope, hash, input bindings and tier floor); it does not duplicate source documents or the full grid. `params` identifies the selected column and skill.
+
+Source soft/hard deletion retains outputs; owner-scoped list/detail endpoints remain available independently. Account deletion cascades through the owner FK and removes work product, and account export includes `tabular_bulk_ops.json`. Queued work fails if its source is gone. Migration downgrade refuses while retained rows exist.
+
+`completed` includes visible per-item failures. Results use `{schema_version: 'de304-v1', items: [{document_id, document_name, status, output_text, error, cost_usd}], summary: {total_items, failed_items}}`. Per-call costs currently remain unreconciled; the aggregate is not metered spend.
 
 ---
 
@@ -1775,7 +1895,10 @@ Revision **0067** includes `profile` (`demonstration` by default, or
 call and may have `current_revision = NULL` until a valid proposal is retained.
 The new `planning` status participates in the one-active-root-per-owner index.
 Sample roots continue to require a current prepared revision and no planning
-snapshot. A root in `planning` cannot reference a prepared revision.
+snapshot. A root in `planning` cannot reference a prepared revision. Migration 0074
+later replaces the enumerated `profile` check, 0075 adds the `closed` status, 0076
+lets `project_id` be null and 0077 lets a registry run complete without a plan; see
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -1797,7 +1920,7 @@ cascades children. Existing single-session status/phase enums are unchanged.
 
 | Table | Keys and fields | Constraints and lifecycle |
 |---|---|---|
-| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id`, unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
+| `orchestration_roots` | `session_id` PK/FK; `owner_id`, `project_id` (nullable from 0076), unique `plan_id`; `current_revision`, nullable `admitted_revision`; `status`, `stop_reason`, created/updated timestamps | One active root per owner, including approval/child waits and uncertainty. Deferred composite FK binds current revision to a stored plan. An admitted revision equals the current revision and prevents recreating a deleted batch. |
 | `orchestration_plans` | PK `(root_id, revision)`; `plan_hash`, private JSONB `snapshot`, `status`, nullable JSONB `approval`, creation timestamp | Positive revision; SHA-256 digest shape; proposed/approved/rejected/superseded states. Approved requires consent. Superseding retains prior consent for inspection; never edits old snapshot content. |
 | `orchestration_admissions` | `session_id` PK/FK; `root_id`, `revision`, `dispatch_id`, `child_order`, creation timestamp | FK to stored plan; unique `(root, revision, dispatch)` and `(root, revision, order)`. Approval, child sessions, fixed allocations and admission audit are serialized by the root transaction. |
 | `orchestration_accounts` | `session_id` PK/FK; `root_id`; `allocation_usd NUMERIC(10,4)`, `spent_usd/reserved_usd NUMERIC(14,4)`; generation, worker UUID, lease expiry, fixed attempt deadline | Nonnegative amounts/generation. Worker, lease and attempt deadline are all set or all null; lease cannot exceed attempt deadline. Larger spent field records observed overruns honestly; admission enforces available allocation in a locked transaction. |
@@ -1904,6 +2027,137 @@ them for owner inspection/export/reset. Project archival blocks tool access but
 retains inspection. Account export includes `skill_workspaces.json`. Migration
 0068 refuses downgrade while any workspace remains: export and intentionally
 clear retained work first. See [capability evidence](plans/issue-563-skill-capabilities.md).
+
+### Tool-egress ceiling columns (0070, DE-358 item 6 / AG-03)
+
+Migration 0070 adds the nullable columns behind the API-side matter-scoped
+tool-egress ceiling ([ADR 0014 amendment 2026-10-01](adr/0014-gateway-egress-boundary-for-tool-providers.md),
+[ADR 0015 amendment 2026-10-01](adr/0015-governed-tool-calling-model.md)).
+The effective ceiling is the numeric `min()` over the operator default
+(`LQ_AI_TOOL_MAX_EGRESS_TIER`), `projects.max_egress_tier`, and the
+orchestration `ExecutionScope.maximum_egress_tier` — a project can only
+tighten the operator default, never loosen it. The policy is independent
+of `minimum_inference_tier` and `privileged`.
+
+| Table | New columns | Constraints |
+|---|---|---|
+| `projects` | `max_egress_tier` SMALLINT, NULL = no project ceiling | `chk_projects_max_egress_tier_range`: NULL or 1–5 |
+| `chat_pending_tool_call` | `max_egress_tier` SMALLINT — ceiling resolved at proposal time; approval re-resolves and executes under `min(original, current)` | `chk_chat_pending_tool_call_max_egress_tier_range`: NULL or 1–5 |
+| `tool_call_log` | `max_allowed_tier` SMALLINT — the ceiling actually applied; `ceiling_source` TEXT — which policy bound it | `chk_tool_call_log_max_allowed_tier_range`: NULL or 0–5 (0 = a scope "no egress" refusal was audited); `chk_tool_call_log_ceiling_source`: NULL or one of `operator`, `project`, `execution_scope`, `pending_original`, `unresolved` |
+
+A scope ceiling of `0` refuses in the API and is never sent to the gateway.
+An unreadable policy fail-closes: no dispatch, refused audit row with
+`ceiling_source="unresolved"`.
+
+### Governed runs in chat and closing a run (0074 to 0077; ADR 0038 proposed)
+
+Implemented; [ADR 0038](adr/0038-governed-runs-in-chat.md)
+is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
+already carries the orchestration tables. The authoritative DDL for the first two is in
+[`0074_runs_in_chat.py`](../api/alembic/versions/0074_runs_in_chat.py) and
+[`0075_close_uncertain_runs.py`](../api/alembic/versions/0075_close_uncertain_runs.py);
+0076 and 0077 are described further down, each with its file.
+This section names the constraints they replace. The `messages` changes of 0074 are
+described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0074-adr-0038-proposed).
+
+**0074: registry profiles.** The profile is validated against the application's
+closed profile registry, so the database keeps only its shape.
+
+| Constraint on `orchestration_roots` | Before | After |
+|---|---|---|
+| `orchestration_roots_profile_check` | `profile IN ('demonstration','model_demo_v1')` | `profile ~ '^[a-z][a-z0-9_]{0,63}$'` |
+| `ck_orchestration_planning` | A model-planned root: `profile = 'model_demo_v1'` and a planning snapshot | A model-planned root: `profile <> 'demonstration'` and a planning snapshot |
+
+`demonstration` stays reserved for the earlier sample profile, which was removed; a
+registry profile cannot use it. The registered profiles are `model_demo_v1`, the
+fictional agreement, and `new_harness_v1`, the profile the chat composer offers as the
+experimental New harness model.
+
+**0075: closing an uncertain run.** ADR 0035 D5 stands: an effect with an uncertain
+outcome is never repeated, and its reservation is retained. Closing is the owner's way
+to end such a run without a retry.
+
+| Constraint | Change |
+|---|---|
+| `orchestration_roots_status_check` | `status` also accepts `closed`. |
+| `ck_orchestration_planning` | A root with no current plan revision may also have status `closed`: it was closed while its planning call was uncertain. |
+| `orchestration_effects_status_check` | `status` also accepts `closed`. |
+| `orchestration_effects_check` | The row-shape rule gains the `closed` branch below. |
+
+```sql
+CHECK (
+  (status = 'completed' AND charged_usd IS NOT NULL AND result IS NOT NULL
+    AND completed_at IS NOT NULL)
+  OR (status = 'closed' AND charged_usd IS NOT NULL AND result IS NULL
+    AND completed_at IS NOT NULL)
+  OR (status IN ('admitted','uncertain') AND charged_usd IS NULL AND result IS NULL
+    AND completed_at IS NULL))
+```
+
+A `closed` effect is one whose outcome was never established. Its reservation was
+settled as a charge (`charged_usd` holds the reserved amount), it has no `result`, and
+`completed_at` is set. Closing a run does this to each unresolved effect, ends the
+root as `closed` with stop reason `owner_closed`, and sets the run's running sessions
+to `halted`. `closed` is outside the partial unique indexes
+`uq_orchestration_active_owner` (one active root per owner) and
+`uq_orchestration_one_inflight` (one admitted or uncertain effect per session), so
+closing releases the owner's single active-run allowance and a closed effect no longer
+blocks its session.
+
+**0076: a run outside a matter.** Authoritative DDL:
+[`0076_runs_outside_a_matter.py`](../api/alembic/versions/0076_runs_outside_a_matter.py).
+`orchestration_roots.project_id` becomes nullable. A run started from a chat that is in
+no matter has no project, and neither do its sessions (`autonomous_sessions.project_id`
+was already nullable, and the tree trigger from 0067 compares projects with
+`IS DISTINCT FROM`). The foreign key and its `ON DELETE RESTRICT` are unchanged, so a
+matter still cannot be deleted from under a run that belongs to it.
+
+The column says only that there is no matter. What follows from that is enforced by the
+application, at intake, on every policy check while the run is live, and at each read:
+
+| Rule | Where |
+|---|---|
+| It reads the owner's undeleted files wherever they are filed (ADR 0038, ruling 4). | `reading.readable_documents`, used by `policy.CurrentPolicy` and `boundary.constrain_call`; intake lists and refuses with the same predicates (`reading.filed_in_a_matter`, `reading.filed_in_another_matter`) |
+| It runs under the strictest terms of the matters that hold its selected documents (`files.project_id`, a `project_files` row, or a knowledge base the matter has attached through `project_knowledge_bases`, archived or not): the lowest `projects.minimum_inference_tier` any of them sets, and privileged if any is. With none, it is not privileged and its floor is the profile's own. | `reading.selection_terms`, set by `begin_run` |
+| Those terms are worked out again at every admission. A floor that has tightened, or a privilege flag that no longer matches, stops the run. A privilege flag with no privileged matter behind it is refused. | `store._data_terms` |
+| Nothing is attached to a matter for it. | `store.start_planning` |
+
+A file that belongs to a matter carries that matter's tier floor and privilege flag, and
+a run with no matter takes them on when it reads the file. A profile says
+whether it may start outside a matter (`project_scope = "any"`); New harness may, and
+the fictional profile, which is limited to one dedicated matter, may not.
+
+**0077: a run answered without a plan.** Authoritative DDL:
+[`0077_runs_answered_without_a_plan.py`](../api/alembic/versions/0077_runs_answered_without_a_plan.py).
+`ck_orchestration_planning` is replaced once more. Until 0077 a registry run with no plan
+revision (`current_revision IS NULL`) could end only as `uncertain`, `halted`, `failed`,
+`expired` or `closed`. It may now also end `completed`: the orchestrator answered the
+request by itself, so there is no `orchestration_plans` row, no admission and no child
+session. No column or table is added. The answer is the bound chat message's content, and
+the root session's `result` holds `{"kind": "orchestration_direct_answer", "verification":
+"unverified", "summary": ...}`.
+
+The constraint cannot say that such a run made one model call and admitted no child. The
+application holds that: the planning call is the only effect a run may admit before it has
+an approved plan (`store.begin_effect`), and children are admitted only under one
+(`store.admit_children`). A sample (`demonstration`) root still requires a prepared
+revision, and no run can wait for approval, be queued or run without one.
+
+Knowledge-base search adds no schema. The knowledge bases a run may search and its frozen
+terms are in `orchestration_roots.planning_snapshot` and the plan snapshot. A search
+step's `orchestration_effects.result` holds the passages the search returned, as a document
+read's holds the text it returned. The source number a search gives a file is in that
+result's step note (`result.step.summary`), with the file's identifiers and name and no
+passage text; it is read back from there when a delivered answer's quotations are checked.
+Of a search step's result, the step note is the only part that a view of the run or the
+owner's export returns.
+
+**Downgrade.** All four migrations refuse to downgrade while the rows they introduced
+are retained, as 0067 does: 0074 while any message has `kind = 'run'` or a session link,
+or any root has a profile other than `demonstration` and `model_demo_v1`; 0075 while any
+root or effect has status `closed`; 0076 while any root has no project; 0077 while any
+root is `completed` with no plan revision. Nothing is dropped silently; those runs need an
+explicit export and removal first.
 
 ### `autonomous_schedules` (M4)
 

@@ -6,6 +6,10 @@
 > recipes and this doc) plus the M4 Autonomous Layer spans and audit actions. What is
 > not yet shipped is listed in [§6 — What's not yet shipped](#6-whats-not-yet-shipped)
 > with links to the tracking DE entries.
+>
+> The governed-run spans, the worker tracing and the routing-log purpose labels
+> for runs (ADR 0038, proposed) are implemented and are
+> marked as such where they appear. They are in no release.
 
 For the architectural context see [docs/architecture.md](architecture.md) §OBS and the
 "What the diagram doesn't show" section. For the deployment recipes see
@@ -27,7 +31,7 @@ Transport is OTLP/HTTP for all signals.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Master switch. Sets the base URL for all signals (traces + metrics when [DE-301](PRD.md#de-301--otel-meterprovider-for-metrics-export-otel-deepening-de-c) lands). OTel initializes iff this OR a per-signal endpoint is set. Example: `http://otel-collector:4318`. | unset — no OTel |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Per-signal override for traces. Takes precedence over the master endpoint for trace export. Useful when splitting traces and metrics to different backends. | unset |
 | `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` | Per-signal override for metrics (relevant once DE-301 lands). | unset |
-| `OTEL_SERVICE_NAME` | Resource attribute `service.name` attached to every span. | `lq-ai-api` (api service), `lq-ai-gateway` (gateway service) |
+| `OTEL_SERVICE_NAME` | Resource attribute `service.name` attached to every span. | `lq-ai-api` (api service), `lq-ai-gateway` (gateway service). Under ADR 0038 the Compose files and both recipes also set `lq-ai-arq-worker` for the `arq-worker` service; see [Governed runs](#orchestrationjob--orchestrationrun--orchestrationeffect). |
 | `OTEL_RESOURCE_ATTRIBUTES` | Arbitrary `key=value,key=value` pairs appended to the resource. Use for deployment environment, region, or cluster tags. Example: `deployment.environment=production,k8s.cluster.name=prod-east`. | unset |
 | `OTEL_TRACES_SAMPLER` | Sampler name per the OTel SDK. The SDK default is `parentbased_always_on` (sample everything). For production, use `parentbased_traceidratio` and set `OTEL_TRACES_SAMPLER_ARG=0.1` (10% head sampling). | `parentbased_always_on` |
 | `OTEL_TRACES_SAMPLER_ARG` | Sampler argument. For `parentbased_traceidratio`, the sampling ratio (0.0–1.0). | `1.0` |
@@ -226,6 +230,80 @@ The autonomous spans also write audit rows — see [§2.4 — Audit actions](#au
 
 ---
 
+#### `orchestration.job` / `orchestration.run` / `orchestration.effect`
+
+**ADR 0038 D2, proposed; implemented and in no release.** A
+governed run executes on the arq worker, not in the API request that accepted or
+approved it. These spans put the worker's part of a run in the same trace as that
+request. Attributes are **identifiers and labels only — never prompt, document or
+answer text.** `autonomous.tool_call`, above, still wraps the chokepoint beneath
+each `orchestration.effect`.
+
+| Span | Emitted by | Wraps |
+|---|---|---|
+| `orchestration.job` | `api/app/workers/orchestration_worker.py` | One arq job for one session of a run. It continues the trace carried in the job (below). |
+| `orchestration.run` | `api/app/autonomous/orchestration/executor.py` | One claimed execution of one session: the planning call, one task, or the combined answer. A child of `orchestration.job`. |
+| `orchestration.effect` | `api/app/autonomous/orchestration/effects.py` | One durable effect: a model call, a document read, a knowledge-base search, or a working-note read or write, each sent through the chokepoint. A tool call the application refuses is a step too: it has an effect span with `orchestration.intent` `refused` and `orchestration.step_kind` `tool_refused`, and no `autonomous.tool_call` beneath it, because nothing runs. It also leaves a zero-cost effect row, a step shown to the owner and an `orchestration.tool_refused` audit row. |
+
+| Attribute | On | Description |
+|---|---|---|
+| `orchestration.root_id` | all three | UUID of the run's root session |
+| `orchestration.session_id` | all three | UUID of the session the span acts for (the root, or one task) |
+| `orchestration.outcome` | job, run | What the invocation ended as. On `orchestration.run`: `completed`, `waiting_children`, `busy` or `stopped`; not set when the run span fails. On `orchestration.job`: one of those, or `disabled` (the run's profile is switched off) or `interrupted` (an error ended the invocation; the recovery sweep resumes from stored state). Every job that opens a span records one. A job that arrives when no profile is enabled at all returns `disabled` before any span opens. |
+| `error.type` | all three, and `autonomous.tool_call` | Set only when the span failed: the exception's class name, which is also the status description. These spans record no exception event and no exception message, because a message can quote SQL parameters, a provider's reply or document text (`quiet_span` in `api/app/observability_helpers.py`). |
+| `orchestration.profile` | run | Registry profile identifier: `model_demo_v1` (the 0.8.0 fictional profile) or `new_harness_v1` (New harness) |
+| `orchestration.role` | run | `root` or `child` |
+| `orchestration.stage` | run | `planning` before a plan exists, `execution` after |
+| `orchestration.phase` | effect | Autonomous phase the effect ran in |
+| `orchestration.intent` | effect | The tool intent label, never its parameters |
+| `orchestration.skill` | effect | Name of what the session is pinned to: an installed skill, or for a profile that pins engine prompt files the prompt's name, such as `new_harness/orchestrator.v2`. A prompt file is not a skill, and the name is the file's name. |
+| `orchestration.step_kind` | effect | The step label shown to the owner, such as `model_turn` or `document_read`; empty when the effect has none |
+
+**How a run's trace is connected.**
+
+1. The API request that accepts a run (`POST /api/v1/chats/{chat_id}/runs`) or
+   approves it is traced like any other request.
+2. When the API queues the worker job it puts the request's W3C trace context in the
+   job (`enqueue_orchestration_job` in `api/app/workers/queue.py`). `orchestration.job`
+   continues that context, so the worker's spans share the request's trace. A job
+   queued from inside a worker job, such as the wake-up of a run's tasks, carries that
+   job's context the same way. The carrier is empty when tracing is not configured. A
+   job woken by the recovery sweep, which runs outside any request, has nothing to
+   continue and starts its own trace. So does a job whose carrier is malformed: the
+   carrier is data from the queue, it grants nothing, and it cannot fail the job.
+3. Inside the worker, `orchestration.run` wraps each claimed session and
+   `orchestration.effect` wraps each effect. A model call leaves the worker through the
+   same gateway client code the API uses, so its context continues to the gateway's
+   spans.
+4. **The arq worker must have `OTEL_EXPORTER_OTLP_ENDPOINT` set.** The worker
+   initializes tracing from the same variables as the API; without an endpoint its
+   spans are dropped and a run's trace ends at the API request. `docker-compose.yml`
+   and `docker-compose.release.yml` pass `OTEL_EXPORTER_OTLP_ENDPOINT` (empty by default)
+   and `OTEL_SERVICE_NAME` (default `lq-ai-arq-worker`, overridden by
+   `LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME`) to `arq-worker`. Both recipes under
+   `deploy/observability/` set `arq-worker` to `http://otel-collector:4318` with service
+   name `lq-ai-arq-worker` and the same sampler default as the API.
+
+**What a span does not carry.** A span holds identifiers and labels. It holds no
+prompt, no opening message, no model reply, no tool-call argument, no document text and
+no search query or passage. How a run's calls were set up and what its model wrote back
+are read from the run's own records through a route for the run's owner (and, with an
+audit row for each read, an admin or an auditor),
+`GET /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace`, described in the
+[backend OpenAPI sketch](api/backend-openapi.yaml). That read is not a span, a log or an
+export to a Collector. It rebuilds each call's opening from the records and returns each
+turn's text and tool calls to that reader. It does not hold document text a read
+returned or passages a search returned, nor a later turn's full request.
+
+**What was checked.** The plan's
+[Implementation status](plans/issue-662-c1-governed-runs-in-chat.md#implementation-status)
+lists `test_runs_in_chat.py` and `test_run_tracing.py` as the evidence for these spans and
+for the trace context carried through queued jobs. It also lists no full Docker stack
+smoke, so a run's trace through a Collector on a running Compose stack with these recipes
+has not been observed.
+
+---
+
 ### Metrics
 
 Prometheus metrics are served by the api (`:8000/metrics`) and gateway
@@ -280,6 +358,67 @@ it (the only `"started"` string in the executor is the `outcome="started"` *deta
 on a `tool_call` row, a different field). Session creation does not currently write
 a `started` audit row. Treat `started` as a reserved-but-unused action until a
 creation-time write is wired up.
+
+**Governed-run audit rows.** Governed runs (ADR 0035) write `orchestration.<event>`
+rows through the run store (`api/app/autonomous/orchestration/store.py`), with
+`resource_type = autonomous_session` and the run's root session as `resource_id`.
+`details` hold identifiers, counts, labels and amounts, never prompt, document or answer
+text. ADR 0038 (proposed) adds `orchestration.tool_refused` (a call
+the application refused: the registry tool name or `unregistered`, and a code, never the
+model's own text) and `orchestration.run_closed` (an owner closed an uncertain run: the
+number of effects closed and the amount charged). A run the orchestrator answered by
+itself, with no plan, writes `orchestration.answered_directly` in place of
+`orchestration.root_delivered`, with `verification: unverified` and the chat and message
+identifiers; a plan that fails writes `orchestration.planning_failed` with the stop reason
+as a label (`invalid_proposal`, `unfunded_plan`, `plan_not_handed_over` or
+`plan_has_placeholders`). For a run hosted in a chat, `orchestration.root_delivered`
+carries the chat and message identifiers. For a profile
+whose answers are checked against the run's sources (the documents selected for it, and files a knowledge-base search found) it also records `verification`
+(`citations_checked` or `unverified`), the counts of quotations verified, unverified and
+unresolved, the number of quoted passages that carry no source marker and so were not
+checked (`citations_unmarked`), and the fiduciary-gate status. If the checks themselves fail, the answer is
+still delivered and the row records `verification: unverified` and `checks: failed`. The
+chat receipts feed reads the `orchestration.*` rows through the run message's link to its
+root session, so they appear in the chat's receipts drawer. Attaching a chat attachment to
+the matter for a run writes `project.file_attached` with `source: run_selection`; that row
+is keyed to the matter, so it is in the admin audit log and not in the chat's receipts.
+
+---
+
+### Routing log
+
+The gateway writes one `inference_routing_log` row for every inference request: provider,
+model, tier, tokens, latency, cost and whether anonymization ran. Two things tie a row to
+what caused it. `chat_id` and `message_id` come from the `lq_ai_chat_id` and
+`lq_ai_message_id` fields the backend sends. `purpose` is a label for the kind of
+traffic, from the request's `lq_ai_purpose` field (`embedding` on the embeddings path).
+The gateway keeps a closed set of labels. A request with no label records `chat`, and so
+does a label outside the set. The column is `varchar(32)`, so a label must fit it.
+
+| `purpose` | Recorded for |
+|---|---|
+| `chat` | Ordinary chat completions; also the fallback for no label or an unknown one |
+| `embedding` | Embeddings calls |
+| `judge_paraphrase` | Citation Engine paraphrase and ensemble judge calls |
+| `judge_case_content` | Citation Engine whole-opinion judge for case law |
+| `judge_authority_content` | The same judge for other authority sources |
+| `judge_treatment` | Case-law treatment-layer judge |
+| `tabular_extraction` | Tabular Review cell extraction |
+| `tabular_bulk_op` | Tabular Review bulk operations: redline reports and summary memos |
+| `playbook_executor` | Playbook executor |
+| `playbook_easy_extract` | Easy Playbook extraction |
+| `autonomous_executor` | A legacy single autonomous session's model calls |
+| `orchestration_run` | A governed run's model calls: planning (which may be the orchestrator's own answer), tasks and the combined answer |
+
+**Proposed (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
+`tabular_bulk_op` were in the set before. The other labels were already sent by the backend and recorded as
+`chat`; recording them as themselves, and the chat and message identifiers on a run's
+model calls, are implemented. Two Easy Playbook assembly labels,
+`playbook_easy_assemble_describe_position` and `playbook_easy_assemble_describe_tier`,
+are longer than the column and are not in the set, so those rows still record `chat`. The
+set is `_KNOWN_PURPOSES` in `gateway/app/api/inference.py`. Chat and message identifiers
+are also passed on `tool_call_log` rows, but that table records only calls to external
+tool providers and neither shipped run profile grants one, so a run writes none.
 
 ---
 
@@ -374,7 +513,7 @@ the acceptance criteria and contributor profile.
 
 | DE | Title | Notes |
 |---|---|---|
-| [DE-299](PRD.md#de-299--otel-instrumentation-for-sqlalchemy--arq-workers-otel-deepening-de-a) | OTel instrumentation for SQLAlchemy + ARQ workers | DB query and background-job latency are blind spots today |
+| [DE-299](PRD.md#de-299--otel-instrumentation-for-sqlalchemy--arq-workers-otel-deepening-de-a) | OTel instrumentation for SQLAlchemy + ARQ workers | DB query and background-job latency are blind spots today. ADR 0038 (proposed) gives the governed-run job path its own `orchestration.job` span, which is not general arq instrumentation. |
 | [DE-300](PRD.md#de-300--log-trace-correlation-via-structured-logger-trace_id--span_id-injection-otel-deepening-de-b) | Log-trace correlation via structured-logger trace_id / span_id injection | Pivoting from a span to its logs requires manual timestamp correlation until this lands |
 | [DE-301](PRD.md#de-301--otel-meterprovider-for-metrics-export-otel-deepening-de-c) | OTel MeterProvider for metrics export | Metrics today go only to Prometheus; OTel-native metrics export (Honeycomb-only, Datadog APM-only) is additive |
 | [DE-302](PRD.md#de-302--reconcile-otel-with-the-openwebui-forks-inherited-telemetry-otel-deepening-de-d) | Reconcile OTel with the OpenWebUI fork's inherited telemetry | The OWUI-inherited layer runs as a parallel `service.name`; alignment or disable decision pending |
@@ -392,6 +531,19 @@ the acceptance criteria and contributor profile.
 | DE | Title | Notes |
 |---|---|---|
 | [DE-318](PRD.md#de-318--playbookposition-child-spans-on-the-redline-node-otel-deepening) | `playbook.position` child spans on the redline node | Classify-node positions are spanned; redline-node positions are not |
+
+**LLM-specific tracing sink (Langfuse) — not implemented.** [PRD §5.4](PRD.md#54-observability)
+describes an optional self-hosted Langfuse sink for LLM-specific tracing. Nothing in `api/`
+or `gateway/` implements it. The `telemetry:` block in `gateway.yaml.example`, with its
+`opentelemetry` and `langfuse` entries, is accepted by the gateway's configuration loader
+and read by no code. The `LANGFUSE_*` variables in `.env.example` and the Compose files
+are read by no code either, so setting them has no effect. Trace export is controlled only
+by the `OTEL_*` variables in [§1](#1-environment-variable-matrix). Spans, audit rows and
+routing-log rows carry identifiers, counts and labels, not prompt or document text, and the autonomous, tabular, orchestration and citation spans record a failure's class and never its message (the other spans still record it). Under
+ADR 0038 (proposed), a run's owner can read how each call was set up and
+what the model wrote back through the trace read described under
+[the governed-run spans](#orchestrationjob--orchestrationrun--orchestrationeffect); that read draws on the run's own records and is
+not this sink.
 
 **SLO + RUM catalog (from [`docs/proposals/opentelemetry-deepening.md`](proposals/opentelemetry-deepening.md)):**
 DE-E (Browser RUM, same as DE-303 above), DE-F (Published SLO catalog), and DE-G

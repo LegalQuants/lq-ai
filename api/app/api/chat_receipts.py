@@ -10,6 +10,14 @@ tables into a single timestamp-ordered stream:
 * ``audit_log`` (``kind='audit'`` or ``kind='retrieval'`` if
   ``action='inference.kb_chunks_retrieved'``)
 
+A governed run hosted in the chat (ADR 0038 D1) is a turn like any other, so
+its records come through the same feed (D2): its message and pinned skills as
+``message`` and ``skill`` events, its model calls as ``inference`` events
+(the gateway stamps them with this chat and the run's message), and the audit
+rows of the run's root session and its children as ``audit`` events. Those
+rows are keyed to the session, not the chat, so they are read through the
+message's link to the root session.
+
 Replay-at-read for M1 — chats are bounded (<100 events typical), so
 re-merging on each request is cheap. No new materialized table.
 A materialized ``chat_receipts`` projection is a v1.1+ candidate if
@@ -49,6 +57,7 @@ from app.auditor_audit import auditor_audit
 from app.db.session import get_db
 from app.errors import Forbidden, NotFound
 from app.models.audit import AuditLog
+from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message
 from app.models.inference import InferenceRoutingLog
 from app.models.user import User
@@ -172,6 +181,10 @@ async def _build_receipt_events(
                             "role": m.role,
                             "prompt_tokens": m.prompt_tokens,
                             "completion_tokens": m.completion_tokens,
+                            # Set on a run message: the run's root session.
+                            "autonomous_session_id": (
+                                str(m.autonomous_session_id) if m.autonomous_session_id else None
+                            ),
                         },
                     )
                 )
@@ -246,6 +259,52 @@ async def _build_receipt_events(
                         },
                     )
                 )
+
+        # ADR 0038 D2: audit rows of runs hosted in this chat. They are keyed
+        # to the run's sessions, so resolve them through each run message's
+        # link to its root session. Counts, identifiers and labels only; the
+        # rows were written that way.
+        if "audit" in requested:
+            bound = (
+                await db.execute(
+                    select(Message.autonomous_session_id, Message.id).where(
+                        Message.chat_id == chat_id,
+                        Message.autonomous_session_id.is_not(None),
+                    )
+                )
+            ).all()
+            if bound:
+                message_for_root = {row[0]: row[1] for row in bound}
+                sessions = (
+                    await db.execute(
+                        select(AutonomousSession.id, AutonomousSession.root_session_id).where(
+                            AutonomousSession.root_session_id.in_(message_for_root)
+                        )
+                    )
+                ).all()
+                root_of = {str(row[0]): row[1] for row in sessions}
+                run_audits = await db.execute(
+                    select(AuditLog)
+                    .where(AuditLog.resource_type == "autonomous_session")
+                    .where(AuditLog.resource_id.in_(root_of))
+                    .order_by(AuditLog.timestamp)
+                )
+                for a in run_audits.scalars():
+                    root_id = root_of[str(a.resource_id)]
+                    events.append(
+                        ReceiptEvent(
+                            ts=a.timestamp,
+                            kind="audit",
+                            detail={
+                                "action": a.action,
+                                "actor_user_id": (str(a.user_id) if a.user_id else None),
+                                "details": a.details,
+                                "session_id": a.resource_id,
+                                "run_root_id": str(root_id),
+                                "message_id": str(message_for_root[root_id]),
+                            },
+                        )
+                    )
 
     events.sort(key=lambda e: e.ts)
     return events

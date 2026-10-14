@@ -110,6 +110,7 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/users/{user_id}/role",
         # Wave B v2 — admin user list for DevRoleManagementCard
         "/api/v1/admin/users",
+        "/api/v1/admin/users/{user_id}/reset-password",
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
@@ -156,6 +157,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/cancel",
         # M3-C4a — XLSX/CSV export.
         "/api/v1/tabular/executions/{execution_id}/export",
+        # DE-304 / ADR 0040 — bulk operations (preview + create).
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops",
+        "/api/v1/tabular/bulk-ops",
+        "/api/v1/tabular/bulk-ops/{bulk_op_id}",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
@@ -164,6 +170,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
         "/api/v1/admin/intake-bridges/teams/{tenant_id}",
+        # 3.8 / DE-263 — admin community-skill installer (ADR 0041)
+        "/api/v1/admin/community-skills",
+        "/api/v1/admin/community-skills/{slug}",
+        "/api/v1/admin/community-skills/{slug}/install",
         # M4-A4-i — Autonomous sessions read/halt API (per-user)
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
@@ -200,6 +210,14 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/orchestration/chat-runs",
         "/api/v1/autonomous/orchestration/chat-runs/{root_id}",
         "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt",
+        # ADR 0038 — governed runs in chat
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}/close",
+        "/api/v1/chats/{chat_id}/run-profiles",
+        "/api/v1/chats/{chat_id}/run-documents",
+        "/api/v1/chats/{chat_id}/runs",
+        "/api/v1/admin/orchestration/profiles",
+        "/api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace",
+        "/api/v1/autonomous/orchestration/prompts/{family}/{name}",
         "/api/v1/skill-workspaces",
         "/api/v1/skill-workspaces/{workspace_id}",
         "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
@@ -355,7 +373,17 @@ async def test_openapi_paths_match_sketch() -> None:
     # /api/v1/admin/tool-providers/{provider_type}
     # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
     # Optional persistent skill workspaces add three owner paths (146 -> 149).
-    assert len(actual) == 150
+    # DE-304 / ADR 0040 adds four new paths (150 -> 154).
+    # 3.8 / DE-263 adds three community-skill paths (154 -> 157):
+    # /api/v1/admin/community-skills
+    # /api/v1/admin/community-skills/{slug}
+    # /api/v1/admin/community-skills/{slug}/install
+    # Admin provisioning adds the reset-password path (157 -> 158).
+    # ADR 0038 adds five paths (158 -> 163): closing an uncertain run, the chat
+    # run intake, its two composer reads, and the admin profile-registry read.
+    # ADR 0038 adds two more (163 -> 165): the owner's read of how one session
+    # of a run was set up, and the text of an engine prompt file.
+    assert len(actual) == 165
 
 
 @pytest.mark.unit

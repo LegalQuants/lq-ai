@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "msa-review-commercial-purchase",
+  "fixture": "baseline-goods-buyer",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/msa-review-commercial-purchase/SKILL.md (Output template shared with MSA Review — SaaS; buyer/supplier vocabulary) and test-plan.md Scenario 1 (routine goods MSA: 0-1 critical, 3-7 material, 5-12 minor; floors relaxed for a ~2-page fixture). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "MSA Review",
+      "Bottom line",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 0,
+        "max": 1
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 7
+      },
+      {
+        "id": "minor_issues",
+        "kind": "section_items",
+        "section": "Minor issues and observations",
+        "min": 0,
+        "max": 12
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 35000
+  }
+}

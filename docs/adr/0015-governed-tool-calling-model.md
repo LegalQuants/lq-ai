@@ -84,3 +84,21 @@ Mirroring ADR 0013 D6: every tool call emits an OTel span (`chat.tool_call` / `a
 - [`docs/security/boundary-registers.md`](../security/boundary-registers.md) (R4/R5/R6).
 - Mini-PRD: [`docs/proposals/legal-research-and-mcp.md`](../proposals/legal-research-and-mcp.md) (WS4 + WS5 discharge this ADR).
 - Reference (the divergence we reject): [MikeOSS](https://github.com/willchen96/mike) open per-user function-calling.
+
+---
+
+## Amendment — 2026-10-01: Matter-scoped egress ceiling in per-call governance (DE-358 item 6 / AG-03)
+
+**Status:** Accepted addendum.
+**Trigger:** [LegalQuants/lq-ai#593](https://github.com/LegalQuants/lq-ai/issues/593).
+
+### What changed in D2's tier check
+
+D2's tier check compared the provider's data-egress tier against the matter/skill minimum. The ceiling side is now explicit and matter-scoped:
+
+- One resolver (`app.tools.governance.resolve_tool_egress_ceiling`) serves the chat and autonomous paths. Chat resolves from the chat's current `project_id` at call time; autonomous resolves from the session's `project_id` composed with the execution-scope ceiling.
+- The resolved ceiling is threaded through `execute_tool` → `governed_tool_invocation` → every governed gateway `call_tool` (MCP, authority, research): the same number the API applied is the number the gateway enforces.
+- `tool_call_log` rows carry `max_allowed_tier` + `ceiling_source` (see the 2026-10-01 amendment to [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md)).
+- The Project create/update/read API accepts and returns `max_egress_tier`.
+
+Policy reads include the chat's current Project lookup and are savepoint-isolated so a recoverable SQL error cannot poison refusal auditing. Error diagnostics contain metadata only. A storage outage still prevents dispatch but cannot guarantee persistence while the database is unavailable. New pending proposals are not created when their original policy cannot be resolved.

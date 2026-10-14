@@ -149,7 +149,9 @@ const mockExecutionCompleted = {
 										}
 									],
 						confidence:
-							j === 2 && i === 1 ? ('failed' as const) : (['high', 'medium', 'low'] as const)[j % 3],
+							j === 2 && i === 1
+								? ('failed' as const)
+								: (['high', 'medium', 'low'] as const)[j % 3],
 						tier_used: j === 2 && i === 1 ? null : 2,
 						cost_usd: '0.0024',
 						error: j === 2 && i === 1 ? 'no citation found' : null
@@ -327,14 +329,219 @@ describe('M3-C3 — Tabular Review happy path', () => {
 		cy.get('[data-testid="lq-tabcell-failed"]').should('contain', 'not found');
 
 		// 12. Click a populated cell → citation modal opens.
-		cy.get('[data-testid="lq-tabcell"][data-state!="empty"][data-state!="failed"]')
-			.first()
-			.click();
+		cy.get('[data-testid="lq-tabcell"][data-state!="empty"][data-state!="failed"]').first().click();
 		cy.get('[data-testid="lq-tabcm"]').should('be.visible');
 		cy.get('[data-testid="lq-tabcm-citations"]').should('be.visible');
 
 		// 13. Close the modal (× button).
 		cy.get('[data-testid="lq-tabcm-close"]').click();
 		cy.get('[data-testid="lq-tabcm"]').should('not.exist');
+	});
+
+	// DE-304 / ADR 0040 — bulk operations over a completed grid.
+	it('completed grid → preview bulk-op cost → run redline report → results panel renders per-row failures honestly', () => {
+		const BULK_OP_ID = 'bop-1';
+		const SKILL_HASH = 'a'.repeat(64);
+		cy.intercept('GET', '**/api/v1/skills/nda-review/inputs', { required: [], optional: [] }).as(
+			'bulkSkillInputs'
+		);
+		const mockBulkOpPending = {
+			id: BULK_OP_ID,
+			execution_id: EXECUTION_ID,
+			source_execution_id: EXECUTION_ID,
+			provenance: { skill_snapshot: { version: '1.0.0', content_hash: SKILL_HASH } },
+			user_id: 'u1',
+			kind: 'redline_rows' as const,
+			status: 'pending' as const,
+			params: { column_name: 'Term', skill_name: 'nda-review' },
+			results: null,
+			confirmed_cost_usd: '0.0500',
+			cost_actual_usd: null,
+			error_text: null,
+			created_at: '2026-05-22T16:00:00Z',
+			started_at: null,
+			completed_at: null
+		};
+		// One row of the 5 fails — the panel must say so (fail-closed
+		// honesty; the report never silently omits failed rows).
+		const mockBulkOpCompleted = {
+			...mockBulkOpPending,
+			status: 'completed' as const,
+			started_at: '2026-05-22T16:00:02Z',
+			completed_at: '2026-05-22T16:01:00Z',
+			cost_actual_usd: '0',
+			results: {
+				schema_version: 'de304-v1',
+				items: DOC_IDS.map((docId, i) => ({
+					document_id: docId,
+					document_name: `sample-nda-${i + 1}.pdf`,
+					status: i === 1 ? ('failed' as const) : ('completed' as const),
+					output_text:
+						i === 1
+							? '## Partial revision\nIncomplete suggested term.'
+							: `## Issues\n1. Draft point for doc ${i + 1}`,
+					error: i === 1 ? 'RuntimeError: gateway unavailable' : null,
+					cost_usd: '0'
+				})),
+				summary: { total_items: 5, failed_items: 1 }
+			}
+		};
+
+		cy.intercept('POST', `**/api/v1/tabular/executions/${EXECUTION_ID}/bulk-ops/preview-cost`, {
+			statusCode: 200,
+			body: {
+				kind: 'redline_rows',
+				calls_count: 5,
+				per_call_cost_usd: '0.0100',
+				estimated_cost_usd: '0.0500',
+				skill_name: 'nda-review',
+				skill_version: '1.0.0',
+				skill_content_hash: SKILL_HASH
+			}
+		}).as('bulkOpPreview');
+
+		let bulkCreated = false;
+		cy.intercept('POST', `**/api/v1/tabular/executions/${EXECUTION_ID}/bulk-ops`, (req) => {
+			bulkCreated = true;
+			req.reply({ statusCode: 202, body: mockBulkOpPending });
+		}).as('bulkOpCreate');
+
+		// Detail polls: completed grid throughout; the bulk op appears
+		// pending right after create, then completed on the next poll.
+		let detailCount = 0;
+		cy.intercept('GET', `**/api/v1/tabular/executions/${EXECUTION_ID}`, (req) => {
+			const bulkOps = !bulkCreated
+				? []
+				: ++detailCount === 1
+					? [mockBulkOpPending]
+					: [mockBulkOpCompleted];
+			req.reply({
+				statusCode: 200,
+				body: { ...mockExecutionCompleted, bulk_ops: bulkOps }
+			});
+		}).as('pollDetail');
+
+		// Login and land directly on the completed execution.
+		cy.visit('/lq-ai/login');
+		cy.get('[data-testid="lq-ai-login-email"]').type('admin@lq.ai');
+		cy.get('[data-testid="lq-ai-login-password"]').type('password');
+		cy.get('[data-testid="lq-ai-login-submit"]').click();
+		cy.wait('@login');
+		cy.url({ timeout: 15000 }).should('not.include', '/login');
+
+		cy.visit(`/lq-ai/tabular/${EXECUTION_ID}`);
+		cy.wait('@pollDetail');
+		cy.get('[data-testid="lq-tabres-status"]', { timeout: 10000 }).should('contain', 'Completed');
+
+		// Bulk-ops affordance is visible on a completed grid.
+		cy.get('[data-testid="lq-bulkops"]').should('be.visible');
+		cy.get('[data-testid="lq-bulkops-kind-redline"]').check();
+
+		// Preview: 5 calls at $0.01 → $0.05; below $1 so no confirm gate.
+		cy.get('[data-testid="lq-bulkops-skill"]').select('nda-review');
+		cy.wait('@bulkSkillInputs');
+		cy.get('[data-testid="lq-bulkops-preview"]').should('not.be.disabled').click();
+		cy.wait('@bulkOpPreview');
+		cy.get('[data-testid="lq-bulkops-preview-result"]')
+			.invoke('text')
+			.should('match', /5\s+call\(s\)/);
+		cy.get('[data-testid="lq-bulkops-preview-result"]').should('contain', '$0.05');
+		cy.get('[data-testid="lq-bulkops-confirm"]').should('not.exist');
+
+		// Run → create fires with the confirmed-cost echo; pending row shows.
+		cy.get('[data-testid="lq-bulkops-run"]').should('not.be.disabled').click();
+		cy.wait('@bulkOpCreate').its('request.body').should('deep.include', {
+			kind: 'redline_rows',
+			column_name: 'Term',
+			skill_name: 'nda-review',
+			skill_content_hash: SKILL_HASH,
+			confirmed_cost_usd: '0.0500'
+		});
+		cy.wait('@pollDetail');
+		cy.get('[data-testid="lq-bulkops-op-status"]', { timeout: 10000 }).should('contain', 'Queued');
+
+		// Next poll (op non-terminal keeps polling alive) → completed with
+		// the honest partial-failure banner.
+		cy.wait('@pollDetail');
+		cy.get('[data-testid="lq-bulkops-op-status"]', { timeout: 10000 }).should(
+			'contain',
+			'1 of 5 item(s) FAILED'
+		);
+		cy.get('[data-testid="lq-bulkops-item-failed"]').should('have.length', 1);
+		cy.get('.lq-bulkops__item').eq(0).find('summary').click();
+		cy.get('.lq-bulkops__item')
+			.eq(0)
+			.find('[data-testid="lq-draft-markdown"] h2')
+			.should('have.text', 'Issues');
+		cy.get('.lq-bulkops__item').eq(1).find('summary').click();
+		cy.get('.lq-bulkops__item').eq(1).should('contain', 'Partial draft — incomplete');
+		cy.get('.lq-bulkops__item')
+			.eq(1)
+			.find('[data-testid="lq-draft-markdown"] h2')
+			.should('have.text', 'Partial revision');
+		cy.intercept('GET', `**/api/v1/tabular/bulk-ops/${BULK_OP_ID}`, mockBulkOpCompleted).as(
+			'savedReport'
+		);
+		cy.visit(`/lq-ai/tabular/bulk-ops/${BULK_OP_ID}`);
+		cy.wait('@savedReport');
+		cy.get('article').eq(1).should('contain', 'Partial draft — incomplete');
+		cy.get('article')
+			.eq(1)
+			.find('[data-testid="lq-draft-markdown"] h2')
+			.should('have.text', 'Partial revision');
+	});
+
+	it('inline and saved incomplete memos retain Markdown and missing-source coverage', () => {
+		const memo = {
+			id: 'memo-partial',
+			execution_id: EXECUTION_ID,
+			source_execution_id: EXECUTION_ID,
+			user_id: 'u1',
+			kind: 'summarize_column',
+			status: 'completed',
+			params: { column_name: 'Term', skill_name: 'nda-review' },
+			provenance: {},
+			created_at: '2026-05-22T16:00:00Z',
+			results: {
+				schema_version: 'de304-v1',
+				summary: { total_items: 1, failed_items: 1 },
+				items: [
+					{
+						status: 'failed',
+						document_id: null,
+						output_text: '## Partial memo\n**Two** available rows.',
+						error: 'Incomplete draft: output limit.',
+						finish_reason: 'length',
+						source_rows: [
+							{ document_name: 'Alpha.pdf', status: 'available', value: '3 years' },
+							{ document_name: 'Gamma.pdf', status: 'missing', value: null }
+						]
+					}
+				]
+			}
+		};
+		cy.intercept('GET', `**/api/v1/tabular/executions/${EXECUTION_ID}`, {
+			...mockExecutionCompleted,
+			bulk_ops: [memo]
+		}).as('memoDetail');
+		cy.intercept('GET', '**/api/v1/tabular/bulk-ops/memo-partial', memo).as('savedMemo');
+		cy.visit('/lq-ai/login');
+		cy.get('[data-testid="lq-ai-login-email"]').type('admin@lq.ai');
+		cy.get('[data-testid="lq-ai-login-password"]').type('password');
+		cy.get('[data-testid="lq-ai-login-submit"]').click();
+		cy.wait('@login');
+		cy.url({ timeout: 15000 }).should('not.include', '/login');
+		cy.visit(`/lq-ai/tabular/${EXECUTION_ID}`);
+		cy.wait('@memoDetail');
+		cy.get('.lq-bulkops__item summary').click();
+		cy.get('[data-testid="lq-memo-source-coverage"]').should('contain', 'Gamma.pdf: Missing');
+		cy.get('[data-testid="lq-draft-markdown"] h2').should('have.text', 'Partial memo');
+		cy.get('[data-testid="lq-draft-markdown"] strong').should('have.text', 'Two');
+		cy.contains('Partial draft — incomplete').should('be.visible');
+		cy.visit('/lq-ai/tabular/bulk-ops/memo-partial');
+		cy.wait('@savedMemo');
+		cy.get('[data-testid="lq-memo-source-coverage"]').should('contain', 'Gamma.pdf: Missing');
+		cy.get('[data-testid="lq-draft-markdown"] h2').should('have.text', 'Partial memo');
+		cy.contains('Partial draft — incomplete').should('be.visible');
 	});
 });

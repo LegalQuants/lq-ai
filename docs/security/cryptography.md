@@ -29,6 +29,21 @@ No application-layer database-column encryption. The PostgreSQL `pgcrypto` exten
 - **Rotation:** restart api with a new `JWT_SECRET`. Existing access and MFA tokens fail signature verification; refresh tokens (opaque random + bcrypt hash, not JWT) survive rotation but the user will need to re-authenticate when their access token expires. No graceful overlap window in M1.
 - **Disclosure impact:** an attacker with `JWT_SECRET` can forge any user's access token (including `is_admin=true`). Treat as "rotate immediately + accept that all sessions invalidate."
 
+### Per-user credential invalidation
+
+Access and MFA challenge JWTs require an integer `credential_version` claim.
+Authentication checks it against `users.credential_version` (migration 0073).
+Admin reset, self-service password change, and CLI reset increment the version
+and revoke refresh sessions atomically. Old JWTs are rejected on subsequent
+requests, even after the forced-change flag clears. Password changes and session
+issuance lock the user row; refresh rechecks revocation after acquiring that lock.
+JWT expiration remains enforced (15-minute access-token default). Already
+authorized requests or streams are not interrupted.
+
+Deployment invalidates existing JWTs lacking this claim. A valid existing refresh
+token can obtain a versioned access token; otherwise the user must log in again.
+Rebuild the API, arq worker, and ingest worker together when applying migration 0073.
+
 ### Master key for Fernet-wrapped provider keys (`LQ_AI_GATEWAY_MASTER_KEY`)
 
 - **Generation:** operator-controlled via `python -m gateway.cli generate-master-key`. See [encrypted-keys.md §One-time bootstrap](encrypted-keys.md#one-time-bootstrap).

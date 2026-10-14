@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "skill": "nda-review",
+  "fixture": "recipient-onesided",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/nda-review/SKILL.md (Output template; Pass 3 asymmetry + Pass 4 red-flag checks: non-solicit and liquidated damages must be flagged whenever present) and test-plan.md Scenario 3 (recipient perspective: 0-2 critical, 1-4 material, 3-8 minor; widened for a ~2-page fixture). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "NDA Review",
+      "Bottom line",
+      "Operational red flags",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 0,
+        "max": 4
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 6
+      },
+      {
+        "id": "operational_red_flags",
+        "kind": "section_items",
+        "section": "Operational red flags",
+        "min": 1,
+        "max": 8
+      },
+      {
+        "id": "severity_findings_total",
+        "kind": "regex_count",
+        "pattern": "^#{2,4}\\s.*(§|section\\s+\\d|clause\\s+\\d)",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 30000
+  }
+}

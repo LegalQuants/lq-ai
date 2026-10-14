@@ -30,7 +30,9 @@ from app.api import (
     autonomous,
     bootstrap,
     chat_receipts,
+    chat_runs,
     chats,
+    community_skills,
     enhance_prompt,
     files,
     inference,
@@ -117,9 +119,18 @@ api_router.include_router(admin.router, dependencies=_active)
 # AdminUser dependency; mounted under the `_active` group so the
 # bearer-token + must-change-password gates fire first.
 api_router.include_router(admin_intake_bridges.router, dependencies=_active)
+# 3.8 / DE-263: community skill installer (catalog from the local
+# submodule per ADR 0041). Admin-gated at handler level via AdminUser;
+# mounted under `_active` so the bearer + must-change-password gates
+# fire first.
+api_router.include_router(community_skills.router, dependencies=_active)
 # M4-A4-i: Autonomous sessions read/halt API — per-user isolated, bearer-auth.
 api_router.include_router(autonomous.router, dependencies=_active)
 api_router.include_router(orchestration.router, dependencies=_active)
+# ADR 0038: governed runs hosted in a chat thread (intake + availability reads),
+# and the operator's read of the run profile registry.
+api_router.include_router(chat_runs.router, dependencies=_active)
+api_router.include_router(orchestration.admin_router, dependencies=_active)
 # M3-A2: Playbook executor — two endpoints under different prefixes
 # (``/playbooks/{id}/execute`` and ``/playbook-executions/{id}``) so
 # they live alongside the M3-A4 list/CRUD endpoints in the same module.

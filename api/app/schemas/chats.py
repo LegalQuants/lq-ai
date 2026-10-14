@@ -475,12 +475,21 @@ class MessageResponse(BaseModel):
     id: uuid.UUID
     chat_id: uuid.UUID
     role: Literal["user", "assistant", "system", "tool"]
-    kind: Literal["user", "ai", "refusal", "system"] = "user"
+    kind: Literal["user", "ai", "refusal", "system", "run"] = "user"
     """Wave D.1 — distinguishes assistant rows that carry a model
     response (``ai``) from refusal rows (``refusal``) emitted by the
     gateway's tier-floor enforcement. Defaults to ``user`` to match the
     DB column server default; the override-tier-floor flow writes
-    ``ai`` explicitly so the UI can tell a re-run apart from a refusal."""
+    ``ai`` explicitly so the UI can tell a re-run apart from a refusal.
+    ADR 0038 D1 adds ``run``: the one assistant message that hosts a
+    governed run in the thread."""
+
+    autonomous_session_id: uuid.UUID | None = None
+    """ADR 0038 D1 — set only on a ``kind='run'`` message: the root
+    session of the governed run this message presents. The client reads
+    the run's plan, progress, files and receipts from the owner-only
+    orchestration routes with this id. ``content`` is the delivered
+    answer, or empty when the run produced none."""
 
     content: str
     applied_skills: list[str] = Field(default_factory=list)
@@ -526,6 +535,7 @@ def message_to_response(row: Any) -> MessageResponse:
         chat_id=row.chat_id,
         role=row.role,
         kind=row.kind,
+        autonomous_session_id=getattr(row, "autonomous_session_id", None),
         content=row.content,
         applied_skills=applied_skills,
         routed_inference_tier=row.routed_inference_tier,

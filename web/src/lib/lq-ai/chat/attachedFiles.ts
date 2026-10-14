@@ -1,6 +1,6 @@
 /** Pure helpers for chat-attached files (PR #316 review follow-ups). No Svelte, no network. */
 
-import type { FileMeta } from '../types';
+import type { FileMeta, MessageCompleteFrame } from '../types';
 
 /**
  * Maximum chat-attached files per message send. Mirrors
@@ -30,4 +30,44 @@ export function selectFileIdsForSend(files: FileMeta[]): string[] | undefined {
 		.slice(0, MAX_CHAT_ATTACHED_FILES)
 		.map((f) => f.id);
 	return ids.length > 0 ? ids : undefined;
+}
+
+/** Whether the backend accepted a file that was still ingesting when sent. */
+export function hasAppliedProcessingFile(
+	processingFileIds: string[],
+	appliedFileIds?: string[]
+): boolean {
+	if (!appliedFileIds) return false;
+	return processingFileIds.some((id) => appliedFileIds.includes(id));
+}
+
+/** Check the visible chat at completion time, since the user may switch mid-stream. */
+export function createProcessingFileWarningHandler(
+	processingFileIds: string[],
+	getActiveChatId: () => string | null | undefined,
+	showWarning: (warning: string) => void
+): (frame: MessageCompleteFrame) => void {
+	return (frame) => {
+		if (frame.message.chat_id !== getActiveChatId()) return;
+		if (!hasAppliedProcessingFile(processingFileIds, frame.applied_file_ids)) return;
+		showWarning(
+			'An attached file was still processing when sent. It was accepted for this turn, but its contents may not have been available for this response.'
+		);
+	};
+}
+
+/**
+ * Names of the attached files whose text will reach the model on this send.
+ * The backend only injects text for 'ready' files, so only these can stand
+ * in for a skill's required document input.
+ */
+export function readyFileNames(files: FileMeta[]): string[] {
+	return files.filter((f) => f.ingestion_status === 'ready').map((f) => f.filename);
+}
+
+/** Names of the attached files still being ingested (neither ready nor failed). */
+export function processingFileNames(files: FileMeta[]): string[] {
+	return files
+		.filter((f) => f.ingestion_status !== 'ready' && f.ingestion_status !== 'failed')
+		.map((f) => f.filename);
 }

@@ -8,6 +8,8 @@ original implementation plan; the runbook describes current behavior.
 **Tracks:** [#563](https://github.com/LegalQuants/lq-ai/issues/563),
 [ADR 0035](../adr/0035-governed-orchestration-run-tree.md), and the
 [feature PRD](../prds/issue-563-governed-orchestration.md).
+**See also:** [Governed runs in chat](issue-662-c1-governed-runs-in-chat.md), the proposed
+follow-on (ADR 0038, not ratified) that hosts this run in the main chat.
 
 UAT implementation detail: the model adapter accepts raw JSON or one complete
 outer `json` Markdown fence. It removes only that presentation wrapper before

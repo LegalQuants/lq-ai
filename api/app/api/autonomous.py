@@ -540,6 +540,7 @@ async def halt_session(
         action="autonomous_session.halt_requested",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()
@@ -1573,6 +1574,7 @@ async def run_now(
         action="autonomous_session.run_now",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()

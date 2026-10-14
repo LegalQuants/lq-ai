@@ -41,7 +41,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.audit import autonomous_audit
+from app.autonomous.audit import AuditedRetrievalOwnershipDenied, autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
@@ -268,6 +268,10 @@ async def _run_analysis_loop(
             act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
+        except AuditedRetrievalOwnershipDenied:
+            # The ownership gate already flushed the closing refusal. Keep
+            # the established nonfatal observation without double-counting it.
+            observations.append(f"{decision.next_intent.value} → failed ({ValueError.__name__})")
         except Exception as exc:  # validation/dispatch failure is a non-fatal observation
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
             # Close the attempt in the audit trail. The chokepoint writes a

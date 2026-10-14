@@ -149,6 +149,18 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "HTTP timeout in seconds for backend to Inference Gateway calls "
+            "(ADR 0027). Must exceed the gateway's adapter timeouts "
+            "(600 seconds by default) so the gateway can report failures first. "
+            "Connection establishment is capped at 10 seconds. "
+            "Restart API and workers after changing this deployment setting."
+        ),
+    )
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the
@@ -278,13 +290,55 @@ class Settings(BaseSettings):
         default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
     )
 
+    # ADR 0038 D1, D3 — New harness, the run profile the chat composer offers
+    # as an experimental model. It has its own switch and its own pinned
+    # route: enabling the fictional profile above never enables this one, and
+    # nothing is inherited from it.
+    new_harness_enabled: bool = Field(default=False, validation_alias="LQ_AI_NEW_HARNESS_ENABLED")
+    new_harness_provider: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_PROVIDER")
+    new_harness_model: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_MODEL")
+    new_harness_budget_usd: Decimal = Field(
+        default=Decimal("5.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_NEW_HARNESS_BUDGET_USD",
+    )
+    new_harness_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_NEW_HARNESS_MINIMUM_TIER"
+    )
+    new_harness_timeout_seconds: int = Field(
+        default=300,
+        ge=1,
+        le=900,
+        validation_alias="LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS",
+    )
+    new_harness_reasoning_effort: Literal["", "none", "minimal", "low", "medium", "high"] = Field(
+        default="",
+        validation_alias="LQ_AI_NEW_HARNESS_REASONING_EFFORT",
+        description=(
+            "How much hidden reasoning a New harness call asks the model for. The "
+            "gateway maps it to Ollama's think, sends it as it is to OpenAI and Azure "
+            "OpenAI, and sends nothing for it to Anthropic. Hidden reasoning counts "
+            "against the output limit. Empty, the default, sends nothing and leaves the "
+            "model's own default. What a level does depends on the model: some treat "
+            "every level as on, and a model that does not take the setting may refuse "
+            "every call. Try a value against the pinned model before relying on it."
+        ),
+    )
+
     orchestration_deployment_children: int | None = Field(
         default=None,
         ge=1,
         le=32,
         validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
-        description="Explicit shared child capacity. Required before enabling the demonstration.",
+        description="Explicit shared child capacity. Required before enabling any run profile.",
     )
+
+    @property
+    def orchestration_enabled(self) -> bool:
+        """True when the operator has switched on at least one run profile."""
+        return self.orchestration_chat_enabled or self.new_harness_enabled
 
     @field_validator("orchestration_deployment_children", mode="before")
     @classmethod
@@ -442,6 +496,33 @@ class Settings(BaseSettings):
         # name working for any existing deployment that set it.
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
+
+    # ----- Tool-egress ceiling (issue #593) -----
+    # Operator-wide default ceiling for governed tool egress, tiers 1
+    # (most private) to 5 (least private). Unset (None) means no operator
+    # ceiling — existing deployments keep today's unconstrained behavior
+    # until an operator opts in. A Project-level max_egress_tier can only
+    # tighten this default, never loosen it; the effective ceiling is
+    # min() over the values that are set (see
+    # app.tools.governance.resolve_tool_egress_ceiling).
+    tool_max_egress_tier: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description=(
+            "Operator default ceiling for tool egress tiers (1-5). Unset "
+            "disables the operator ceiling. Operator-overridable via "
+            "LQ_AI_TOOL_MAX_EGRESS_TIER."
+        ),
+        validation_alias=AliasChoices("LQ_AI_TOOL_MAX_EGRESS_TIER", "TOOL_MAX_EGRESS_TIER"),
+    )
+
+    @field_validator("tool_max_egress_tier", mode="before")
+    @classmethod
+    def empty_tool_egress_ceiling(cls, value: object) -> object:
+        # Compose forwards an unset optional value as an empty string.
+        # Only that blank means unset; invalid nonblank values still fail.
+        return None if value == "" else value
 
     # Optional skill data/tools. Bundled execution is confined to a separately
     # configured local broker; no command or host-process fallback exists.

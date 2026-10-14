@@ -485,7 +485,6 @@ Path to broader governance is documented but not implemented in v1: as the proje
 
 - **GitHub Issues** for bugs and feature requests.
 - **GitHub Discussions** for community Q&A.
-- **Discord** (LegalQuants-hosted) for synchronous community.
 - **Blog** at [legalquants.com/blog](https://legalquants.com/blog) for releases and roadmap updates.
 
 For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure process includes safe-harbor language for good-faith security researchers, response-time commitments (acknowledge within 72h, fix critical issues within 30d), and credit attribution for reporters.

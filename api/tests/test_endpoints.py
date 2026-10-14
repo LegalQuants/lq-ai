@@ -105,6 +105,17 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/autonomous/orchestration/chat-runs"),
     ("GET", "/api/v1/autonomous/orchestration/chat-runs/{root_id}"),
     ("POST", "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt"),
+    # ADR 0038 — governed runs in chat: closing an uncertain run, chat intake
+    # and composer reads, and the operator's read of the profile registry.
+    ("POST", "/api/v1/autonomous/orchestration/chat-runs/{root_id}/close"),
+    ("GET", "/api/v1/chats/{chat_id}/run-profiles"),
+    ("GET", "/api/v1/chats/{chat_id}/run-documents"),
+    ("POST", "/api/v1/chats/{chat_id}/runs"),
+    ("GET", "/api/v1/admin/orchestration/profiles"),
+    # ADR 0038 D2, D3: the owner's read of how a run was set up, and the text
+    # of an engine prompt file.
+    ("GET", "/api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace"),
+    ("GET", "/api/v1/autonomous/orchestration/prompts/{family}/{name}"),
     ("GET", "/api/v1/skill-workspaces"),
     ("DELETE", "/api/v1/skill-workspaces/{workspace_id}"),
     ("GET", "/api/v1/skill-workspaces/{workspace_id}/files/{name}"),
@@ -216,6 +227,10 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/admin/tool-providers/{provider_type}"),
     ("DELETE", "/api/v1/admin/tool-providers/{provider_type}"),
     ("GET", "/api/v1/admin/config"),
+    # 3.8 / DE-263 — admin community-skill installer (ADR 0041)
+    ("GET", "/api/v1/admin/community-skills"),
+    ("GET", "/api/v1/admin/community-skills/{slug}"),
+    ("POST", "/api/v1/admin/community-skills/{slug}/install"),
     # D3 — admin audit-log read endpoint
     ("GET", "/api/v1/admin/audit-log"),
     # M3-0.3 / DE-276 — admin ingest-health aggregate
@@ -243,6 +258,11 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("POST", "/api/v1/tabular/executions/{execution_id}/cancel"),
     # M3-C4a — XLSX/CSV export.
     ("GET", "/api/v1/tabular/executions/{execution_id}/export"),
+    # DE-304 / ADR 0040 — bulk operations (preview + create).
+    ("POST", "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost"),
+    ("POST", "/api/v1/tabular/executions/{execution_id}/bulk-ops"),
+    ("GET", "/api/v1/tabular/bulk-ops"),
+    ("GET", "/api/v1/tabular/bulk-ops/{bulk_op_id}"),
     # M3-B1 — Word add-in admin manifest generation
     ("GET", "/api/v1/admin/word-addin/manifest"),
     # M3-B8 — Word add-in version handshake (unauthenticated)
@@ -297,6 +317,9 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("PATCH", "/api/v1/admin/users/{user_id}/role"),
     # Wave B v2 — admin user list for DevRoleManagementCard (PRD §5.2)
     ("GET", "/api/v1/admin/users"),
+    # User provisioning — create a user + reset a user's password (admin-only)
+    ("POST", "/api/v1/admin/users"),
+    ("POST", "/api/v1/admin/users/{user_id}/reset-password"),
     # Wave D.2 — sandbox ensure, skills autocomplete, user-skill versions, KB files
     ("POST", "/api/v1/projects/sandbox/ensure"),
     ("GET", "/api/v1/skills/autocomplete"),

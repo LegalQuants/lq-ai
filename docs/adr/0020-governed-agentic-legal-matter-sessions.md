@@ -11,6 +11,12 @@ profile, it extends D2/D4/D7 with durable waits, tree-wide budget reservations
 and internal child delivery with root-owned user output. The bounded fictional
 chat profile exercises this run tree; ordinary single-session behavior remains.
 
+**Proposed clarification (2026-10-06, reworded 2026-10-12):** [ADR 0038 D4](0038-governed-runs-in-chat.md#d4--approved-children-may-call-granted-tools)
+records that D1's closed-choice planner contract governs matter sessions and does not
+reach a run sub-agent: a run's approved children use native tool calls within the set
+their plan grants. This text is not changed, and ordinary matter sessions are unchanged.
+The record is not in force until ADR 0038 is ratified.
+
 ## Context
 
 WS-D is the milestone's headline user capability: *"describe a matter in plain language and have LQ.AI pursue the right inquiry."* A lawyer states a matter — "Does our Delaware NDA's assignment clause survive a change-of-control? Find controlling authority." — and LQ.AI runs a **matter-scoped agentic session** that plans, retrieves authoritative content, adapts as it learns, and produces a work product (WS-B) backed by a one-click-traceable citation ledger (WS-A).

@@ -39,6 +39,7 @@ from app.audit import audit_action
 from app.db.session import get_db
 from app.errors import NotFound
 from app.models.chat import Chat, Message
+from app.models.team import TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
 from app.skills.connectors import resolve_available_connectors, unavailable_tool_usage
@@ -87,6 +88,22 @@ def _registry(request: Request) -> MutableSkillRegistry:
 # structured DB data — we synthesize an equivalent payload so the
 # wire shape is identical whichever source the row came from. The
 # gateway-side parser doesn't need to know which source it's reading.
+
+
+def _run_orchestrator_skills() -> frozenset[str]:
+    """Built-in skills that instruct a run profile's orchestrator (ADR 0038 D3).
+
+    Such a skill is that profile's own prompt. It plans and combines for a
+    governed run and does nothing useful attached to an ordinary message, so
+    the catalogue listing and the composer's autocomplete leave it out. It is
+    still an installed skill: it can be read by name, and the profile pins it.
+    A skill that instructs a run's tasks (Contract QA) is an ordinary skill and
+    stays listed.
+    """
+    # Imported here: the profile registry imports the skill registry.
+    from app.autonomous.orchestration.profiles import registered_profiles
+
+    return frozenset(p.root_skill for p in registered_profiles() if p.root_skill)
 
 
 def _summary_from_user_skill(row: UserSkill) -> dict[str, Any]:
@@ -219,6 +236,25 @@ async def _list_user_shadows(db: AsyncSession, *, user_id: uuid.UUID) -> list[Us
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def _list_team_shadows(db: AsyncSession, *, user_id: uuid.UUID) -> list[UserSkill]:
+    """Member-visible teams, with the same tie-break as single-skill resolution."""
+    stmt = (
+        select(UserSkill)
+        .join(TeamMember, TeamMember.team_id == UserSkill.owner_team_id)
+        .where(
+            UserSkill.scope == "team",
+            TeamMember.user_id == user_id,
+            UserSkill.archived_at.is_(None),
+        )
+        .order_by(UserSkill.updated_at.desc(), UserSkill.id.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    winners: dict[str, UserSkill] = {}
+    for row in rows:
+        winners.setdefault(row.slug, row)
+    return list(winners.values())
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -236,23 +272,16 @@ async def list_skills(
 
     Merging semantics (per ADR 0012):
 
-    * ``scope=all`` (default) — caller's user-scope rows first, then
-      built-ins. Dedup on slug: a user shadow hides the built-in of
-      the same slug from this listing.
+    * ``scope=all`` (default) — caller's user-scope rows, newest eligible
+      team rows, then built-ins. Dedup matches single-skill resolution.
     * ``scope=user`` — caller's user-scope rows only.
     * ``scope=builtin`` — filesystem built-ins only (no shadow merge).
-    * ``scope=team`` — empty list until D8.1 (team scope deferred).
+    * ``scope=team`` — skills from teams the caller belongs to.
 
-    The ``tag`` filter applies to both layers; a built-in matches if
+    The ``tag`` filter applies after personal/team precedence; a built-in matches if
     its ``lq_ai.tags`` contains the tag, a user shadow matches if its
     ``tags`` column contains it.
     """
-
-    if scope == "team":
-        # Deferred to D8.1 per ADR 0012; honor the contract by returning
-        # the empty set rather than 501 — clients can render "no team
-        # skills yet" without checking for a status code.
-        return JSONResponse(content=[])
 
     holder = _registry(request)
     registry = holder.current()
@@ -260,19 +289,22 @@ async def list_skills(
     user_rows: list[UserSkill] = []
     if scope in ("user", "all"):
         user_rows = await _list_user_shadows(db, user_id=user.id)
-        if tag is not None:
-            user_rows = [r for r in user_rows if tag in (r.tags or [])]
-
-    user_summaries = [_summary_from_user_skill(r) for r in user_rows]
+    team_rows = await _list_team_shadows(db, user_id=user.id) if scope in ("team", "all") else []
     shadowed_slugs = {r.slug for r in user_rows}
+    merged_rows = user_rows + [r for r in team_rows if r.slug not in shadowed_slugs]
+    shadowed_slugs.update(r.slug for r in team_rows)
+    if tag is not None:
+        merged_rows = [r for r in merged_rows if tag in (r.tags or [])]
+    user_summaries = [_summary_from_user_skill(r) for r in merged_rows]
 
-    if scope == "user":
+    if scope in ("user", "team"):
         return JSONResponse(content=user_summaries)
 
+    internal = _run_orchestrator_skills()
     builtin_summaries = [
         filter_summary_for_response(s)
         for s in registry.list_summaries(tag=tag)
-        if s.name not in shadowed_slugs
+        if s.name not in shadowed_slugs and s.name not in internal
     ]
 
     if scope == "builtin":
@@ -393,8 +425,9 @@ async def _list_merged_skills_for_user(
 
     holder = _registry(request)
     registry = holder.current()
+    internal = _run_orchestrator_skills()
     for summary in registry.list_summaries():
-        if summary.name in shadowed_slugs:
+        if summary.name in shadowed_slugs or summary.name in internal:
             continue
         out.append(
             {

@@ -75,6 +75,7 @@ from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
 from app.autonomous.guard import _args_digest
+from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, thread_for_turn
 from app.chat.tool_loop import (
     LoopConfirmation,
     LoopFinal,
@@ -114,6 +115,7 @@ from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.message_tool_source import MessageToolSource
+from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
@@ -148,6 +150,7 @@ from app.security.encryption import (
     encrypt_payload_envelope,
 )
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.tools.governance import resolve_resumed_ceiling, resolve_tool_egress_ceiling
 from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -234,6 +237,7 @@ async def _load_history_messages(
     exclude_message_id: uuid.UUID,
     token_budget: int,
     max_messages: int,
+    terms: MatterTerms | None = None,
 ) -> list[ChatCompletionMessage]:
     """Load prior conversation turns for ``chat_id`` as gateway messages.
 
@@ -245,11 +249,30 @@ async def _load_history_messages(
     ``lq_ai_skip_anonymization`` flag, so the gateway pseudonymizes them
     with the same per-request map as the current turn (consistent entity
     mapping across the conversation).
+
+    ``terms`` are the data terms of the turn being sent: its matter's
+    inference-tier floor and privilege flag, or none for a chat in no matter.
+    A governed run's answer that was written under stricter terms is replaced
+    by a note, as it is for a later run's planning call (ADR 0038 D5): the
+    answer may hold what a matter's file said, and this turn goes out on its
+    own terms. The answer's terms are those of the matters behind it
+    (:func:`~app.autonomous.orchestration.reading.answer_terms`). With no
+    ``terms`` nothing is withheld.
     """
     if token_budget <= 0 or max_messages <= 0:
         return []
     stmt = (
-        select(Message.role, Message.content)
+        select(
+            Message.role,
+            Message.content,
+            Message.autonomous_session_id,
+            OrchestrationRoot.project_id,
+            OrchestrationRoot.planning_snapshot,
+        )
+        .outerjoin(
+            OrchestrationRoot,
+            OrchestrationRoot.session_id == Message.autonomous_session_id,
+        )
         .where(
             Message.chat_id == chat_id,
             Message.id != exclude_message_id,
@@ -258,8 +281,12 @@ async def _load_history_messages(
         )
         .order_by(Message.created_at.asc(), Message.id.asc())
     )
-    rows = (await db.execute(stmt)).all()
-    history: list[tuple[str, str]] = [(row[0], row[1]) for row in rows if row[1]]
+    rows = [
+        (role, content, session_id, project_id, snapshot)
+        for role, content, session_id, project_id, snapshot in (await db.execute(stmt)).all()
+        if content
+    ]
+    history = await thread_for_turn(db, rows, terms)
     selected = _select_history_within_budget(
         history, token_budget=token_budget, max_messages=max_messages
     )
@@ -384,6 +411,21 @@ async def _load_visible_chat(
             details={"chat_id": str(chat_id)},
         )
     return row
+
+
+async def _resolve_proposal_ceiling(db: AsyncSession, *, chat_id: uuid.UUID) -> int | None:
+    """Resolve the egress ceiling to stamp on a pending tool-call row.
+
+    Issue #593: a proposed call records the policy in force at proposal
+    time; the approve path re-resolves and executes under
+    ``min(original, current)``. Returns ``None`` only when unconstrained.
+    An unreadable policy refuses proposal creation: a new NULL must never
+    erase the distinction between an unset policy and a failed lookup.
+    """
+    ceiling, source = await resolve_tool_egress_ceiling(db, project_id=None, chat_id=chat_id)
+    if source == "unresolved":
+        raise Conflict("Tool confirmation could not resolve egress policy; please retry.")
+    return ceiling
 
 
 async def _load_visible_project_for_chat(
@@ -1645,6 +1687,12 @@ async def send_message(
         exclude_message_id=user_message.id,
         token_budget=settings.lq_ai_chat_history_token_budget,
         max_messages=settings.lq_ai_chat_history_max_messages,
+        # A run's answer written under a stricter matter's terms is not replayed
+        # to a turn that goes out on this chat's own (ADR 0038 D5).
+        terms=MatterTerms(
+            minimum_inference_tier=project_floor if project_floor is not None else NO_FLOOR,
+            privileged=project_privileged,
+        ),
     )
     gw_messages.extend(history_messages)
 
@@ -2213,6 +2261,18 @@ async def resume_tool_call(
                 #   the actual approved execution, stamped confirmation_state=
                 #   "approved" / outcome="executed".  This is the authoritative
                 #   record that the tool ran with user approval.
+                #
+                # Issue #593: re-resolve the CURRENT egress policy and execute
+                # under min(proposal-time ceiling, current ceiling).  An
+                # unreadable current policy fail-closes inside
+                # governed_tool_invocation (ceiling_source="unresolved":
+                # no dispatch, refused audit row).
+                current_ceiling, current_source = await resolve_tool_egress_ceiling(
+                    db, project_id=None, chat_id=cid
+                )
+                egress_ceiling = resolve_resumed_ceiling(
+                    pending.max_egress_tier, current_ceiling, current_source
+                )
                 try:
                     result = await execute_tool(
                         db,
@@ -2226,6 +2286,7 @@ async def resume_tool_call(
                         chat_id=cid,
                         request_id=request_id,
                         confirmation_state="approved",
+                        egress_ceiling=egress_ceiling,
                     )
                     # Update the gate row's confirmation_state to "approved"
                     # (the confirmation-REQUEST lifecycle: pending_confirmation →
@@ -2374,6 +2435,8 @@ async def resume_tool_call(
                     ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                    # Issue #593: proposal-time egress ceiling (see above).
+                    max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=cid),
                 )
                 db.add(pending_row2)
                 await db.flush()
@@ -3263,6 +3326,10 @@ async def _non_streaming_response(
                 ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                # Issue #593: proposal-time egress ceiling; the approve path
+                # re-resolves current policy and executes under
+                # min(original, current).
+                max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
             )
             db.add(pending_row)
             await db.flush()
@@ -3593,6 +3660,8 @@ async def _stream_response(
                         ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                        # Issue #593: proposal-time egress ceiling (see above).
+                        max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
                     )
                     db.add(pending_row)
                     await db.flush()
