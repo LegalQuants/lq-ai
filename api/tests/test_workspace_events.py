@@ -114,7 +114,7 @@ def test_contract_is_closed_and_immutable() -> None:
     assert event.provenance == EventProvenance(producer="autonomous")
     assert event.sensitivity == "confidential"
     with pytest.raises(ValidationError):
-        event.source_ref = uuid.uuid4()  # type: ignore[misc]
+        event.source_ref = uuid.uuid4()
 
 
 @pytest.mark.integration
@@ -272,7 +272,7 @@ async def test_time_window_and_cursor_pagination(db_session: AsyncSession) -> No
         )
         ids.append(row.id)
     query = WorkspaceEventQuery(start_at=WHEN, end_at=WHEN + timedelta(seconds=1), limit=2)
-    seen = []
+    seen: list[uuid.UUID] = []
     while True:
         rows = await list_events(db_session, user_id=user.id, query=query)
         if not rows:
