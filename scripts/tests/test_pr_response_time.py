@@ -282,3 +282,47 @@ def test_parse_time_accepts_github_z_suffix() -> None:
 def test_cli_rejects_until_before_since(capsys: pytest.CaptureFixture[str]) -> None:
     assert prt.main(["--since", "2026-09-30", "--until", "2026-07-01"]) == 1
     assert "before" in capsys.readouterr().err
+
+
+# --- window selection ----------------------------------------------------------
+
+
+def window(*argv: str) -> tuple[date, date]:
+    return prt.resolve_window(prt.build_parser().parse_args(list(argv)), today=date(2026, 10, 16))
+
+
+def test_quarter_shortcut() -> None:
+    assert window("--quarter", "2026-Q3") == (date(2026, 7, 1), date(2026, 9, 30))
+    assert window("--quarter", "2026Q1") == (date(2026, 1, 1), date(2026, 3, 31))
+    assert window("--quarter", "2026-q4") == (date(2026, 10, 1), date(2026, 12, 31))
+
+
+def test_month_shortcut_handles_month_ends_and_year_roll() -> None:
+    assert window("--month", "2026-09") == (date(2026, 9, 1), date(2026, 9, 30))
+    assert window("--month", "2028-02") == (date(2028, 2, 1), date(2028, 2, 29))
+    assert window("--month", "2026-12") == (date(2026, 12, 1), date(2026, 12, 31))
+
+
+def test_since_defaults_until_to_today() -> None:
+    assert window("--since", "2026-10-01") == (date(2026, 10, 1), date(2026, 10, 16))
+
+
+def test_window_flags_are_mutually_exclusive() -> None:
+    with pytest.raises(SystemExit):
+        prt.build_parser().parse_args(["--month", "2026-09", "--quarter", "2026-Q3"])
+
+
+def test_bad_month_and_quarter_are_rejected() -> None:
+    for argv in (["--month", "2026-13"], ["--quarter", "2026-Q5"], ["--month", "Sept"]):
+        with pytest.raises(SystemExit):
+            prt.build_parser().parse_args(argv)
+
+
+def test_cli_requires_a_window(capsys: pytest.CaptureFixture[str]) -> None:
+    assert prt.main([]) == 1
+    assert "required" in capsys.readouterr().err
+
+
+def test_cli_rejects_until_without_since(capsys: pytest.CaptureFixture[str]) -> None:
+    assert prt.main(["--month", "2026-09", "--until", "2026-09-30"]) == 1
+    assert "--until only goes with --since" in capsys.readouterr().err

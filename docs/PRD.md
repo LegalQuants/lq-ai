@@ -5239,6 +5239,12 @@ Roadmap 4.3 wired `--cov-fail-under` coverage gates into CI (`.github/workflows/
 
 The air-gap verification harness (roadmap 3.5, `.github/workflows/airgap-verify.yml`) verifies compose local-profile boot and Tier-1 chat under its documented egress and DNS policy — but an air-gapped operator still has to assemble the image set by hand from the per-component BOM in `docs/security/air-gap-verification.md`. The k3s pattern from the air-gap OSS survey closes the gap: publish a per-release `docker save` bundle (all compose images at their pinned digests + the Ollama model directory contract documented alongside) as a release asset, generated in `release.yml` so the *shipped* artifact is the *certified* one. Scope: a release-job step producing `lq-ai-airgap-bundle-<version>.tar.zst` + a checksum/cosign attestation, and a runbook section ("load the bundle" replaces the pre-fetch checklist). Depends on the air-gap CI landing first so the bundle contents track the verified profile.
 
+#### DE-406 — Publish the PR first-response median on a schedule
+
+**Priority:** P3 · **Effort:** S · **Status (2026-10-16): filed (#699 follow-up).**
+
+#699 delivered the measurement: `scripts/pr_response_time.py` prints, for any window, the median time to first maintainer response, the counts, the PRs still waiting, and the rule it applied. Publication is still manual, and the maintainer reviewing #699 asked where the number will live (README? a monthly release report?) and said automation would be welcome. Scope: a scheduled workflow (monthly, or quarterly to match the ADR 0030 checkpoint) that runs the script with `--json` on a read-only token and posts the result somewhere durable and linkable — a GitHub Discussion thread or a dated file under `docs/` — so CONTRIBUTING.md's "published alongside the target" promise holds without a person remembering to run it. Out of scope: changing the measurement rule; that is the script's job and its caveats are printed with every run. Decide the venue first; the workflow is small once that is settled.
+
 #### DE-396 — OCR normalization layer violates its documented idempotence contract
 
 **Priority:** P2 · **Effort:** S · **Status (2026-10-03): resolved (implemented fixed-point loop, see #652).**

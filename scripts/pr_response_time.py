@@ -26,8 +26,13 @@ median the window will finally settle at.
 
 Usage:
 
+    python scripts/pr_response_time.py --quarter 2026-Q3
+    python scripts/pr_response_time.py --month 2026-09
     python scripts/pr_response_time.py --since 2026-07-01 --until 2026-09-30
     python scripts/pr_response_time.py --since 2026-07-01 --json
+
+``--month`` and ``--quarter`` are shortcuts for the two publication cadences
+CONTRIBUTING.md contemplates; ``--since``/``--until`` take any range.
 
 Authentication: a read-only GitHub token from ``GITHUB_TOKEN`` or ``GH_TOKEN``,
 or, when neither is set, the token ``gh auth token`` prints. Reading the
@@ -47,13 +52,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import statistics
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 GRAPHQL_URL = "https://api.github.com/graphql"
@@ -580,18 +586,63 @@ def _parse_date(value: str) -> date:
         raise argparse.ArgumentTypeError(f"{value!r} is not a YYYY-MM-DD date") from exc
 
 
+def _parse_month(value: str) -> tuple[date, date]:
+    match = re.fullmatch(r"(\d{4})-(\d{2})", value)
+    if not match or not 1 <= int(match.group(2)) <= 12:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a YYYY-MM month")
+    year, month = int(match.group(1)), int(match.group(2))
+    first = date(year, month, 1)
+    last = date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)
+    return first, last
+
+
+def _parse_quarter(value: str) -> tuple[date, date]:
+    match = re.fullmatch(r"(\d{4})-?[Qq]([1-4])", value)
+    if not match:
+        raise argparse.ArgumentTypeError(f"{value!r} is not a YYYY-Qn quarter")
+    year, quarter = int(match.group(1)), int(match.group(2))
+    first = date(year, 3 * quarter - 2, 1)
+    last = _parse_month(f"{year}-{3 * quarter:02d}")[1]
+    return first, last
+
+
+def resolve_window(args: argparse.Namespace, today: date) -> tuple[date, date]:
+    """Pick the creation-date window from --quarter, --month, or --since/--until."""
+    if args.quarter:
+        return args.quarter
+    if args.month:
+        return args.month
+    if args.since is None:
+        raise ValueError("one of --quarter, --month or --since is required")
+    until = args.until or today
+    if until < args.since:
+        raise ValueError("--until is before --since")
+    return args.since, until
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Median time to first maintainer response on PRs opened in a window (#699).",
     )
-    parser.add_argument(
-        "--since", type=_parse_date, required=True, help="first creation date, YYYY-MM-DD"
+    window = parser.add_mutually_exclusive_group()
+    window.add_argument(
+        "--quarter", type=_parse_quarter, metavar="YYYY-Qn", help="a calendar quarter, e.g. 2026-Q3"
+    )
+    window.add_argument(
+        "--month", type=_parse_month, metavar="YYYY-MM", help="a calendar month, e.g. 2026-09"
+    )
+    window.add_argument(
+        "--since",
+        type=_parse_date,
+        metavar="YYYY-MM-DD",
+        help="first creation date of a custom range",
     )
     parser.add_argument(
         "--until",
         type=_parse_date,
         default=None,
-        help="last creation date, YYYY-MM-DD (default: today)",
+        metavar="YYYY-MM-DD",
+        help="last creation date of a custom range (default: today); only with --since",
     )
     parser.add_argument(
         "--repo", default=DEFAULT_REPO, help=f"owner/name (default: {DEFAULT_REPO})"
@@ -615,9 +666,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     now = datetime.now(UTC)
-    until = args.until or now.date()
-    if until < args.since:
-        print("error: --until is before --since", file=sys.stderr)
+    if args.until and args.since is None:
+        print("error: --until only goes with --since", file=sys.stderr)
+        return 1
+    try:
+        since, until = resolve_window(args, now.date())
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
     if "/" not in args.repo:
         print("error: --repo must be owner/name", file=sys.stderr)
@@ -632,7 +687,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             maintainers = fetch_team(token, org, args.team)
             source = f"team {org}/{args.team}, read at run time"
-        prs = fetch_prs(token, args.repo, args.since, until)
+        prs = fetch_prs(token, args.repo, since, until)
     except GitHubError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -642,7 +697,7 @@ def main(argv: list[str] | None = None) -> int:
         maintainers,
         now,
         repo=args.repo,
-        since=args.since,
+        since=since,
         until=until,
         maintainer_source=source,
     )
