@@ -64,7 +64,7 @@ class _CellResultState(TypedDict, total=False):
     cited_chunk_ids: list[str]
     confidence: str  # high|medium|low|failed
     tier_used: int | None
-    cost_usd: str  # Decimal as string for JSON serializability
+    cost_usd: str | None  # Decimal string; None when gateway cost is unknown
     error: str | None
     # Citation-Engine verification method for the cell (Donna #6), e.g.
     # ``ensemble_strict`` / ``ensemble_majority``. None when the column

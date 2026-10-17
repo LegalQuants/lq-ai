@@ -143,14 +143,14 @@ Exports use the same provenance resolver as GET and cancellation. For minting-vi
 
 ## Per-cell cost & tier telemetry
 
-Cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_actual_usd` sums to 0. This is a **known, code-documented v0.3.0 limitation** (`api/app/tabular/nodes.py` — the cell node comments and `_sum_cell_costs`): the cell node does not yet propagate the per-call tier + cost back from the gateway response. The cost *estimator* still converges off the routing log either way, so the pre-flight preview stays accurate; it is only the post-hoc per-cell economics in the grid that read 0. Threading real per-cell tier + cost through is **[DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work)**.
+DE-310 (#421) propagates the gateway's `routed_inference_tier` and `cost_estimate` onto each successfully extracted cell as `tier_used` and a fixed-point decimal-string `cost_usd`. Missing annotations stay null; the column's minimum tier is not reported as the routed tier. `cost_actual_usd` sums the reported extraction costs, with missing costs contributing zero. This is incomplete accounting when annotations are absent or a response fails before cell parsing, and it excludes ensemble judge spend; the routing log remains the source for those calls. It is not a complete billed-spend total.
 
 ---
 
 ## Known limitations
 
 - **Positional provenance is verbatim-only.** A paraphrased value that cannot be located mints no row. New-vintage GET/cancel responses and exports expose no citations for that cell; only genuine legacy executions retain synthetic bridge ids. See [Citations](#citations-how-the-cell-grounding-is-surfaced).
-- **Per-cell `tier_used` + `cost_usd` are not captured** (always null / 0). [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
+- **Cost totals include reported extraction costs only.** Missing annotations remain null per cell and contribute zero to the aggregate; failed-response and ensemble-judge spend may be absent. [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
 - **Bulk-operation scope is bounded.** The current DE-304 implementation supports selected-row redline reports and single-column summaries; its retained work-product and execution rules are documented in [ADR 0040](adr/0040-tabular-bulk-operations.md).
 - **Lexical FTS retrieval, not vector.** A column query whose vocabulary diverges from the contract's wording may retrieve weaker chunks; low-confidence cells should be treated with corresponding skepticism.
 - **Sequential cell dispatch.** No per-cell parallelism in v0.3.0; large grids (toward the 200 × 10 ceiling) run cell-by-cell.

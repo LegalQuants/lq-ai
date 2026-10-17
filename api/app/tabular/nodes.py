@@ -872,8 +872,8 @@ def _sum_cell_costs(per_cell_results: list[Any]) -> Decimal:
     """Sum per-cell costs to derive ``cost_actual_usd``.
 
     ``cost_usd`` carries the gateway's per-call ``cost_estimate``
-    annotation as a decimal string (DE-310), so this sum is the actual
-    extraction spend. Cells without a recorded cost (failed before the
+    annotation as a decimal string (DE-310), so this sum is the reported
+    extraction cost. Cells without a recorded cost (failed before the
     gateway call, or the gateway had no rate configured for the routed
     model) contribute 0. Ensemble judge spend is not included — see
     the DE-310 note in :func:`extract_cell`."""
