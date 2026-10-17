@@ -71,7 +71,11 @@ dependencies = [
     # sessions are stateful, so the connection holder must speak MCP. This is
     # the official MCP SDK — not reasonably hand-rollable (it implements the
     # full JSON-RPC-over-SSE session + auth handshake). Client-only use here.
-    "mcp>=1.28,<2",
+    # Floor 1.30: earlier 1.x follows a server's cross-origin redirect
+    # (GHSA-5h93-6whr-6q8j) and fetches server-chosen $ref URLs while
+    # validating tool output (GHSA-rwrf-2pqf-9j8j). <2: 2.x replaces the HTTP
+    # stack and the TLS trust store, a migration still to be decided.
+    "mcp>=1.30,<2",
     # starlette is pinned explicitly rather than left to fastapi's resolver.
     # History: this cap was originally <1.4 because mcp pulls sse-starlette,
     # whose 3.4.x line requires starlette 1.x, which conflicted with the

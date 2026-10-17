@@ -20,10 +20,12 @@ import json
 import socket
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -191,6 +193,7 @@ def _build_harness(
     peer: PeerHandle,
     *,
     base_url: str = CONFIGURED_URL,
+    auth: str = "none",
 ) -> Harness:
     # Loopback traffic must never go through an environment proxy.
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
@@ -207,7 +210,7 @@ def _build_harness(
             "base_url": base_url,
             "egress_tier": 2,
             "allowlist": {"hosts": [CONFIGURED_HOST]},
-            "auth": "none",
+            "auth": auth,
         }
     )
     adapter = MCPToolProviderAdapter.from_config(config, session_factory=shim.connect)
@@ -225,9 +228,15 @@ async def _list_tools(adapter: MCPToolProviderAdapter) -> dict[str, ToolSpec]:
     return {spec.name: spec for spec in specs}
 
 
-async def _invoke(adapter: MCPToolProviderAdapter, tool: str, args: dict[str, Any]) -> ToolResult:
+async def _invoke(
+    adapter: MCPToolProviderAdapter,
+    tool: str,
+    args: dict[str, Any],
+    *,
+    user_token: str | None = None,
+) -> ToolResult:
     with anyio.fail_after(CALL_DEADLINE_S):
-        return await adapter.invoke_tool(tool, args, request_id="req-525")
+        return await adapter.invoke_tool(tool, args, request_id="req-525", user_token=user_token)
 
 
 def _flags(spec: ToolSpec) -> tuple[bool, bool, bool]:
@@ -347,3 +356,135 @@ async def test_g1_non_allowlisted_url_is_refused_before_any_session(
 
     assert harness.shim.urls == []
     assert harness.shim.headers == []
+
+
+# --- G2: a server redirect cannot carry a request off its origin -------------
+
+
+@dataclass
+class _Recorded:
+    method: str
+    path: str
+    headers: dict[str, str]
+    body: bytes
+
+
+class _SinkHandler(BaseHTTPRequestHandler):
+    """Records every request. It stands for a host the operator never allowlisted."""
+
+    received: list[_Recorded]
+
+    def _record(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        self.received.append(
+            _Recorded(
+                method=self.command,
+                path=self.path,
+                headers=dict(self.headers.items()),
+                body=self.rfile.read(length),
+            )
+        )
+        self.send_response(404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    do_GET = do_POST = do_DELETE = _record
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+class _RedirectHandler(BaseHTTPRequestHandler):
+    """Answers every request with a body-preserving 307 to another origin."""
+
+    location: str
+
+    def _redirect(self) -> None:
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        self.send_response(307)
+        self.send_header("Location", self.location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    do_GET = do_POST = do_DELETE = _redirect
+
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
+
+@contextmanager
+def _serve(handler: type[BaseHTTPRequestHandler]) -> Iterator[int]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield int(server.server_address[1])
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=TERMINATE_WAIT_S)
+
+
+@dataclass(frozen=True)
+class RedirectPair:
+    redirector_url: str
+    sink_url: str
+    received: list[_Recorded]
+
+
+@pytest.fixture
+def cross_origin_redirect() -> Iterator[RedirectPair]:
+    """A server that redirects every request to a second origin, and that origin.
+
+    Same host, different port: a different origin for the browser rule the MCP
+    SDK and httpx both apply (scheme, host and port).
+    """
+    received: list[_Recorded] = []
+    sink = type("Sink", (_SinkHandler,), {"received": received})
+    with _serve(sink) as sink_port:
+        sink_url = f"http://127.0.0.1:{sink_port}/mcp"
+        redirect = type("Redirect", (_RedirectHandler,), {"location": sink_url})
+        with _serve(redirect) as redirect_port:
+            yield RedirectPair(
+                redirector_url=f"http://127.0.0.1:{redirect_port}/mcp",
+                sink_url=sink_url,
+                received=received,
+            )
+
+
+@pytest.mark.integration
+async def test_g2_cross_origin_redirect_is_not_followed(
+    monkeypatch: pytest.MonkeyPatch, cross_origin_redirect: RedirectPair
+) -> None:
+    """GHSA-5h93-6whr-6q8j: mcp < 1.30.0 followed a server's cross-origin redirect.
+
+    ``validate_egress_target`` checks only the configured URL, so a followed
+    redirect sends the request to a host nobody allowlisted. On a 307 that
+    request keeps its body: the JSON-RPC message, tool arguments included.
+    httpx already drops ``Authorization`` on such a hop, so the body is the
+    exposure; the test asserts that nothing at all reaches the second origin.
+    """
+    harness = _build_harness(
+        monkeypatch, PeerHandle(url=cross_origin_redirect.redirector_url), auth="oauth"
+    )
+
+    # Broad on purpose: a followed redirect also ends in an error (the second
+    # origin is no MCP server), and the assertion that matters must run first.
+    with pytest.raises(ToolProviderError) as caught:
+        await _invoke(
+            harness.adapter,
+            "lookup_clause",
+            {"clause_id": "matter-confidential-7.2"},
+            user_token="user-oauth-token",
+        )
+
+    assert cross_origin_redirect.received == []
+    # The guard saw the configured URL, and the user's token was offered only there.
+    assert harness.shim.urls == [CONFIGURED_URL]
+    assert harness.shim.headers == [{"Authorization": "Bearer user-oauth-token"}]
+    # The caller is told the server redirected, by status and host only.
+    error = caught.value
+    assert isinstance(error, ToolProviderHTTPError)
+    assert error.upstream_status == 307
+    assert cross_origin_redirect.sink_url not in error.message
