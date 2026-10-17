@@ -1,15 +1,18 @@
 <script context="module" lang="ts">
-	import { getSkillContents } from '../api/skills';
-	import type { SkillReferenceFile } from '../types';
+	import { getSkillContents, type ReferenceRange } from '../api/skills';
+	import type { SkillReferencePage } from '../types';
 
 	export type ResourceContentsResult =
-		| { contents: SkillReferenceFile[]; error: null }
+		| { contents: SkillReferencePage[]; error: null }
 		| { contents: null; error: string };
 
 	/** Human inspection remains available when the model's reference-read tool is disabled. */
-	export async function loadResourceContents(slug: string): Promise<ResourceContentsResult> {
+	export async function loadResourceContents(
+		slug: string,
+		range?: ReferenceRange
+	): Promise<ResourceContentsResult> {
 		try {
-			const skill = await getSkillContents(slug);
+			const skill = await getSkillContents(slug, range);
 			return { contents: skill.on_demand_contents ?? [], error: null };
 		} catch (e) {
 			return {
@@ -36,7 +39,7 @@
 	export let files: SkillResourceFile[] = [];
 	export let referenceReadEnabled: boolean | undefined = undefined;
 
-	let contents: SkillReferenceFile[] | null = null;
+	let contents: SkillReferencePage[] | null = null;
 	let error: string | null = null;
 	let loading = false;
 
@@ -49,6 +52,27 @@
 		loading = false;
 	}
 
+	let paging: string | null = null;
+	let pageErrors: Record<string, string> = {};
+
+	async function readPortion(source: SkillReferencePage, offset: number): Promise<void> {
+		paging = source.path;
+		pageErrors = { ...pageErrors, [source.path]: '' };
+		const result = await loadResourceContents(slug, {
+			path: source.path,
+			offset_bytes: offset,
+			expected_sha256: source.sha256
+		});
+		const page = result.contents?.find((entry) => entry.path === source.path);
+		if (page) contents = (contents ?? []).map((entry) => (entry.path === page.path ? page : entry));
+		else
+			pageErrors = {
+				...pageErrors,
+				[source.path]: result.error ?? 'Reference is no longer available. Reload the skill.'
+			};
+		paging = null;
+	}
+
 	onMount(() => {
 		if (files.length > 0) void load();
 	});
@@ -59,8 +83,9 @@
 	<p class="lq-text-body note">{modelReadLabel(referenceReadEnabled)}</p>
 	<p class="lq-text-caption note">
 		These are separate from references included in every use of the skill. Currently available: up
-		to 64 text files in the skill's references folder, at most 64 KiB each. Other bundled files are
-		not available for on-demand reading yet.
+		to 64 text files in the skill's references folder. Files of any size remain listed; each read
+		returns at most 64 KiB. Request another portion when needed. Other bundled paths are not
+		available for on-demand reading yet.
 	</p>
 	{#if files.length === 0}
 		<p class="lq-text-body note">This skill has no on-demand references.</p>
@@ -79,7 +104,33 @@
 				{#if contents}
 					{@const source = contents.find((entry) => entry.path === file.path)}
 					{#if source}
+						{#if source.size_bytes !== undefined}
+							<p class="lq-text-caption note" role="status">
+								Bytes {source.offset_bytes.toLocaleString()}–{source.end_offset_bytes.toLocaleString()}
+								(end exclusive) of {source.size_bytes.toLocaleString()}.
+								{source.has_more ? 'More remains.' : 'End of file.'}
+							</p>
+						{/if}
 						<pre>{source.content}</pre>
+						{#if pageErrors[source.path]}
+							<p class="error" role="alert">{pageErrors[source.path]}</p>
+						{/if}
+						{#if source.has_more && source.next_offset_bytes !== null}
+							<button
+								type="button"
+								disabled={paging !== null}
+								on:click={() => readPortion(source, source.next_offset_bytes ?? 0)}
+							>
+								{paging === source.path ? 'Loading…' : 'Read next portion'}
+							</button>
+						{/if}
+						{#if source.offset_bytes > 0}
+							<button
+								type="button"
+								disabled={paging !== null}
+								on:click={() => readPortion(source, 0)}>Read first portion</button
+							>
+						{/if}
 					{:else}
 						<p class="lq-text-body note">
 							This reference is no longer available. Reload the skill to refresh its file list.

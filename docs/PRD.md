@@ -555,10 +555,13 @@ Each invocation checks current policy and exact installed/pinned resource scope;
 resource data cannot grant execution, storage or external-access authority.
 
 The #658 increment supports admitted `references/` UTF-8 files only: at most 64
-files, 64 KiB per file, safe ASCII paths, no hidden names or symlinks. These are
+files, bounded 64 KiB reads, safe ASCII paths, no hidden names or symlinks.
+Larger files remain indexed with their size and are read through explicit UTF-8
+byte ranges. Each result reports the returned range, next offset and whether more
+remains. No automatic continuation or size-based omission is performed. These are
 LQ implementation limits, not Agent Skills format constraints. Legacy eager
 `reference/` loading remains unchanged. Assets, broader packaged paths, Unicode
-names, bounded large-resource reading and complete-list discovery belong to the
+names and complete-list discovery belong to the
 unnumbered Agent Skills compatibility DE associated with #658 and epic #662.
 See the [authoring guide](skill-authoring-guide.md#reference-and-references) and
 [operator notes](deploy/skill-capabilities.md#on-demand-reference-files).

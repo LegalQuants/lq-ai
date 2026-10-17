@@ -131,14 +131,34 @@ class SkillTools:
         """Return one listed ``references/`` file of the bound skill.
 
         ``execute`` revalidates access and the digest. Return the bytes from
-        that digest's original snapshot, with no subsequent disk read.
+        that digest's snapshot; later ranges recheck the full streamed file hash.
         """
         if request.path not in binding.reference_paths:
             return {"error": "file_unavailable"}
-        content = dict(binding.reference_contents).get(request.path)
-        if content is None:
+        from app.skills.references import ReferenceRangeError, read_reference_snapshot
+
+        snapshot = dict(binding.reference_snapshots).get(request.path)
+        if snapshot is None or binding.reference_folder is None:
             return {"error": "file_unavailable"}
-        return {"path": request.path, "content": content}
+        try:
+            if request.offset_bytes:
+                snapshot = read_reference_snapshot(
+                    binding.reference_folder,
+                    binding.reference_folder / request.path,
+                    offset_bytes=request.offset_bytes,
+                    max_bytes=request.max_bytes,
+                    expected=snapshot,
+                )
+            return snapshot.page(request.path, request.max_bytes)
+        except ReferenceRangeError as exc:
+            return {
+                "error": "invalid_range",
+                "path": request.path,
+                "size_bytes": snapshot.size_bytes,
+                "message": str(exc),
+            }
+        except (OSError, UnicodeError, ValueError):
+            raise ToolNotGranted("Pinned skill artifact is unavailable or changed") from None
 
     async def run_script(self, binding: SkillBinding, request: ScriptInput) -> dict[str, Any]:
         if request.script not in {script.name for script in binding.capabilities.scripts}:

@@ -100,12 +100,33 @@ describe('human skill resource inspection', () => {
 	});
 });
 
+describe('explicit large-reference portions', () => {
+    it('requests exactly one bounded portion with its pinned hash and preserves continuation metadata', async () => {
+        const page = { path: 'references/enforcement_actions.json', content: 'next portion',
+            size_bytes: 208564, offset_bytes: 65536, end_offset_bytes: 65548,
+            returned_bytes: 12, has_more: true, next_offset_bytes: 65548, sha256: 'a'.repeat(64) };
+        const spy = vi.fn(async () => response({ ...source, on_demand_contents: [page] }));
+        global.fetch = spy as typeof fetch;
+        const result = await loadResourceContents('my skill', {
+            path: page.path, offset_bytes: 65536, expected_sha256: page.sha256
+        });
+        expect(result.contents).toEqual([page]);
+        expect(spy).toHaveBeenCalledTimes(1);
+        const url = new URL(String((spy.mock.calls[0] as unknown[])[0]), 'http://fixture');
+        expect(url.pathname).toContain('/my%20skill/contents');
+        expect(url.searchParams.get('reference_path')).toBe(page.path);
+        expect(url.searchParams.get('offset_bytes')).toBe('65536');
+        expect(url.searchParams.get('max_bytes')).toBe('65536');
+        expect(url.searchParams.get('expected_sha256')).toBe(page.sha256);
+    });
+});
+
 describe('operator skill reference policy', () => {
 	it.each([true, false])('reports the effective enabled=%s policy', async (enabled) => {
 		const policy = {
 			reference_read_enabled: enabled,
 			max_files: 64,
-			max_file_bytes: 65536,
+			max_read_bytes: 65536,
 			scope: 'installed skill references/'
 		};
 		global.fetch = vi.fn(async () =>

@@ -27,7 +27,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.skills.capabilities import SkillCapabilities
+from app.skills.capabilities import ReferenceReadResult, SkillCapabilities
 
 # All built-in M1 skills are filesystem-canonical; user/team-scope forks
 # land later and gain ``user`` / ``team`` values for ``scope``. C1 only
@@ -288,7 +288,7 @@ class Skill(SkillSummary):
 class SkillInspection(Skill):
     """Human-only inspection response; never used by the gateway resolver."""
 
-    on_demand_contents: list[SkillFile] = Field(default_factory=list)
+    on_demand_contents: list[ReferenceReadResult] = Field(default_factory=list)
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------

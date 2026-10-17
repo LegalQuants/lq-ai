@@ -11,6 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete, select
 from tests.skills.conftest import real_runner as real_runner, runner_module as runner_module
+from tests.skills.reference_helpers import saif_reference, whole_page
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult
@@ -156,14 +157,7 @@ async def test_reference_read_approved_roles_and_durable_replay(
     ) as read:
         result = await call(env, claim, ToolIntent.skill_reference_read, "reference", params)
         replay = await call(env, claim, ToolIntent.skill_reference_read, "reference", params)
-    assert (
-        result.data
-        == replay.data
-        == {
-            "path": params["path"],
-            "content": env.reference.read_text(),
-        }
-    )
+    assert result.data == replay.data == whole_page(params["path"], env.reference.read_text())
     assert result.cost_usd == replay.cost_usd == 0
     assert result.outcome == replay.outcome == "success"
     assert read.call_count == 1
@@ -201,7 +195,7 @@ async def test_reference_byte_boundary_completes_and_replays_exactly(
 ) -> None:
     env = reference_capable
     claim = getattr(env, role)
-    expected = {"path": env.reference_path, "content": env.reference.read_text()}
+    expected = whole_page(env.reference_path, env.reference.read_text())
     assert len(expected["content"].encode("utf-8")) == 65536
     with patch.object(
         SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
@@ -389,3 +383,51 @@ async def test_guarded_root_and_child_execute_real_helper(
         )
         assert result.data["exit_code"] == 0, result.data
         assert json.loads(result.data["stdout"])["word_count"] == 3
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize(
+    "reference_capable", [{"content": saif_reference().decode("utf-8")}], indirect=True
+)
+async def test_saif_large_reference_explicit_pages_complete_and_replay(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    original = saif_reference()
+    cursor = 0
+    chunks = []
+    with patch.object(
+        SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
+    ) as read:
+        for number in range(4):
+            params = {"path": env.reference_path, "offset_bytes": cursor}
+            first = await call(
+                env, claim, ToolIntent.skill_reference_read, f"page:{number}", params
+            )
+            replay = await call(
+                env, claim, ToolIntent.skill_reference_read, f"page:{number}", params
+            )
+            assert first.data == replay.data
+            page = first.data
+            piece = page["content"].encode("utf-8")
+            assert page["size_bytes"] == 208564
+            assert page["offset_bytes"] == cursor
+            assert page["returned_bytes"] == len(piece) <= 65536
+            cursor += len(piece)
+            assert page["end_offset_bytes"] == cursor
+            assert page["has_more"] is (cursor < 208564)
+            assert page["next_offset_bytes"] == (cursor if cursor < 208564 else None)
+            chunks.append(piece)
+            assert read.call_count == number + 1
+    assert b"".join(chunks) == original and cursor == 208564
+    async with env.factory() as db:
+        receipts = list(
+            await db.scalars(
+                select(OrchestrationEffect).where(
+                    OrchestrationEffect.session_id == claim.session_id
+                )
+            )
+        )
+        assert len(receipts) == 4
+        assert all(row.status == "completed" and row.charged_usd == 0 for row in receipts)

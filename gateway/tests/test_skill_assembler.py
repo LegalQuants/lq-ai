@@ -274,7 +274,7 @@ def test_assemble_lists_on_demand_files_by_name_only() -> None:
     out = assemble_skill_prompt([skill])
     assert "## Reference: reference/a.md" in out
     assert "## Reference files available on request" in out
-    assert "- references/checklist.md\n- references/states/ca.md" in out
+    assert "- references/checklist.md (4470 bytes)\n- references/states/ca.md (10777 bytes)" in out
     assert "skill_reference_read" in out
     assert "## Reference: references/" not in out
 

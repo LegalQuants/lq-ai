@@ -21,9 +21,11 @@ Status markers reference the roadmap milestones (M1 → M4) documented in [READM
 On-demand model reads are default-on for enabled, trusted filesystem skills,
 with an independent host-disable policy and retained authorized human supporting-
 file inspection. The initial profile supports admitted `references/` UTF-8 text:
-64 files, 64 KiB per file, safe ASCII paths, no hidden names or symlinks. Legacy
+64 files, 64 KiB per explicit read, safe ASCII paths, no hidden names or symlinks.
+Large files stay discoverable and expose size/range/continuation metadata. Streamed
+validation and hashing retain only one bounded range in memory. Legacy
 `reference/` prompt loading is unchanged. Assets, broader paths, Unicode names,
-paging and complete-list discovery remain compatibility follow-up work. This
+complete-list discovery remain compatibility follow-up work. This
 entry claims neither a released capability nor complete Agent Skills support.
 
 Verification targets include `api/tests/skills/test_reference_read.py`, skill

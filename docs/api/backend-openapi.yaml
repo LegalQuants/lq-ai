@@ -1291,15 +1291,31 @@ paths:
       tags: [skills]
       summary: Full skill contents for the skill inspector (PRD §3.4 — Wave A)
       description: |
-        Adds ``on_demand_contents`` (path/content pairs) for eligible installed
+        Adds ``on_demand_contents`` (bounded reference ranges) for eligible installed
         references to ``GET /skills/{skill_name}``. Runtime reads can be
         disabled by the host while authenticated human inspection remains
-        available. At most 64 UTF-8 files of 65536 bytes each are inspected.
+        available. At most 64 UTF-8 files are indexed with no file-size exclusion;
+        each returned range contains at most 65536 UTF-8 bytes. Default response
+        includes each file's first range. Supply reference_path and offset_bytes
+        for one further explicit range, with expected_sha256 to reject changes.
         User/team shadows receive no installed filesystem resources. The
         dedicated URL exists because PRD §3.4 names it explicitly as
         the contract behind the "view this skill" affordance + the
         skill inspector side panel. Applies the D8.1b resolution stack
         (user > team > built-in).
+      parameters:
+        - name: reference_path
+          in: query
+          schema: {type: string, maxLength: 255}
+        - name: offset_bytes
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 9223372036854775807, default: 0}
+        - name: max_bytes
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 65536, default: 65536}
+        - name: expected_sha256
+          in: query
+          schema: {type: string, pattern: '^[0-9a-f]{64}$'}
       responses:
         '200':
           description: Skill plus human-only installed reference contents
@@ -3541,7 +3557,7 @@ paths:
         the web UI to populate the provider dropdown when editing
         aliases. Secrets are not in the schema; the payload contains
         env-var *names* only. Adds ``skill_resource_policy`` for the API host:
-        reference_read_enabled, max_files=64, max_file_bytes=65536,
+        reference_read_enabled, max_files=64, max_read_bytes=65536,
         scope='installed skill references/'. Set LQ_AI_SKILL_REFERENCE_READ_ENABLED
         (or SKILL_REFERENCE_READ_ENABLED) and restart API/workers to change it.
         Human inspection remains available when runtime reads are disabled.
@@ -3556,11 +3572,11 @@ paths:
                 properties:
                   skill_resource_policy:
                     type: object
-                    required: [reference_read_enabled, max_files, max_file_bytes, scope]
+                    required: [reference_read_enabled, max_files, max_read_bytes, scope]
                     properties:
                       reference_read_enabled: {type: boolean, default: true}
                       max_files: {type: integer, enum: [64]}
-                      max_file_bytes: {type: integer, enum: [65536]}
+                      max_read_bytes: {type: integer, enum: [65536]}
                       scope: {type: string, enum: ['installed skill references/']}
 
   # ----------- ADMIN: USERS (Wave C — PRD §5.2) -----------
@@ -9664,13 +9680,23 @@ components:
             on_demand_contents:
               type: array
               maxItems: 64
-              description: Human-only bounded installed references; never in the internal gateway resolver.
-              items:
-                type: object
-                required: [path, content]
-                properties:
-                  path: {type: string}
-                  content: {type: string}
+              description: Human-only bounded ranges; never in the internal gateway resolver.
+              items: {$ref: '#/components/schemas/ReferenceReadResult'}
+
+    ReferenceReadResult:
+      type: object
+      additionalProperties: false
+      required: [path, content, size_bytes, offset_bytes, end_offset_bytes, returned_bytes, has_more, next_offset_bytes, sha256]
+      properties:
+        path: {type: string, maxLength: 255}
+        content: {type: string, description: At most 65536 UTF-8 bytes; never a split codepoint.}
+        size_bytes: {type: integer, minimum: 0}
+        offset_bytes: {type: integer, minimum: 0}
+        end_offset_bytes: {type: integer, minimum: 0, description: Exclusive end offset.}
+        returned_bytes: {type: integer, minimum: 0, maximum: 65536}
+        has_more: {type: boolean}
+        next_offset_bytes: {type: integer, nullable: true, minimum: 0}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
 
     # Wave A — Skill inputs (form schema for the skill-input-form pattern).
     SkillInputDef:

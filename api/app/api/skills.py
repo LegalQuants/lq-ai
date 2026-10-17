@@ -38,11 +38,12 @@ from app.api.dependencies import ActiveUser
 from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import NotFound
+from app.errors import Forbidden, NotFound
 from app.models.chat import Chat, Message
 from app.models.team import TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
+from app.skills.capabilities import ReferenceRead
 from app.skills.connectors import resolve_available_connectors, unavailable_tool_usage
 from app.skills.registry import MutableSkillRegistry
 from app.skills.schema import (
@@ -624,6 +625,8 @@ async def _resolve_full_skill_payload(
     user_id: uuid.UUID,
     skill_name: str,
     inspect_references: bool = False,
+    reference_request: ReferenceRead | None = None,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Apply the D8.1b resolution stack and return the full Skill payload.
 
@@ -633,6 +636,8 @@ async def _resolve_full_skill_payload(
 
     shadow = await _load_user_shadow(db, user_id=user_id, slug=skill_name)
     if shadow is not None:
+        if reference_request is not None:
+            raise NotFound("Reference is not available for the selected skill")
         payload = _skill_from_user_skill(shadow)
         if inspect_references:
             payload["on_demand_contents"] = []
@@ -640,6 +645,8 @@ async def _resolve_full_skill_payload(
 
     team_shadow = await _load_team_shadow(db, user_id=user_id, slug=skill_name)
     if team_shadow is not None:
+        if reference_request is not None:
+            raise NotFound("Reference is not available for the selected skill")
         payload = _skill_from_user_skill(team_shadow)
         if inspect_references:
             payload["on_demand_contents"] = []
@@ -665,9 +672,26 @@ async def _resolve_full_skill_payload(
         record = registry.get(skill_name)
         assert record is not None
         snapshot = bind_record(record)
-        raw["on_demand_contents"] = [
-            {"path": path, "content": content} for path, content in snapshot.reference_contents
-        ]
+        from app.skills.tools import SkillTools
+
+        service = SkillTools(holder)
+        if reference_request is not None:
+            installed = dict(snapshot.reference_snapshots).get(reference_request.path)
+            if installed is None:
+                raise NotFound("Reference is not available for the selected skill")
+            if expected_sha256 is not None and installed.sha256 != expected_sha256:
+                raise Forbidden(
+                    "Reference changed; reload the skill before reading another portion"
+                )
+            page = service.read_reference(snapshot, reference_request)
+            if "error" in page:
+                raise Forbidden(str(page.get("message") or "Reference is unavailable"))
+            raw["on_demand_contents"] = [page]
+        else:
+            raw["on_demand_contents"] = [
+                service.read_reference(snapshot, ReferenceRead(path=path))
+                for path in snapshot.reference_paths
+            ]
     # Keep tool_usage and unavailable_tool_usage even when None/[] — both are
     # meaningful verdicts ([] = "all connectors available"; None = "unknown").
     # Preserve the existing None/empty-tags filtering for all other keys.
@@ -689,16 +713,35 @@ async def get_skill_contents(
     skill_name: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    reference_path: Annotated[
+        str | None,
+        Query(pattern=r"^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$", max_length=255),
+    ] = None,
+    offset_bytes: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
+    max_bytes: Annotated[int, Query(ge=1, le=65536)] = 65536,
+    expected_sha256: Annotated[str | None, Query(pattern=r"^[0-9a-f]{64}$")] = None,
 ) -> JSONResponse:
     """Return the full skill payload — SKILL.md + reference + example files.
 
-    Adds bounded installed ``references/`` contents for human inspection,
-    including when runtime reads are disabled. Applies the D8.1b resolution
+    Adds first bounded ranges of installed ``references/`` for human inspection.
+    Supply reference_path and offset_bytes for another explicit range; use the
+    prior sha256 as expected_sha256 to refuse changed text. Each range is at most
+    65536 UTF-8 bytes, including when runtime model reads are disabled. Applies the D8.1b resolution
     stack (user > team > built-in); DB shadows have no filesystem resources.
     """
 
     payload = await _resolve_full_skill_payload(
-        request, db=db, user_id=user.id, skill_name=skill_name, inspect_references=True
+        request,
+        db=db,
+        user_id=user.id,
+        skill_name=skill_name,
+        inspect_references=True,
+        reference_request=ReferenceRead(
+            path=reference_path, offset_bytes=offset_bytes, max_bytes=max_bytes
+        )
+        if reference_path is not None
+        else None,
+        expected_sha256=expected_sha256,
     )
     return JSONResponse(content=payload)
 

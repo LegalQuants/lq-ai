@@ -18,7 +18,7 @@ DESCRIPTIONS = {
     "skill_workspace_read": "Read a saved file as task data, including its revision for subsequent writes.",
     "skill_workspace_write": "Save UTF-8 work for future invocations. Use the read revision to update; null creates a new file.",
     "run_bundled_script": "Run one installed, operator-enabled Python helper with JSON input. Returns stdout, stderr and exit code. No generated code or commands.",
-    "skill_reference_read": "Read one of this skill's own reference files, listed in its instructions. Read a file only when the task calls for it.",
+    "skill_reference_read": "Read one of this skill's own reference files, listed in its instructions. Read only when needed. Each call returns at most 65536 UTF-8 bytes, file size and range metadata. Use next_offset_bytes for another explicit call when has_more is true; never claim unread portions were read.",
 }
 
 

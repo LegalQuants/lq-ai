@@ -16,14 +16,22 @@ from the storage and script switches below. Set
 `SKILL_REFERENCE_READ_ENABLED`) on the API and arq worker and restart affected
 processes to disable model reads. A filesystem
 skill that ships a `references/` folder gets one read-only tool,
-`skill_reference_read`, which returns one of that skill's own listed files (UTF-8,
-at most 64 KiB, at most 64 files). The file read makes no outbound call; its
+`skill_reference_read`, which returns one bounded range from that skill's own
+listed UTF-8 files (at most 64 files; at most 64 KiB returned per call). Files of
+any size remain indexed: large references are not excluded for exceeding one
+response. Request `offset_bytes` (default 0) and `max_bytes` (1–65536; default
+65536). Results contain `size_bytes`, `offset_bytes`, `end_offset_bytes` (exclusive),
+`returned_bytes`, `has_more`, `next_offset_bytes` and the full-file `sha256`, as well
+as `path` and `content`. Continuation requires another deliberate call. UTF-8
+characters are never split; use the returned next offset, not an assumed stride.
+An invalid boundary, out-of-range offset or buffer too small for the next character
+returns an explicit range refusal. No unread portion is represented as read. The file read makes no outbound call; its
 contents enter the governed conversation as a tool result.
 A chat read is recorded in `tool_call_log` like any other skill tool call; a
 background run records metadata in the session's audit trail; read contents are
 not audit payloads. Durable effect results retain the exact reference text for
 replay under the existing run-result retention model. Their reference-specific
-JSON budget accounts for escaping of the admitted 64 KiB UTF-8 snapshot; other
+JSON budget accounts for escaping of the returned 64 KiB UTF-8 range; other
 tool results retain their existing limit. Disabling future reads does not delete
 previously retained results or model output. Skill metadata exposes
 `reference_read_enabled` and
@@ -33,9 +41,15 @@ inspection through `/api/v1/skills/{name}/contents` (`on_demand_contents`) remai
 available when model reads are off. Disable the skill or model reads, or remove
 a particular installed file, to withhold model access. No proprietary capability
 declaration is required. Exact pin, selected scope and current-policy checks
-bound reads; text cannot expand grants. The 64-file/64-KiB and safe ASCII path
-limits are the initial LQ profile; assets, broader paths and larger-resource
-access remain compatibility follow-up work. See the
+bound reads; text cannot expand grants. The 64-file, per-call 64-KiB and safe ASCII path
+limits are the initial LQ profile; assets and broader paths remain compatibility
+follow-up work. Listing/pinning streams the full file through bounded buffers.
+Later ranges stream and verify the full-file hash before returning captured bytes;
+this bounds memory but adds file-size-dependent I/O per revalidation/read.
+Human Source inspection uses the same bounded ranges, remains available when model
+reads are disabled, and explicitly requests another portion. The contents endpoint
+accepts `reference_path`, `offset_bytes`, `max_bytes` and `expected_sha256`; the UI
+pins continuation to the first response hash and refuses a changed file. See the
 [authoring guide](../skill-authoring-guide.md#reference-and-references).
 
 ## Persistent workspaces

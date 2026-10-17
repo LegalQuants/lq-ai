@@ -242,7 +242,10 @@ async def _run_analysis_loop(
             skill_tool_schemas = {
                 "instructions": binding.instructions,
                 "helpers": [s.model_dump() for s in binding.capabilities.scripts],
-                "reference_files": list(binding.reference_paths),
+                "reference_files": [
+                    {"path": path, "size_bytes": snap.size_bytes}
+                    for path, snap in binding.reference_snapshots
+                ],
                 "tools": {
                     intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
                     for intent in optional

@@ -453,10 +453,10 @@ def _list_on_demand_files(skill_folder: Path, *, quiet: bool = False) -> list[Pa
 
     A file is listed only if ``skill_reference_read`` could return it: a
     regular file inside the skill folder, reached through no symlink and no
-    hidden name, with a path the tool's argument accepts, holding at most
-    64 KiB of UTF-8 text. At most :data:`MAX_REFERENCE_FILES` are listed.
+    hidden name, with a path the tool's argument accepts, holding valid
+    UTF-8 text. Large files stay discoverable and are read in bounded ranges. At most :data:`MAX_REFERENCE_FILES` are listed.
     Anything else is left out with a warning and the skill still loads: a
-    community skill with one oversized data file should not lose the rest.
+    community skill with one unsupported data file should not lose the rest.
     ``quiet`` drops the warning, for callers that re-read a skill already
     loaded (the pin check runs on every bind).
     """

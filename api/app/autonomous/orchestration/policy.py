@@ -39,6 +39,7 @@ from app.models.document import Document
 from app.research.registry import SOURCE_REGISTRY
 from app.schemas.autonomous import Phase
 from app.skills.loader import LoaderError, _load_one
+from app.skills.references import ReferenceSnapshot
 from app.skills.registry import MutableSkillRegistry, SkillRecord, SkillRegistry
 
 _RESEARCH_INTENTS = frozenset(
@@ -187,18 +188,23 @@ class PinnedSkill:
     pin: SkillPin
     instructions: str
     bundle_digest: str | None = None
-    reference_contents: tuple[tuple[str, str], ...] = field(default=(), repr=False, compare=False)
+    reference_snapshots: tuple[tuple[str, ReferenceSnapshot], ...] = field(
+        default=(), repr=False, compare=False
+    )
 
 
-def on_demand_index(paths: list[str]) -> str:
+def on_demand_index(files: list[tuple[str, int]]) -> str:
     """The prompt block that names a skill's on-demand reference files."""
     return (
         "## Reference files available on request\n\n"
         "These files belong to this skill and are not included here. When the task calls "
         "for one, read it with the `skill_reference_read` tool (in chat the tool's name "
         "carries a prefix and ends in `skill_reference_read`). If no such tool is offered, "
-        "say which file you could not read; do not guess its contents.\n\n"
-        + "\n".join(f"- {path}" for path in paths)
+        "say which file you could not read; do not guess its contents. "
+        "Each call returns at most 65536 UTF-8 bytes, file size, the returned byte range, "
+        "has_more and next_offset_bytes. Request the next offset explicitly only if needed; "
+        "never describe unread portions as read.\n\n"
+        + "\n".join(f"- {path} ({size} bytes)" for path, size in files)
     )
 
 
@@ -217,6 +223,7 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         if current != record:
             raise ValueError("registry and disk differ")
         files = []
+        snapshots = []
         for path in sorted(
             (
                 *record.reference_paths,
@@ -227,12 +234,14 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         ):
             if not path.resolve().is_relative_to(record.folder.resolve()):
                 raise ValueError("supporting file outside skill folder")
-            content = (
-                read_reference_snapshot(record.folder, path)
-                if path in record.on_demand_paths
-                else path.read_text("utf-8")
-            )
-            files.append((path.relative_to(record.folder).as_posix(), content))
+            relative = path.relative_to(record.folder).as_posix()
+            if path in record.on_demand_paths:
+                snapshot = read_reference_snapshot(record.folder, path)
+                snapshots.append((relative, snapshot))
+                # Pin all bytes without materializing a large resource in JSON.
+                files.append((relative, f"sha256:{snapshot.sha256};bytes:{snapshot.size_bytes}"))
+            else:
+                files.append((relative, path.read_text("utf-8")))
         artifact = (record.name, record.source, record.raw_yaml, record.body, files)
         digest = hashlib.sha256(
             json.dumps(artifact, ensure_ascii=False, separators=(",", ":")).encode()
@@ -250,7 +259,9 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
             continue
         instructions += f"\n\n## Supporting file: {relative_path}\n\n{content}"
     if on_demand:
-        instructions += "\n\n" + on_demand_index(sorted(on_demand))
+        instructions += "\n\n" + on_demand_index(
+            [(path, snap.size_bytes) for path, snap in snapshots]
+        )
     scripts = [(p, c) for p, c in files if p.startswith("scripts/")]
     bundle_digest = (
         hashlib.sha256(
@@ -263,7 +274,7 @@ def load_pinned_skill(record: SkillRecord) -> PinnedSkill:
         SkillPin(name=record.name, digest=digest),
         instructions,
         bundle_digest,
-        tuple((path, content) for path, content in files if path in on_demand),
+        tuple(snapshots),
     )
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ from app.errors import ToolNotGranted
 from app.models.team import TeamMember
 from app.models.user_skill import UserSkill
 from app.skills.capabilities import SkillCapabilities
+from app.skills.references import ReferenceSnapshot
 from app.skills.registry import MutableSkillRegistry, SkillRecord
 
 
@@ -28,8 +30,11 @@ class SkillBinding:
     reference_paths: tuple[str, ...] = ()
     """The skill's on-demand ``references/`` files, as paths relative to the
     skill folder. Their contents are covered by ``digest``."""
-    reference_contents: tuple[tuple[str, str], ...] = field(default=(), repr=False, compare=False)
+    reference_snapshots: tuple[tuple[str, ReferenceSnapshot], ...] = field(
+        default=(), repr=False, compare=False
+    )
     """Ephemeral bytes from the hashed artifact; never policy, audit, or trace data."""
+    reference_folder: Path | None = field(default=None, repr=False, compare=False)
     instructions: str = field(default="", repr=False, compare=False)
 
 
@@ -48,7 +53,8 @@ def bind_record(record: SkillRecord) -> SkillBinding:
         reference_paths=tuple(
             path.relative_to(record.folder).as_posix() for path in record.on_demand_paths
         ),
-        reference_contents=pinned.reference_contents,
+        reference_snapshots=pinned.reference_snapshots,
+        reference_folder=record.folder,
         instructions=record.body,
     )
 

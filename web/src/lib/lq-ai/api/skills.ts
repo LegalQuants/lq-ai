@@ -42,6 +42,22 @@ export async function getSkill(name: string): Promise<Skill> {
 }
 
 /** Human inspection includes references even when model reading is disabled. */
-export async function getSkillContents(name: string): Promise<Skill> {
-	return apiRequest<Skill>(`/skills/${encodeURIComponent(name)}/contents`);
+export interface ReferenceRange {
+	path: string;
+	offset_bytes: number;
+	max_bytes?: number;
+	expected_sha256?: string;
+}
+
+export async function getSkillContents(name: string, range?: ReferenceRange): Promise<Skill> {
+	const query = new URLSearchParams();
+	if (range) {
+		query.set('reference_path', range.path);
+		query.set('offset_bytes', String(range.offset_bytes));
+		query.set('max_bytes', String(range.max_bytes ?? 65536));
+		if (range.expected_sha256) query.set('expected_sha256', range.expected_sha256);
+	}
+	return apiRequest<Skill>(
+		`/skills/${encodeURIComponent(name)}/contents${range ? `?${query}` : ''}`
+	);
 }

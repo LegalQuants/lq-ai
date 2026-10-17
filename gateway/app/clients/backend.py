@@ -131,6 +131,7 @@ class SkillFileRef(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     path: str
+    size_bytes: int = 0
 
 
 class Skill(BaseModel):

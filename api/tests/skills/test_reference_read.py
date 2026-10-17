@@ -36,6 +36,7 @@ from app.skills.registry import MutableSkillRegistry
 from app.skills.tools import SkillTools, parse_skill_tool
 from tests.autonomous.test_agentic_loop import _ScriptedGateway
 from tests.chat.test_tool_loop import _resp_final, _resp_tool_call
+from tests.skills.reference_helpers import whole_page
 from tests.skills.test_capabilities import make_user
 
 GUIDE = "Guide text that is only ever read on request. " * 4
@@ -121,10 +122,9 @@ def test_reference_result_uses_the_pinned_snapshot(
     (skills_dir / "ref-demo" / "references" / "guide.md").write_text("unvalidated new bytes")
     # Execution separately revalidates the pin. The result must never perform
     # a second disk read after that check, even if the file changes meanwhile.
-    assert tools.read_reference(binding, ReferenceRead(path="references/guide.md")) == {
-        "path": "references/guide.md",
-        "content": GUIDE,
-    }
+    assert tools.read_reference(binding, ReferenceRead(path="references/guide.md")) == whole_page(
+        "references/guide.md", GUIDE
+    )
     assert GUIDE not in repr(binding)
 
 
@@ -173,7 +173,7 @@ async def test_tool_reads_one_listed_file_with_no_operator_setting(
         params={"path": "references/topic/detail.md"},
     )
     assert result.outcome == "success"
-    assert result.data == {"path": "references/topic/detail.md", "content": DETAIL}
+    assert result.data == whole_page("references/topic/detail.md", DETAIL)
 
     # A skill with no references/ folder gets no tool at all.
     plain = _binding(registry, "plain")
@@ -331,7 +331,7 @@ async def test_chat_offers_the_tool_and_returns_the_file(
             json={"content": "Use ref-demo", "skills": ["ref-demo"], "stream": False},
         )
     assert response.status_code == 200, response.text
-    assert observed == [{"path": "references/guide.md", "content": GUIDE}]
+    assert observed == [whole_page("references/guide.md", GUIDE)]
     # The schema names the files, so the model cannot ask for anything else.
     function = next(
         t["function"] for t in offered if t["function"]["name"].endswith("skill_reference_read")
@@ -372,8 +372,8 @@ async def test_disabled_reads_leave_human_inspection_and_metadata_available(
     contents = await client.get("/api/v1/skills/ref-demo/contents", headers=headers)
     assert contents.status_code == 200, contents.text
     assert contents.json()["on_demand_contents"] == [
-        {"path": "references/guide.md", "content": GUIDE},
-        {"path": "references/topic/detail.md", "content": DETAIL},
+        whole_page("references/guide.md", GUIDE),
+        whole_page("references/topic/detail.md", DETAIL),
     ]
     internal = await client.get(
         "/api/v1/internal/skills/ref-demo",
@@ -635,3 +635,87 @@ async def test_background_refuses_reference_changed_after_planner_binding(
         and (row.details or {}).get("outcome") == "success"
         for row in audit
     )
+
+
+async def test_human_pages_large_reference_while_model_reads_disabled(
+    chat_client: ChatClient,
+    skills_dir: Path,
+    registry: MutableSkillRegistry,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tests.skills.reference_helpers import saif_reference
+
+    client, _, headers = chat_client
+    path = skills_dir / "ref-demo/references/guide.md"
+    path.write_bytes(saif_reference())
+    registry.replace(load_registry(skills_dir))
+    monkeypatch.setattr(get_settings(), "skill_reference_read_enabled", False)
+    detail = await client.get("/api/v1/skills/ref-demo", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["on_demand_files"][0]["size_bytes"] == 208564
+    assert "on_demand_contents" not in detail.json()
+    first = await client.get("/api/v1/skills/ref-demo/contents", headers=headers)
+    assert first.status_code == 200, first.text
+    page = first.json()["on_demand_contents"][0]
+    assert page["returned_bytes"] == 65536 and page["has_more"]
+    params = {
+        "reference_path": page["path"],
+        "offset_bytes": page["next_offset_bytes"],
+        "expected_sha256": page["sha256"],
+    }
+    next_page = await client.get("/api/v1/skills/ref-demo/contents", params=params, headers=headers)
+    assert next_page.status_code == 200, next_page.text
+    assert next_page.json()["on_demand_contents"][0]["offset_bytes"] == 65536
+    path.write_bytes(saif_reference() + b" ")
+    stale = await client.get("/api/v1/skills/ref-demo/contents", params=params, headers=headers)
+    assert stale.status_code == 403
+
+
+async def test_chat_requires_explicit_additional_large_reference_calls(
+    chat_client: ChatClient,
+    skills_dir: Path,
+    registry: MutableSkillRegistry,
+) -> None:
+    from tests.skills.reference_helpers import saif_reference
+
+    client, _, headers = chat_client
+    (skills_dir / "ref-demo/references/guide.md").write_bytes(saif_reference())
+    registry.replace(load_registry(skills_dir))
+    created = await client.post("/api/v1/chats", headers=headers, json={"title": "Large reference"})
+    pages = []
+
+    async def complete(
+        _self: GatewayClient, request: ChatCompletionRequest, **kwargs: Any
+    ) -> ChatCompletionResponse:
+        messages = [message for message in request.messages if message.role == "tool"]
+        if messages:
+            assert messages[-1].content is not None
+            latest = json.loads(messages[-1].content)
+            pages.append(latest)
+            if not latest["has_more"]:
+                return _resp_final("All requested portions read")
+            offset = latest["next_offset_bytes"]
+        else:
+            offset = 0
+        assert request.tools is not None
+        tool = next(
+            t["function"]["name"]
+            for t in request.tools
+            if t["function"]["name"].endswith("skill_reference_read")
+        )
+        return _resp_tool_call(tool, {"path": "references/guide.md", "offset_bytes": offset})
+
+    with patch.object(GatewayClient, "chat_completion", new=complete):
+        response = await client.post(
+            f"/api/v1/chats/{created.json()['id']}/messages",
+            headers=headers,
+            json={
+                "content": "Read the complete reference",
+                "skills": ["ref-demo"],
+                "stream": False,
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert len(pages) == 4
+    assert b"".join(page["content"].encode() for page in pages) == saif_reference()
+    assert pages[-1]["returned_bytes"] == 11956 and not pages[-1]["has_more"]

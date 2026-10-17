@@ -352,9 +352,9 @@ def test_load_one_lists_references_for_on_demand_reading(tmp_path: Path) -> None
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("size, admitted", [(65536, True), (65537, False)])
+@pytest.mark.parametrize("size", [65536, 65537, 208564])
 def test_on_demand_listing_never_reads_a_whole_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, size: int, admitted: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, size: int
 ) -> None:
     """Indexing must enforce the byte limit before allocating file contents."""
     folder = tmp_path / "demo"
@@ -378,7 +378,7 @@ def test_on_demand_listing_never_reads_a_whole_file(
         original_read = stream.read
 
         def bounded_read(size: int = -1) -> bytes:
-            assert 0 <= size <= 65537, "reference read exceeded the byte limit plus sentinel"
+            assert 0 <= size <= 65536, "reference scan used an unbounded read"
             read_sizes.append(size)
             return original_read(size)
 
@@ -388,8 +388,9 @@ def test_on_demand_listing_never_reads_a_whole_file(
     monkeypatch.setattr(Path, "read_bytes", refuse_unbounded_read)
     monkeypatch.setattr(os, "fdopen", bounded_fdopen)
     record = _load_one(folder)
-    assert record.on_demand_paths == ((reference,) if admitted else ())
-    assert read_sizes == ([65537] if admitted else [])
+    assert record.on_demand_paths == (reference,)
+    assert sum(read_sizes) == size + 1
+    assert max(read_sizes) <= 65536
 
 
 @pytest.mark.unit
@@ -417,9 +418,9 @@ def test_on_demand_listing_leaves_out_what_cannot_be_read(
     with caplog.at_level("WARNING"):
         rec = _load_one(folder)
 
-    assert rec.on_demand_paths == (refs / "good.md",)
+    assert rec.on_demand_paths == (refs / "big.json", refs / "good.md")
     warned = " ".join(r.getMessage() for r in caplog.records)
-    for name in ("big.json", "binary.bin", "has space.md", "link.md"):
+    for name in ("binary.bin", "has space.md", "link.md"):
         assert name in warned
     assert ".hidden.md" not in warned
 

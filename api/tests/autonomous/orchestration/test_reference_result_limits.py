@@ -1,6 +1,7 @@
 """Receipt expansion never widens other tools or the admitted file profile."""
 
 import pytest
+from tests.skills.reference_helpers import whole_page
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.store import _effect_result_json
@@ -19,8 +20,10 @@ from app.errors import ValidationError
     ids=["over-file-limit", "nul", "outside-reference", "extra-data", "not-text"],
 )
 def test_reference_receipts_enforce_the_original_file_profile(data: dict[str, object]) -> None:
+    page = whole_page("references/guide.md", "text")
+    page.update(data)
     with pytest.raises(ValidationError, match="Effect result must be bounded JSON"):
-        _effect_result_json({"data": data, "outcome": "success"}, ToolIntent.skill_reference_read)
+        _effect_result_json({"data": page, "outcome": "success"}, ToolIntent.skill_reference_read)
 
 
 def test_reference_receipt_cannot_carry_unbounded_extra_metadata() -> None:

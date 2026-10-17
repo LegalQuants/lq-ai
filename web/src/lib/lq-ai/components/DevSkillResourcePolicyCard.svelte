@@ -46,7 +46,8 @@
 		<p><strong>Model reading: {policy.reference_read_enabled ? 'Enabled' : 'Disabled'}</strong></p>
 		<p>
 			Scope: {policy.scope}. Up to {policy.max_files} UTF-8 text files,
-			{(policy.max_file_bytes / 1024).toLocaleString()} KiB per file.
+			{(policy.max_read_bytes / 1024).toLocaleString()} KiB per read; larger files use multiple explicit
+			reads.
 		</p>
 		<p>
 			People can inspect eligible references in a skill's Source tab even when model reading is

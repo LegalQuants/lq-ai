@@ -388,8 +388,11 @@ def _render_skill(skill: Skill, *, inputs: dict[str, Any]) -> _AssembledSkill:
             "These files belong to this skill and are not included here. When the task calls "
             "for one, read it with the `skill_reference_read` tool (in chat the tool's name "
             "carries a prefix and ends in `skill_reference_read`). If no such tool is offered, "
-            "say which file you could not read; do not guess its contents.\n\n"
-            + "\n".join(f"- {ref.path}" for ref in skill.on_demand_files)
+            "say which file you could not read; do not guess its contents. "
+            "Each call returns at most 65536 UTF-8 bytes, file size, the returned byte range, "
+            "has_more and next_offset_bytes. Request the next offset explicitly only if needed; "
+            "never describe unread portions as read.\n\n"
+            + "\n".join(f"- {ref.path} ({ref.size_bytes} bytes)" for ref in skill.on_demand_files)
             + "\n"
         )
 

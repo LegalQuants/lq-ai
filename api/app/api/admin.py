@@ -559,7 +559,7 @@ class SkillResourcePolicy(BaseModel):
 
     reference_read_enabled: bool
     max_files: int
-    max_file_bytes: int
+    max_read_bytes: int
     scope: str
 
 
@@ -584,7 +584,7 @@ async def get_admin_config(
     payload["skill_resource_policy"] = {
         "reference_read_enabled": get_settings().skill_reference_read_enabled,
         "max_files": MAX_REFERENCE_FILES,
-        "max_file_bytes": MAX_FILE_BYTES,
+        "max_read_bytes": MAX_FILE_BYTES,
         "scope": "installed skill references/",
     }
     return payload

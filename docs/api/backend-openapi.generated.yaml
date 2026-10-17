@@ -5992,6 +5992,62 @@ components:
       - detail
       title: ReceiptEvent
       type: object
+    ReferenceReadResult:
+      additionalProperties: false
+      description: An exact UTF-8 byte range; more content requires another explicit
+        call.
+      properties:
+        content:
+          title: Content
+          type: string
+        end_offset_bytes:
+          minimum: 0.0
+          title: End Offset Bytes
+          type: integer
+        has_more:
+          title: Has More
+          type: boolean
+        next_offset_bytes:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Next Offset Bytes
+        offset_bytes:
+          minimum: 0.0
+          title: Offset Bytes
+          type: integer
+        path:
+          maxLength: 255
+          pattern: ^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$
+          title: Path
+          type: string
+        returned_bytes:
+          maximum: 65536.0
+          minimum: 0.0
+          title: Returned Bytes
+          type: integer
+        sha256:
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+          type: string
+        size_bytes:
+          maximum: 9.223372036854776e+18
+          minimum: 0.0
+          title: Size Bytes
+          type: integer
+      required:
+      - path
+      - content
+      - size_bytes
+      - offset_bytes
+      - end_offset_bytes
+      - returned_bytes
+      - has_more
+      - next_offset_bytes
+      - sha256
+      title: ReferenceReadResult
+      type: object
     RefreshRequest:
       description: '`/auth/refresh` body per backend-openapi.yaml.'
       properties:
@@ -7130,7 +7186,7 @@ components:
           type: string
         on_demand_contents:
           items:
-            $ref: '#/components/schemas/SkillFile'
+            $ref: '#/components/schemas/ReferenceReadResult'
           title: On Demand Contents
           type: array
         on_demand_files:
@@ -7213,11 +7269,11 @@ components:
     SkillResourcePolicy:
       description: Current API/worker host policy for installed skill reference reads.
       properties:
-        max_file_bytes:
-          title: Max File Bytes
-          type: integer
         max_files:
           title: Max Files
+          type: integer
+        max_read_bytes:
+          title: Max Read Bytes
           type: integer
         reference_read_enabled:
           title: Reference Read Enabled
@@ -7228,7 +7284,7 @@ components:
       required:
       - reference_read_enabled
       - max_files
-      - max_file_bytes
+      - max_read_bytes
       - scope
       title: SkillResourcePolicy
       type: object
@@ -17293,9 +17349,14 @@ paths:
         files.
 
 
-        Adds bounded installed ``references/`` contents for human inspection,
+        Adds first bounded ranges of installed ``references/`` for human inspection.
 
-        including when runtime reads are disabled. Applies the D8.1b resolution
+        Supply reference_path and offset_bytes for another explicit range; use the
+
+        prior sha256 as expected_sha256 to refuse changed text. Each range is at most
+
+        65536 UTF-8 bytes, including when runtime model reads are disabled. Applies
+        the D8.1b resolution
 
         stack (user > team > built-in); DB shadows have no filesystem resources.'
       operationId: get_skill_contents_api_v1_skills__skill_name__contents_get
@@ -17306,6 +17367,43 @@ paths:
         schema:
           title: Skill Name
           type: string
+      - in: query
+        name: reference_path
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 255
+            pattern: ^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$
+            type: string
+          - type: 'null'
+          title: Reference Path
+      - in: query
+        name: offset_bytes
+        required: false
+        schema:
+          default: 0
+          maximum: 9223372036854775807
+          minimum: 0
+          title: Offset Bytes
+          type: integer
+      - in: query
+        name: max_bytes
+        required: false
+        schema:
+          default: 65536
+          maximum: 65536
+          minimum: 1
+          title: Max Bytes
+          type: integer
+      - in: query
+        name: expected_sha256
+        required: false
+        schema:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          title: Expected Sha256
       responses:
         '200':
           content:
