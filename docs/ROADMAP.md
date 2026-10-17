@@ -51,6 +51,109 @@ Items that touch the Inference Gateway, authentication, audit logging, or crypto
 
 ---
 
+## Path to 1.0
+
+> **Canon:** [ADR 0029](adr/0029-definition-of-1.0.md) defines 1.0;
+> [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md) paces it. This section is a
+> navigation aid — where a row here disagrees with an ADR, the ADR wins.
+
+**What 1.0 is.** An operator-trust milestone with a short feature-completion list, not a feature
+milestone:
+
+> At 1.0, every surface an operator can reach is either complete or explicitly labeled
+> experimental, and every promise the documentation makes is either enforced in CI or verifiable
+> by the operator.
+
+**What 1.0 is not.** It is not dated. The 2026-09 member survey declined to set a date until the
+review-capacity constraint is addressed, so [ADR 0030](adr/0030-pacing-1.0-preconditions-and-named-trains.md)
+replaced the date with three measurable preconditions and a dated checkpoint at the first
+committee call of 2027. **Criteria govern the tag; preconditions govern the date.** On current
+arithmetic the earliest possible tag is May 2027 — an earliest, not a target.
+
+### The gate
+
+| Row | Gate |
+|---|---|
+| **F1** | Matter-intake UI for governed agentic matter sessions |
+| **F2** | Slack/Teams `/lq` + `/lq ask` flows (DE-288), verified live (DE-312) |
+| **F3** | Word add-in slice — skills on selection/document with tracked-changes redlines ([ADR 0032](adr/0032-word-add-in-1.0-slice.md)) |
+| **H1** | All seven open Medium findings of #288 closed |
+| **H2** | Every open Low/Info finding closed or risk-accepted in writing ([register](security/risk-acceptance-register.md)) |
+| **H3** | M4-D2 acceptance lap complete |
+| **D1** | Coverage gate enforced in CI |
+| **D2** | Cypress deterministic track runs on PRs touching `web/` |
+| **D3** | `docs/test-strategy.md` exists with the E2E coverage matrix |
+| **D4** | Acceptance tests run for the 10 starter skills against a real corpus (DE-051/DE-236) |
+| **P1** | Procurement-Readiness Pack (SIG Lite + CAIQ Lite + cover letter) |
+| **R1** | Desktop launcher defaults to a pinned image set |
+| **R2** | Docs reconciliation at tag time |
+| **R3** | Post-1.0 version semantics published |
+
+**Cut from the gate:** Contract Repository (PRD §3.16) — re-scoped to post-1.0 by ADR 0029
+decision 7 (survey: 0 keep · 6 cut · 3 blank).
+
+### The three preconditions for setting a date
+
+1. **Bus factor ≥ 2** — a second maintainer with merge *and* security-review authority, active
+   ≥ 1 quarter, measured as activity rather than team membership.
+2. **An attorney pool ≥ 2**, with at least one completed D4 acceptance batch behind it.
+3. **Median PR first-response < 7 days**, sustained for a quarter.
+
+[ADR 0034](adr/0034-review-capacity-and-reviewer-roles.md) is the machinery that makes these
+reachable — the trusted-reviewer rung, published promotion criteria, the attorney pool, and a
+review SLA that is measured rather than merely asserted. **Review help is the highest-value
+contribution to this project right now.**
+
+### The four trains
+
+Named milestones with target months, decoupled from version numbers — ADR 0025 computes
+`vX.Y.Z` from what lands on `main`, so a train promises a theme and a date, never a number.
+**Dates hold, content moves:** a train ships what is green on its date; what is not rolls forward
+visibly.
+
+| Train | Due | Theme | Carries |
+|---|---|---|---|
+| **Enforced** | 2026-10-31 | What the docs promise, CI enforces | D1, D2, D3, P1, F1, F2, R1; H1 fix shapes decided; first D4 batch; the ratification series on `main` |
+| **Honest Documents** | 2026-12-31 | Documents never fail silently | [ADR 0033](adr/0033-document-pipeline-honesty-and-ocr.md) — the honesty audit, OCR T1+T2 (DE-320/DE-387), the local embedding path (DE-355), chat attachments; remaining Mediums; the F3 lane decision |
+| *(checkpoint)* | first committee call of 2027 | Preconditions read against measured data | Met → the committee sets the date. Unmet → narrower scope or slower trains, decided publicly |
+| **First Run** | 2027-02-28 | The first run doesn't fight you | Lite mode (DE-398), the docs site, the F3 build if owned, desktop first-run, D4 batches 2–3, SSO/OIDC scoping (DE-400) |
+| **Candidate** | 2027-04-30 | The acceptance lap | H3, R2, the H2 register complete, D4 complete, every F row green or labeled experimental |
+
+**Capacity, honestly.** The kept gate is 90–145 person-days; the vote-sequenced additions add
+≈ 30–55 more; observed throughput is ≈ 16 person-days/month, maintainer-only. The trains hold
+their dates only with a second reviewer and one or two champion-carried lanes — which is precisely
+what the preconditions require and ADR 0034 recruits for. Absent that, trains ship thinner, on
+time, and say so.
+
+## After 1.0
+
+Ordering recorded by [ADR 0029](adr/0029-definition-of-1.0.md) from the member survey's post-1.0
+column, so that "post-1.0" is a queue rather than a wastebasket:
+
+| Votes | Item |
+|---|---|
+| 6 | Evaluation harness (DE-237) |
+| 6 | Per-framework compliance packs (SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, FedRAMP) |
+| 5 | DOCX tracked changes ([ADR 0017](adr/0017-docx-ingest-via-pandoc.md) governs; #272, #315) |
+| 5 | Email intake |
+| 5 | Principles-as-tests / review assistance (DE-401) |
+| 5 | Jurisdiction packs ([ADR 0024](adr/0024-jurisdiction-and-practice-area-expansion.md)) |
+| 5 | Practice-management connectors (#529) |
+| 4 | The full Word add-in surface (DE-287 beyond the F3 slice) |
+| 4 | Litigation carve-in |
+
+**Proposal-first, not scheduled:** Matter Memory (survey: 5 for 1.0, 2 post-1.0) goes to a
+mini-PRD in `docs/proposals/` before any ADR, because shipping it means amending
+[ADR 0013](adr/0013-autonomous-layer-design-influences.md) D5 — the accepted rule that the
+agent may *propose* promoting a precedent into a Project's context but never writes Project
+context directly. Five votes on an XL hypothesis mean "take this seriously," not "start coding."
+
+**Not on the roadmap:** Contract Repository (PRD §3.16) — post-1.0, no owner, not scheduled;
+headless/API-only support — acknowledged but not supported
+([ADR 0031](adr/0031-headless-api-only-use.md)), with two named revisit triggers.
+
+---
+
 ## 1. Active milestone work — fiduciary-grade milestone punch list + M4 close-out
 
 M4 (the Autonomous Layer), the legal-research + connectors (MCP) milestone that shipped after it, and the fiduciary-grade agentic legal work milestone that shipped after that — the Citation Ledger + fiduciary gate, governed agentic matter sessions, three free authority sources (GovInfo, SEC EDGAR, EUR-Lex), and the validity/treatment layer (ADR [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)) — have all shipped. See [HONEST-STATE.md §5.6](HONEST-STATE.md#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) for the shipped catalog and its honest caveats. What remains open: the fiduciary-grade milestone's own punch list (the EUR-Lex and chat/autonomous-parity DEs below, plus a dedicated matter-intake UI), the M4 acceptance lap, and the Contract Repository capability that lives alongside the Autonomous Layer in M4 scope.
@@ -63,7 +166,7 @@ M4 (the Autonomous Layer), the legal-research + connectors (MCP) milestone that 
 | 1.4 | DE-375 — EUR-Lex treaty/corrigendum CELEX support | [PRD §9 DE-375](PRD.md#de-375--eur-lex-treatycorrigendum-celex-support) | 🟡 Medium | S–M | Mid, Backend | PR2b rejects treaty/corrigendum CELEX ids (containing `/` or `()`) pre-egress because they don't fit the `authority_text_cache` key charset. Needs a reversible `external_ref` encoding or an alternate cache-key scheme. |
 | 1.5 | DE-376 — EUR-Lex human-readable subtitle + partial-payload adapter test | [PRD §9 DE-376](PRD.md#de-376--eur-lex-human-readable-subtitle--partial-payload-adapter-test) | 🟢 Low | S | Junior, Backend | Two cosmetic, non-blocking follow-ups from the PR2b whole-branch review: a friendlier `FetchedAuthority.subtitle` for EUR-Lex, and a unit test for the adapter's absent-`content_kind`/`url`/`title` payload fallback path. |
 | 1.6 | Matter-intake UI for governed agentic matter sessions | ADR [0020](adr/0020-governed-agentic-legal-matter-sessions.md); PRs #239/#240; HONEST-STATE §5.6 | 🟡 Medium | M | Mid, Frontend | The plain-language "describe your matter" entry point (governed plan → act → observe → replan loop, backend shipped) is a session-state seam today, not a purpose-built UI — it reuses the existing autonomous session UI (`web/src/routes/lq-ai/autonomous/`). No DE filed yet. |
-| 1.7 | **M4-D2 — Boundary-registers flip + docs finalization + fresh-install acceptance** | [M4 §M4-D2](M4-IMPLEMENTATION-PLAN.md) | 🟡 Medium | M | Mid, Backend + Docs | The acceptance lap that flips PRD §3.10 status to "Shipped (v0.4.0)" and runs a clean-stack walkthrough of every M4 surface. |
+| 1.7 | **M4-D2 — Boundary-registers flip + docs finalization + fresh-install acceptance** | [M4 §M4-D2](M4-IMPLEMENTATION-PLAN.md) | 🟡 Medium | M | Mid, Backend + Docs | **Shipped** — PRD §3.10 reads "M4 status: SHIPPED"; R4/R5/R6 verified in [`docs/security/boundary-registers.md`](security/boundary-registers.md) (citing `api/app/autonomous/guard.py`); [HONEST-STATE.md](HONEST-STATE.md) rewritten at M4 close with the fresh-install acceptance run passed. |
 | 1.8 | **Contract Repository — Auto-Relationship Detection (M4)** | [PRD §3.16](PRD.md#316-contract-repository--auto-relationship-detection-m4); HONEST-STATE §4 | 🔴 High | XL | Senior, Backend + AI/ML | Not yet started in source (no `contract_relationships` table). Pipeline produces a relationship graph (amendments, restatements, references, master/sub) over a KB; user-confirmable edges; operative-document-chain reasoning. Largest single capability still on the M4 plate. |
 | 1.9 | DE-293 — Autonomous-layer restraints (R4 economic, R5 temporal, R6 contextual) follow-through | [PRD §9 DE-293](PRD.md#de-293--autonomous-layer-restraints-r4-economic-r5-temporal-r6-contextual) | 🟡 Medium | M | Senior, Backend + Security | Chokepoint shipped; remaining work is the second-pass tuning + per-deployment policy surfaces. |
 | 1.10 | DE-294 — Cross-agent handoff validation for autonomous multi-agent flows | [PRD §9 DE-294](PRD.md#de-294--cross-agent-handoff-validation-for-autonomous-multi-agent-flows) | 🔴 High | L | Senior, Backend | Lands once the single-agent v1 (M4-1) is stable; foundation for M5+ multi-agent direction. |
@@ -71,7 +174,7 @@ M4 (the Autonomous Layer), the legal-research + connectors (MCP) milestone that 
 | 1.12 | DE-322 — Validate playbook/project FK ownership on schedule + watch create | [PRD §9 DE-322](PRD.md#de-322--validate-playbookproject-fk-ownership-on-schedule--watch-create-m4-b3b4-finding) | 🟢 Low | S | Junior, Backend | Authorization tightening at the create endpoints. **`project_id` ownership now validated at all five assignment sites (post-v0.4.0, #133, closing a pre-existing IDOR);** any remaining FK (e.g. playbook) ownership check is what's left. |
 | 1.13 | DE-323 — Surface autonomous context proposals on the Matter detail page | [PRD §9 DE-323](PRD.md#de-323--surface-autonomous-context-proposals-on-the-matter-detail-page-m4-c2-finding) | 🟡 Medium | M | Mid, Frontend | Deferred from M4-C2 dashboard; needs a small UI surface on `/lq-ai/matters/[id]`. |
 | 1.14 | DE-324 — Global-chrome notification bell for autonomous notifications | [PRD §9 DE-324](PRD.md#de-324--global-chrome-notification-bell-for-autonomous-notifications-m4-c2-finding) | 🟡 Medium | M | Mid, Frontend | Adds a top-chrome bell with the unread count from `/api/v1/notifications`. |
-| 1.15 | DE-333 — Dedupe correlated artifact storage-failure warn findings | [PRD §9 DE-333](PRD.md#de-333--dedupe-correlated-artifact-storage-failure-warn-findings) | 🟢 Low | S | Junior, Backend | Robustness follow-on to document-grade artifacts (#138): collapse correlated storage-failure warn findings so a single MinIO outage does not flood a session's findings. |
+| 1.15 | DE-333 — Dedupe correlated artifact storage-failure warn findings | [PRD §9 DE-333](PRD.md#de-333--dedupe-correlated-artifact-storage-failure-warn-findings) | 🟢 Low | S | Junior, Backend | Robustness follow-on to document-grade artifacts (#138): collapse correlated storage-failure warn findings so a single object-store outage does not flood a session's findings. |
 
 ---
 
@@ -140,9 +243,9 @@ The project commits to measurable rigor; today many of these are documented inte
 | 4.19 | DE-252 — Fuzz testing extended to document parsers and anonymization paths | [DE-252](PRD.md#de-252--fuzz-testing-extended-to-document-parsers-and-anonymization-paths) | 🟡 Medium | M | Mid, Backend + Security | Atheris / hypothesis fuzz on the highest-risk parsers. |
 | 4.20 | DE-251 — Chaos and fault injection for the gateway and document pipeline | [DE-251](PRD.md#de-251--chaos-and-fault-injection-for-the-gateway-and-document-pipeline) | 🔴 High | L | Senior, DevOps + Backend | Adds toxiproxy / chaos-mesh scenarios to CI. |
 | 4.21 | DE-250 — Performance regression with historical tracking | [DE-250](PRD.md#de-250--performance-regression-with-historical-tracking) | 🟡 Medium | M | Mid, DevOps + Backend | Per-PR benchmark with trend chart. |
-| 4.22 | DE-254 — Cypress shared helpers extracted to `support/` | [DE-254](PRD.md#de-254--cypress-shared-helpers-extracted-to-support) | 🟢 Low | S | Junior, Frontend | Refactor finding from M1 wave-D2. |
-| 4.23 | DE-255 — Add `responseTimeout: 90000` to `cypress.config.ts` | [DE-255](PRD.md#de-255--add-responsetimeout-90000-to-cypressconfigts) | 🟢 Low | S | Junior, Frontend | Single-line config change. |
-| 4.24 | DE-256 — KB attach interceptor added to `wave-m1-final-surfaces.cy.ts` Test 2 | [DE-256](PRD.md#de-256--kb-attach-interceptor-added-to-wave-m1-final-surfacescyts-test-2) | 🟢 Low | S | Junior, Frontend | Test reliability patch. |
+| 4.22 | DE-254 — Cypress shared helpers extracted to `support/` | [DE-254](PRD.md#de-254--cypress-shared-helpers-extracted-to-support) | 🟢 Low | S | Junior, Frontend | **Shipped** — helpers live in `web/cypress/support/lq-ai-helpers.ts` (file header documents DE-254); the three specs import from it. |
+| 4.23 | DE-255 — Add `responseTimeout: 90000` to `cypress.config.ts` | [DE-255](PRD.md#de-255--add-responsetimeout-90000-to-cypressconfigts) | 🟢 Low | S | Junior, Frontend | **Shipped** — `web/cypress.config.ts` sets `responseTimeout: 90000` with the inline rationale comment. |
+| 4.24 | DE-256 — KB attach interceptor added to `wave-m1-final-surfaces.cy.ts` Test 2 | [DE-256](PRD.md#de-256--kb-attach-interceptor-added-to-wave-m1-final-surfacescyts-test-2) | 🟢 Low | S | Junior, Frontend | **Shipped** — `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` intercepts the KB-attach POST (`kbAttach`) and asserts the 204 response. |
 
 ---
 
@@ -159,7 +262,7 @@ OTel SDK ships at M1; the deepening mini-PRD broke out the operator-facing gaps 
 | 5.5 | DE-303 — Browser RUM via OpenTelemetry SDK | [DE-303](PRD.md#de-303--browser-rum-via-opentelemetry-sdk-otel-deepening-de-e) | 🟡 Medium | M | Mid, Frontend | Real User Monitoring for the SvelteKit app. |
 | 5.6 | DE-314 — Tabular executions: skill linkage for the `tabular.skill_id` span attribute | [DE-314](PRD.md#de-314--tabular-executions-have-no-skill-linkage-for-the-tabularskill_id-span-attribute-otel-deepening) | 🟢 Low | S | Junior, Backend | Span-attribute fix. |
 | 5.7 | DE-315 — Streaming-rehydration per-chunk spans (anonymization) | [DE-315](PRD.md#de-315--streaming-rehydration-per-chunk-spans-otel-deepening-anonymization) | 🟢 Low | S | Junior, Gateway | Adds a child span per rehydrated chunk. |
-| 5.8 | DE-316 — Promote skill `author` to the `Skill` / `SkillSummary` wire shape | [DE-316](PRD.md#de-316--promote-skill-author-to-the-skill--skillsummary-wire-shape-otel-deepening-skill-spans) | 🟢 Low | S | Junior, Backend | Wire-shape addition. |
+| 5.8 | DE-316 — Promote skill `author` to the `Skill` / `SkillSummary` wire shape | [DE-316](PRD.md#de-316--promote-skill-author-to-the-skill--skillsummary-wire-shape-otel-deepening-skill-spans) | 🟢 Low | S | Junior, Backend | **Shipped** — PRD §9 marks it ✅ RESOLVED (M3-close): `author` on `SkillSummary`, mapped in `derive_summary()` (`api/app/skills/schema.py`), regression-tested. |
 | 5.9 | DE-317 — `inference.dispatch` span on the streaming path | [DE-317](PRD.md#de-317--inferencedispatch-span-on-the-streaming-path-otel-deepening) | 🟢 Low | S | Junior, Gateway | Adds a missing span. |
 | 5.10 | DE-318 — `playbook.position` child spans on the redline node | [DE-318](PRD.md#de-318--playbookposition-child-spans-on-the-redline-node-otel-deepening) | 🟢 Low | S | Junior, Backend | Adds a missing child span. |
 | 5.11 | DE-245 — Published SLOs / SLIs | [DE-245](PRD.md#de-245--published-service-level-objectives-and-indicators) | 🟡 Medium | M | Mid, DevOps | Lands once 5.3 (metrics path) is in place. |
@@ -224,11 +327,11 @@ Compliance Alignment Pack docs are stubs at v1 launch; per-framework alignment d
 | 8.2 | DE-035 — AWS Bedrock provider adapter (Anthropic on Bedrock) | [DE-035](PRD.md#de-035--aws-bedrock-provider-adapter-anthropic-on-bedrock) | 🟡 Medium | L | Mid, Gateway + AWS | Fully spec'd with Event Stream parser + SigV4 acceptance criteria. |
 | 8.3 | DE-278 — Azure OpenAI AD authentication (managed identity / service principal) | [DE-278](PRD.md#de-278--azure-openai-ad-authentication-managed-identity--service-principal) | 🟡 Medium | M | Mid, Gateway + Azure | Extends the M2-shipped Azure OpenAI adapter with AD auth. |
 | 8.4 | DE-030 — Helm chart for Kubernetes deployment (production-ready) | [DE-030](PRD.md#de-030--helm-chart-for-kubernetes-deployment) | 🟡 Medium | L | DevOps | Drafted chart exists; production-ready hardening + values matrix is the gap. |
-| 8.5 | DE-033 — Backup and restore tooling | [DE-033](PRD.md#de-033--backup-and-restore-tooling) | 🟡 Medium | M | DevOps | `pg_dump` + MinIO snapshot wrapper + restore drill script. |
+| 8.5 | DE-033 — Backup and restore tooling | [DE-033](PRD.md#de-033--backup-and-restore-tooling) | 🟡 Medium | M | DevOps | `pg_dump` + object-store snapshot wrapper + restore drill script; build on the first procedure in `docs/runbooks/minio-to-rustfs.md`. |
 | 8.6 | DE-248 — Disaster recovery test cadence | [DE-248](PRD.md#de-248--disaster-recovery-test-cadence) | 🟢 Low | S | DevOps + Docs | Cadence doc + test recipe. |
 | 8.7 | DE-249 — Runbooks for operational tasks | [DE-249](PRD.md#de-249--runbooks-for-operational-tasks) | 🟡 Medium | M | Docs + DevOps | Per-task runbooks in a new `docs/runbooks/`. |
-| 8.8 | DE-305 — Bridge env vars use `${VAR:?}` and break all Compose commands when unset | [DE-305](PRD.md#de-305--bridge-env-vars-use-var-and-break-all-compose-commands-when-unset-m3-e1-finding-f1) | 🟢 Low | S | DevOps | One-line Compose fix from M3 acceptance. |
-| 8.9 | DE-306 — Fresh-install host-port collision needs prominent quickstart callout | [DE-306](PRD.md#de-306--fresh-install-host-port-collision-needs-prominent-quickstart-callout-m3-e1-finding-f2) | 🟢 Low | S | Docs | Quickstart edit. |
+| 8.8 | DE-305 — Bridge env vars use `${VAR:?}` and break all Compose commands when unset | [DE-305](PRD.md#de-305--bridge-env-vars-use-var-and-break-all-compose-commands-when-unset-m3-e1-finding-f1) | 🟢 Low | S | DevOps | **Shipped** — `docker-compose.yml` bridge vars use `${VAR:-}`; bridge `Settings` validators + regression tests (`slack-bridge/tests/test_config.py`, `teams-bridge/tests/test_config.py`). PRD §9 marks it ✅ RESOLVED (2026-05-24, issue #92). |
+| 8.9 | DE-306 — Fresh-install host-port collision needs prominent quickstart callout | [DE-306](PRD.md#de-306--fresh-install-host-port-collision-needs-prominent-quickstart-callout-m3-e1-finding-f2) | 🟢 Low | S | Docs | **Shipped** — `docs/quickstart.md` carries the port-collision callout beside the `docker compose up` step plus an "address already in use" troubleshooting section with the `POSTGRES_HOST_PORT=15432` remap. |
 | 8.10 | DE-311 — Single source of truth for the application version | [DE-311](PRD.md#de-311--single-source-of-truth-for-the-application-version-m3-e1-finding-f3-follow-on) | 🟢 Low | S | Backend + DevOps | Consolidate version reads. |
 | 8.11 | DE-312 — Slack + Teams bridge OAuth end-to-end tunnel verification | [DE-312](PRD.md#de-312--slack--teams-bridge-oauth-end-to-end-tunnel-verification-m3-e1-finding) | 🟡 Medium | M | Backend + DevOps | Adds a recipe + smoke test for the public-tunnel OAuth dance. |
 | 8.12 | DE-319 — Migrate LangGraph 0.2 → 1.x | [DE-319](PRD.md#de-319--migrate-langgraph-02--1x-re-type-the-executors) | 🟡 Medium | M | Mid, Backend | Re-types the M3/M4 executors against LangGraph 1.x. |
@@ -275,29 +378,29 @@ Compliance Alignment Pack docs are stubs at v1 launch; per-framework alignment d
 
 | # | Item | Source | Complexity | Effort | Skill | Notes |
 |---|---|---|---|---|---|---|
-| 10.1 | DE-010 — Skill input form rendering for any skill | [DE-010](PRD.md#de-010--skill-input-form-rendering-for-any-skill) | 🟡 Medium | M | Frontend | Dynamic form generation from skill frontmatter. |
+| 10.1 | DE-010 — Skill input form rendering for any skill | [DE-010](PRD.md#de-010--skill-input-form-rendering-for-any-skill) | 🟡 Medium | M | Frontend | Dynamic form generation from skill frontmatter. Chat composer form implemented; Enhance Prompt review screen and a per-input file picker remain (see DE-010 status). |
 | 10.2 | DE-011 — Reasoning visibility configuration for Enhance Prompt | [DE-011](PRD.md#de-011--reasoning-visibility-configuration-for-enhance-prompt) | 🟢 Low | S | Frontend | Toggle + UI surface. |
 | 10.3 | DE-012 — Skill inspector side panel | [DE-012](PRD.md#de-012--skill-inspector-side-panel) | 🟡 Medium | M | Frontend | Side panel that surfaces the SKILL.md + references. |
 | 10.4 | DE-014 — Tone / Audience Settings on Skills | [DE-014](PRD.md#de-014--tone--audience-settings-on-skills) | 🟢 Low | S | Backend + Frontend | Per-skill tone defaults. |
 | 10.5 | DE-015 — Voice / Dictation Input | [DE-015](PRD.md#de-015--voice--dictation-input) | 🟡 Medium | L | Mid, Frontend | Web Speech API integration with privacy posture. |
-| 10.6 | DE-265 — In-app "unverified citation" badging until Citation Engine ships | [DE-265](PRD.md#de-265--in-app-unverified-citation-badging-until-citation-engine-ships) | 🟢 Low | S | Frontend | Closed by M2 if not already removed; verify status before claiming. |
-| 10.7 | DE-272 — Admin AliasForm: model dropdown autocomplete population | [DE-272](PRD.md#de-272--admin-aliasform-model-dropdown-autocomplete-population) | 🟢 Low | S | Junior, Frontend | One-prop wiring fix called out in HONEST-STATE §1. |
+| 10.6 | DE-265 — In-app "unverified citation" badging until Citation Engine ships | [DE-265](PRD.md#de-265--in-app-unverified-citation-badging-until-citation-engine-ships) | 🟢 Low | S | Frontend | **Shipped/closed by M2** — citation verification states are live end-to-end; unverified citations render greyed with an `[unverified]` marker (Citation Engine, PRD §3.3 "M2 status: SHIPPED"), superseding the interim badge. |
+| 10.7 | DE-272 — Admin AliasForm: model dropdown autocomplete population | [DE-272](PRD.md#de-272--admin-aliasform-model-dropdown-autocomplete-population) | 🟢 Low | S | Junior, Frontend | **Shipped** — `web/src/routes/lq-ai/admin/models/+page.svelte` builds `providerModels` from live model discovery and passes it to `AliasForm` (`<datalist>` autocomplete). |
 | 10.8 | DE-273 — Audit log API: server-side actor enrichment | [DE-273](PRD.md#de-273--audit-log-api-server-side-actor-enrichment) | 🟢 Low | S | Junior, Backend | Server-side enrichment fix. |
 | 10.9 | DE-275 — Embed M2 citations in chat-message envelope | [DE-275](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope) | 🟡 Medium | M | Backend + Frontend | Avoids the per-message follow-up `/citations` call. |
-| 10.10 | DE-276 — Ingest observability: surface silent embed/parse failures | [DE-276](PRD.md#de-276--ingest-observability-surface-silent-embedparse-failures) | 🟡 Medium | M | Mid, Backend | Pre-M3 hardening item per M3 Phase 0; verify status. |
-| 10.11 | DE-277 — Citation extractor: fallback to document scan on chunk-boundary miss | [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) | 🟡 Medium | M | Mid, Backend + AI/ML | Known M2 limitation; failing test is pinned and waiting for the fix. |
+| 10.10 | DE-276 — Ingest observability: surface silent embed/parse failures | [DE-276](PRD.md#de-276--ingest-observability-surface-silent-embedparse-failures) | 🟡 Medium | M | Mid, Backend | **Shipped** — `GET /api/v1/admin/ingest-health` (`api/app/api/admin.py`); PRD §9 marks it SHIPPED at M3-0.3. |
+| 10.11 | DE-277 — Citation extractor: fallback to document scan on chunk-boundary miss | [DE-277](PRD.md#de-277--citation-extractor-fallback-to-document-scan-on-chunk-boundary-miss) | 🟡 Medium | M | Mid, Backend + AI/ML | **Shipped** — full-document fallback in `api/app/citation/extraction.py` (M3-0.2) with `citation_chunk_mismatch` observability; the pinned test flipped (`api/tests/citation/test_chunk_boundary.py`). |
 | 10.12 | DE-279 — Case citation validation (Bluebook resolution via CourtListener) | [DE-279](PRD.md#de-279--case-citation-validation-bluebook-resolution-via-courtlistener) | 🔴 High | L | Senior, Backend + Legal-domain | New verification capability. |
 | 10.13 | DE-280 — Case-content accuracy (statement vs judicial opinion) | [DE-280](PRD.md#de-280--case-content-accuracy-statement-vs-judicial-opinion) | 🔴 High | L | Senior, AI/ML + Legal-domain | Companion to 10.12. |
 | 10.14 | DE-281 — Citation Engine operational-telemetry calibration | [DE-281](PRD.md#de-281--citation-engine-operational-telemetry-calibration-tolerant_match_threshold--aggregation_rule) | 🟡 Medium | M | Mid, AI/ML | Per-deployment tuning of the cascade thresholds. |
-| 10.15 | DE-283 — Fresh-install login UX: surface the bootstrap-password path on first 401 | [DE-283](PRD.md#de-283--fresh-install-login-ux-surface-the-bootstrap-password-path-on-first-401) | 🟢 Low | S | Junior, Frontend | M3 Phase 0 hardening item; verify status. |
+| 10.15 | DE-283 — Fresh-install login UX: surface the bootstrap-password path on first 401 | [DE-283](PRD.md#de-283--fresh-install-login-ux-surface-the-bootstrap-password-path-on-first-401) | 🟢 Low | S | Junior, Frontend | **Shipped** — `GET /api/v1/admin/bootstrap-status` (`api/app/api/bootstrap.py`) + login-screen hint on first 401 (`web/src/routes/lq-ai/login/+page.svelte`); PRD §9 marks it SHIPPED at M3-0.1. |
 | 10.16 | DE-257 — `/api/v1/audit-health` endpoint for AmbientFooter signal | [DE-257](PRD.md#de-257--apiv1audit-health-endpoint-for-ambientfooter-signal) | 🟢 Low | S | Junior, Backend | Endpoint + footer wiring. |
 | 10.17 | DE-258 — KB embedding-progress percentage aggregation | [DE-258](PRD.md#de-258--kb-embedding-progress-percentage-aggregation) | 🟢 Low | S | Junior, Backend | Aggregation endpoint. |
 | 10.18 | DE-259 — KB attached-matters reverse-lookup | [DE-259](PRD.md#de-259--kb-attached-matters-reverse-lookup) | 🟢 Low | S | Junior, Backend | Reverse-lookup endpoint. |
 | 10.19 | DE-260 — Receipts assistant-side skill event deduplication | [DE-260](PRD.md#de-260--receipts-assistant-side-skill-event-deduplication) | 🟢 Low | S | Junior, Backend | Dedup pass. |
-| 10.20 | DE-261 — `api/client.ts` `errorFor` swallows string-shaped FastAPI detail bodies | [DE-261](PRD.md#de-261--apiclientts-errorfor-swallows-string-shaped-fastapi-detail-bodies) | 🟢 Low | S | Junior, Frontend | Single-function fix. |
+| 10.20 | DE-261 — `api/client.ts` `errorFor` swallows string-shaped FastAPI detail bodies | [DE-261](PRD.md#de-261--apiclientts-errorfor-swallows-string-shaped-fastapi-detail-bodies) | 🟢 Low | S | Junior, Frontend | **Shipped** — `errorFor` surfaces string-shaped `detail` bodies; DE-261-named regression test in `web/src/lib/lq-ai/__tests__/api-client.test.ts`. |
 | 10.21 | DE-307 — `File` API schema exposes `page_count`/`character_count` that never populate | [DE-307](PRD.md#de-307--file-api-schema-exposes-page_countcharacter_count-that-never-populate-m3-e1-finding-f4) | 🟢 Low | S | Junior, Backend | Either populate or remove from schema. |
 | 10.22 | DE-329 — Self-service email editing on `PATCH /api/v1/users/me` | [DE-329](PRD.md#de-329--self-service-email-editing-on-patch-apiv1usersme-donna-profile-edit-finding) | 🟡 Medium | M | Mid, Backend | `PATCH /users/me` ships `display_name`-only (post-v0.4.0, #118); email editing was held back for its auth-adjacent concerns (uniqueness 409 without id-probing leak, re-verification, possible step-up). |
-| 10.23 | DE-332 — Text/markdown ingest-parser support (ingest pipeline is PDF-only today) | [DE-332](PRD.md#de-332--textmarkdown-ingest-parser-support-today-the-ingest-pipeline-is-pdf-only) | 🟡 Medium | M | Mid, Backend | Document-grade artifacts (#138) write markdown/plain KB documents, but the ingest pipeline still parses PDFs only; add an md/txt parser path. |
+| 10.23 | DE-332 — Text/markdown ingest-parser support (ingest pipeline is PDF-only today) | [DE-332](PRD.md#de-332--textmarkdown-ingest-parser-support-today-the-ingest-pipeline-is-pdf-only) | 🟡 Medium | M | Mid, Backend | **Shipped (post-v0.5.0)** — `parse_text` (`api/app/pipeline/parsers.py`) accepts `text/plain` + `text/markdown`; tests in `api/tests/test_pipeline_parsers_text.py` + `api/tests/test_pipeline_ingest.py`. DOCX remains roadmap. |
 
 ---
 
@@ -349,7 +452,7 @@ These appear in PRD §9 but the project does not currently plan to implement the
 
 1. Find an item that matches your skills and bandwidth using the labels above.
 2. Open a GitHub issue with the item ID (e.g., "DE-103" or "1.3 Contract Repository") as the title.
-3. Comment "I'd like to take this." A maintainer responds within ~7 days.
+3. Comment "I'd like to take this." A maintainer responds per the target in [Review timelines](../CONTRIBUTING.md#review-timelines).
 4. Follow the source mini-PRD (where one exists) or the PRD §9 entry for scope + acceptance criteria.
 5. Engineering process: [`CONTRIBUTING.md`](../CONTRIBUTING.md). Skill content: [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md) — the practicing-attorney attestation applies.
 

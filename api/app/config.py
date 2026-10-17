@@ -16,10 +16,15 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
+
+# Published development default for the JWT signing secret. Refused at startup
+# outside dev mode (see ``assert_production_secrets``) so a deployment can never
+# silently ship with a public signing key.
+DEV_JWT_SECRET = "dev-jwt-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -52,10 +57,10 @@ class Settings(BaseSettings):
         description="Redis URL used for sessions, queues, and rate limits.",
     )
 
-    # ----- MinIO / S3 -----
+    # ----- S3-compatible object storage -----
     s3_endpoint_url: str = Field(
         default="http://localhost:9000",
-        description="S3-compatible endpoint URL (MinIO in Compose; S3 in prod).",
+        description="S3-compatible endpoint URL (RustFS in Compose; operator-supplied S3 allowed).",
     )
     s3_access_key: str = Field(default="", description="S3 access key.")
     s3_secret_key: str = Field(default="", description="S3 secret key.")
@@ -144,6 +149,18 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
+    lq_ai_gateway_timeout_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        allow_inf_nan=False,
+        description=(
+            "HTTP timeout in seconds for backend to Inference Gateway calls "
+            "(ADR 0027). Must exceed the gateway's adapter timeouts "
+            "(600 seconds by default) so the gateway can report failures first. "
+            "Connection establishment is capped at 10 seconds. "
+            "Restart API and workers after changing this deployment setting."
+        ),
+    )
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the
@@ -155,13 +172,19 @@ class Settings(BaseSettings):
     # on long-context models can raise the budget; set it to 0 to disable
     # history replay entirely (revert to single-turn requests).
     lq_ai_chat_history_token_budget: int = Field(
-        default=6_000,
+        default=64_000,
         ge=0,
         description=(
             "Approximate token budget (~4 chars/token) for prior chat turns "
             "replayed to the model. 0 disables multi-turn history."
         ),
     )
+    # Raised from 6,000 (issue #503): at 6k a ~47,000-token case file supplied
+    # in turn 1 was silently gone by turn 2, on models whose context windows
+    # are 200k-1M, and nothing in the response said trimming had occurred.
+    # This raises a ceiling; the category fix — not counting injected
+    # attached-document blocks (``_format_attached_files_block``) against the
+    # *chat-history* budget at all — is DE-391.
     lq_ai_chat_history_max_messages: int = Field(
         default=20,
         ge=0,
@@ -171,9 +194,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ----- Matter access control (migration 0067) -----
+    lq_ai_matter_default_share_scope: str = Field(
+        default="personal",
+        pattern="^(personal|members|org)$",
+        description=(
+            "Ambient grant applied to a newly created matter when the caller "
+            "does not set one. 'personal' (the default) is fail-restrictive: "
+            "a new matter reaches only its owner until someone is added. "
+            "'org' gives every non-blocked user in the deployment READ on new "
+            "matters, which suits a small firm where ambient visibility is the "
+            "working assumption and an ethical screen is the exception. It "
+            "never widens WRITE, and a 'blocked' membership row overrides it. "
+            "Sandbox matters ignore this and stay 'personal' (DB CHECK)."
+        ),
+    )
+
     # ----- JWT (per ADR 0002 — backend owns auth) -----
     jwt_secret: str = Field(
-        default="dev-jwt-secret-change-me",
+        default=DEV_JWT_SECRET,
         description="Signing secret for JWT access and refresh tokens.",
     )
     jwt_access_token_ttl_seconds: int = Field(
@@ -228,18 +267,105 @@ class Settings(BaseSettings):
 
     # Default model the analysis node passes to the gateway when neither
     # the spawning trigger (watch/schedule ``params["model"]``) nor the
-    # target skill/playbook pinned one. Mirrors the gateway.yaml deployment
-    # default. Operators may override via the env var; the value must be a
-    # model identifier the gateway recognises in its routing table.
+    # target skill/playbook pinned one. Defaults to the ``smart`` alias —
+    # the same alias the playbook and tabular executors use — so the
+    # fallback follows the operator's routing table instead of pinning one
+    # provider-native model id (a deployment that does not route a pinned
+    # model sees every autonomous analysis rejected at the gateway).
+    # Operators may override via the env var; the value must be a model id
+    # or alias the gateway recognises in its routing table.
     autonomous_default_model: str = Field(
-        default="claude-opus-4-7",
+        default="smart",
         description=(
             "Fallback chat-completion model used by the autonomous "
             "analysis node when ``params['model']`` is not set on the "
-            "session. Must be a model id the gateway can route."
+            "session. Must be a model id or alias the gateway can route."
         ),
         validation_alias=AliasChoices("LQ_AI_AUTONOMOUS_DEFAULT_MODEL"),
     )
+
+    orchestration_chat_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_ORCHESTRATION_CHAT_ENABLED"
+    )
+    orchestration_chat_project_id: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROJECT_ID"
+    )
+    orchestration_chat_provider: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_PROVIDER"
+    )
+    orchestration_chat_model: str = Field(
+        default="", validation_alias="LQ_AI_ORCHESTRATION_CHAT_MODEL"
+    )
+    orchestration_chat_budget_usd: Decimal = Field(
+        default=Decimal("2.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_ORCHESTRATION_CHAT_BUDGET_USD",
+    )
+    orchestration_chat_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER"
+    )
+    orchestration_chat_timeout_seconds: int = Field(
+        default=120, ge=1, le=900, validation_alias="LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS"
+    )
+
+    # ADR 0038 D1, D3 — New harness, the run profile the chat composer offers
+    # as an experimental model. It has its own switch and its own pinned
+    # route: enabling the fictional profile above never enables this one, and
+    # nothing is inherited from it.
+    new_harness_enabled: bool = Field(default=False, validation_alias="LQ_AI_NEW_HARNESS_ENABLED")
+    new_harness_provider: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_PROVIDER")
+    new_harness_model: str = Field(default="", validation_alias="LQ_AI_NEW_HARNESS_MODEL")
+    new_harness_budget_usd: Decimal = Field(
+        default=Decimal("5.0000"),
+        gt=0,
+        max_digits=10,
+        decimal_places=4,
+        validation_alias="LQ_AI_NEW_HARNESS_BUDGET_USD",
+    )
+    new_harness_minimum_tier: int = Field(
+        default=1, ge=1, le=5, validation_alias="LQ_AI_NEW_HARNESS_MINIMUM_TIER"
+    )
+    new_harness_timeout_seconds: int = Field(
+        default=300,
+        ge=1,
+        le=900,
+        validation_alias="LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS",
+    )
+    new_harness_reasoning_effort: Literal["", "none", "minimal", "low", "medium", "high"] = Field(
+        default="",
+        validation_alias="LQ_AI_NEW_HARNESS_REASONING_EFFORT",
+        description=(
+            "How much hidden reasoning a New harness call asks the model for. The "
+            "gateway maps it to Ollama's think, sends it as it is to OpenAI and Azure "
+            "OpenAI, and sends nothing for it to Anthropic. Hidden reasoning counts "
+            "against the output limit. Empty, the default, sends nothing and leaves the "
+            "model's own default. What a level does depends on the model: some treat "
+            "every level as on, and a model that does not take the setting may refuse "
+            "every call. Try a value against the pinned model before relying on it."
+        ),
+    )
+
+    orchestration_deployment_children: int | None = Field(
+        default=None,
+        ge=1,
+        le=32,
+        validation_alias="LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN",
+        description="Explicit shared child capacity. Required before enabling any run profile.",
+    )
+
+    @property
+    def orchestration_enabled(self) -> bool:
+        """True when the operator has switched on at least one run profile."""
+        return self.orchestration_chat_enabled or self.new_harness_enabled
+
+    @field_validator("orchestration_deployment_children", mode="before")
+    @classmethod
+    def empty_orchestration_capacity(cls, value: object) -> object:
+        # Compose forwards an unset optional setting as an empty string.
+        # It remains unconfigured; enabling without a limit still refuses.
+        return None if value == "" else value
 
     # M-Sec.1 — MFA-mandatory deployment flag per PRD §5.1. When True,
     # the backend treats any authenticated user without MFA enrolled
@@ -391,6 +517,52 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LQ_AI_CHAT_TOOL_CALL_CAP", "CHAT_TOOL_CALL_CAP"),
     )
 
+    # ----- Tool-egress ceiling (issue #593) -----
+    # Operator-wide default ceiling for governed tool egress, tiers 1
+    # (most private) to 5 (least private). Unset (None) means no operator
+    # ceiling — existing deployments keep today's unconstrained behavior
+    # until an operator opts in. A Project-level max_egress_tier can only
+    # tighten this default, never loosen it; the effective ceiling is
+    # min() over the values that are set (see
+    # app.tools.governance.resolve_tool_egress_ceiling).
+    tool_max_egress_tier: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description=(
+            "Operator default ceiling for tool egress tiers (1-5). Unset "
+            "disables the operator ceiling. Operator-overridable via "
+            "LQ_AI_TOOL_MAX_EGRESS_TIER."
+        ),
+        validation_alias=AliasChoices("LQ_AI_TOOL_MAX_EGRESS_TIER", "TOOL_MAX_EGRESS_TIER"),
+    )
+
+    @field_validator("tool_max_egress_tier", mode="before")
+    @classmethod
+    def empty_tool_egress_ceiling(cls, value: object) -> object:
+        # Compose forwards an unset optional value as an empty string.
+        # Only that blank means unset; invalid nonblank values still fail.
+        return None if value == "" else value
+
+    # Optional skill data/tools. Bundled execution is confined to a separately
+    # configured local broker; no command or host-process fallback exists.
+    skill_reference_read_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "LQ_AI_SKILL_REFERENCE_READ_ENABLED", "SKILL_REFERENCE_READ_ENABLED"
+        ),
+        description="Allow activated skills to read installed references/. Human inspection remains available.",
+    )
+    skill_workspaces_enabled: bool = Field(
+        default=False, validation_alias="LQ_AI_SKILL_WORKSPACES_ENABLED"
+    )
+    skill_script_runner_url: str | None = Field(
+        default=None, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_URL"
+    )
+    skill_script_runner_token: str = Field(
+        default="", repr=False, validation_alias="LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN"
+    )
+
     # ----- Operational -----
     log_level: LogLevel = Field(default="info", description="Log level for the api/ service.")
     lq_ai_dev_mode: bool = Field(
@@ -470,6 +642,27 @@ def get_settings() -> Settings:
     monkeypatching environment variables.
     """
     return Settings()
+
+
+def assert_production_secrets(settings: Settings) -> None:
+    """Fail closed at startup if a known development default is used in prod.
+
+    Called from the app lifespan startup gate (``app.main.lifespan``), NOT as a
+    Settings validator — construction with the published defaults must stay
+    valid so ``test_config`` and any Settings() in tests keep working. The
+    guard fires only when the process actually starts serving.
+
+    ``jwt_secret`` signs and verifies every access/MFA token; shipping the
+    published default (``DEV_JWT_SECRET``) lets an attacker forge a token for
+    any user. Refuse to boot unless the operator sets a real secret, or opts
+    into ``LQ_AI_DEV_MODE`` for local development.
+    """
+    if settings.jwt_secret == DEV_JWT_SECRET and not settings.lq_ai_dev_mode:
+        raise RuntimeError(
+            "Refusing to start: JWT_SECRET is the published development default "
+            f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
+            "set LQ_AI_DEV_MODE=true for local development."
+        )
 
 
 def is_allowed_return_url(url: str, settings: Settings) -> bool:

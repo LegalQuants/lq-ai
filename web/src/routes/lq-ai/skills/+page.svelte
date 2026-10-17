@@ -98,6 +98,7 @@
 			</p>
 		</div>
 		<div class="flex gap-2">
+			<a href="/lq-ai/skills/workspaces" class="lq-btn-secondary text-xs">Saved work</a>
 			<a
 				href="/lq-ai"
 				class="lq-btn-secondary text-xs"

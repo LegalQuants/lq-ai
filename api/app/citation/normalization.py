@@ -30,6 +30,13 @@ The function has two layers:
   * ``l`` ↔ ``1`` substitutes ``l`` → ``1`` only when adjacent to a
     digit (same pattern; ``liability`` stays).
 
+  The digit-adjacency rules (``O``/``0`` and ``l``/``1``) are applied in
+  a fixed-point loop: each iteration can expose a new adjacency created
+  by the previous substitution (e.g. ``Oll5`` → ``O115`` → ``0115``).
+  The loop terminates when a full pass produces no change, guaranteeing
+  convergence in O(k) passes where k is the length of the longest
+  chain of adjacent OCR-confused characters.
+
   We intentionally only canonicalise in one direction per pair —
   the chunk content and the model's quote get the same normalization
   applied, so collapsing variants down to the same target makes a
@@ -135,7 +142,17 @@ def normalize(text: str, *, was_ocrd: bool = False) -> str:
 
     if was_ocrd:
         out = _OCR_RN_RE.sub("m", out)
-        out = _OCR_O_RE.sub("0", out)
-        out = _OCR_L_RE.sub("1", out)
+
+        # Iterate the digit-adjacency rules to a fixed point.
+        # A single pass is not sufficient when OCR confusions are chained:
+        # e.g. "Oll5" — substituting l→1 first creates a new digit
+        # neighbour for the leading O that was not yet a digit.
+        # Each productive iteration strictly reduces the count of
+        # substitutable characters, so the loop always terminates.
+        previous = ""
+        while out != previous:
+            previous = out
+            out = _OCR_O_RE.sub("0", out)
+            out = _OCR_L_RE.sub("1", out)
 
     return out

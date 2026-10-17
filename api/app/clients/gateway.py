@@ -92,10 +92,13 @@ REQUEST_ID_HEADER = "X-Request-Id"
 TIER_RESPONSE_HEADER = "X-LQ-AI-Routed-Inference-Tier"
 """Response header set by the gateway (B4) carrying the routed Inference Tier."""
 
-DEFAULT_TIMEOUT_SECONDS = 60.0
-"""Default per-request timeout. Streaming overrides this (the stream is
-expected to take longer than a single API call). Health check overrides
-to a tight value separately."""
+DEFAULT_TIMEOUT_SECONDS = 900.0
+"""Default HTTP timeout for direct construction, per ADR 0027.
+
+The process-global factory reads ``LQ_AI_GATEWAY_TIMEOUT_SECONDS``.
+Streaming inherits the same timeout; connection establishment is capped
+at 10 seconds. Health and configuration probes retain their short overrides.
+"""
 
 
 def _structured_log_extra(**fields: Any) -> dict[str, Any]:
@@ -151,7 +154,7 @@ class GatewayClient:
         self._timeout = timeout
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
-            timeout=timeout,
+            timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
             headers={GATEWAY_KEY_HEADER: self._gateway_key} if self._gateway_key else {},
         )
 
@@ -389,6 +392,7 @@ class GatewayClient:
         request: ChatCompletionRequest,
         *,
         request_id: str | None = None,
+        configuration_revision: str | None = None,
     ) -> ChatCompletionResponse:
         """POST a non-streaming chat-completion to the gateway.
 
@@ -407,6 +411,8 @@ class GatewayClient:
 
         body = request.model_dump(mode="json", exclude_none=True)
         headers = self._build_headers(request_id=request_id)
+        if configuration_revision is not None:
+            headers["X-LQ-AI-Config-Revision"] = configuration_revision
 
         try:
             response = await self._client.post(
@@ -448,6 +454,14 @@ class GatewayClient:
                 body_bytes=response.content,
                 op="chat_completion",
                 request_id=request_id,
+            )
+
+        if (
+            configuration_revision is not None
+            and response.headers.get("X-LQ-AI-Config-Revision") != configuration_revision
+        ):
+            raise GatewayInvalidResponse(
+                "Gateway did not acknowledge the bound configuration revision"
             )
 
         try:
@@ -693,6 +707,8 @@ class GatewayClient:
         args: dict[str, Any],
         *,
         max_allowed_tier: int | None = None,
+        require_anonymization: bool | None = None,
+        configuration_revision: str | None = None,
         user_token: str | None = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
@@ -712,6 +728,10 @@ class GatewayClient:
             # logs and never written to tool_egress_log).
             headers["X-LQ-AI-User-Token"] = user_token
         body: dict[str, Any] = {"args": args}
+        if configuration_revision is not None:
+            headers["X-LQ-AI-Config-Revision"] = configuration_revision
+        if require_anonymization is not None:
+            body["require_anonymization"] = require_anonymization
         if max_allowed_tier is not None:
             body["max_allowed_tier"] = max_allowed_tier
         op = f"call_tool:{provider}/{tool}"
@@ -738,6 +758,13 @@ class GatewayClient:
             )
         try:
             payload: dict[str, Any] = response.json()
+            if (
+                configuration_revision is not None
+                and response.headers.get("X-LQ-AI-Config-Revision") != configuration_revision
+            ):
+                raise GatewayInvalidResponse(
+                    "Gateway did not acknowledge the bound configuration revision"
+                )
             return payload
         except json.JSONDecodeError as exc:
             raise GatewayInvalidResponse(
@@ -1568,6 +1595,7 @@ def get_gateway_client() -> GatewayClient:
         _client = GatewayClient(
             base_url=settings.lq_ai_gateway_url,
             gateway_key=settings.lq_ai_gateway_key,
+            timeout=settings.lq_ai_gateway_timeout_seconds,
         )
     return _client
 

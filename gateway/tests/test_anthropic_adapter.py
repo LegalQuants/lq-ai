@@ -28,6 +28,7 @@ import httpx
 import pytest
 import respx
 
+from app.config import ProviderConfig
 from app.providers import (
     AnthropicAdapter,
     ChatCompletionChunk,
@@ -37,10 +38,12 @@ from app.providers import (
     ProviderAuthError,
     ProviderHTTPError,
     ProviderNetworkError,
+    ProviderTimeoutError,
     ProviderUnsupportedError,
 )
 from app.providers.anthropic import (
     DEFAULT_MAX_TOKENS,
+    DEFAULT_TIMEOUT_SECONDS,
     _to_anthropic_request,
 )
 
@@ -440,6 +443,62 @@ async def test_network_error_raises_provider_network_error() -> None:
 
 
 @pytest.mark.unit
+def test_default_timeout_accommodates_long_generations() -> None:
+    """The default per-request timeout is 600s: frontier drafting
+    responses of 4-16K output tokens routinely exceed 60s of generation
+    time (#318), and a measured document-production turn took 370s
+    (#503). A client-side timeout mid-generation surfaced as a provider
+    outage. Per-provider ``timeout_s`` still overrides."""
+
+    assert DEFAULT_TIMEOUT_SECONDS == 600.0
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_client_timeout_raises_provider_timeout_error() -> None:
+    """A client-side timeout raises :class:`ProviderTimeoutError` — a
+    :class:`ProviderNetworkError` subclass (wire code unchanged) that the
+    routing log labels distinctly from an upstream 5xx outage."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=httpx.ReadTimeout("read timed out")
+    )
+    adapter = _make_adapter()
+    try:
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    exc = excinfo.value
+    # Wire contract unchanged: same code (and 503 mapping) as any network error.
+    assert isinstance(exc, ProviderNetworkError)
+    assert exc.code == "provider_unavailable"
+    # But the message and details say "we gave up", not "Anthropic is down".
+    assert "client-side timeout" in exc.message
+    assert exc.details["timeout_s"] == DEFAULT_TIMEOUT_SECONDS
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_client_timeout_raises_provider_timeout_error() -> None:
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=httpx.ReadTimeout("read timed out")
+    )
+    adapter = _make_adapter()
+    try:
+        stream = await adapter.chat_completion(
+            _basic_request(), model="claude-sonnet-4-6", stream=True
+        )
+        assert not isinstance(stream, ChatCompletionResponse)
+        with pytest.raises(ProviderTimeoutError) as excinfo:
+            async for _chunk in stream:
+                pass
+    finally:
+        await adapter.aclose()
+    assert "client-side timeout" in excinfo.value.message
+
+
+@pytest.mark.unit
 async def test_embeddings_raises_unsupported() -> None:
     """Anthropic has no embeddings endpoint; the adapter says so explicitly."""
 
@@ -562,6 +621,107 @@ def test_from_config_succeeds_with_env_set() -> None:
     )
     adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
     assert adapter.name == "anthropic-test"
+
+
+# --- #18: per-provider default_max_tokens -------------------------------------
+
+
+def _anthropic_provider_config(**extra: object) -> ProviderConfig:
+    """Build a minimal anthropic ProviderConfig, merging ``extra`` fields."""
+
+    payload: dict[str, object] = {
+        "name": "anthropic-test",
+        "type": "anthropic",
+        "base_url": ANTHROPIC_BASE,
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "tier": 4,
+    }
+    payload.update(extra)
+    return ProviderConfig.model_validate(payload)
+
+
+def _minimal_anthropic_response() -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "id": "msg_01ABC",
+            "model": "claude-sonnet-4-6",
+            "content": [{"type": "text", "text": "Hello there!"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 12, "output_tokens": 5},
+        },
+    )
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_default_max_tokens_from_provider_config_is_honored() -> None:
+    """A provider entry with ``default_max_tokens`` overrides the module
+    constant when the caller omits ``max_tokens`` — and an explicit
+    request value still wins over the configured default."""
+
+    provider = _anthropic_provider_config(default_max_tokens=8192)
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    route = respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        side_effect=lambda request: _minimal_anthropic_response()
+    )
+    try:
+        await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+        sent = json.loads(route.calls[-1].request.content)
+        assert sent["max_tokens"] == 8192
+
+        await adapter.chat_completion(
+            _basic_request(max_tokens=256), model="claude-sonnet-4-6", stream=False
+        )
+        sent = json.loads(route.calls[-1].request.content)
+        assert sent["max_tokens"] == 256
+    finally:
+        await adapter.aclose()
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_default_max_tokens_absent_falls_back_to_module_constant() -> None:
+    """Without ``default_max_tokens`` on the provider entry, the adapter
+    sends :data:`DEFAULT_MAX_TOKENS` (16384 — ADR 0027 D1)."""
+
+    provider = _anthropic_provider_config()
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    route = respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=_minimal_anthropic_response()
+    )
+    try:
+        await adapter.chat_completion(_basic_request(), model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    sent = json.loads(route.calls[-1].request.content)
+    assert sent["max_tokens"] == DEFAULT_MAX_TOKENS == 16384
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad", ["lots", 0, -5])
+def test_default_max_tokens_rejects_malformed_values(bad: object) -> None:
+    """A ``default_max_tokens`` that is not a positive integer is a config
+    error surfaced at startup (the same ValueError channel as a missing
+    key), never silently replaced by the module constant."""
+
+    provider = _anthropic_provider_config(default_max_tokens=bad)
+    with pytest.raises(ValueError, match="default_max_tokens"):
+        AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+
+
+@pytest.mark.unit
+def test_default_max_tokens_is_not_clamped_to_the_unenforced_ceiling() -> None:
+    """``request_validation.max_max_tokens`` is enforced on no request path
+    (DE-392), so the injected default is not clamped against it: an
+    operator's explicit ``default_max_tokens`` is honoured as written."""
+
+    provider = _anthropic_provider_config(default_max_tokens=200_000)
+    adapter = AnthropicAdapter.from_config(provider, env={"ANTHROPIC_API_KEY": "sk-ant-x"})
+    try:
+        assert adapter._default_max_tokens == 200_000
+    finally:
+        pass
 
 
 # --- PR5b: tools / tool_choice forwarding + tool_use bridging ----------------
@@ -745,3 +905,254 @@ async def test_anthropic_round_trips_assistant_tool_use_for_follow_up() -> None:
     assert resp2.choices[0].finish_reason == "stop"
     assert resp2.choices[0].message.content == "Confirmed."
     assert call_count == 2
+
+
+# --- DE-358 item 4: granular tool_choice mode coverage ------------------------
+
+
+def _plain_text_response(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "id": "msg_tc",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": {"input_tokens": 5, "output_tokens": 2},
+        },
+    )
+
+
+def _tools_request(tool_choice: object) -> ChatCompletionRequest:
+    return ChatCompletionRequest(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "verify_citations",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        tool_choice=tool_choice,
+    )
+
+
+async def _capture_request_body(req: ChatCompletionRequest) -> dict:
+    captured: dict[str, object] = {}
+
+    def _capture(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return _plain_text_response(request)
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(side_effect=_capture)
+    adapter = _make_adapter()
+    try:
+        await adapter.chat_completion(req, model="claude-sonnet-4-6", stream=False)
+    finally:
+        await adapter.aclose()
+    body = captured["body"]
+    assert isinstance(body, dict)
+    return body
+
+
+# --- DE-358 item 1: streaming tool_use accumulation ---------------------------
+
+
+SSE_TOOL_USE_FIXTURE_BODY = (
+    "event: message_start\n"
+    'data: {"type":"message_start","message":{"id":"msg_tool_stream","model":"claude-sonnet-4-6",'
+    '"usage":{"input_tokens":11,"output_tokens":0}}}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Checking."}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":0}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":1,"content_block":'
+    '{"type":"tool_use","id":"toolu_s1","name":"verify_citations","input":{}}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":1,"delta":'
+    '{"type":"input_json_delta","partial_json":"{\\"text\\": \\"Brown"}}\n\n'
+    "event: content_block_delta\n"
+    'data: {"type":"content_block_delta","index":1,"delta":'
+    '{"type":"input_json_delta","partial_json":" v. Board\\"}"}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":1}\n\n'
+    "event: message_delta\n"
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}\n\n'
+    "event: message_stop\n"
+    'data: {"type":"message_stop"}\n\n'
+)
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_accumulates_tool_use_into_tool_calls_delta() -> None:
+    """DE-358 item 1: a streamed ``tool_use`` block (``content_block_start``
+    + ``input_json_delta`` fragments) is accumulated and emitted as one
+    OpenAI ``tool_calls`` delta at ``content_block_stop``, with
+    ``finish_reason="tool_calls"`` on the final chunk. Before this change
+    the streaming adapter silently dropped tool calls (latent — the chat
+    tool-loop is non-streaming — but a future streaming-with-tools
+    consumer would have lost them)."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            text=SSE_TOOL_USE_FIXTURE_BODY,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(stream=True),
+            model="claude-sonnet-4-6",
+            stream=True,
+        )
+        assert not isinstance(result, ChatCompletionResponse)
+        chunks: list[ChatCompletionChunk] = []
+        async for chunk in result:
+            chunks.append(chunk)
+    finally:
+        await adapter.aclose()
+
+    # role chunk + text delta + tool_calls delta + final chunk.
+    assert len(chunks) == 4
+    assert chunks[0].choices[0].delta.role == "assistant"
+    assert chunks[1].choices[0].delta.content == "Checking."
+
+    tool_delta = chunks[2].choices[0].delta
+    assert tool_delta.tool_calls is not None and len(tool_delta.tool_calls) == 1
+    call = tool_delta.tool_calls[0]
+    assert call["index"] == 0
+    assert call["id"] == "toolu_s1"
+    assert call["type"] == "function"
+    assert call["function"]["name"] == "verify_citations"
+    # Fragments join into the exact arguments JSON string.
+    assert json.loads(call["function"]["arguments"]) == {"text": "Brown v. Board"}
+
+    final = chunks[-1]
+    assert final.choices[0].finish_reason == "tool_calls"
+    assert final.usage is not None
+    assert final.usage.prompt_tokens == 11
+    assert final.usage.completion_tokens == 9
+
+
+SSE_TOOL_USE_EMPTY_INPUT_FIXTURE_BODY = (
+    "event: message_start\n"
+    'data: {"type":"message_start","message":{"id":"msg_tool_empty","model":"claude-sonnet-4-6",'
+    '"usage":{"input_tokens":4,"output_tokens":0}}}\n\n'
+    "event: content_block_start\n"
+    'data: {"type":"content_block_start","index":0,"content_block":'
+    '{"type":"tool_use","id":"toolu_e1","name":"list_sources","input":{}}}\n\n'
+    "event: content_block_stop\n"
+    'data: {"type":"content_block_stop","index":0}\n\n'
+    "event: message_delta\n"
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}\n\n'
+    "event: message_stop\n"
+    'data: {"type":"message_stop"}\n\n'
+)
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_none_drops_tools() -> None:
+    """DE-358 item 4: ``tool_choice="none"`` — Anthropic has no ``none``
+    mode, so the adapter honors it by omitting ``tools`` (and therefore
+    ``tool_choice``) from the provider request entirely."""
+
+    body = await _capture_request_body(_tools_request("none"))
+    assert "tools" not in body
+    assert "tool_choice" not in body
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_required_maps_to_any() -> None:
+    """DE-358 item 4: ``tool_choice="required"`` maps to Anthropic
+    ``{"type": "any"}`` with tools forwarded."""
+
+    body = await _capture_request_body(_tools_request("required"))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "any"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_forced_function_maps_to_tool() -> None:
+    """DE-358 item 4: an OpenAI forced-function object maps to Anthropic
+    ``{"type": "tool", "name": ...}``."""
+
+    body = await _capture_request_body(
+        _tools_request({"type": "function", "function": {"name": "verify_citations"}})
+    )
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "tool", "name": "verify_citations"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_tool_choice_absent_defaults_to_auto() -> None:
+    """DE-358 item 4: with tools present and no explicit ``tool_choice``,
+    ``main`` emits ``{"type": "auto"}`` (unlike the closed PR5b branches,
+    which omitted the field — assertions follow ``main``'s behavior)."""
+
+    body = await _capture_request_body(_tools_request(None))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert body["tool_choice"] == {"type": "auto"}
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_anthropic_forced_function_without_name_omits_tool_choice() -> None:
+    """DE-358 item 4: a malformed forced-function object (no ``name``)
+    forwards tools but sets no ``tool_choice`` — the provider default
+    applies rather than a fabricated directive."""
+
+    body = await _capture_request_body(_tools_request({"type": "function", "function": {}}))
+    assert body["tools"][0]["name"] == "verify_citations"
+    assert "tool_choice" not in body
+
+
+@pytest.mark.unit
+@respx.mock
+async def test_streaming_tool_use_with_no_input_deltas_emits_empty_args() -> None:
+    """DE-358 item 1: a no-argument tool call (no ``input_json_delta``
+    events at all) emits ``arguments="{}"``, mirroring the non-streaming
+    bridge's ``json.dumps(input or {})``. A plain-text ``content_block_stop``
+    (no tool state) emits nothing — unchanged behavior."""
+
+    respx.post(f"{ANTHROPIC_BASE}/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            text=SSE_TOOL_USE_EMPTY_INPUT_FIXTURE_BODY,
+            headers={"content-type": "text/event-stream"},
+        )
+    )
+
+    adapter = _make_adapter()
+    try:
+        result = await adapter.chat_completion(
+            _basic_request(stream=True),
+            model="claude-sonnet-4-6",
+            stream=True,
+        )
+        assert not isinstance(result, ChatCompletionResponse)
+        chunks = [chunk async for chunk in result]
+    finally:
+        await adapter.aclose()
+
+    # role chunk + tool_calls delta + final chunk (no text deltas).
+    assert len(chunks) == 3
+    tool_delta = chunks[1].choices[0].delta
+    assert tool_delta.tool_calls is not None
+    assert tool_delta.tool_calls[0]["function"]["arguments"] == "{}"
+    assert chunks[-1].choices[0].finish_reason == "tool_calls"

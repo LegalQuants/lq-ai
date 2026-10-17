@@ -14,7 +14,7 @@ the embed-on-write worker job is in test_knowledge_embed_unit.py.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -26,11 +26,12 @@ from app.main import app
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.project import Project
+from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -245,6 +246,110 @@ async def test_list_kbs_per_user_isolation(
     assert response.status_code == 200
     names = {kb["name"] for kb in response.json()}
     assert names == {"mine"}
+
+
+@pytest.mark.integration
+async def test_list_kbs_project_filter_uses_join_table(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    db_user: User,
+) -> None:
+    """``?project_id=`` returns KBs linked via the join table.
+
+    Regression test: the list endpoint previously filtered on the legacy
+    ``knowledge_bases.project_id`` column, so a KB attached through
+    ``POST /projects/{id}/knowledge-bases`` (which writes the
+    ``project_knowledge_bases`` junction, not the legacy column) was
+    functional in retrieval but invisible on the matter page. The filter
+    must key off the junction row instead.
+    """
+
+    project = Project(owner_id=db_user.id, name="Matter A", slug=f"matter-{uuid.uuid4().hex[:8]}")
+    other_project = Project(
+        owner_id=db_user.id, name="Matter B", slug=f"matter-{uuid.uuid4().hex[:8]}"
+    )
+    db_session.add_all([project, other_project])
+    await db_session.flush()
+
+    # Linked only via the join table — legacy project_id left NULL.
+    linked = KnowledgeBase(owner_id=db_user.id, name="linked-via-join")
+    # A KB attached to a *different* project via the join table.
+    other_linked = KnowledgeBase(owner_id=db_user.id, name="linked-elsewhere")
+    # A KB carrying a stale legacy project_id but with NO join row: under the
+    # join-table semantics it is NOT in the project.
+    stale_legacy = KnowledgeBase(owner_id=db_user.id, name="stale-legacy", project_id=project.id)
+    db_session.add_all([linked, other_linked, stale_legacy])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ProjectKnowledgeBase(
+                project_id=project.id,
+                knowledge_base_id=linked.id,
+                attached_by_user_id=db_user.id,
+            ),
+            ProjectKnowledgeBase(
+                project_id=other_project.id,
+                knowledge_base_id=other_linked.id,
+                attached_by_user_id=db_user.id,
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    response = await client.get(
+        f"/api/v1/knowledge-bases?project_id={project.id}",
+        headers=_auth_headers(db_user),
+    )
+    assert response.status_code == 200
+    names = {kb["name"] for kb in response.json()}
+    assert names == {"linked-via-join"}
+    # KB attached to a different project is excluded.
+    assert "linked-elsewhere" not in names
+    # Stale legacy project_id (no join row) is NOT treated as in-project.
+    assert "stale-legacy" not in names
+
+
+@pytest.mark.integration
+async def test_list_kbs_project_filter_respects_owner_and_archived(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    db_user: User,
+    other_user: User,
+) -> None:
+    """Project filter keeps the owner scope and the active-only default."""
+
+    from datetime import UTC, datetime
+
+    project = Project(owner_id=db_user.id, name="Matter C", slug=f"matter-{uuid.uuid4().hex[:8]}")
+    db_session.add(project)
+    await db_session.flush()
+
+    active = KnowledgeBase(owner_id=db_user.id, name="active-in-project")
+    archived = KnowledgeBase(owner_id=db_user.id, name="archived-in-project")
+    archived.archived_at = datetime.now(tz=UTC)
+    # A join row owned-context: another user's KB joined to db_user's project
+    # must never leak (owner scope wins).
+    foreign = KnowledgeBase(owner_id=other_user.id, name="foreign-in-project")
+    db_session.add_all([active, archived, foreign])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ProjectKnowledgeBase(project_id=project.id, knowledge_base_id=active.id),
+            ProjectKnowledgeBase(project_id=project.id, knowledge_base_id=archived.id),
+            ProjectKnowledgeBase(project_id=project.id, knowledge_base_id=foreign.id),
+        ]
+    )
+    await db_session.flush()
+
+    response = await client.get(
+        f"/api/v1/knowledge-bases?project_id={project.id}",
+        headers=_auth_headers(db_user),
+    )
+    assert response.status_code == 200
+    names = {kb["name"] for kb in response.json()}
+    assert names == {"active-in-project"}
 
 
 @pytest.mark.integration

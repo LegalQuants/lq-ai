@@ -51,7 +51,7 @@ Then start the stack:
 docker compose up -d
 ```
 
-First run pulls images across the eight always-on services — `postgres`, `redis`, `minio`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
+First run pulls images across the eight always-on services — `postgres`, `redis`, `rustfs`, `gateway`, `api`, `ingest-worker`, `arq-worker`, `web` (the `ingest-worker` and `arq-worker` background workers run unconditionally; the local-Ollama (`--profile local`) and Slack/Teams (`--profile slack` / `--profile teams`) services are opt-in Compose profiles). On a reasonable connection this takes 2–4 minutes. Subsequent runs reuse the images and start in seconds.
 
 When the stack is up, you should see something like this in the API container's logs:
 
@@ -208,7 +208,7 @@ A few things to notice about the output:
 
 Procurement reviews and document-review work both benefit from being able to quickly distinguish citations the system stands behind from ones it does not. The 5th `system-error` state (verification-pipeline errors surfaced as their own signal rather than collapsed into "unverified") is tracked at [DE-275](PRD.md#de-275--embed-m2-citations-in-chat-message-envelope) for a future release; the M2-C2 surface ships the four states above.
 
-Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the docling-side citable-chunk schema is fully wired through the UI.
+Click-through-to-source-viewer (highlighting the cited span in the source document with PDF.js bbox overlay) is intentionally out of scope for M2 — the visual contract and the data plumbing are in place; the viewer surface is a follow-on for v0.3+ when the citable-chunk schema (PRD §3.3 / DE-387) is fully wired through the UI.
 
 **Severity tags follow the rubric.** Critical / Material / Minor — the [Skill-Authoring Guide](skill-authoring-guide.md#severity-rubric-for-review-skills) documents the calibration. None of the issues in the sample NDA rise to "Critical" because the sample is calibrated to be *plausibly real, with material issues*, not catastrophic.
 
@@ -277,9 +277,9 @@ The Slack and Teams intake bridges are **opt-in** Compose profiles. To bring the
 docker compose --profile slack --profile teams up -d --build
 ```
 
-You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `minio`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
+You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis`, `rustfs`, `arq-worker`, `ingest-worker`, `slack-bridge`, `teams-bridge`. (Omit the `--profile` flags to skip the bridges — see the [intake-bridges doc](intake-bridges.md) for what the bridges need before they're useful, and note that a real Slack/Teams OAuth round-trip has not yet been exercised end-to-end — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work).)
 
-> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/MinIO. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
+> **Port already in use?** If `docker compose up` fails with `address already in use` on `5432` (or `6379` / `9000`), you already run a host Postgres/Redis/S3 service. Remap the host-side port in `.env` — e.g. `POSTGRES_HOST_PORT=15432` — and re-run. The stack's internal traffic stays on the default ports; only the host mapping shifts. See [Troubleshooting](#docker-compose-up-fails-with-address-already-in-use).
 
 Confirm the migration head is current:
 
@@ -381,14 +381,14 @@ First-run image pulls are typically the slow step. Verify with `docker compose l
 
 ### `docker compose up` fails with "address already in use"
 
-If startup fails with `ports are not available: ... bind: address already in use` on `5432` (Postgres), `6379` (Redis), or `9000`/`9001` (MinIO), you already have a host service holding that port — commonly a Homebrew/Postgres.app Postgres on `5432`. Remap the host-side port in `.env` and re-run:
+If startup fails with `ports are not available: ... bind: address already in use` on `5432` (Postgres), `6379` (Redis), or `9000`/`9001` (RustFS), you already have a host service holding that port — commonly a Homebrew/Postgres.app Postgres on `5432`. Remap the host-side port in `.env` and re-run:
 
 ```bash
 # .env — host-side mapping only; the stack's internal traffic stays on 5432
 POSTGRES_HOST_PORT=15432
 ```
 
-The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `MINIO_API_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT`.
+The application services reach Postgres over the Docker network at `postgres:5432` regardless, so remapping the host port has no effect on the running stack — it only changes how you reach it with host tooling (`psql -h localhost -p 15432`). The same pattern applies to `REDIS_HOST_PORT` / `OBJECT_STORE_API_HOST_PORT` / `OBJECT_STORE_CONSOLE_HOST_PORT`.
 
 ### "First-run admin password" doesn't appear in logs
 
@@ -408,7 +408,7 @@ Verify your `.env` has at least one provider key set and matches the model alias
 
 ### Citation engine fails on the sample NDA
 
-The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF + Docling and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
+The sample is markdown rather than PDF. The Citation Engine handles markdown with synthetic page boundaries; if you see verification errors, check the API logs. The ingestion pipeline is PyMuPDF and parses text-bearing documents only — there is no OCR step (scanned-PDF OCR is not implemented; DE-320), so a verification miss is not an OCR configuration issue. Confirm the document carries extractable text rather than being a scanned image.
 
 ### "Tier 4 not allowed" message
 

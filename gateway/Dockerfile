@@ -1,16 +1,34 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-FROM python:3.12-slim AS base
+# Digest-pinned for reproducible builds (#301). Bump the tag and digest together.
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS base
+
+# ADR 0023 — dependencies install from the committed uv.lock so the shipped
+# tree is exactly the reviewed tree. The uv binary is copied from the
+# version-tagged upstream image (same tag-pin posture as python:3.12-slim);
+# bump the tag deliberately alongside the lockfile toolchain.
+COPY --from=ghcr.io/astral-sh/uv:0.12.0 /uv /uvx /usr/local/bin/
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_NO_CACHE=1 \
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir .
+# `uv sync --frozen` refuses to re-resolve: the build fails if uv.lock is
+# missing or stale rather than silently shipping an unreviewed tree.
+# `--no-install-project` installs dependencies only — the app/ source is
+# COPY'd in below and imported from /app, matching the previous
+# metadata-only `pip install .` behavior.
+COPY pyproject.toml README.md uv.lock ./
+RUN uv sync --frozen --no-install-project
+
+# Put the locked venv first on PATH so python/uvicorn/spacy below (and the
+# entrypoint's CMD) resolve to the synced environment.
+ENV PATH="/app/.venv/bin:$PATH"
 
 # M2-B2 — bake spaCy's en_core_web_lg model into the image so the
 # Presidio AnalyzerEngine has its NLP backbone available at first
@@ -20,8 +38,10 @@ RUN pip install --no-cache-dir .
 # for PERSON, ORG, LOCATION, and the others Presidio's default
 # pipeline depends on; the custom PatternRecognizers
 # (CaseNumberRecognizer, MatterNumberRecognizer) don't depend on
-# spaCy but they live in the same Analyzer.
-RUN python -m spacy download en_core_web_lg
+# spaCy but they live in the same Analyzer. uv-created venvs ship without
+# pip and `spacy download` shells out to `python -m pip`, so seed the
+# interpreter's bundled pip into the venv first.
+RUN python -m ensurepip && python -m spacy download en_core_web_lg
 
 COPY app/ ./app/
 

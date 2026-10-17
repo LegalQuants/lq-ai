@@ -5,6 +5,11 @@
 **Affected components:** `gateway/`, `api/`
 **Related:** [Task C6](../M1-IMPLEMENTATION-ORDER.md#task-c6--knowledge-service-hybrid-retrieval--embedding-generation), [ADR 0006 §3 — embeddings deferral](0006-document-pipeline-architecture.md), [ADR 0003 — error handling](0003-error-handling.md), [PRD §4 — Inference Gateway](../PRD.md#4-the-lq-ai-inference-gateway), [PRD §3 — Knowledge Bases](../PRD.md#3-capability-specifications)
 
+**Accepted revision (2026-10-04):** [ADR 0033](0033-document-pipeline-honesty-and-ocr.md)
+decision 5 adds an opt-in local (Ollama) path to the `embedding` alias. This ADR's
+1536-dimension constraint and its SBOM objection still hold and constrain that path;
+the assumption that an operator holds an OpenAI key is what changed.
+
 ---
 
 ## Context

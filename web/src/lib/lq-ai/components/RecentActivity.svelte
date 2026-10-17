@@ -44,13 +44,13 @@
   }
 </script>
 
-<section style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--lq-space-4); margin-bottom: var(--lq-space-6);">
+<section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters} style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--lq-space-4); margin-bottom: var(--lq-space-6);">
   <!-- Recent chats -->
   <div class="activity-card">
     <p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Recent chats</p>
 
     {#if loading}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">Loading…</p>
+      <p class="lq-text-body-sm" style="color: var(--lq-text-secondary);">Loading…</p>
     {:else if error}
       <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">Could not load recent chats.</p>
     {:else if chats.length === 0}
@@ -75,7 +75,7 @@
     <p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Recent matters</p>
 
     {#if loadingMatters}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">Loading…</p>
+      <p class="lq-text-body-sm" style="color: var(--lq-text-secondary);">Loading…</p>
     {:else if matters.length === 0}
       <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No matters yet. <a href="/lq-ai/matters" style="color: var(--lq-accent); text-decoration: none;">+ Start a matter</a></p>
     {:else}

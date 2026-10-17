@@ -16,8 +16,10 @@ human-attestation pipeline's domain (per CLAUDE.md and
 
 from __future__ import annotations
 
+import os
 import signal
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -60,7 +62,7 @@ def _capture_loader_warnings(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     captured: list[str] = []
     original_warning = loader_mod.log.warning
 
-    def _capture(msg: object, *args: object, **kwargs: object) -> None:
+    def _capture(msg: str, *args: object, **kwargs: Any) -> None:
         # Render the format string with the printf-style args the loader
         # passes, so the test can grep for substrings like "missing-name".
         try:
@@ -315,6 +317,115 @@ def test_load_one_returns_record_with_paths(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_load_one_lists_references_for_on_demand_reading(tmp_path: Path) -> None:
+    """``references/`` files are listed by path and never inlined.
+
+    ``references/`` is the Agent Skills name and the one most community
+    skills use. Those skills expect the model to open one file when the task
+    needs it, so the loader keeps them apart from ``reference/``, whose
+    files are sent with the prompt.
+    """
+
+    folder = tmp_path / "demo"
+    folder.mkdir()
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    (folder / "reference").mkdir()
+    (folder / "reference" / "a.md").write_text("ref-a")
+    (folder / "references" / "topic").mkdir(parents=True)
+    (folder / "references" / "b.md").write_text("ref-b")
+    (folder / "references" / "topic" / "c.md").write_text("ref-c!")
+
+    rec = _load_one(folder)
+    assert rec.reference_paths == (folder / "reference" / "a.md",)
+    assert rec.on_demand_paths == (
+        folder / "references" / "b.md",
+        folder / "references" / "topic" / "c.md",
+    )
+    skill = rec.materialise()
+    assert [(f.path, f.content) for f in skill.reference_files] == [("reference/a.md", "ref-a")]
+    assert [(f.path, f.size_bytes) for f in skill.on_demand_files] == [
+        ("references/b.md", 5),
+        ("references/topic/c.md", 6),
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("size", [65536, 65537, 208564])
+def test_on_demand_listing_never_reads_a_whole_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, size: int
+) -> None:
+    """Indexing must enforce the byte limit before allocating file contents."""
+    folder = tmp_path / "demo"
+    refs = folder / "references"
+    refs.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    reference = refs / "guide.md"
+    reference.write_bytes(b"x" * size)
+    original = Path.read_bytes
+    original_fdopen = os.fdopen
+    read_sizes: list[int] = []
+
+    def refuse_unbounded_read(path: Path) -> bytes:
+        assert path != reference, "reference indexing used an unbounded whole-file read"
+        return original(path)
+
+    def bounded_fdopen(descriptor: int, mode: str) -> Any:
+        stream = original_fdopen(descriptor, mode)
+        original_read = stream.read
+
+        def bounded_read(size: int = -1) -> bytes:
+            assert 0 <= size <= 65536, "reference scan used an unbounded read"
+            read_sizes.append(size)
+            return original_read(size)
+
+        monkeypatch.setattr(stream, "read", bounded_read)
+        return stream
+
+    monkeypatch.setattr(Path, "read_bytes", refuse_unbounded_read)
+    monkeypatch.setattr(os, "fdopen", bounded_fdopen)
+    record = _load_one(folder)
+    assert record.on_demand_paths == (reference,)
+    assert sum(read_sizes) == size + 1
+    assert max(read_sizes) <= 65536
+
+
+@pytest.mark.unit
+def test_on_demand_listing_leaves_out_what_cannot_be_read(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A file the read tool could not return is not listed, and the skill
+    still loads with the rest."""
+
+    folder = tmp_path / "demo"
+    refs = folder / "references"
+    refs.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    outside = tmp_path / "secret.md"
+    outside.write_text("not part of the skill")
+    (refs / "good.md").write_text("fine")
+    (refs / "big.json").write_text("x" * 65537)
+    (refs / "binary.bin").write_bytes(b"\xff\xfe\x00\x01")
+    (refs / ".hidden.md").write_text("hidden")
+    (refs / "has space.md").write_text("bad name")
+    (refs / "link.md").symlink_to(outside)
+
+    with caplog.at_level("WARNING"):
+        rec = _load_one(folder)
+
+    assert rec.on_demand_paths == (refs / "big.json", refs / "good.md")
+    warned = " ".join(r.getMessage() for r in caplog.records)
+    for name in ("binary.bin", "has space.md", "link.md"):
+        assert name in warned
+    assert ".hidden.md" not in warned
+
+
+@pytest.mark.unit
 def test_load_one_rejects_missing_frontmatter(tmp_path: Path) -> None:
     """A SKILL.md without `---` delimiters raises LoaderError."""
 
@@ -510,7 +621,7 @@ def test_install_sighup_reload_handler_swaps_registry(tmp_path: Path) -> None:
         handler = signal.getsignal(signal.SIGHUP)
         assert callable(handler)
         # The handler signature is (signum, frame).
-        handler(signal.SIGHUP, None)  # type: ignore[arg-type, misc]
+        handler(signal.SIGHUP, None)
         new_registry = holder.current()
         assert new_registry is not initial
         assert "alpha-test-skill" in new_registry.names()

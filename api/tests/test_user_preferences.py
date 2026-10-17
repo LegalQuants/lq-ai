@@ -15,7 +15,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -29,7 +29,7 @@ from app.models import AuditLog, User
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -117,6 +117,7 @@ async def test_patch_preferences_changes_value_and_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     changes = audit.details["changes"]
     assert changes["reasoning_visibility"]["before"] == "disclosure"
     assert changes["reasoning_visibility"]["after"] == "always_show"
@@ -186,7 +187,7 @@ async def test_users_check_constraint_blocks_invalid_value(
 
     from sqlalchemy.exc import IntegrityError
 
-    caller.reasoning_visibility = "invalid_value"
+    caller.reasoning_visibility = "invalid_value"  # type: ignore[assignment]  # intentionally invalid
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()
@@ -217,6 +218,7 @@ async def test_patch_preferences_featured_tools_change_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     changes = audit.details["changes"]
     assert changes["featured_tools"]["before"] == "prominent"
     assert changes["featured_tools"]["after"] == "inline"
@@ -242,6 +244,7 @@ async def test_patch_preferences_workspace_layout_change_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     changes = audit.details["changes"]
     assert changes["workspace_layout"]["before"] == "three_pane"
     assert changes["workspace_layout"]["after"] == "two_pane"
@@ -267,6 +270,7 @@ async def test_patch_preferences_trust_pills_change_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     changes = audit.details["changes"]
     assert changes["trust_pills"]["before"] == "labels"
     assert changes["trust_pills"]["after"] == "dots"
@@ -292,6 +296,7 @@ async def test_patch_preferences_provenance_pills_change_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     changes = audit.details["changes"]
     assert changes["provenance_pills"]["before"] == "always"
     assert changes["provenance_pills"]["after"] == "collapsed"
@@ -333,6 +338,7 @@ async def test_patch_preferences_multi_field_change_single_audit_row(
         .all()
     )
     assert len(audits) == 1
+    assert audits[0].details is not None
     changes = audits[0].details["changes"]
     assert set(changes.keys()) == {"featured_tools", "trust_pills", "provenance_pills"}
 
@@ -357,7 +363,7 @@ async def test_users_check_constraint_blocks_invalid_featured_tools_value(
 
     from sqlalchemy.exc import IntegrityError
 
-    caller.featured_tools = "not_a_valid_value"
+    caller.featured_tools = "not_a_valid_value"  # type: ignore[assignment]  # intentionally invalid
     with pytest.raises(IntegrityError):
         await db_session.flush()
     await db_session.rollback()

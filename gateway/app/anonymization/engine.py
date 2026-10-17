@@ -38,8 +38,9 @@ test suite that just exercises the custom recognizers in isolation
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Final, Protocol, cast
 
 from app.anonymization.mapper import PseudonymMapper
 from app.anonymization.recognizers.case_number import CaseNumberRecognizer
@@ -127,14 +128,23 @@ DISABLED_DEFAULT_RECOGNIZERS: tuple[str, ...] = (
 
 _analyzer_singleton: AnalyzerEngine | None = None
 
+# One analysis at a time in this process, and one construction of the singleton. The analyzer
+# is a single shared object and nothing here shows it to be safe under concurrent use. The
+# request pre-pass runs on its own worker thread so that a long document does not stop the
+# event loop (``app.api.inference``), while the bound-tool path (``authority``) still analyses
+# on the loop thread; this lock is what keeps the two from running the analyzer together. It
+# costs nothing the loop did not already pay: a path that waits here waited for the loop
+# before.
+_ANALYSIS_LOCK: Final = threading.Lock()
+
 
 def get_analyzer_engine() -> AnalyzerEngine:
     """Return a configured :class:`AnalyzerEngine`, constructing once.
 
     First call constructs the engine, loads spaCy's NLP backbone,
     registers the custom legal recognizers, and removes the disabled
-    defaults. Subsequent calls return the cached instance — the
-    AnalyzerEngine is thread-safe for read-only ``analyze`` calls.
+    defaults. Subsequent calls return the cached instance. Two threads
+    that arrive together construct it once (:data:`_ANALYSIS_LOCK`).
 
     Tests that exercise individual recognizers in isolation should
     NOT call this — they should instantiate the recognizer directly
@@ -148,21 +158,27 @@ def get_analyzer_engine() -> AnalyzerEngine:
 
     from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 
-    registry = RecognizerRegistry()
-    registry.load_predefined_recognizers()
+    with _ANALYSIS_LOCK:
+        built = _analyzer_singleton
+        if built is None:
+            registry = RecognizerRegistry()
+            registry.load_predefined_recognizers()
 
-    # Remove the noisy default recognizers (see
-    # DISABLED_DEFAULT_RECOGNIZERS above for the per-name rationale).
-    registry.recognizers = [
-        r for r in registry.recognizers if type(r).__name__ not in DISABLED_DEFAULT_RECOGNIZERS
-    ]
+            # Remove the noisy default recognizers (see
+            # DISABLED_DEFAULT_RECOGNIZERS above for the per-name rationale).
+            registry.recognizers = [
+                r
+                for r in registry.recognizers
+                if type(r).__name__ not in DISABLED_DEFAULT_RECOGNIZERS
+            ]
 
-    # Register the custom legal recognizers.
-    registry.add_recognizer(CaseNumberRecognizer())
-    registry.add_recognizer(MatterNumberRecognizer())
+            # Register the custom legal recognizers.
+            registry.add_recognizer(CaseNumberRecognizer())
+            registry.add_recognizer(MatterNumberRecognizer())
 
-    _analyzer_singleton = AnalyzerEngine(registry=registry)
-    return _analyzer_singleton
+            built = AnalyzerEngine(registry=registry)
+            _analyzer_singleton = built
+    return built
 
 
 def _reset_analyzer_engine_for_tests() -> None:
@@ -261,7 +277,8 @@ class Anonymizer:
             return text
 
         analyzer = self._resolve_analyzer()
-        results = analyzer.analyze(text=text, language="en")
+        with _ANALYSIS_LOCK:
+            results = analyzer.analyze(text=text, language="en")
         spans = _resolve_overlaps(results)
 
         # Two-pass substitution. Pass 1 walks spans left-to-right and

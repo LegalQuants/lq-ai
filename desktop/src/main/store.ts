@@ -1,6 +1,6 @@
 import { safeStorage } from 'electron'
-import { writeFileSync, readFileSync, existsSync, chmodSync, rmSync } from 'node:fs'
-import { configPath, envPath } from './paths'
+import { writeFileSync, readFileSync, existsSync, chmodSync, rmSync, mkdirSync } from 'node:fs'
+import { configPath, envPath, opsPath } from './paths'
 import { renderEnv, ensureMasterKeyLine } from '../core/env'
 import { generateMasterKey } from '../core/secrets'
 import type { LauncherConfig } from '../core/config'
@@ -8,7 +8,7 @@ import type { LauncherConfig } from '../core/config'
 /** Persist config encrypted at rest via the OS keychain-backed safeStorage. */
 export function saveConfig(cfg: LauncherConfig): void {
 	const json = Buffer.from(JSON.stringify(cfg), 'utf8')
-	// NOTE: LauncherConfig holds the generated stack secrets (Postgres/MinIO/gateway/JWT) —
+	// NOTE: LauncherConfig holds the generated stack secrets (Postgres/object-store/gateway/JWT) —
 	// not provider API keys (those are added in-app via Configure / BYOK, never persisted here).
 	// safeStorage encrypts at rest via the OS keychain. When encryption is unavailable (rare;
 	// headless/CI), we fall back to plaintext JSON — acceptable for those environments, but be
@@ -22,8 +22,60 @@ export function saveConfig(cfg: LauncherConfig): void {
 export function loadConfig(): LauncherConfig | null {
 	if (!existsSync(configPath())) return null
 	const blob = readFileSync(configPath())
-	const json = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(blob) : blob.toString('utf8')
+	const json = safeStorage.isEncryptionAvailable()
+		? safeStorage.decryptString(blob)
+		: blob.toString('utf8')
 	return JSON.parse(json) as LauncherConfig
+}
+
+/** Upgrade pre-v0.8.0 config names and align images with this launcher release. */
+export function ensureObjectStoreConfig(releaseImageTag: string): void {
+	const cfg = loadConfig()
+	if (!cfg) return
+	const legacySecrets = cfg.secrets as typeof cfg.secrets & {
+		MINIO_ROOT_PASSWORD?: string
+	}
+	const legacyPorts = cfg.ports as typeof cfg.ports & {
+		minioApi?: number
+		minioConsole?: number
+	}
+	let changed = false
+	if (!cfg.secrets.OBJECT_STORE_SECRET_KEY && legacySecrets.MINIO_ROOT_PASSWORD) {
+		cfg.secrets.OBJECT_STORE_SECRET_KEY = legacySecrets.MINIO_ROOT_PASSWORD
+		changed = true
+	}
+	if (!cfg.ports.objectStoreApi && legacyPorts.minioApi) {
+		cfg.ports.objectStoreApi = legacyPorts.minioApi
+		changed = true
+	}
+	if (!cfg.ports.objectStoreConsole && legacyPorts.minioConsole) {
+		cfg.ports.objectStoreConsole = legacyPorts.minioConsole
+		changed = true
+	}
+	if (releaseImageTag !== 'latest' && cfg.imageTag !== releaseImageTag) {
+		cfg.imageTag = releaseImageTag
+		changed = true
+	}
+	const path = envPath()
+	if (existsSync(path)) {
+		const before = readFileSync(path, 'utf8')
+		let after = before
+		if (cfg.imageTag !== 'latest') {
+			after = /^LQ_AI_IMAGE_TAG=.*$/m.test(after)
+				? after.replace(/^LQ_AI_IMAGE_TAG=.*$/m, `LQ_AI_IMAGE_TAG=${cfg.imageTag}`)
+				: `LQ_AI_IMAGE_TAG=${cfg.imageTag}\n${after}`
+		}
+		if (!/^LQ_AI_OPS_SOURCE=/m.test(after)) {
+			const separator = after.endsWith('\n') ? '' : '\n'
+			after = `${after}${separator}LQ_AI_OPS_SOURCE=${opsPath()}\n`
+		}
+		if (after !== before) {
+			mkdirSync(opsPath(), { recursive: true })
+			writeFileSync(path, after, { mode: 0o600 })
+			chmodSync(path, 0o600)
+		}
+	}
+	if (changed) saveConfig(cfg)
 }
 
 /** Delete the persisted config + .env so the next launch re-runs the first-run wizard. */
@@ -36,7 +88,10 @@ export function clearConfig(): void {
 /** Write the chmod-600 .env the compose command reads, into the app data dir. */
 export function writeEnvFile(cfg: LauncherConfig): string {
 	const path = envPath()
-	writeFileSync(path, renderEnv(cfg), { mode: 0o600 })
+	mkdirSync(opsPath(), { recursive: true })
+	writeFileSync(path, `${renderEnv(cfg)}LQ_AI_OPS_SOURCE=${opsPath()}\n`, {
+		mode: 0o600
+	})
 	chmodSync(path, 0o600) // belt-and-suspenders if the file pre-existed
 	return path
 }

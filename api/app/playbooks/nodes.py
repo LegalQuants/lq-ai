@@ -33,7 +33,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +40,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import GatewayClient
+from app.graph_types import AsyncStateNode
 from app.models.document import DocumentChunk
 from app.models.playbook import PlaybookExecution
 from app.observability_helpers import get_tracer, record_attributes
@@ -87,7 +87,7 @@ _CONFIDENCE_NUMERIC: dict[str, float] = {"high": 0.9, "medium": 0.7, "low": 0.5}
 
 def make_retrieve_node(
     db: AsyncSession,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the retrieve node bound to a DB session."""
 
     async def retrieve_node(state: PlaybookExecutionState) -> dict[str, Any]:
@@ -122,7 +122,7 @@ def make_retrieve_node(
                 retrievals.append({"position_id": pos["id"], "chunks": fallback})
                 continue
 
-            query = " ".join(keywords)
+            query = _keywords_to_tsquery(keywords)
             chunks = await _fts_over_document(
                 db,
                 document_id=target_doc_id,
@@ -143,6 +143,29 @@ def make_retrieve_node(
     return retrieve_node
 
 
+def _keywords_to_tsquery(keywords: list[str]) -> str:
+    """Build a ``websearch_to_tsquery`` string matching a passage with ANY keyword.
+
+    ``websearch_to_tsquery`` joins bare space-separated words with AND, so
+    ``"term duration expiry"`` only matches a chunk containing all three.
+    Joining with ``or`` makes any keyword enough, and multi-word keywords
+    are quoted so they match as phrases. Websearch syntax inside a keyword
+    is neutralised: double quotes are removed, leading ``-`` (negation) is
+    stripped, and a keyword that is just ``or`` is quoted so it is not read
+    as the operator. Blank keywords are dropped; an all-blank list gives
+    ``""``, which matches nothing.
+    """
+    terms: list[str] = []
+    for keyword in keywords:
+        cleaned = " ".join(str(keyword).replace('"', " ").split()).lstrip("-").strip()
+        if not cleaned:
+            continue
+        if " " in cleaned or cleaned.lower() == "or":
+            cleaned = f'"{cleaned}"'
+        terms.append(cleaned)
+    return " or ".join(terms)
+
+
 async def _fts_over_document(
     db: AsyncSession,
     *,
@@ -152,10 +175,10 @@ async def _fts_over_document(
 ) -> list[dict[str, Any]]:
     """Run FTS over ``document_chunks`` scoped to one document.
 
-    Uses ``websearch_to_tsquery`` rather than ``plainto_tsquery`` so
-    multi-keyword queries with OR-like semantics rank chunks that hit
-    any keyword (the user's intent when they list multiple
-    ``detection_keywords``).
+    ``query`` is parsed by ``websearch_to_tsquery``, which ANDs bare
+    words, so callers build it with :func:`_keywords_to_tsquery` to get
+    "any keyword" semantics; ``ts_rank_cd`` then ranks chunks that hit
+    more keywords higher.
     """
     result = await db.execute(
         text(
@@ -270,7 +293,7 @@ def make_classify_node(
     *,
     gateway: GatewayClient,
     judge_model: str,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the classify node bound to a gateway client + model alias."""
 
     async def classify_node(state: PlaybookExecutionState) -> dict[str, Any]:
@@ -406,7 +429,7 @@ def make_redline_node(
     *,
     gateway: GatewayClient,
     judge_model: str,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the redline node bound to a gateway client + model alias.
 
     Iterates :func:`classify_node`'s ``per_position_results`` and runs a
@@ -487,7 +510,7 @@ def _build_redline_messages(
 
 def make_compile_node(
     db: AsyncSession,
-) -> Callable[[PlaybookExecutionState], Awaitable[dict[str, Any]]]:
+) -> AsyncStateNode[PlaybookExecutionState]:
     """Build the compile node bound to a DB session.
 
     The compile node writes the assembled results into

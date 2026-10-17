@@ -1,5 +1,6 @@
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.citation_treatment import CitationTreatment
 from app.models.citation_treatment_signal import CitationTreatmentSignal
@@ -7,7 +8,7 @@ from app.models.citation_treatment_signal import CitationTreatmentSignal
 pytestmark = pytest.mark.asyncio
 
 
-async def _treatment(db) -> CitationTreatment:
+async def _treatment(db: AsyncSession) -> CitationTreatment:
     t = CitationTreatment(
         cluster_id=111,
         opinion_id=222,
@@ -22,7 +23,7 @@ async def _treatment(db) -> CitationTreatment:
     return t
 
 
-async def test_signal_round_trips_and_cascades(db_session) -> None:
+async def test_signal_round_trips_and_cascades(db_session: AsyncSession) -> None:
     t = await _treatment(db_session)
     db_session.add(
         CitationTreatmentSignal(
@@ -51,7 +52,7 @@ async def test_signal_round_trips_and_cascades(db_session) -> None:
     assert remaining == []
 
 
-async def test_bad_classification_rejected(db_session) -> None:
+async def test_bad_classification_rejected(db_session: AsyncSession) -> None:
     from sqlalchemy.exc import IntegrityError
 
     t = await _treatment(db_session)
@@ -68,7 +69,7 @@ async def test_bad_classification_rejected(db_session) -> None:
         await db_session.flush()
 
 
-async def test_parent_allows_graph_plus_judge_method(db_session) -> None:
+async def test_parent_allows_graph_plus_judge_method(db_session: AsyncSession) -> None:
     db_session.add(
         CitationTreatment(
             cluster_id=9,
