@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Awaitable, Callable
+from decimal import Decimal
 from typing import Any, NamedTuple
 
 from sqlalchemy import select
@@ -26,11 +27,16 @@ from app.citation.authority import (
     authority_target,
     load_authority_text as _default_load_authority_text,
 )
+from app.citation.authority_content_judge import (
+    AUTHORITY_CONTENT_JUDGE_BUDGET_USD,
+    estimate_authority_content_cost_usd,
+    judge_authority_content,
+)
 from app.citation.caselaw import _CaselawCandidate, locate_passage, opinion_target
 from app.citation.extraction import CitationCandidate, locate_in_chunk
 from app.citation.gate import compute_and_record_gate
 from app.citation.ledger import assemble_ledger_entries
-from app.citation.verification import verify
+from app.citation.verification import VerificationResult, verify
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message, MessageCitation
 from app.models.document import Document, DocumentChunk
@@ -348,13 +354,29 @@ async def build_authority_citations(
     3. Build an :class:`_AuthorityVerificationTarget` via
        :func:`authority_target`.
     4. Locate ``quote`` in the body via :func:`locate_passage`.
-       **Miss → FAIL row** (``verified=False, method=None``) — unlike caselaw's
-       ledger bridge, a no-locate authority quote MUST surface to the gate so
-       fabricated statute/regulation quotes are never silently passed.  Mirrors
+       **Miss → budgeted whole-body paraphrase judge (DE-371), then FAIL.**
+       When a ``gateway`` is available, the quote is judged against the
+       attributed authority's whole body via
+       :func:`app.citation.authority_content_judge.judge_authority_content`
+       under the same per-turn budget chat's Pass B uses
+       (``AUTHORITY_CONTENT_JUDGE_BUDGET_USD``, pre-flight
+       ``estimate_authority_content_cost_usd`` accounting).  A supporting
+       verdict writes a SUPPORTED row (``verified=True,
+       verification_method="paraphrase_judge", partial=True``) with
+       whole-body placeholder offsets (``start=0, end=len(body)``) exactly
+       like chat's Pass B rows.  A non-supporting verdict, judge error,
+       budget exhaustion, or ``gateway=None`` keeps the FAIL row
+       (``verified=False, method=None``) — unlike caselaw's ledger bridge, a
+       no-locate authority quote MUST surface to the gate so fabricated
+       statute/regulation quotes are never silently passed.  FAIL rows mirror
        :func:`app.citation.caselaw._fail_row`'s offset convention
-       (``start=0, end=len(quote)``).
+       (``start=0, end=len(quote)``).  The judge tier can grant at most
+       SUPPORTED — it never upgrades to PASS.
     5. On locate hit: build an :class:`_AuthorityCandidate` and run the
-       verifier cascade via :func:`verify`.  Write a ``MessageAuthorityCitation``
+       verifier cascade via :func:`verify` with ``gateway=None`` (a located
+       span always exact/tolerant-matches, so the judge stage is
+       structurally unreachable there — see chat's Pass A in
+       :mod:`app.citation.authority`).  Write a ``MessageAuthorityCitation``
        row carrying ``result.verified``; the gate buckets it PASS or FAIL.
 
     ``db.add_all(rows)`` + ``db.flush()`` once at the end.  Never commits.
@@ -364,6 +386,7 @@ async def build_authority_citations(
     the whole pass or poison the ``AsyncSession``.
     """
     rows: list[MessageAuthorityCitation] = []
+    judge_spent: Decimal = Decimal("0")
 
     for item in items:
         if not item.quote.strip():
@@ -393,6 +416,107 @@ async def build_authority_citations(
             off = locate_passage(item.quote, target.normalized_content)
 
             if off is None:
+                # Locate miss. DE-371: the autonomous path is attributed by
+                # construction (item.source/item.external_ref name the
+                # authority), so before failing, give the quote one budgeted
+                # whole-body paraphrase-judge chance against the attributed
+                # body — the SUPPORTED tier, mirroring chat's Pass B in
+                # verify_and_persist_authority_citations. The judge can grant
+                # at most SUPPORTED, never PASS. Any non-supporting outcome
+                # (no verdict, judge error, budget exhaustion, gateway=None)
+                # falls through to the FAIL row — fail-closed default.
+                judged: VerificationResult | None = None
+                if gateway is not None:
+                    body_text = target.normalized_content
+                    est: Decimal | None
+                    try:
+                        est = await estimate_authority_content_cost_usd(
+                            db, judge_model=judge_model, authority_text=body_text
+                        )
+                    except Exception:
+                        # The pre-flight estimate queries inference_routing_log;
+                        # a transient failure there must degrade to "no judge,
+                        # keep the FAIL row" — never skip the item (zero rows
+                        # would read as fiduciary_grade at the gate).
+                        log.warning(
+                            "authority citation build: cost estimate failed — keeping FAIL",
+                            extra={
+                                "event": "autonomous_authority_citation_judge_miss",
+                                "external_ref": item.external_ref,
+                            },
+                            exc_info=True,
+                        )
+                        est = None
+                    if est is None:
+                        pass  # estimate failed → no judge; fall through to FAIL row.
+                    elif judge_spent + est > AUTHORITY_CONTENT_JUDGE_BUDGET_USD:
+                        log.info(
+                            "authority citation build: judge budget exhausted — keeping FAIL",
+                            extra={
+                                "event": "autonomous_authority_citation_judge_budget_exhausted",
+                                "external_ref": item.external_ref,
+                            },
+                        )
+                    else:
+                        judge_spent += est
+                        jres: VerificationResult | None
+                        try:
+                            jres = await judge_authority_content(
+                                passage=item.quote,
+                                authority_text=body_text,
+                                gateway=gateway,
+                                judge_model=judge_model,
+                            )
+                        except Exception:
+                            # judge_authority_content is documented never to
+                            # raise, but a raise must still keep the FAIL row.
+                            log.warning(
+                                "authority citation build: judge raised — keeping FAIL",
+                                extra={
+                                    "event": "autonomous_authority_citation_judge_miss",
+                                    "external_ref": item.external_ref,
+                                },
+                                exc_info=True,
+                            )
+                            jres = None
+                        if jres is not None and jres.verified:
+                            judged = jres
+                        elif jres is not None:
+                            log.debug(
+                                "authority citation build: judge did not support — keeping FAIL",
+                                extra={
+                                    "event": "autonomous_authority_citation_judge_miss",
+                                    "external_ref": item.external_ref,
+                                },
+                            )
+
+                if judged is not None:
+                    # SUPPORTED row: whole-body placeholder offsets exactly
+                    # like chat's Pass B rows (start=0, end=len(body)).
+                    log.debug(
+                        "authority citation build: judge supported — SUPPORTED row added",
+                        extra={
+                            "event": "autonomous_authority_citation_judge_supported",
+                            "external_ref": item.external_ref,
+                        },
+                    )
+                    rows.append(
+                        MessageAuthorityCitation(
+                            message_id=message_id,
+                            source_type=item.source,
+                            external_ref=item.external_ref,
+                            content_kind=item.content_kind,
+                            source_offset_start=0,
+                            source_offset_end=len(target.normalized_content),
+                            source_text=item.quote,
+                            verified=True,
+                            verification_method="paraphrase_judge",
+                            verification_confidence=judged.confidence,
+                            partial=True,
+                        )
+                    )
+                    continue
+
                 # FAIL row: fabricated authority quote must surface to the gate.
                 # Offsets are a documented placeholder (mirrors caselaw._fail_row):
                 # start=0, end=len(quote) satisfies CHECK(end > start >= 0).
@@ -427,7 +551,12 @@ async def build_authority_citations(
                 source_text=item.quote,
                 source_document_id=target.id,
             )
-            result = await verify(cand, target, gateway=gateway, judge_model=judge_model)
+            # gateway=None: verbatim-only here. locate_passage is a byte-exact
+            # substring finder — a located span always exact/tolerant-matches,
+            # so verify()'s judge stage is structurally unreachable in this
+            # branch and passing the gateway through would be dishonest.
+            # Mirrors chat's Pass A comment in app.citation.authority.
+            result = await verify(cand, target, gateway=None, judge_model=judge_model)
             rows.append(
                 MessageAuthorityCitation(
                     message_id=message_id,
