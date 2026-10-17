@@ -1,0 +1,73 @@
+/** Pure helpers for chat-attached files (PR #316 review follow-ups). No Svelte, no network. */
+
+import type { FileMeta, MessageCompleteFrame } from '../types';
+
+/**
+ * Maximum chat-attached files per message send. Mirrors
+ * MESSAGE_FILE_IDS_MAX_LEN in api/app/schemas/chats.py — the backend rejects
+ * the whole send with a 422 when `file_ids` exceeds this, so the attach path
+ * enforces it client-side instead of failing at send time.
+ */
+export const MAX_CHAT_ATTACHED_FILES = 16;
+
+/** Attach guard: false once the panel already holds the cap. */
+export function canAttachChatFile(attachedCount: number): boolean {
+	return attachedCount < MAX_CHAT_ATTACHED_FILES;
+}
+
+/**
+ * Build the `file_ids` payload from the panel's attached files.
+ *
+ * Excludes 'failed' files — they can never contribute text. Keeps
+ * pending/processing files: the backend skips not-yet-ready files gracefully,
+ * and dropping them would silently ignore a just-attached document.
+ * Defensively slices to the cap, and returns undefined when the result is
+ * empty so the field is omitted from the payload.
+ */
+export function selectFileIdsForSend(files: FileMeta[]): string[] | undefined {
+	const ids = files
+		.filter((f) => f.ingestion_status !== 'failed')
+		.slice(0, MAX_CHAT_ATTACHED_FILES)
+		.map((f) => f.id);
+	return ids.length > 0 ? ids : undefined;
+}
+
+/** Whether the backend accepted a file that was still ingesting when sent. */
+export function hasAppliedProcessingFile(
+	processingFileIds: string[],
+	appliedFileIds?: string[]
+): boolean {
+	if (!appliedFileIds) return false;
+	return processingFileIds.some((id) => appliedFileIds.includes(id));
+}
+
+/** Check the visible chat at completion time, since the user may switch mid-stream. */
+export function createProcessingFileWarningHandler(
+	processingFileIds: string[],
+	getActiveChatId: () => string | null | undefined,
+	showWarning: (warning: string) => void
+): (frame: MessageCompleteFrame) => void {
+	return (frame) => {
+		if (frame.message.chat_id !== getActiveChatId()) return;
+		if (!hasAppliedProcessingFile(processingFileIds, frame.applied_file_ids)) return;
+		showWarning(
+			'An attached file was still processing when sent. It was accepted for this turn, but its contents may not have been available for this response.'
+		);
+	};
+}
+
+/**
+ * Names of the attached files whose text will reach the model on this send.
+ * The backend only injects text for 'ready' files, so only these can stand
+ * in for a skill's required document input.
+ */
+export function readyFileNames(files: FileMeta[]): string[] {
+	return files.filter((f) => f.ingestion_status === 'ready').map((f) => f.filename);
+}
+
+/** Names of the attached files still being ingested (neither ready nor failed). */
+export function processingFileNames(files: FileMeta[]): string[] {
+	return files
+		.filter((f) => f.ingestion_status !== 'ready' && f.ingestion_status !== 'failed')
+		.map((f) => f.filename);
+}

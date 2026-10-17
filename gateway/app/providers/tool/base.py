@@ -115,6 +115,7 @@ class ToolProviderAdapter(ABC):
     Constructed once at startup, held in ``app.state.tool_adapters``, reused
     across requests. All outbound HTTP MUST go through ``guarded_egress``."""
 
+    configuration_revision: str | None = None
     name: str
 
     @abstractmethod

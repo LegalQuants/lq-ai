@@ -3,7 +3,7 @@
 Backs the GDPR Article 20 export endpoint pair (``POST /users/me/export``
 + ``GET /users/me/export/{job_id}``). The :class:`UserExportJob` row
 tracks one async export from queued → processing → completed/failed.
-The actual ZIP bytes live in MinIO under the ``storage_key`` the
+The actual ZIP bytes live in object storage under the ``storage_key`` the
 worker writes; ``GET`` returns a presigned URL for the bytes.
 
 See docs/db-schema.md §`user_export_jobs` and migration 0009 for the

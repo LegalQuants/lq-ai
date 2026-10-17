@@ -1,7 +1,7 @@
 """User-data export worker — Task D6 (GDPR Article 20).
 
 Builds a ZIP archive of every piece of data the LQ.AI backend stores
-about one user, uploads it to MinIO under
+about one user, uploads it to object storage under
 ``exports/<user_id>/<job_id>.zip``, and updates the
 :class:`UserExportJob` row with the resulting key + 7-day expiry.
 
@@ -20,6 +20,10 @@ The export bundle contains:
   user can audit their own actions.
 * ``skills.json`` — empty array under M1 (skills are filesystem-canonical
   per ADR 0004; no per-user DB rows).
+* ``orchestration_runs.json`` — the user's governed runs (ADR 0038 D5,
+  ADR 0016 P9): each run's planning intake, plan revisions and approvals,
+  child results, the root's combined result, per-step receipts and the
+  contents of the run's working files.
 * ``README.md`` — bundle manifest.
 
 A best-effort export: if a particular row family fails to serialize
@@ -108,9 +112,145 @@ def _serialize_message(message: Message) -> dict[str, Any]:
         "id": str(message.id),
         "chat_id": str(message.chat_id),
         "role": message.role,
+        "directed_by_user_id": str(message.directed_by_user_id)
+        if message.directed_by_user_id
+        else None,
+        "kind": message.kind,
+        # Set on a run message: the run in ``orchestration_runs.json``.
+        "autonomous_session_id": str(message.autonomous_session_id)
+        if message.autonomous_session_id
+        else None,
         "content": message.content,
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+async def _serialize_runs(session: AsyncSession, user: User) -> list[dict[str, Any]]:
+    """The user's governed runs: plans, child results, receipts and run files.
+
+    The owner's own work product (ADR 0016 P9). Step receipts carry the same
+    bounded notes the run view shows; raw tool results and provider responses
+    are not exported, as they are not shown.
+    """
+    from app.models.autonomous import AutonomousSession
+    from app.models.orchestration import (
+        OrchestrationAccount,
+        OrchestrationEffect,
+        OrchestrationFile,
+        OrchestrationPlan,
+        OrchestrationRoot,
+    )
+
+    runs = []
+    roots = await session.scalars(
+        select(OrchestrationRoot)
+        .where(OrchestrationRoot.owner_id == user.id)
+        .order_by(OrchestrationRoot.created_at, OrchestrationRoot.session_id)
+    )
+    for root in roots.all():
+        bound = (
+            await session.execute(
+                select(Message.chat_id, Message.id).where(
+                    Message.autonomous_session_id == root.session_id
+                )
+            )
+        ).one_or_none()
+        plans = await session.scalars(
+            select(OrchestrationPlan)
+            .where(OrchestrationPlan.root_id == root.session_id)
+            .order_by(OrchestrationPlan.revision)
+        )
+        sessions = []
+        members = await session.scalars(
+            select(AutonomousSession)
+            .where(AutonomousSession.root_session_id == root.session_id)
+            .order_by(AutonomousSession.delegation_depth, AutonomousSession.child_order)
+        )
+        for member in members.all():
+            account = await session.get(OrchestrationAccount, member.id)
+            effects = await session.scalars(
+                select(OrchestrationEffect)
+                .where(OrchestrationEffect.session_id == member.id)
+                .order_by(OrchestrationEffect.created_at, OrchestrationEffect.effect_key)
+            )
+            files = await session.scalars(
+                select(OrchestrationFile)
+                .where(OrchestrationFile.session_id == member.id)
+                .order_by(OrchestrationFile.name)
+            )
+            sessions.append(
+                {
+                    "session_id": str(member.id),
+                    "role": "root" if member.id == root.session_id else "child",
+                    "child_order": member.child_order,
+                    "status": member.status,
+                    "phase": member.current_phase,
+                    "result": member.result,
+                    "allocation_usd": str(account.allocation_usd) if account else None,
+                    "spent_usd": str(account.spent_usd) if account else None,
+                    "reserved_usd": str(account.reserved_usd) if account else None,
+                    "effects": [
+                        {
+                            "effect_key": effect.effect_key,
+                            "intent": effect.intent,
+                            "phase": effect.phase,
+                            "status": effect.status,
+                            "reserved_usd": str(effect.reserved_usd),
+                            "charged_usd": str(effect.charged_usd)
+                            if effect.charged_usd is not None
+                            else None,
+                            "created_at": _iso(effect.created_at),
+                            "completed_at": _iso(effect.completed_at),
+                            "outcome": (effect.result or {}).get("outcome"),
+                            "step": (effect.result or {}).get("step"),
+                        }
+                        for effect in effects.all()
+                    ],
+                    "files": [
+                        {
+                            "name": file.name,
+                            "revision": file.revision,
+                            "digest": file.digest,
+                            "size_bytes": file.size_bytes,
+                            "shared": file.shared,
+                            "updated_at": _iso(file.updated_at),
+                            "content": file.content,
+                        }
+                        for file in files.all()
+                    ],
+                }
+            )
+        runs.append(
+            {
+                "root_id": str(root.session_id),
+                "profile": root.profile,
+                "status": root.status,
+                "stop_reason": root.stop_reason,
+                "project_id": str(root.project_id) if root.project_id else None,
+                "chat_id": str(bound.chat_id) if bound else None,
+                "message_id": str(bound.id) if bound else None,
+                "created_at": _iso(root.created_at),
+                "updated_at": _iso(root.updated_at),
+                "planning": root.planning_snapshot,
+                "plans": [
+                    {
+                        "revision": plan.revision,
+                        "status": plan.status,
+                        "plan_hash": plan.plan_hash,
+                        "plan": plan.snapshot,
+                        "approval": plan.approval,
+                        "created_at": _iso(plan.created_at),
+                    }
+                    for plan in plans.all()
+                ],
+                "sessions": sessions,
+            }
+        )
+    return runs
 
 
 def _serialize_project(project: Project) -> dict[str, Any]:
@@ -120,6 +260,7 @@ def _serialize_project(project: Project) -> dict[str, Any]:
         "slug": project.slug,
         "description": project.description,
         "minimum_inference_tier": project.minimum_inference_tier,
+        "max_egress_tier": project.max_egress_tier,
         "privileged": project.privileged,
         "archived_at": project.archived_at.isoformat() if project.archived_at else None,
         "created_at": project.created_at.isoformat() if project.created_at else None,
@@ -222,9 +363,18 @@ original bytes for any files you uploaded.
                             a third party (e.g., trial counsel, an
                             auditor) when you need to attest to how a
                             specific piece of model output was produced.
+- `tabular_bulk_ops.json` — retained reports, memos and their source metadata.
 - `skills.json`          — empty under M1; skills are filesystem-canonical
                             (see ADR 0004) and live in the deployment's
                             `skills/` directory rather than the database.
+- `skill_workspaces.json` — your optional saved skill work, including file
+                            contents, namespaces and revisions.
+- `orchestration_runs.json` — your governed runs: each run's request and
+                            plan, your approvals, each task's result, the
+                            combined result, step receipts and the contents
+                            of the run's working files. A run hosted in a
+                            chat is linked from its message in
+                            `messages.json`.
 
 ## Validity
 
@@ -237,6 +387,12 @@ deleted and a status-poll on this job will report it expired.
 async def _build_zip(session: AsyncSession, user: User) -> bytes:
     """Assemble the export ZIP for ``user`` and return the bytes."""
 
+    from app.authz.matters import blocked_project_ids
+    from app.errors import Forbidden
+
+    blocked = (await session.execute(blocked_project_ids(user))).scalars().all()
+    if blocked:
+        raise Forbidden("Export requires reconciliation of screened matter content.")
     buffer = io.BytesIO()
 
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -346,7 +502,10 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
         attrib_rows = (
             (
                 await session.execute(
-                    select(WorkProductAttribution).where(WorkProductAttribution.user_id == user.id)
+                    select(WorkProductAttribution).where(
+                        (WorkProductAttribution.user_id == user.id)
+                        | WorkProductAttribution.message_id.in_([m.id for m in messages])
+                    )
                 )
             )
             .scalars()
@@ -357,8 +516,59 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
             json.dumps([_serialize_work_product(r) for r in attrib_rows], indent=2),
         )
 
+        # Retained reports/memos remain user work product after their source is deleted.
+        from app.models.tabular import TabularBulkOp
+        from app.schemas.tabular import TabularBulkOpResponse
+
+        bulk_ops = await session.scalars(
+            select(TabularBulkOp).where(TabularBulkOp.user_id == user.id).order_by(TabularBulkOp.id)
+        )
+        zf.writestr(
+            "tabular_bulk_ops.json",
+            json.dumps(
+                [
+                    TabularBulkOpResponse.model_validate(row).model_dump(mode="json")
+                    for row in bulk_ops
+                ],
+                ensure_ascii=False,
+                indent=2,
+            ),
+        )
+
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).
         zf.writestr("skills.json", json.dumps([], indent=2))
+
+        from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
+        from app.skills.workspace import metadata
+
+        saved_work = []
+        for workspace in await session.scalars(
+            select(SkillWorkspace)
+            .where(SkillWorkspace.owner_id == user.id)
+            .order_by(SkillWorkspace.id)
+        ):
+            workspace_files = await session.scalars(
+                select(SkillWorkspaceFile)
+                .where(SkillWorkspaceFile.workspace_id == workspace.id)
+                .order_by(SkillWorkspaceFile.name)
+            )
+            saved_work.append(
+                {
+                    "id": str(workspace.id),
+                    "skill_key": workspace.skill_key,
+                    "skill_name": workspace.skill_name,
+                    "format_version": workspace.format_version,
+                    "project_id": str(workspace.project_id) if workspace.project_id else None,
+                    "files": [{**metadata(row), "content": row.content} for row in workspace_files],
+                }
+            )
+        zf.writestr("skill_workspaces.json", json.dumps(saved_work, ensure_ascii=False, indent=2))
+
+        # Governed runs (ADR 0038 D5): plans, child results and run files.
+        zf.writestr(
+            "orchestration_runs.json",
+            json.dumps(await _serialize_runs(session, user), ensure_ascii=False, indent=2),
+        )
 
     return buffer.getvalue()
 
@@ -476,7 +686,7 @@ async def export_gc_job(ctx: dict[str, Any]) -> dict[str, Any]:
 async def build_export_zip_for_test(session: AsyncSession, user: User) -> bytes:
     """Test-only entry point that returns raw ZIP bytes.
 
-    Tests that don't need MinIO can call this and inspect the archive
+    Tests that don't need object storage can call this and inspect the archive
     directly via :mod:`zipfile` rather than spinning up arq.
     """
 

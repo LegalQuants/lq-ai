@@ -3,9 +3,10 @@
 Token model (per ADR 0002 / PRD §5.1):
 
 - **Access token** — short-lived JWT signed with HS256, ~15 min TTL. Carries
-  `sub` (user id), `email`, `is_admin`, `iat`, `exp`. Stateless: never stored
-  server-side; validated by signature and expiry on every request. Rotated
-  by the refresh flow.
+  `sub` (user id), `email`, `is_admin`, `iat`, `exp`, `credential_version`.
+  Never stored server-side; signature and expiry are validated on every
+  request, then the user dependency checks the current credential version.
+  Rotated by the refresh flow.
 
 - **Refresh token** — long-lived (~7 days) opaque random string. The plaintext
   is returned to the client on login and refresh; the bcrypt hash is stored
@@ -63,6 +64,7 @@ class AccessTokenClaims:
     is_admin: bool
     issued_at: datetime
     expires_at: datetime
+    credential_version: int
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,7 @@ class MfaTokenClaims:
     user_id: uuid.UUID
     issued_at: datetime
     expires_at: datetime
+    credential_version: int
 
 
 def _utcnow() -> datetime:
@@ -79,10 +82,12 @@ def _utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def create_access_token(user_id: uuid.UUID, email: str, *, is_admin: bool) -> str:
+def create_access_token(
+    user_id: uuid.UUID, email: str, *, is_admin: bool, credential_version: int = 0
+) -> str:
     """Mint a signed access-token JWT for `user_id`.
 
-    Encodes `sub`, `email`, `is_admin`, `iat`, `exp`, and a `typ` claim so
+    Encodes `sub`, `email`, `is_admin`, `iat`, `exp`, `credential_version`, and `typ` so
     we can refuse, e.g., a refresh-context MFA token presented as an
     access token. Returns the encoded JWT as a UTF-8 string.
     """
@@ -95,6 +100,7 @@ def create_access_token(user_id: uuid.UUID, email: str, *, is_admin: bool) -> st
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=settings.jwt_access_token_ttl_seconds)).timestamp()),
         "typ": _TYPE_ACCESS,
+        "credential_version": credential_version,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=_JWT_ALGORITHM)
 
@@ -116,6 +122,10 @@ def decode_access_token(token: str) -> AccessTokenClaims | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[_JWT_ALGORITHM])
     except jwt.PyJWTError:
+        return None
+
+    version = payload.get("credential_version")
+    if type(version) is not int or version < 0:
         return None
 
     if payload.get("typ") != _TYPE_ACCESS:
@@ -140,13 +150,14 @@ def decode_access_token(token: str) -> AccessTokenClaims | None:
         is_admin=bool(is_admin),
         issued_at=datetime.fromtimestamp(int(iat), tz=UTC),
         expires_at=datetime.fromtimestamp(int(exp), tz=UTC),
+        credential_version=version,
     )
 
 
-def create_mfa_token(user_id: uuid.UUID) -> str:
+def create_mfa_token(user_id: uuid.UUID, *, credential_version: int = 0) -> str:
     """Mint a signed MFA challenge token (issued by /auth/login on 423).
 
-    The token's only payload is the user id and a short TTL. D5's
+    The token carries the user id, credential version, and a short TTL. D5's
     /auth/mfa/verify consumes it; if it expires before the user submits
     a TOTP code, the user re-enters credentials at /auth/login.
     """
@@ -157,6 +168,7 @@ def create_mfa_token(user_id: uuid.UUID) -> str:
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=settings.mfa_token_ttl_seconds)).timestamp()),
         "typ": _TYPE_MFA,
+        "credential_version": credential_version,
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=_JWT_ALGORITHM)
 
@@ -167,6 +179,10 @@ def decode_mfa_token(token: str) -> MfaTokenClaims | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[_JWT_ALGORITHM])
     except jwt.PyJWTError:
+        return None
+
+    version = payload.get("credential_version")
+    if type(version) is not int or version < 0:
         return None
 
     if payload.get("typ") != _TYPE_MFA:
@@ -187,6 +203,7 @@ def decode_mfa_token(token: str) -> MfaTokenClaims | None:
         user_id=user_id,
         issued_at=datetime.fromtimestamp(int(iat), tz=UTC),
         expires_at=datetime.fromtimestamp(int(exp), tz=UTC),
+        credential_version=version,
     )
 
 

@@ -241,3 +241,34 @@ async def test_existing_callers_can_omit_gateway_kwargs() -> None:
     # Stage 1 hits — gateway never needed.
     assert result.verified is True
     assert result.method == "exact_match"
+
+
+@pytest.mark.unit
+async def test_stage_2_ocr_regression_and_false_positive_guard() -> None:
+    """OCR chained normalization must not raise false positives or break regressions.
+
+    Verifies that the idempotence loop fixes cross-run chained confusion without
+    aggressively squashing unrelated strings to false positives.
+    """
+
+    # Regression: chained confusion `5lO` should match canonical `510`
+    text = "The limit is 510 days."
+    doc = _doc(text)
+    doc.was_ocrd = True
+
+    # 5lO starts at index 13, ends at 16
+    cand_match = _cand(doc, start=13, end=16, source_text="5lO")
+
+    gw = _StubGateway('{"verdict": "no"}')
+    result = await verify(cand_match, doc, gateway=gw, judge_model="fast")
+
+    assert result.verified is True
+    assert result.method == "tolerant_match"
+
+    # False positive guard: Unrelated but structurally similar string (5x0)
+    # must NOT trigger Stage 2 when compared against 510, proving OCR
+    # normalization didn't just blanket-accept everything.
+    cand_false = _cand(doc, start=13, end=16, source_text="5x0")
+    result_false = await verify(cand_false, doc, gateway=gw, judge_model="fast")
+
+    assert result_false.verified is False

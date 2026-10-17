@@ -11,8 +11,13 @@ Covers:
   token exchange → mocked Graph display-name lookup → POST tenant
   record to the api over the shared bridge token → success page.
 * ``GET /teams/oauth/callback`` — bad state → 400.
-* ``GET /teams/oauth/callback`` — ``error=...`` query param renders
-  the cancellation page without contacting Microsoft or the api.
+* ``GET /teams/oauth/callback`` — ``error=...`` query param (with a valid
+  state) renders the static cancellation page without contacting
+  Microsoft or the api.
+* Output encoding + CSP regression suite (reflected XSS in the callback,
+  reported 2026-08): the state check precedes every page-rendering
+  branch; ``error`` / ``error_description`` / upstream bodies are never
+  reflected; every HTML page carries ``default-src 'none'``.
 * Microsoft token endpoint returning non-200 → 502.
 * api persistence returning non-2xx → 502.
 * Graph display-name lookup failure falls back to tid (does NOT 502).
@@ -24,7 +29,7 @@ import base64
 import json
 import time
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -259,13 +264,17 @@ def test_callback_with_bad_state_returns_400(client: TestClient) -> None:
 def test_callback_with_error_query_param_renders_cancellation_page(
     client: TestClient,
 ) -> None:
+    """A declined consent (valid state, no code) renders the static cancel
+    page; ``error`` / ``error_description`` are logged, never echoed."""
+    state = _seed_state("stateDenied")
     res = client.get(
-        "/teams/oauth/callback?code=ignored&state=ignored"
-        "&error=access_denied&error_description=admin+declined"
+        f"/teams/oauth/callback?state={state}&error=access_denied&error_description=admin+declined"
     )
     assert res.status_code == 400
     assert "Install cancelled" in res.text
-    assert "access_denied" in res.text
+    assert "access_denied" not in res.text
+    assert "admin declined" not in res.text
+    assert state not in oauth_module._STATE_STORE
 
 
 def test_callback_with_token_endpoint_failure_returns_502(
@@ -323,3 +332,160 @@ def test_callback_with_id_token_missing_claims_returns_502(
     res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
     assert res.status_code == 502
     assert "tid + oid" in res.text
+
+
+# ---------------------------------------------------------------------------
+# Output encoding + CSP (reflected-XSS regression, 2026-08 advisory)
+# ---------------------------------------------------------------------------
+#
+# Teams was the easier reported attack: ``code`` and ``state`` were already
+# optional here, so ``?error=x&error_description=<script>…`` reached the
+# reflecting branch with no other parameter. The state check now runs
+# first, and nothing caller- or provider-controlled is rendered.
+
+_SCRIPT_PAYLOAD = "<script>document.title='pwned'</script>"
+_IMG_PAYLOAD = '<img src=x onerror="alert(1)">'
+
+
+def _assert_hardened_html(res: object) -> None:
+    headers = res.headers  # type: ignore[attr-defined]
+    text = res.text  # type: ignore[attr-defined]
+    assert headers["content-type"].startswith("text/html")
+    assert headers["content-security-policy"] == oauth_module._CONTENT_SECURITY_POLICY
+    assert headers["content-security-policy"].startswith("default-src 'none'")
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["referrer-policy"] == "no-referrer"
+    assert headers["cache-control"] == "no-store"
+    # No live tag or attribute survives: only the entity-encoded form may.
+    assert "<script" not in text.lower()
+    assert "<img" not in text.lower()
+    assert 'onerror="' not in text.lower()
+    assert "Correlation:" in text
+
+
+def test_error_branch_is_unreachable_without_valid_state(client: TestClient) -> None:
+    """The reported bare-URL reach (no code, no state) is closed."""
+    res = client.get(f"/teams/oauth/callback?error=x&error_description={quote(_SCRIPT_PAYLOAD)}")
+    assert res.status_code == 400
+    assert "invalid or expired state" in res.text.lower()
+    assert "<script" not in res.text
+    assert res.headers["content-type"].startswith("application/json")
+
+
+def test_error_and_description_payloads_are_not_reflected(client: TestClient) -> None:
+    state = _seed_state("stateXss")
+    res = client.get(
+        f"/teams/oauth/callback?state={state}&error={quote(_IMG_PAYLOAD)}"
+        f"&error_description={quote(_SCRIPT_PAYLOAD)}"
+    )
+    assert res.status_code == 400
+    assert "Install cancelled" in res.text
+    assert "pwned" not in res.text
+    _assert_hardened_html(res)
+
+
+def test_missing_code_without_error_returns_400_after_state_check(
+    client: TestClient,
+) -> None:
+    state = _seed_state("stateOnlyState")
+    res = client.get(f"/teams/oauth/callback?state={state}")
+    assert res.status_code == 400
+    assert "missing authorization code" in res.text.lower()
+
+
+def test_token_endpoint_body_is_not_reflected(
+    client: TestClient,
+    httpx_mock: HTTPXMock,
+) -> None:
+    """The raw upstream body used to land in a ``<pre>``; now only the HTTP
+    status and a token-shaped error code (if any) are shown."""
+    state = _seed_state("stateBody")
+    httpx_mock.add_response(
+        url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        method="POST",
+        status_code=400,
+        text=_SCRIPT_PAYLOAD,
+    )
+    res = client.get(f"/teams/oauth/callback?code=bad&state={state}")
+    assert res.status_code == 502
+    assert "HTTP 400" in res.text
+    assert "error code: unknown" in res.text
+    assert "pwned" not in res.text
+    _assert_hardened_html(res)
+
+
+def test_token_endpoint_error_code_rendered_only_when_token_shaped(
+    client: TestClient,
+    httpx_mock: HTTPXMock,
+) -> None:
+    state = _seed_state("stateMarkupCode")
+    httpx_mock.add_response(
+        url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        method="POST",
+        status_code=400,
+        json={"error": _IMG_PAYLOAD, "error_description": _SCRIPT_PAYLOAD},
+    )
+    res = client.get(f"/teams/oauth/callback?code=bad&state={state}")
+    assert res.status_code == 502
+    assert "error code: unknown" in res.text
+    _assert_hardened_html(res)
+
+
+def test_id_token_decode_failure_detail_is_not_reflected(
+    client: TestClient,
+    httpx_mock: HTTPXMock,
+) -> None:
+    state = _seed_state("stateBadJwt")
+    httpx_mock.add_response(
+        url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        method="POST",
+        status_code=200,
+        json={"id_token": _SCRIPT_PAYLOAD, "access_token": "x"},
+    )
+    res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 502
+    assert "could not be decoded" in res.text
+    assert "pwned" not in res.text
+    _assert_hardened_html(res)
+
+
+def test_success_page_escapes_tenant_name(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+) -> None:
+    """The consenting tenant's own Graph display name is still output-encoded."""
+    state = _seed_state("stateName")
+    _add_token_endpoint_success(httpx_mock)
+    _add_graph_org_success(httpx_mock, display_name=_IMG_PAYLOAD)
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
+        method="POST",
+        status_code=201,
+        json={},
+    )
+    res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 200, res.text
+    assert "Install complete" in res.text
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in res.text
+    _assert_hardened_html(res)
+
+
+def test_api_persist_rejection_body_is_not_reflected(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+) -> None:
+    state = _seed_state("stateApiBody")
+    _add_token_endpoint_success(httpx_mock)
+    _add_graph_org_success(httpx_mock)
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
+        method="POST",
+        status_code=500,
+        text=_SCRIPT_PAYLOAD,
+    )
+    res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 502
+    assert "Backend rejected with HTTP 500" in res.text
+    _assert_hardened_html(res)

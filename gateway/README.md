@@ -7,10 +7,15 @@ OpenAI-compatible surface (`/v1/chat/completions`, `/v1/embeddings`) plus admin 
 ## Quick start
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --extra dev               # creates .venv from the committed uv.lock
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8001
 ```
+
+Dependencies are locked with [uv](https://docs.astral.sh/uv/) per
+[ADR 0023](../docs/adr/0023-uv-lockfiles-gateway-api.md); after editing
+`pyproject.toml`, run `uv lock` and commit the updated `uv.lock` (CI gates on
+`uv lock --check`).
 
 Health check: `curl http://localhost:8001/health`
 

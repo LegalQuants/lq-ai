@@ -112,6 +112,7 @@ async def test_reset_admin_password_happy_path(
         async with factory() as s:
             row = (await s.execute(select(User).where(User.email == email))).scalar_one()
             assert row.must_change_password is True
+            assert row.credential_version == 1
             # Old password no longer verifies.
             assert verify_password("OldOldOldOldOld!", row.hashed_password) is False
         await engine.dispose()

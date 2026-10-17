@@ -6,6 +6,16 @@ The audience is anyone authoring a skill containing legal substance: practicing 
 
 For the contribution process (claim, draft, attest, review, merge), see [`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md). This guide focuses on **how to author the skill itself** — what goes in `SKILL.md`, what goes in `reference/`, what goes in `examples/`, and what conventions the project expects.
 
+**Optional capabilities, disabled by default:**
+[ADR 0035 D8b–D8d](adr/0035-governed-orchestration-run-tree.md#d8b--optional-persistent-skill-workspaces)
+adds persistent skill workspaces and installed Python helpers. Bundled scripts
+require security review of their exact code, dependencies and runtime image in
+addition to any legal-content review. Helpers must treat supplied and saved text
+as data and preserve its restrictions through subsequent agent calls. General
+generated-code execution remains excluded. The [capability summary](plans/issue-563-skill-capabilities.md)
+describes the implementation and pending security gates. Production helper
+enablement requires those gates to be completed.
+
 ---
 
 ## Skill anatomy
@@ -15,9 +25,11 @@ A skill is a folder. The structure:
 ```
 my-skill/
 ├── SKILL.md              # Required. Main instruction file with frontmatter.
-├── reference/            # Optional. Reference material the skill cites.
+├── reference/            # Optional. Reference material sent with every prompt.
 │   ├── severity_rubric.md
 │   ├── report_structure.md
+│   └── ...
+├── references/           # Optional. Reference material read one file at a time.
 │   └── ...
 ├── examples/             # Required for review. Worked examples.
 │   ├── example_perspective_a.md
@@ -26,11 +38,125 @@ my-skill/
     └── ...
 ```
 
-`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is optionally surfaced when the skill's workflow references it. `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+`SKILL.md` is the operational instruction the model executes when the skill is attached to a chat. Everything in `SKILL.md` becomes part of the prompt; everything in `reference/` is appended to it, and files in `references/` are read on request (see below). `examples/` are documentation for users and reviewers; they do not become part of the prompt by default.
+
+### `reference/` and `references/`
+
+The two folder names behave differently.
+
+- **`reference/`** is sent with the prompt. Every file in it is appended to the skill's instructions each time the skill is used. Keep it small: a rubric, a report structure, the checklist the workflow always needs.
+- **`references/`** is read on request. This is the Agent Skills name, and it is what most community skills ship. The model is given the list of file paths and a `skill_reference_read` tool that returns one file. Nothing in the folder is sent unless the model asks for it. Use it for material only some tasks need: one file per jurisdiction, per regime, per scenario.
+
+For `references/`, tell the model in `SKILL.md` which file answers which kind of question, by path (`references/states/ca.md`). A read takes `{"path": "references/states/ca.md"}`; only paths in the skill's own list are accepted. In chat the function name carries a skill-specific prefix and ends in `skill_reference_read`; background execution uses the intent name.
+
+A file is listed if it contains valid UTF-8 text without NUL, in a path made of letters, digits, `_`, `.` and `-`, with no hidden names and no symlinks. There is no size-based omission: files up to 64 KiB fit one default call; larger files require multiple explicit bounded calls. At most 64 files are listed. A file that does not qualify is left out and named in a warning in the API log; the skill still loads. The files are part of the skill's pinned digest, so a file edited on disk mid-run is refused until the skill is reloaded.
+
+Ordinary reads are default-on for an enabled, trusted installed skill, without
+`lq_ai.capabilities` or experimental `allowed-tools`. Operators can disable model
+reads with `LQ_AI_SKILL_REFERENCE_READ_ENABLED=false` (bare alias
+`SKILL_REFERENCE_READ_ENABLED`). Metadata exposes `reference_read_enabled`;
+authorized human inspection remains available through the supporting-file UI and
+`/api/v1/skills/{name}/contents` in `on_demand_contents`. This grants no script
+execution, persistence or external access. The caps and safe-path subset above
+are #658's limited LQ profile, not Agent Skills format requirements. Assets,
+broader paths, Unicode names and complete-list paging remain follow-up
+work; omitted resources must not be described as read. A chat with such a skill attached runs through the tool loop, so the model behind it must support tool calls. Database (user and team) skills have no files and get no read tool.
+
+A reference read accepts `path`, `offset_bytes` (default 0) and `max_bytes`
+(1–65536; default 65536). Results report total `size_bytes`, the exclusive
+`end_offset_bytes`, `returned_bytes`, `has_more`, `next_offset_bytes` and the
+full-file `sha256`. Use the returned next offset for a later deliberate call;
+UTF-8 characters may make a range slightly shorter than the requested maximum.
+Never imply unread portions were read. A changed file invalidates the binding,
+including when the change occurs outside the requested range. Source inspection
+also exposes explicit portions with size and progress. The 208,564-byte
+`us-state-privacy-navigator/references/enforcement_actions.json` is covered by
+the paging regressions and reads in four default calls.
+
+**Optional execution (#563).** Declared `scripts/` helpers
+can run through the private bundled-helper broker when an operator enables their
+exact installed version. Merely including a script does not enable execution.
+Generated-code execution is unsupported. The next section describes the optional
+declarations; [PRD §3.4](PRD.md#34-skill-library-and-skill-creator) records release state.
 
 **Where skills live.** Built-in skills are filesystem-canonical under `skills/<slug>/SKILL.md` in this repo. Community skills come from the [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills) git submodule mounted at `skills/community/` — **empty on a fresh clone until you run `git submodule update --init --remote skills/community`**. At startup the loader (`api/app/skills/loader.py`) walks built-in skills first, then community skills, with **built-in winning on slug collision**. User- and team-authored skills are a separate path entirely: they live in the `user_skills` database table (created via the wizard UI or `POST /api/v1/user-skills`), not on the filesystem — see [User-scope skills](#user-scope-skills-slash_alias-forked_from-and-capture-from-chat-wave-d2) below.
 
 ---
+
+## Optional persistence and bundled helpers
+
+These two capabilities are independent and default off. A skill can use either,
+both or neither. The following declaration opts in to both:
+
+```yaml
+lq_ai:
+  capabilities:
+    workspace_version: 1
+    scripts:
+      - name: summarize_notes
+        description: Count lines and words in a text input and return a short preview.
+```
+
+`workspace_version` is a storage format version (integer 1–1000), separate from
+the skill's release version. Keep it for compatible changes; increment it when
+saved data is incompatible. A new version starts an empty namespace. Files belong
+to the current owner, matter or personal scope, resolved skill and format version.
+Team skills do not share users' saved files. A new invocation can read prior work
+in the same scope; a fork/new skill identity cannot. Loading prior work is always
+explicit and optional, and stored notes remain unverified task data.
+
+The available tool operations are `skill_workspace_list`, `skill_workspace_read`
+and `skill_workspace_write`. Chat exposes skill-specific function names and
+schemas; background execution uses the intent names. The application binds the
+identity and owner; callers never supply a workspace ID or host path. For example:
+
+```json
+{"name": "notes.md", "content": "Alpha beta\nGamma", "expected_revision": null}
+```
+
+The successful write returns a revision UUID. To update, read the file and supply
+that revision as `expected_revision`. A conflict means another write/reset happened;
+read again before deciding what to save. Names match
+`[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}`. Limits are 32 files, 64 KiB UTF-8 per file and
+1 MiB per workspace. There is no automatic file deletion tool; owners can reset
+the workspace from Saved skill work and export it through account export.
+
+For scripts, install `scripts/<declared_name>.py` in a filesystem skill. Helper
+names match `[a-z][a-z0-9_]{0,47}`; at most eight may be declared. The loader accepts
+up to 32 `.py`, `.json`, `.txt` or `.md` files under `scripts/`, at most 64 KiB each
+and 1 MiB total, with no hidden files or symlinks. All those files are included
+in the bundle hash and exposed in the skill's Source view. DB/user/team/inline
+skill text cannot install executable helpers; a reviewed filesystem installation
+is required for code.
+
+Call `run_bundled_script` with a declared name and bounded JSON input:
+
+```json
+{"script": "summarize_notes", "inputs": {"text": "Alpha beta\nGamma"}}
+```
+
+A helper reads one JSON object from stdin and writes stdout/stderr. The result
+contains `stdout`, `stderr` and `exit_code`, or a fixed error. Nonzero exit status
+means the helper failed even if it printed output. No shell, source-code or
+interpreter argument exists. Helpers must validate input shape and treat strings
+as data; do not use `eval`, shell interpolation, generated imports or execute
+programs from temporary work. The reviewed image supplies Python and approved
+dependencies. Network access, runtime installation, credentials, database access,
+host mounts and persistent filesystem access are absent.
+
+`/work` is temporary, bounded to 16 MiB and fresh on every call. Helpers get ten
+seconds and 64 KiB combined output. Python runs in isolation mode (`-I -B`);
+working-directory and user imports are unavailable. Read selected workspace data
+through its tool, pass it as JSON, and separately save selected output if useful.
+Do not assume the helper can open `notes.md` merely because the workspace stores
+that name. Source and input/output contracts should be reviewable in the skill.
+
+`saved-notes-demo` is a technical example, with a two-invocation worked example.
+Tools are available in attached chat turns, query-driven background planning and
+the guarded orchestration adapter. Existing single-inference playbook/tabular/
+query-less paths do not acquire a tool loop. Orchestration additionally requires
+the approved skill pin, explicit tool grants, phase and live worker claim.
+See [deployment and acceptance](deploy/skill-capabilities.md) for operator enablement.
 
 ## SKILL.md frontmatter
 
@@ -485,6 +611,38 @@ The frontmatter field `lq_ai.self_improvement` defaults to `false` for v1.0.0 sk
 - Skills that "learn" without explicit user guidance can drift in ways that are hard to detect and worse to fix.
 
 For v1.0.0, skills are stable. Improvements happen through versioned releases, not through silent self-modification. If you have a self-improvement use case in mind, file an issue describing it; it's a candidate for the deferred-enhancements list.
+
+---
+
+## Untrusted content: what the assembler does, and does not, do
+
+Input values are caller-supplied at request time — pasted text, document
+content, parameters — and may contain text that reads as instructions. The
+gateway's assembler (ADR 0007) handles them two ways:
+
+- **Inputs your body never references** (the case for every built-in skill;
+  none uses `{{placeholders}}`) are appended after your body and reference
+  files as a `### Provided inputs` block: a one-line JSON envelope carrying
+  the source (`skill_input`), your skill's name, and the values, under a
+  policy line telling the model the values are data, not instructions. A
+  value cannot start a new line of the prompt, close the fence, or reproduce
+  the assembler's own section markers.
+- **Inputs consumed by a `{{placeholder}}`** are substituted into your body
+  as opaque strings. The only transformation is that the assembler's own
+  boundary headings (`# Skill:`, `## Reference:`, `### Provided inputs for`,
+  `## Operator system instructions`) at the start of a line are
+  backslash-escaped when formed wholly or partly by an input, including
+  across template boundaries and after Unicode line separators. Anything
+  else in the value reaches the model verbatim, in-body, with the same
+  authority as your prose.
+
+Two consequences for authors. Prefer leaving **document-sized inputs
+unconsumed** so they land in the envelope rather than in-body. And write
+the skill so it treats input content as *material to analyse*: say so in
+the "Inputs" section, and never instruct the model to "follow" anything it
+finds in a document. This is envelope integrity, not isolation — the values
+still sit in the system message; relocating them into a data channel is
+tracked as DE-388 in PRD §9.
 
 ---
 

@@ -62,7 +62,7 @@ async def _make_session(db: AsyncSession) -> AutonomousSession:
     return sess
 
 
-def _evidence() -> list[dict]:  # type: ignore[type-arg]
+def _evidence() -> list[dict]:
     return [
         {
             "n": 1,
@@ -209,7 +209,7 @@ _EDGAR_BODY = (
 )
 
 
-def _edgar_evidence() -> list[dict]:  # type: ignore[type-arg]
+def _edgar_evidence() -> list[dict]:
     """Mirrors dataclasses.asdict(EvidenceItem(...)) for an EDGAR authority hit:
     source="edgar", content_kind="sec_filing" (both always set by EdgarAdapter,
     per app/research/adapters.py)."""

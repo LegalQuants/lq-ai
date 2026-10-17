@@ -1,0 +1,252 @@
+{
+  "meta": {
+    "docling": "2.120.1",
+    "docling-core": "2.91.0",
+    "docling-parse": "7.13.0",
+    "docling-ibm-models": "3.14.0",
+    "torch": "2.13.0"
+  },
+  "results": [
+    {
+      "file": "nda-1-acme-beta.pdf",
+      "convert_seconds": 66.14,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 28763,
+      "roundtrip": "ok",
+      "num_tables": 0,
+      "num_pictures": 0,
+      "num_text_items": 37,
+      "text_labels": {
+        "section_header": 12,
+        "text": 25
+      },
+      "tables": [],
+      "markdown_chars": 6379,
+      "ok": true
+    },
+    {
+      "file": "nda-2-cypress-delta.pdf",
+      "convert_seconds": 0.36,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 28245,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 25,
+      "text_labels": {
+        "section_header": 10,
+        "text": 15
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 5522,
+      "ok": true
+    },
+    {
+      "file": "nda-3-echo-foxtrot.pdf",
+      "convert_seconds": 0.83,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 38016,
+      "roundtrip": "ok",
+      "num_tables": 2,
+      "num_pictures": 0,
+      "num_text_items": 32,
+      "text_labels": {
+        "section_header": 10,
+        "text": 15,
+        "list_item": 7
+      },
+      "tables": [
+        {
+          "num_rows": 3,
+          "num_cols": 2,
+          "num_cells": 6
+        },
+        {
+          "num_rows": 2,
+          "num_cols": 2,
+          "num_cells": 4
+        }
+      ],
+      "markdown_chars": 7879,
+      "ok": true
+    },
+    {
+      "file": "nda-4-gamma-helix.pdf",
+      "convert_seconds": 0.34,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 28030,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 25,
+      "text_labels": {
+        "section_header": 10,
+        "text": 15
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 5449,
+      "ok": true
+    },
+    {
+      "file": "nda-5-indigo-juniper.pdf",
+      "convert_seconds": 0.35,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 32373,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 28,
+      "text_labels": {
+        "section_header": 10,
+        "text": 16,
+        "list_item": 2
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 7015,
+      "ok": true
+    },
+    {
+      "file": "msa-1-acme-northstar.pdf",
+      "convert_seconds": 0.81,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 41460,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 37,
+      "text_labels": {
+        "section_header": 11,
+        "text": 26
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 9783,
+      "ok": true
+    },
+    {
+      "file": "msa-2-blackbird-zenith.pdf",
+      "convert_seconds": 0.41,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 40648,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 39,
+      "text_labels": {
+        "section_header": 11,
+        "text": 28
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 8893,
+      "ok": true
+    },
+    {
+      "file": "msa-3-cypress-pinnacle.pdf",
+      "convert_seconds": 0.42,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 41301,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 38,
+      "text_labels": {
+        "section_header": 11,
+        "text": 27
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 9444,
+      "ok": true
+    },
+    {
+      "file": "msa-4-delta-foxtrot.pdf",
+      "convert_seconds": 0.4,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 39497,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 38,
+      "text_labels": {
+        "section_header": 11,
+        "text": 27
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 8640,
+      "ok": true
+    },
+    {
+      "file": "msa-5-evergreen-horizon.pdf",
+      "convert_seconds": 0.43,
+      "conversion_status": "ConversionStatus.SUCCESS",
+      "json_default_mode": "ok",
+      "json_payload_bytes": 44554,
+      "roundtrip": "ok",
+      "num_tables": 1,
+      "num_pictures": 0,
+      "num_text_items": 41,
+      "text_labels": {
+        "section_header": 11,
+        "text": 30
+      },
+      "tables": [
+        {
+          "num_rows": 4,
+          "num_cols": 2,
+          "num_cells": 8
+        }
+      ],
+      "markdown_chars": 10608,
+      "ok": true
+    }
+  ]
+}

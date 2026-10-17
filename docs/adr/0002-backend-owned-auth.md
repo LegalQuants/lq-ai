@@ -37,6 +37,27 @@ During M1 planning, several factors made Option B the simpler architecture in pr
 
 **MFA.** TOTP via `pyotp` in M1; WebAuthn is a tracked enhancement (DE-### TBD). Recovery codes are single-use, hashed at rest, rotated on re-enrollment.
 
+### October 2026 addendum — local account administration
+
+For a small operator-managed deployment, trusted admins may create accounts and
+reset any live user's password, including their own or another admin's (PRD §5.1).
+The API returns the generated initial password in the creation/reset response with
+`Cache-Control: no-store`, stores only a bcrypt hash, forces a password change, and
+audits the mutation in the same transaction. Existing MFA enrollment is preserved.
+
+Access and MFA challenge tokens include a required `credential_version` claim.
+Each password change/reset (including CLI reset) increments the user version and
+revokes refresh sessions atomically. The existing per-request identity lookup
+checks that version, so no token denylist or extra database query is required.
+Password mutation and session issuance serialize on the user row; refresh must
+recheck session revocation after acquiring that lock. Existing unversioned JWTs
+need refresh or login after deployment. Access-token expiry remains 15 minutes by
+default. Requests already authorized before reset can finish.
+
+This extends the token validity check beyond signature/expiry while retaining
+backend-owned authentication and the existing session store. It adds no public
+signup, invitation service, MFA recovery, or finer-grained administrator roles.
+
 ## Consequences
 
 **Positive:**

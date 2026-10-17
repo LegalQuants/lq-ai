@@ -37,7 +37,7 @@ FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "skills"
 
 
 @pytest_asyncio.fixture
-async def real_session_factory(test_engine: AsyncEngine):
+async def real_session_factory(test_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     """Yield a session factory that creates a fresh AsyncSession per call.
 
     Used to override ``get_db`` so each in-flight request gets its own
@@ -83,7 +83,9 @@ async def seeded_user(test_engine: AsyncEngine) -> AsyncIterator[User]:
 
 
 @pytest_asyncio.fixture
-async def client(real_session_factory) -> AsyncIterator[AsyncClient]:
+async def client(
+    real_session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncClient]:
     """In-process AsyncClient where each request opens its own DB session."""
 
     async def _override() -> AsyncIterator[AsyncSession]:
