@@ -67,6 +67,7 @@ from app.models.user import MUTATING_ROLES, User
 from app.models.work_product import WorkProductAttribution
 from app.schemas.autonomous import Phase
 from app.schemas.chats import derive_chat_title
+from app.skills.capabilities import MAX_FILE_BYTES, ReferenceRead
 
 log = logging.getLogger(__name__)
 
@@ -161,6 +162,40 @@ def _receipt(effect: Effect) -> EffectReceipt:
         effect.charged_usd,
         effect.result,
     )
+
+
+def _effect_result_json(result: dict[str, Any], intent: str) -> str:
+    """Bound replay storage, including JSON expansion of one reference snapshot.
+
+    The default remains 128 KiB. A successful installed-reference read has a
+    strict path/text envelope and at most 64 KiB of UTF-8 before escaping.
+    JSON needs up to six bytes per input byte (C0 escapes), plus bounded path
+    and envelope overhead. Keep the original text for exact durable replay.
+    """
+    try:
+        if not isinstance(result, dict):
+            raise ValueError("result must be an object")
+        limit = 131_072
+        if intent == ToolIntent.skill_reference_read and result.get("outcome") == "success":
+            data = result.get("data")
+            if (
+                set(result) != {"data", "outcome"}
+                or not isinstance(data, dict)
+                or set(data) != {"path", "content"}
+                or not isinstance(data["content"], str)
+            ):
+                raise ValueError("invalid reference result")
+            ReferenceRead.model_validate({"path": data["path"]})
+            raw = data["content"].encode("utf-8")
+            if len(raw) > MAX_FILE_BYTES or b"\x00" in raw:
+                raise ValueError("reference outside bounded text profile")
+            limit = 6 * MAX_FILE_BYTES + 1024
+        content = json.dumps(result, allow_nan=False, ensure_ascii=False)
+        if len(content.encode("utf-8")) > limit:
+            raise ValueError("oversized result")
+        return content
+    except (ValueError, TypeError):
+        raise ValidationError(message="Effect result must be bounded JSON") from None
 
 
 def _money(value: Decimal) -> Decimal:
@@ -2045,14 +2080,6 @@ class OrchestrationStore:
         flushes session cost/outcome. No new execution is authorized here.
         """
         charge = _money(charged_usd)
-        try:
-            if not isinstance(result, dict):
-                raise ValueError("result must be an object")
-            content = json.dumps(result, allow_nan=False, ensure_ascii=False)
-            if len(content.encode("utf-8")) > 131_072:
-                raise ValueError("oversized result")
-        except (ValueError, TypeError):
-            raise ValidationError(message="Effect result must be bounded JSON") from None
         # Completion may record one admitted call after halt/revocation.
         # It does not resolve policy or authorize another external action.
         root = await db.get(Root, claim.root_id)
@@ -2075,6 +2102,9 @@ class OrchestrationStore:
         effect = await db.get(Effect, (claim.session_id, effect_key))
         if effect is None or effect.generation != claim.generation:
             raise Conflict(message="Effect is not owned by this worker generation")
+        # The admitted server-side intent selects the storage bound; result
+        # fields cannot opt another tool into a larger receipt.
+        content = _effect_result_json(result, effect.intent)
         if effect.status == "completed":
             if effect.charged_usd != charge or effect.result != result:
                 raise Conflict(message="Completed effect cannot be rewritten")

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.autonomous.enums import ToolIntent
 from app.autonomous.orchestration.contracts import PreparedPlan
 from app.autonomous.orchestration.store import EffectReceipt
-from app.errors import Conflict, Forbidden
+from app.errors import Conflict, Forbidden, ValidationError
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.orchestration import (
@@ -1146,3 +1146,18 @@ async def test_orphan_reservation_without_prior_stop_reason_remains_visible(
         assert account.reserved_usd == 1 and account.worker_id is None
     with pytest.raises(Conflict, match="not approved"):
         await env.store.claim(env.root_id, env.root_id, worker_id=uuid4(), seconds=60)
+
+
+async def test_other_effect_results_keep_the_existing_json_limit(ready: SimpleNamespace) -> None:
+    env = ready
+    await begin(env)
+    with pytest.raises(ValidationError, match="Effect result must be bounded JSON"):
+        await env.store.complete_effect(
+            env.claim,
+            effect_key="analysis:one",
+            charged_usd=Decimal("0"),
+            result={"content": "\n" * 65536},
+        )
+    async with env.factory() as db:
+        effect = await db.get(Effect, (env.claim.session_id, "analysis:one"))
+        assert effect.status == "admitted" and effect.result is None

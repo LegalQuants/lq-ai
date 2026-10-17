@@ -547,8 +547,8 @@ This is the single most differentiated capability in the product. Specified in d
 
 ### 3.4 Skill Library and Skill Creator
 
-**Proposed compatibility clarification (#658; maintainer-directed 2026-10-06,
-pending human review and merge).** Ordinary reference reads are default-on for
+**Adopted compatibility clarification (#658; maintainer-directed 2026-10-06,
+adopted by the maintainer 2026-10-17).** Ordinary reference reads are default-on for
 an enabled, trusted installed skill, without proprietary capability frontmatter.
 Host policy can disable model reads while retaining authorized human inspection.
 Each invocation checks current policy and exact installed/pinned resource scope;

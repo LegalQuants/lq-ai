@@ -21,7 +21,12 @@ at most 64 KiB, at most 64 files). The file read makes no outbound call; its
 contents enter the governed conversation as a tool result.
 A chat read is recorded in `tool_call_log` like any other skill tool call; a
 background run records metadata in the session's audit trail; read contents are
-not audit payloads. Skill metadata exposes `reference_read_enabled` and
+not audit payloads. Durable effect results retain the exact reference text for
+replay under the existing run-result retention model. Their reference-specific
+JSON budget accounts for escaping of the admitted 64 KiB UTF-8 snapshot; other
+tool results retain their existing limit. Disabling future reads does not delete
+previously retained results or model output. Skill metadata exposes
+`reference_read_enabled` and
 `GET /api/v1/admin/config` exposes the read-only, environment-backed
 `skill_resource_policy`. This is not a runtime-editable switch. Authorized human
 inspection through `/api/v1/skills/{name}/contents` (`on_demand_contents`) remains

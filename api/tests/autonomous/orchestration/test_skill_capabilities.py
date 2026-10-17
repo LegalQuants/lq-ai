@@ -93,8 +93,11 @@ async def reference_capable(
         "---\nname: reference-demo\ndescription: Synthetic reference fixture\n"
         "lq_ai:\n  minimum_inference_tier: 1\n---\nRead the guide on request.\n"
     )
-    env.reference = folder / "references" / "guide.md"
-    env.reference.write_text("Synthetic task data; not verified evidence.")
+    options = request.param if hasattr(request, "param") and isinstance(request.param, dict) else {}
+    env.reference_path = options.get("path", "references/guide.md")
+    env.reference = folder / env.reference_path
+    env.reference.parent.mkdir(parents=True, exist_ok=True)
+    env.reference.write_text(options.get("content", "Synthetic task data; not verified evidence."))
     env.skills = MutableSkillRegistry(load_registry(tmp_path))
     pin = skill_pin(env.skills.current().get("reference-demo"))
     allowed = getattr(request, "param", True)
@@ -175,6 +178,57 @@ async def test_reference_read_approved_roles_and_durable_replay(
         assert len(receipts) == 1
         assert receipts[0].status == "completed" and receipts[0].charged_usd == 0
         assert receipts[0].result == {"outcome": "success", "data": result.data}
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize(
+    "reference_capable",
+    [
+        {"content": "x" * 65536},
+        {"content": "\n" * 65536},
+        {"content": '"\\' * 32768},
+        {
+            "content": "\x01" * 65536,
+            "path": "references/" + "a" * 95 + "/" + "b" * 95 + "/" + "c" * 52,
+        },
+        {"content": "🚀" * 16384},
+    ],
+    indirect=True,
+    ids=["plain", "newlines", "quotes-and-backslashes", "worst-escape-longest-path", "utf8"],
+)
+async def test_reference_byte_boundary_completes_and_replays_exactly(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    expected = {"path": env.reference_path, "content": env.reference.read_text()}
+    assert len(expected["content"].encode("utf-8")) == 65536
+    with patch.object(
+        SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
+    ) as read:
+        first = await call(
+            env, claim, ToolIntent.skill_reference_read, "boundary", {"path": env.reference_path}
+        )
+        replay = await call(
+            env, claim, ToolIntent.skill_reference_read, "boundary", {"path": env.reference_path}
+        )
+    assert first.data == replay.data == expected
+    assert first.outcome == replay.outcome == "success"
+    assert first.cost_usd == replay.cost_usd == 0
+    assert read.call_count == 1
+    async with env.factory() as db:
+        receipts = list(
+            await db.scalars(
+                select(OrchestrationEffect).where(
+                    OrchestrationEffect.session_id == claim.session_id
+                )
+            )
+        )
+        assert len(receipts) == 1
+        receipt = receipts[0]
+        assert receipt.status == "completed" and receipt.charged_usd == 0
+        assert receipt.result == {"data": expected, "outcome": "success"}
+        assert len(json.dumps(receipt.result, ensure_ascii=False).encode("utf-8")) <= 394240
 
 
 @pytest.mark.parametrize("role", ["claim", "child"])
