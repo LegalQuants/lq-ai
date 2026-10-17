@@ -208,7 +208,17 @@ connection as plain **HTTP**, which affects cookies and Service Workers. The
   resolution; until `web` is actually listening Caddy returns 502, which is a
   recoverable state — preferable to holding the whole tailnet entry point down.
 - **Persistence.** Caddy's `/data` (state) and `/config` (autosave config) are
-  kept in the `caddy-data` and `caddy-config` named volumes.
+  kept in the `caddy-data` and `caddy-config` named volumes — a `docker compose
+  down` between restarts doesn't lose them; only an explicit `-v` would. The
+  `tailscale serve --bg` command itself lives in the **host's** Tailscale
+  configuration, outside any container, and survives both host and stack
+  reboots — you run it once, not on every `docker compose up`.
+- **This recipe has no LQ.AI-side refusal of its own.** Caddy speaks plain HTTP
+  internally and the gateway isn't routed through it at all (see "Routing"
+  above). If `tailscale serve` itself prompts you with a consent URL instead of
+  running, that's Tailscale asking you to enable **MagicDNS** and **HTTPS
+  Certificates** for the tailnet, a one-time admin-console step, not a
+  fail-closed control in this repository.
 
 ## Files
 

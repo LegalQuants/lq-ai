@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="LQ.AI">
+  <!--
+    LQ.AI documentation-site favicon.
+
+    The product icon at web/static/static/favicon.png is the upstream OpenWebUI
+    "OI" mark, not an LQ.AI icon, so this is the minimal monogram the build brief
+    asks for instead: plain letterforms in the brand charcoal on a transparent
+    ground. It is deliberately not the LegalQuants "LQ" tile — there is no tile,
+    no container and no wordmark, because the brand guidelines restrict those.
+
+    Transparent ground plus a prefers-color-scheme swap so the mark stays legible
+    in a light or a dark browser chrome.
+  -->
+  <style>
+    .mark { fill: none; stroke: #2d2d2d; stroke-width: 3.5; }
+    @media (prefers-color-scheme: dark) {
+      .mark { stroke: #f5f6f7; }
+    }
+  </style>
+  <g class="mark" transform="translate(0 1.5)" stroke-linecap="butt">
+    <!-- L -->
+    <path d="M5.75 7 V19.25 H13" />
+    <!-- Q -->
+    <circle cx="22.5" cy="14" r="5" />
+    <path d="M25.6 17.6 L28.6 20.6" />
+  </g>
+</svg>

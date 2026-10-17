@@ -198,4 +198,19 @@ The friction is the point. An undocumented decision compounds across every task 
 
 ---
 
+## 9. Reading the documentation site as plain text
+
+If your first contact with the project is the published documentation site rather than a
+clone, you don't need to render HTML to read it. Per [ADR 0028, decision
+4](../adr/0028-documentation-site-generator-and-hosting.md#decision), the site build owns
+the machine-readable surface: every page is also served as plain Markdown at its own URL
+with `.md` appended, so a page's URL and its machine-readable twin differ only by that
+suffix. The build may also publish `llms.txt` at the site root (every page with a one-line
+description, grouped by namespace) and `llms-full.txt` (every page's full text
+concatenated in sidebar order), but ADR 0028 is explicit that the `.md` routes are the
+guaranteed surface — the `.txt` files depend on a plugin and must not be assumed present
+without checking.
+
+---
+
 *Next stop: [CLAUDE.md](../../CLAUDE.md). Keep it open while you work.*

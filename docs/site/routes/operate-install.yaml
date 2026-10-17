@@ -1,0 +1,155 @@
+- route: operate/install-macos
+  source: docs/INSTALL-MAC.md
+  title: Install on macOS
+  description: Install the signed LQ.AI desktop app on Apple Silicon, and verify what you downloaded.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/BUILD-AND-RELEASE.md
+    - docker-compose.release.yml
+  sidebar: { order: 10 }
+  next: [operate/reverse-proxy-tls, operate/rotate-a-leaked-key, operate/troubleshooting]
+
+- route: operate/install-docker-compose
+  source: README.md
+  from: "## Quick Start"
+  to: "## Architecture"
+  title: Install with Docker Compose
+  description: The reference deployment — clone, configure, and run LQ.AI's eight services with Docker Compose.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/adr/0026-document-ingestion-parser-and-docling.md
+    - docs/adr/0036-bundled-object-store-rustfs.md
+    - docker-compose.yml
+    - docs/quickstart.md
+    - .env.example
+    - docs/security/encrypted-keys.md
+  sidebar: { order: 11 }
+  next: [operate/reverse-proxy-tls, operate/air-gapped, operate/architecture]
+
+- route: operate/install-helm
+  source: docs/operate/install-helm.md
+  title: Install with Helm
+  description: Deploy the core LQ.AI services to Kubernetes with the in-repo chart, and what it doesn't yet run for you.
+  audience: [operator]
+  status: draft
+  sources:
+    - deploy/helm/lq-ai/Chart.yaml
+    - deploy/helm/lq-ai/values.yaml
+    - deploy/helm/lq-ai/values-example.yaml
+    - deploy/helm/lq-ai/NOTES.txt
+    - deploy/helm/lq-ai/templates/job-migrate.yaml
+    - docs/PRD.md
+    - docs/HONEST-STATE.md
+    - docs/adr/0025-release-versioning-and-pipeline-ordering.md
+    - docs/adr/0036-bundled-object-store-rustfs.md
+    - docs/adr/0037-deployment-migrations-framework.md
+    - api/app/__init__.py
+    - gateway/app/__init__.py
+  sidebar: { order: 12 }
+  next: [operate/reverse-proxy-tls, operate/architecture]
+
+- route: operate/reverse-proxy-tls
+  source: docs/operate/reverse-proxy-tls.md
+  title: Reverse proxy and TLS
+  description: Put a stable, encrypted URL in front of LQ.AI — a private tailnet recipe, and three public-domain recipes.
+  audience: [operator]
+  status: draft
+  sources:
+    - deploy/caddy-tailscale/README.md
+    - deploy/reverse-proxy/README.md
+    - docs/adr/0014-gateway-egress-boundary-for-tool-providers.md
+  sidebar: { order: 13 }
+  next: [operate/air-gapped, operate/recipes/caddy-tailscale, operate/install-docker-compose]
+
+- route: operate/air-gapped
+  source: docs/operate/air-gapped.md
+  title: Air-gapped and local-only inference
+  description: Run LQ.AI with local-only inference, and what the repository can — and cannot yet — prove about its network behavior.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - docs/adr/0026-document-ingestion-parser-and-docling.md
+    - README.md
+    - docs/PRD.md
+    - docker-compose.yml
+    - docs/contribute/mini-prds/air-gap-install-verification.md
+    - docs/HONEST-STATE.md
+    - gateway.yaml.example
+    - docs/quickstart.md
+  sidebar: { order: 14 }
+  next: [operate/install-docker-compose, trust/what-leaves-my-deployment, operate/hardware-sizing]
+
+- route: operate/hardware-sizing
+  source: docs/operate/hardware-sizing.md
+  title: Hardware sizing
+  description: Three named configurations the repository actually supports numbers for, and what happens below the floor.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/adr/0026-document-ingestion-parser-and-docling.md
+    - README.md
+    - docs/INSTALL-MAC.md
+    - docker-compose.yml
+    - docs/quickstart.md
+    - docs/PRD.md
+    - deploy/helm/lq-ai/values.yaml
+  sidebar: { order: 22 }
+  next: [operate/air-gapped, operate/install-docker-compose, operate/install-macos]
+
+- route: operate/architecture
+  source: docs/architecture.md
+  title: Architecture
+  description: How the services fit together, what ships at each milestone, and where a customer's data can leave the deployment.
+  audience: [operator, evaluator]
+  status: draft
+  sources:
+    - docs/HONEST-STATE.md
+  sidebar: { order: 20 }
+  next: [trust/what-leaves-my-deployment, operate/logs-and-monitoring, trust/published-gaps]
+
+- route: operate/logs-and-monitoring
+  source: docs/observability.md
+  title: Logs and monitoring
+  description: What LQ.AI emits by default, what it takes to turn on tracing and metrics, and the ready-made deployment recipes.
+  audience: [operator]
+  status: draft
+  sources:
+    - deploy/observability/README.md
+  sidebar: { order: 21 }
+  next: [operate/architecture, operate/recipes/observability, operate/rotate-a-leaked-key]
+
+- route: operate/recipes/caddy-tailscale
+  source: deploy/caddy-tailscale/README.md
+  title: "Recipe: Caddy + Tailscale"
+  description: The runnable steps for a private, tailnet-only URL with auto-renewing HTTPS — no public DNS, no open inbound ports.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/operate/reverse-proxy-tls.md
+  sidebar: { order: 31 }
+  next: [operate/reverse-proxy-tls, operate/recipes/tailnet-ollama]
+
+- route: operate/recipes/tailnet-ollama
+  source: deploy/tailnet-ollama/README.md
+  title: "Recipe: tailnet-hosted Ollama"
+  description: Point the gateway at Ollama running on a separate GPU host, reached over your tailnet, HTTPS-only.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/adr/0014-gateway-egress-boundary-for-tool-providers.md
+  sidebar: { order: 32 }
+  next: [operate/recipes/caddy-tailscale, operate/air-gapped]
+
+- route: operate/recipes/observability
+  source: deploy/observability/README.md
+  title: "Recipe: observability"
+  description: Wire a traces-and-metrics backend — self-hosted, or forwarding to an existing SaaS collector.
+  audience: [operator]
+  status: draft
+  sources:
+    - deploy/observability/grafana-tempo-loki/README.md
+    - deploy/observability/otel-collector-standalone/README.md
+  sidebar: { order: 33 }
+  next: [operate/logs-and-monitoring, operate/architecture]

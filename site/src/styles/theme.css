@@ -1,0 +1,907 @@
+/*
+ * LQ.AI documentation site — theme
+ * ================================
+ *
+ * The design language is the one measured from legalquants.com on 2026-09-15
+ * (build brief §5): editorial, quiet, precise. Hairline borders instead of
+ * shadows, generous whitespace, mono uppercase eyebrows, arrows as the only
+ * ornament. No gradients, no illustrations, no emoji in the interface.
+ *
+ * Two rules that are not preferences:
+ *
+ *   1. No webfonts. A trust centre makes no third-party request to render a
+ *      page, so the type stack is what the reader's system already has.
+ *   2. Contrast is verified, not eyeballed. Every colour pair that carries text
+ *      is checked by `node scripts/theme-contrast.mjs`, which fails the run when
+ *      a pair drops below its WCAG 2.1 AA floor. The numbers in the comments
+ *      below are that script's output. Change a value, re-run the script.
+ *
+ * `#e8590c` is the brand accent, and it is never text on white — it measures
+ * 3.58:1 there. Text-weight accent is `#c2410c` (5.18:1 on white). Eyebrows are
+ * small but bold rather than large, so they are treated as normal text and held
+ * to 4.5:1 too.
+ *
+ * Light is the default theme. Starlight's own defaults live on bare `:root`
+ * (dark) and `:root[data-theme='light']`, so both blocks are written out in
+ * full here rather than one deriving from the other.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Shared tokens — identical in both themes
+ * ------------------------------------------------------------------ */
+
+:root {
+  /* Type. System stacks only; see rule 1 above. */
+  --sl-font:
+    -apple-system, 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    'Noto Sans', Arial, sans-serif;
+  --sl-font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+
+  --sl-line-height: 1.625;
+  --sl-line-height-headings: 1.25;
+
+  /* Prose rhythm — applied to `.sl-markdown-content` only, so cards, asides
+     and chrome keep the base size. 17.5px body, 1.7 leading, 1.5rem between
+     paragraphs. */
+  --lq-text-body: 1.09375rem;
+  --lq-leading-body: 1.7;
+  --lq-prose-gap: 1.5rem;
+
+  /* Radii */
+  --lq-radius-md: 0.375rem;
+  --lq-radius-lg: 0.5rem;
+  --lq-radius-xl: 0.75rem;
+  --lq-radius-2xl: 1rem;
+
+  /* The brand accent. Fills, rules and focus rings only — never text. */
+  --lq-accent: #e8590c;
+
+  /* Eyebrow caption metrics */
+  --lq-eyebrow-size: 0.68rem;
+  --lq-eyebrow-tracking: 0.12em;
+
+  /* Shadows are off. The design language uses hairlines. */
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: 0 0 0 1px var(--sl-color-hairline-light);
+}
+
+/* ------------------------------------------------------------------ *
+ * Light (default)
+ * ------------------------------------------------------------------ */
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  /*
+   * Starlight's greys run from "strongest text" (white) to "page background"
+   * (black). The LQ.AI role each one carries is named in the comment.
+   *
+   *   heading  #14181f on #ffffff  17.79:1
+   *   ink      #1e2a3a on #ffffff  14.51:1
+   *   body     #374151 on #ffffff  10.31:1
+   *   muted    #6b7280 on #ffffff   4.83:1
+   *   faint    #8b919c on #ffffff   3.17:1  (non-text UI only)
+   */
+  --sl-color-white: #14181f; /* heading text */
+  --sl-color-gray-1: #1e2a3a; /* ink: strong text, dark fills */
+  --sl-color-gray-2: #374151; /* body text */
+  --sl-color-gray-3: #6b7280; /* muted text */
+  --sl-color-gray-4: #8b919c; /* faint: icons and controls, never prose */
+  --sl-color-gray-5: #d1d5db; /* strong line */
+  --sl-color-gray-6: #e5e7eb; /* line */
+  --sl-color-gray-7: #f9fafb; /* raised surface */
+  --sl-color-black: #ffffff; /* page background */
+
+  --lq-color-surface-raised: #f9fafb;
+  --lq-color-surface-sunken: #f3f4f6;
+  --lq-color-control-bg: #f3f4f6; /* search trigger and similar controls */
+  /* One step off the sidebar ground, in whichever direction reads as "lifted"
+     in this theme. The sidebar itself is the raised surface in light, so the
+     current item cannot also be. */
+  --lq-color-sidebar-current-bg: #ffffff;
+
+  /* Accent. `accent` fills; `accent-high` is the text-weight tint. */
+  --sl-color-accent-low: #fdece2;
+  --sl-color-accent: #e8590c;
+  --sl-color-accent-high: #c2410c;
+
+  --sl-color-text: var(--sl-color-gray-2);
+  /* 5.18:1 on #ffffff, 4.96:1 on the raised surface. */
+  --sl-color-text-accent: #c2410c;
+  /* Sits on --sl-color-bg-accent: 5.18:1. */
+  --sl-color-text-invert: #ffffff;
+
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #f9fafb;
+  --sl-color-bg-inline-code: #f3f4f6;
+  --sl-color-bg-accent: #c2410c;
+
+  --sl-color-hairline-light: #e5e7eb;
+  --sl-color-hairline: #e5e7eb;
+  --sl-color-hairline-shade: #e5e7eb;
+  --lq-color-hairline-strong: #d1d5db;
+
+  --sl-color-backdrop-overlay: rgba(30, 42, 58, 0.6);
+
+  /*
+   * Semantic hues. The mid value is a border or rule; `-high` is the only one
+   * that carries text, and it is checked against its own `-low` background.
+   * `#dd7400` measures 3.20:1 on white, so amber *text* is `#8a4b00`.
+   */
+  --sl-color-green-low: #e7f4ec;
+  --sl-color-green: #008138;
+  --sl-color-green-high: #04612d; /* 6.74:1 on green-low */
+  --sl-color-orange-low: #fdf1e3;
+  /* The brief's amber 600 (#dd7400) measures 2.87:1 on this tint, under the
+     3:1 non-text floor; #c96a00 keeps the hue and clears it at 3.40:1. */
+  --sl-color-orange: #c96a00;
+  --sl-color-orange-high: #8a4b00; /* 6.11:1 on orange-low */
+  --sl-color-red-low: #fdeceb;
+  --sl-color-red: #b42318;
+  --sl-color-red-high: #8f1c13; /* 7.84:1 on red-low */
+  --sl-color-blue-low: #eef2f7;
+  --sl-color-blue: #64748b;
+  --sl-color-blue-high: #1e3a5f; /* 10.23:1 on blue-low */
+  /* Starlight's `tip` aside uses the purple slot; LQ.AI gives it the green. */
+  --sl-color-purple-low: var(--sl-color-green-low);
+  --sl-color-purple: var(--sl-color-green);
+  --sl-color-purple-high: var(--sl-color-green-high);
+
+  /* Status badges (text + colour; the text is what carries the meaning). */
+  --lq-status-draft-bg: #f3f4f6;
+  --lq-status-draft-text: #4b5563; /* 6.87:1 */
+  --lq-status-draft-line: #d1d5db;
+  --lq-status-reviewed-bg: #e7f4ec;
+  --lq-status-reviewed-text: #04612d; /* 6.74:1 */
+  --lq-status-reviewed-line: #008138;
+}
+
+/* ------------------------------------------------------------------ *
+ * Dark
+ * ------------------------------------------------------------------ */
+
+:root,
+::backdrop {
+  /*
+   *   heading  #f5f6f7 on #0b0e11  17.89:1
+   *   body     #c9cacc on #0b0e11  11.94:1  (a step above the 73% tint, #b6b7b9)
+   *   muted    #858789 on #0b0e11   5.37:1  (52%; 45% measures 4.25:1 — below AA)
+   *   faint    #646668 on #0b0e11   3.36:1  (38%; non-text UI only)
+   *
+   * The percentages are the brief's alpha ladder, resolved to flat hex so the
+   * measured ratio is the rendered ratio whatever sits behind the element.
+   */
+  --sl-color-white: #f5f6f7; /* heading text */
+  --sl-color-gray-1: #e4e5e7; /* ink */
+  --sl-color-gray-2: #c9cacc; /* body text */
+  --sl-color-gray-3: #858789; /* muted text */
+  --sl-color-gray-4: #646668; /* faint: icons and controls, never prose */
+  --sl-color-gray-5: #2b333d; /* strong line */
+  --sl-color-gray-6: #191a1d; /* surface */
+  --sl-color-gray-7: #111114; /* sunken surface */
+  --sl-color-black: #0b0e11; /* page ground */
+
+  --lq-color-surface-raised: #191a1d;
+  --lq-color-surface-sunken: #08080a;
+  --lq-color-control-bg: #111114;
+  --lq-color-sidebar-current-bg: #191a1d;
+
+  /*
+   * `#e8590c` clears AA on the dark ground (5.41:1), but only just, and it
+   * loses a further step on a raised surface. `#f0803a` is the tint that holds
+   * 7.24:1 on the ground and 6.51:1 on a surface.
+   */
+  --sl-color-accent-low: #351405;
+  --sl-color-accent: #e8590c;
+  --sl-color-accent-high: #f0803a;
+
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-text-accent: #f0803a;
+  /* Sits on --sl-color-bg-accent: 7.24:1. */
+  --sl-color-text-invert: #0b0e11;
+
+  --sl-color-bg: #0b0e11;
+  --sl-color-bg-nav: #111114;
+  --sl-color-bg-sidebar: #111114;
+  --sl-color-bg-inline-code: #232a33;
+  --sl-color-bg-accent: #f0803a;
+
+  --sl-color-hairline-light: #2b333d;
+  --sl-color-hairline: #232a33;
+  --sl-color-hairline-shade: #08080a;
+  --lq-color-hairline-strong: #333b45;
+
+  --sl-color-backdrop-overlay: rgba(11, 14, 17, 0.7);
+
+  --sl-color-green-low: #0e1f16;
+  --sl-color-green: #3faa68;
+  --sl-color-green-high: #8fe0ad; /* 10.96:1 on green-low */
+  --sl-color-orange-low: #241609;
+  --sl-color-orange: #e8590c;
+  --sl-color-orange-high: #f9c295; /* 11.04:1 on orange-low */
+  --sl-color-red-low: #25100e;
+  --sl-color-red: #e05b52;
+  --sl-color-red-high: #fbb4ae; /* 10.56:1 on red-low */
+  --sl-color-blue-low: #161d26;
+  --sl-color-blue: #7d8ea3;
+  --sl-color-blue-high: #cbd7e4; /* 11.62:1 on blue-low */
+  --sl-color-purple-low: var(--sl-color-green-low);
+  --sl-color-purple: var(--sl-color-green);
+  --sl-color-purple-high: var(--sl-color-green-high);
+
+  --lq-status-draft-bg: #191a1d;
+  --lq-status-draft-text: #b6b7b9; /* 8.67:1 */
+  --lq-status-draft-line: #2b333d;
+  --lq-status-reviewed-bg: #0e1f16;
+  --lq-status-reviewed-text: #8fe0ad; /* 10.96:1 */
+  --lq-status-reviewed-line: #3faa68;
+}
+
+/* ------------------------------------------------------------------ *
+ * Typography
+ * ------------------------------------------------------------------ */
+
+:root {
+  --sl-text-h1: 2.125rem;
+  --sl-text-h2: 1.625rem;
+  --sl-text-h3: 1.3125rem;
+  --sl-text-h4: 1.125rem;
+}
+
+@media (min-width: 50em) {
+  :root {
+    --sl-text-h1: 2.5rem;
+    --sl-text-h2: 1.875rem;
+    --sl-text-h3: 1.4375rem;
+    --sl-text-h4: 1.1875rem;
+  }
+}
+
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* Balanced headings; never a widowed last word. */
+.lq-page-title h1,
+.sl-markdown-content :is(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+/*
+ * Prose rhythm. Scoped to the reading column so cards, asides, tables and the
+ * chrome keep the base size. Left-aligned, never justified; hyphenation only
+ * where the text asks for it. Starlight's own spacing lives in
+ * `@layer starlight.content`; these rules are unlayered, so they win.
+ */
+.sl-markdown-content {
+  font-size: var(--lq-text-body);
+  line-height: var(--lq-leading-body);
+  text-align: start;
+  hyphens: manual;
+}
+.sl-markdown-content p {
+  margin-bottom: var(--lq-prose-gap);
+  text-wrap: pretty;
+}
+.sl-markdown-content :is(h2, h3, h4) {
+  scroll-margin-top: 5rem;
+}
+.sl-markdown-content h2 {
+  margin-top: 2.5rem;
+}
+.sl-markdown-content h3 {
+  margin-top: 1.75rem;
+}
+.sl-markdown-content h4 {
+  margin-top: 1.5rem;
+}
+.sl-markdown-content :is(ul, ol) li + li {
+  margin-top: 0.35em;
+}
+
+/* Code at a fixed 15px, inline and in blocks (Expressive Code reads
+   `--sl-text-code` for its block font size). */
+:root {
+  --sl-text-code: 0.9375rem;
+}
+
+.sl-markdown-content :is(h2, h3) {
+  letter-spacing: -0.01em;
+}
+
+.sl-markdown-content :is(h4, h5, h6) {
+  letter-spacing: -0.005em;
+}
+
+/*
+ * A hairline under H2 gives the page its sections without a rule per block.
+ *
+ * The rule goes on Starlight's anchor-link *wrapper*, not on the heading.
+ * Starlight sets `.sl-heading-wrapper > :first-child { display: inline }` so
+ * that the ¶ anchor sits on the last line of the heading — which means a
+ * border on the `h2` itself tracks the width of the heading's *text* instead
+ * of the width of the content column, and a two-line heading gets a rule under
+ * only its second line. The wrapper is the block box, so it carries the rule.
+ *
+ * The bare `h2` selector stays for a heading rendered without the wrapper
+ * (Starlight drops it when the heading is visually hidden, and a generator
+ * could emit raw HTML); `:where()` keeps both at the same specificity.
+ */
+.sl-markdown-content :is(.sl-heading-wrapper.level-h2, h2:not(.sl-heading-wrapper > *)) {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+}
+
+/* ------------------------------------------------------------------ *
+ * Tables → shapes
+ *
+ * A Markdown table is source, not layout. `rehype-lq-tables`
+ * (`scripts/lib/rehype-lq-tables.mjs`) classifies every table at build time —
+ * by column count, by how long its cells run, or by an explicit
+ * `<!-- table: … -->` directive — and rewrites it into whichever shape
+ * actually reads in a 632px column: `.lq-dl` for a two-column key→value
+ * table, `.lq-records` for one-row-per-entity data with prose cells, or
+ * `.lq-table` (a plain `<table>`, wrapped) for the minority that is
+ * genuinely tabular and narrow. Nothing below scrolls — the classification
+ * exists so that no table needs to — and the build's tables gate fails if
+ * one still overflows at 1280px or 400px.
+ * ------------------------------------------------------------------ */
+
+.sl-markdown-content :is(th, td) {
+  border-color: var(--sl-color-hairline-light);
+}
+
+/*
+ * Grid — the shape that keeps the `<table>` element, for the tables that are
+ * both narrow and genuinely tabular. `display: table` (Starlight's own rule
+ * is `block` plus `overflow-x: auto`) and `table-layout: auto` size columns
+ * to their content instead of shrinking to a scroll box's minimum width;
+ * `overflow-wrap: anywhere` is what keeps one long value from pushing the
+ * table past the reading column instead of wrapping inside it.
+ */
+.lq-table table {
+  display: table;
+  width: auto;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: var(--sl-text-sm);
+}
+
+.lq-table :is(th, td) {
+  overflow-wrap: anywhere;
+  /* A forced narrow-column break (below) should land on a syllable boundary
+     with a visible hyphen wherever the browser's dictionary allows one,
+     falling back to `overflow-wrap: anywhere`'s bare character break only
+     when hyphenation can't find one — a plain word split reads as broken
+     layout, a hyphenated one reads as considered. */
+  hyphens: auto;
+}
+
+/*
+ * `table-layout: auto` sizes each column to its own min-content width, which
+ * is exactly what makes a genuinely tabular table read well — but a handful
+ * of short, multi-word column headers (e.g. "Setting" / "Type" / "Default")
+ * can still sum past a 400px viewport even though no single cell is wide
+ * enough on its own to trigger `overflow-wrap`. Below the width a reading
+ * column ever gets that narrow, columns share the available width instead
+ * (`table-layout: fixed`) so `overflow-wrap: anywhere` has room to actually
+ * wrap every cell down to the container, not just the widest one.
+ *
+ * An even column split still leaves little room for a table with the
+ * maximum 5 columns the grid classification allows (`Field · Type ·
+ * Required · Default · What it is`, say) — dropping a size, the way a dense
+ * data table already does inside `.lq-table`, buys each column back a few
+ * more characters before a header word has to wrap at all. (Skewing the
+ * split toward one column instead — tried and screenshotted — made every
+ * other column narrower and produced *more* broken words, not fewer; the
+ * table shapes in this generated content don't have a column the CSS could
+ * safely assume is always the long one.)
+ */
+@media (max-width: 30rem) {
+  .lq-table table {
+    width: 100%;
+    table-layout: fixed;
+    font-size: var(--sl-text-xs);
+  }
+}
+
+.lq-table th {
+  color: var(--sl-color-white);
+  text-align: left;
+}
+
+/*
+ * Definition list — the shape for a two-column key→value table. The caption
+ * keeps the two columns' own headers legible once the `<th>` row is gone; it
+ * takes the eyebrow's metrics at the muted tint rather than the accent, since
+ * what is being labelled is the page's own structure, not a link.
+ */
+.lq-dl {
+  margin-block: var(--lq-prose-gap) 0;
+}
+
+.lq-dl__caption {
+  margin: 0 0 0.5rem;
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+.lq-dl > dl {
+  margin: 0;
+}
+
+.lq-dl__item {
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+}
+
+.lq-dl__item dt {
+  margin: 0;
+  color: var(--sl-color-white);
+  font-weight: 600;
+}
+
+.lq-dl__item dd {
+  margin: 0.25rem 0 0;
+  color: var(--sl-color-text);
+}
+
+/* Two columns only once the reading column is wide enough to hold a stable
+   label beside a value; narrower than that, the pair reads better stacked. */
+@media (min-width: 50rem) {
+  .lq-dl__item {
+    display: grid;
+    grid-template-columns: minmax(10rem, 16rem) 1fr;
+    gap: 0.5rem 1.5rem;
+  }
+  .lq-dl__item dd {
+    margin-top: 0;
+  }
+}
+
+/* What an empty value cell renders instead of a blank `dd` or
+   `.lq-record__value` — muted rather than absent, so the reader can tell a
+   missing value from a rendering gap. */
+.lq-muted {
+  color: var(--sl-color-gray-3);
+}
+
+/*
+ * Records — the shape for one-row-per-entity data with prose cells. Each row
+ * becomes an `<article>`; its short columns (measured over the whole column,
+ * not the cell) make a wrapped meta line, its long columns a stacked body, in
+ * original column order. The title carries `scroll-margin-top` because its
+ * `id` is a citable anchor (a config setting, an ADR decision) — a reader
+ * following `#slug` should not land under the sticky header.
+ */
+.lq-records {
+  margin-block: var(--lq-prose-gap) 0;
+}
+
+.lq-record {
+  padding-block: 0.75rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+}
+
+.lq-record__title {
+  margin: 0;
+  color: var(--sl-color-white);
+  font-weight: 600;
+  font-size: var(--sl-text-lg);
+  scroll-margin-top: 5rem;
+}
+
+.lq-record__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.25rem;
+  margin: 0.35rem 0 0;
+  font-size: var(--sl-text-sm);
+}
+
+.lq-record__label {
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+}
+
+/* In the meta line the label sits inline before its value (a space in the
+   markup separates them); in the body it is stacked above a value that runs
+   long enough to need its own line. */
+.lq-record__field--long {
+  margin-top: 0.5rem;
+}
+
+.lq-record__field--long .lq-record__label {
+  display: block;
+}
+
+/* Once the reading column is wide enough, a long field puts its label in a
+   fixed column beside the value — the same two-column rhythm as `.lq-dl` — so
+   a record with two prose fields is three lines tall, not five. */
+@media (min-width: 50rem) {
+  .lq-record__field--long {
+    display: grid;
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    align-items: baseline;
+  }
+  .lq-record__field--long .lq-record__label {
+    padding-top: 0.2em;
+  }
+}
+
+.lq-record__value p {
+  margin: 0;
+}
+
+.sl-markdown-content blockquote {
+  border-inline-start-color: var(--lq-accent);
+  color: var(--sl-color-gray-2);
+}
+
+/* ------------------------------------------------------------------ *
+ * Focus — visible, accent-coloured, and never clipped
+ * ------------------------------------------------------------------ */
+
+:root {
+  --lq-focus-ring: 2px solid var(--lq-accent);
+}
+
+:where(a, button, input, select, summary, textarea, [tabindex]):focus-visible {
+  outline: var(--lq-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--lq-radius-md);
+}
+
+/* ------------------------------------------------------------------ *
+ * Eyebrow — mono, uppercase, accent. Small but semibold, so it is held to
+ * the 4.5:1 normal-text floor rather than the 3:1 large-text one.
+ * ------------------------------------------------------------------ */
+
+.lq-eyebrow {
+  display: block;
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: var(--lq-eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--sl-color-text-accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * Status badge — the word carries the meaning; the colour repeats it.
+ * ------------------------------------------------------------------ */
+
+.lq-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.15em 0.55em;
+  border: 1px solid var(--lq-status-line, var(--sl-color-hairline-light));
+  border-radius: var(--lq-radius-md);
+  background-color: var(--lq-status-bg, transparent);
+  color: var(--lq-status-text, var(--sl-color-gray-2));
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lq-status--draft {
+  --lq-status-bg: var(--lq-status-draft-bg);
+  --lq-status-text: var(--lq-status-draft-text);
+  --lq-status-line: var(--lq-status-draft-line);
+}
+
+.lq-status--reviewed {
+  --lq-status-bg: var(--lq-status-reviewed-bg);
+  --lq-status-text: var(--lq-status-reviewed-text);
+  --lq-status-line: var(--lq-status-reviewed-line);
+}
+
+/* The record-table status words (ADR status, skill status, config rollout).
+   Shipped and accepted read as done, so they take the same green as the
+   `reviewed` badge; partial and proposed read as in motion, so they take the
+   caution amber; scaffold, deferred, superseded, deprecated and rejected all
+   read as "not the live state" and share the `draft` badge's neutral tokens
+   rather than each getting its own. */
+.lq-status--shipped,
+.lq-status--accepted {
+  --lq-status-bg: var(--sl-color-green-low);
+  --lq-status-text: var(--sl-color-green-high);
+  --lq-status-line: var(--sl-color-green);
+}
+
+.lq-status--partial,
+.lq-status--proposed {
+  --lq-status-bg: var(--sl-color-orange-low);
+  --lq-status-text: var(--sl-color-orange-high);
+  --lq-status-line: var(--sl-color-orange);
+}
+
+.lq-status--scaffold,
+.lq-status--deferred,
+.lq-status--superseded,
+.lq-status--deprecated,
+.lq-status--rejected {
+  --lq-status-bg: var(--lq-status-draft-bg);
+  --lq-status-text: var(--lq-status-draft-text);
+  --lq-status-line: var(--lq-status-draft-line);
+}
+
+/* Audience chips — same family, quieter, and plainly not a status. */
+.lq-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12em 0.5em;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: var(--lq-radius-md);
+  color: var(--sl-color-gray-3);
+  font-family: var(--sl-font-mono);
+  font-size: var(--lq-eyebrow-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Stamp — "Checked against <sha> · <date>" plus the sources it was
+ * checked against. Quiet, but never below the body-text contrast floor.
+ * ------------------------------------------------------------------ */
+
+.lq-stamp {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--sl-color-hairline-light);
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+
+.lq-stamp__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  margin: 0;
+}
+
+.lq-stamp code {
+  font-size: 0.95em;
+  background-color: var(--sl-color-bg-inline-code);
+  border-radius: var(--lq-radius-md);
+  padding: 0.1em 0.35em;
+}
+
+.lq-stamp__sources {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+.lq-stamp__sources a {
+  color: var(--sl-color-gray-3);
+  text-underline-offset: 0.2em;
+}
+
+.lq-stamp__sources a:hover,
+.lq-stamp__sources a:focus-visible {
+  color: var(--sl-color-text-accent);
+}
+
+/* ------------------------------------------------------------------ *
+ * Cards — hairline border, raised ground, a 3px lift on hover with the
+ * accent at 50%. The lift is motion, so it is off under
+ * `prefers-reduced-motion`.
+ *
+ * Three things render as a card on this site and they must be one object:
+ *   `.card`             — Starlight's <Card>;
+ *   `.sl-link-card`     — Starlight's <LinkCard>, which is what every hub page
+ *                         and the entry page are actually built from;
+ *   `.pagination-links` — the previous/next pair in the footer.
+ *
+ * Starlight's own rules for the last two are a *strong* line (`gray-5`), the
+ * `lg` radius, no background, and a grey-fill hover — so without this block the
+ * design language stops at the edge of the prose. Its declarations are
+ * `.sl-link-card:where(.astro-…)`, specificity (0,1,0), so the selectors here
+ * win on specificity rather than on order.
+ * ------------------------------------------------------------------ */
+
+.sl-markdown-content .card,
+.sl-markdown-content .sl-link-card,
+.pagination-links > a,
+.lq-card {
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: var(--lq-radius-xl);
+  background-color: var(--lq-color-surface-raised);
+  box-shadow: none;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.sl-markdown-content .card:hover,
+.sl-markdown-content .sl-link-card:hover,
+.sl-markdown-content .sl-link-card:focus-within,
+.pagination-links > a:hover,
+.pagination-links > a:focus-within,
+.lq-card:hover,
+.sl-markdown-content .card:focus-within,
+.lq-card:focus-within {
+  transform: translateY(-3px);
+  /* `color-mix` with `transparent` would let the page show through the card's
+     own raised ground; mixing into the hairline keeps it opaque. */
+  border-color: color-mix(in srgb, var(--lq-accent) 50%, var(--sl-color-hairline-light));
+  background-color: var(--lq-color-surface-raised);
+}
+
+/* The arrow is the card's only ornament; it takes the accent on hover rather
+   than the heading colour Starlight gives it. */
+.sl-markdown-content .sl-link-card:hover .icon,
+.sl-markdown-content .sl-link-card:focus-within .icon,
+.pagination-links > a:hover svg,
+.pagination-links > a:focus-within svg {
+  color: var(--sl-color-text-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-markdown-content .card,
+  .sl-markdown-content .sl-link-card,
+  .pagination-links > a,
+  .lq-card {
+    transition: none;
+  }
+  .sl-markdown-content .card:hover,
+  .sl-markdown-content .sl-link-card:hover,
+  .sl-markdown-content .sl-link-card:focus-within,
+  .pagination-links > a:hover,
+  .pagination-links > a:focus-within,
+  .lq-card:hover,
+  .sl-markdown-content .card:focus-within,
+  .lq-card:focus-within {
+    transform: none;
+  }
+}
+
+/* The card title is a heading, not a link colour — the whole card is the
+   target, so an underlined blue-orange title would double the signal. */
+.sl-markdown-content .sl-link-card .title {
+  color: var(--sl-color-white);
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ *
+ * Chrome — nav and sidebar separated by a hairline, not a shadow.
+ * ------------------------------------------------------------------ */
+
+.header,
+header.header {
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+}
+
+/* Site title: the LQ.AI text wordmark reads as ink, not as a link. */
+.site-title,
+a.site-title {
+  color: var(--sl-color-white);
+  letter-spacing: -0.01em;
+}
+
+/* ------------------------------------------------------------------ *
+ * Search — a quiet control, not a bar.
+ *
+ * Starlight draws the search trigger 22rem wide and 2.5rem tall with the
+ * strong line and the page ground, so it is the heaviest object in an
+ * otherwise hairline header. Here it is a hairline pill on the control
+ * surface, narrower and a step shorter, with a mono shortcut hint. Starlight's
+ * rules sit in `@layer starlight.core`; this block is unlayered, so it wins.
+ * Below 50rem Starlight shows an icon-only button, which is left alone.
+ * ------------------------------------------------------------------ */
+
+@media (min-width: 50rem) {
+  site-search button[data-open-modal] {
+    max-width: 14rem;
+    height: 2.25rem;
+    border-color: var(--sl-color-hairline-light);
+    border-radius: var(--lq-radius-lg);
+    background-color: var(--lq-color-control-bg);
+    color: var(--sl-color-text);
+  }
+  site-search button[data-open-modal]:hover,
+  site-search button[data-open-modal]:focus-visible {
+    border-color: var(--lq-color-hairline-strong);
+    color: var(--sl-color-white);
+  }
+  site-search button[data-open-modal] > kbd {
+    font-family: var(--sl-font-mono);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+    background-color: var(--sl-color-bg);
+    border: 1px solid var(--sl-color-hairline-light);
+    border-radius: var(--lq-radius-md);
+  }
+}
+
+/*
+ * The current page in the sidebar.
+ *
+ * Starlight fills it solid with `--sl-color-text-accent` and inverts the text.
+ * That passes contrast, but a saturated orange block is the loudest object on
+ * an otherwise quiet page and it is the *second* place the accent is spent on
+ * "you are here" — the header already marks the current namespace with an
+ * accent underline. So the two become one device: a 3px accent rule against the
+ * reading edge, ink text at 600, and one step of surface off the sidebar.
+ *
+ * The state is still carried three ways that are not colour (SC 1.4.1):
+ * `aria-current="page"`, the weight, and the rule.
+ *
+ * Starlight's declarations are `:where(.astro-…)[aria-current=page]`, so these
+ * win on specificity; the `:hover`/`:focus` variants are restated because
+ * Starlight restates them too.
+ */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  color: var(--sl-color-white);
+  background-color: var(--lq-color-sidebar-current-bg);
+  border-inline-start: 3px solid var(--lq-accent);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ *
+ * Code blocks (Expressive Code)
+ *
+ * Two of Expressive Code's defaults are the only illustration and the only
+ * drop shadow in the interface: the three macOS "traffic light" dots on a
+ * terminal frame, and the frame's box shadow. Both are off. An untitled
+ * terminal frame then has nothing left to put in its title bar, so the bar
+ * collapses — but the element stays in the accessibility tree, because it also
+ * holds the visually hidden "Terminal window" label.
+ *
+ * Starlight sets these variables inside `@layer starlight.components`; the
+ * block here is unlayered, so it wins without needing extra specificity.
+ * ------------------------------------------------------------------ */
+
+.expressive-code {
+  --ec-frm-trmTtbDotsOpa: 0;
+  --ec-frm-frameBoxShdCssVal: none;
+  /* Hairlines, like every other border on the site. */
+  --ec-brdCol: var(--sl-color-hairline-light);
+}
+
+.expressive-code .frame.is-terminal:not(.has-title) > .header {
+  block-size: 0;
+  min-block-size: 0;
+  padding-block: 0;
+  border: none;
+}
+
+/* The bar's bottom hairline goes with the bar. */
+.expressive-code .frame.is-terminal:not(.has-title) > .header::after {
+  content: none;
+}
+
+/* Give the code box the top edge the title bar used to draw. */
+.expressive-code .frame.is-terminal:not(.has-title) pre {
+  border-top: var(--ec-brdWd) solid var(--ec-brdCol);
+  border-start-start-radius: var(--ec-brdRad);
+  border-start-end-radius: var(--ec-brdRad);
+}

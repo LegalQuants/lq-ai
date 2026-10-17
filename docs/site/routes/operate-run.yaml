@@ -1,0 +1,124 @@
+- route: operate/backup-and-restore
+  source: docs/operate/backup-and-restore.md
+  title: Back up and restore
+  description: What actually has to survive a disaster, what's safe to lose, and a restore runbook that ends in a verification step.
+  audience: [operator]
+  status: draft
+  sources:
+    - docker-compose.yml
+    - docker-compose.release.yml
+    - docs/db-schema.md
+    - docs/security/encrypted-keys.md
+    - docs/security/audit-logging.md
+    - docs/adr/0036-bundled-object-store-rustfs.md
+  sidebar: { order: 23 }
+  next: [operate/rotate-a-leaked-key, operate/upgrade, operate/move-or-uninstall]
+
+- route: operate/upgrade
+  source: docs/operate/upgrade.md
+  title: Upgrade
+  description: The runbook for taking a new release — read the notes, back up, rebuild the right services together, and verify.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/adr/0025-release-versioning-and-pipeline-ordering.md
+    - docs/releases/v0.7.0.md
+    - docs/releases/v0.7.1.md
+    - docs/releases/v0.8.0.md
+    - docs/runbooks/minio-to-rustfs.md
+    - docker-compose.yml
+    - docker-compose.release.yml
+    - CLAUDE.md
+    - desktop/src/core/compose.ts
+  sidebar: { order: 24 }
+  next: [operate/backup-and-restore, operate/something-is-wrong]
+
+- route: operate/rotate-a-leaked-key
+  source: docs/operate/rotate-a-leaked-key.md
+  title: Rotate a leaked provider key
+  description: Revoke, replace, find the blast radius with one audit query, and confirm — the runbook for the 11pm scenario.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/security/encrypted-keys.md
+    - docs/security/audit-logging.md
+    - docs/db-schema.md
+    - docs/HONEST-STATE.md
+    - docs/INSTALL-MAC.md
+    - gateway.yaml.example
+    - api/app/api/admin.py
+  sidebar: { order: 25 }
+  next: [trust/audit-and-evidence, operate/something-is-wrong, trust/security-disclosure]
+
+- route: operate/headless-boot
+  source: docs/operate/headless-boot.md
+  title: Headless boot
+  description: The stack boots and serves without the web UI. Here's what that gets you, and the one sentence about what it doesn't promise.
+  audience: [operator, contributor]
+  status: draft
+  sources:
+    - docker-compose.yml
+    - docs/api/backend-openapi.generated.yaml
+    - api/tests/test_openapi_export.py
+    - docs/quickstart.md
+    - docs/adr/0036-bundled-object-store-rustfs.md
+  sidebar: { order: 29 }
+  next: [reference/versioning, operate/architecture]
+
+- route: operate/move-or-uninstall
+  source: docs/operate/move-or-uninstall.md
+  title: Move machines or uninstall
+  description: What to export before you move host or remove LQ.AI, and why one flag is irreversible.
+  audience: [operator]
+  status: draft
+  sources:
+    - docker-compose.yml
+    - CLAUDE.md
+    - docs/INSTALL-MAC.md
+    - docs/security/encrypted-keys.md
+    - docs/PRD.md
+    - docs/HONEST-STATE.md
+    - api/app/api/users.py
+    - api/app/workers/user_export.py
+    - api/app/workers/user_deletion.py
+  sidebar: { order: 27 }
+  next: [operate/backup-and-restore, operate/upgrade, operate/rotate-a-leaked-key]
+
+- route: operate/something-is-wrong
+  source: docs/operate/something-is-wrong.md
+  title: Something is wrong
+  description: Start from what you're seeing, not from a task name — three branches, and the catalog of failures that don't announce themselves.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/HONEST-STATE.md
+    - docs/citation-engine.md
+    - docs/security/anonymization.md
+    - docs/db-schema.md
+    - api/app/config.py
+    - gateway/app/providers/anthropic.py
+    - gateway/app/providers/openai.py
+    - gateway/app/providers/ollama.py
+    - api/app/clients/gateway.py
+    - docker-compose.yml
+    - README.md
+    - docs/PRD.md
+  sidebar: { order: 26 }
+  next: [operate/troubleshooting, operate/upgrade, operate/rotate-a-leaked-key, trust/anonymization]
+
+- route: operate/troubleshooting
+  source: docs/operate/troubleshooting.md
+  title: Troubleshooting
+  description: Search by the error you're actually seeing — one index over every recovery step published across this site.
+  audience: [operator]
+  status: draft
+  sources:
+    - docs/adr/0026-document-ingestion-parser-and-docling.md
+    - docs/quickstart.md
+    - docs/INSTALL-MAC.md
+    - deploy/tailnet-ollama/README.md
+    - README.md
+    - docker-compose.yml
+    - docs/PRD.md
+  sidebar: { order: 28 }
+  next: [operate/something-is-wrong, start/quickstart]

@@ -391,7 +391,13 @@ admins. The canonical mutation path is fork-then-edit — create a new
 owned playbook (which the operator can edit/delete) rather than
 modifying the shipped one. The `POST /api/v1/playbooks` endpoint always
 sets `created_by = caller.id`, so the only way to mint a new built-in
-is a seed migration.
+is a seed migration. This mirrors the forking posture
+[`skills/CONTRIBUTING.md`](../skills/CONTRIBUTING.md) sets for skills —
+fork, modify, run your version — applied to a playbook's positions
+rather than to a skill's workflow: a built-in is a starting point
+drafted to give an operator a head start, not a vetted template, and
+never a substitute for their own attorney reviewing every position
+before relying on it for client work.
 
 ## Legal-substance posture
 
