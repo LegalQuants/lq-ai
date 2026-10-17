@@ -24,7 +24,7 @@ services:
   postgres:
     # Digest-pinned for reproducible boots (matches the pin in
     # .github/workflows/ci.yml). Bump the tag and digest together.
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -43,7 +43,7 @@ services:
 
   redis:
     # Digest-pinned for reproducible boots. Bump the tag and digest together.
-    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+    image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -75,7 +75,7 @@ services:
 
   rustfs:
     # ADR 0036: pin the GA multi-arch index, not a floating tag.
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.1@sha256:1803faef57627e2d9c2e7d89d655d712ddded5389040054987163043fecb6a3c
     restart: unless-stopped
     depends_on:
       rustfs-init:
