@@ -631,7 +631,7 @@ async def test_background_refuses_reference_changed_after_planner_binding(
     assert len(gateway.captured_requests) == 1
     audit = list(await db_session.scalars(select(AuditLog).where(AuditLog.user_id == owner.id)))
     assert not any(
-        row.details.get("tool") == "skill_reference_read"
-        and row.details.get("outcome") == "success"
+        (row.details or {}).get("tool") == "skill_reference_read"
+        and (row.details or {}).get("outcome") == "success"
         for row in audit
     )
