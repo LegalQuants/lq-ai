@@ -45,12 +45,23 @@
 			(() => {
 				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
 				const prefersDarkTheme = window.matchMedia('(prefers-color-scheme: dark)').matches;
+				// LQ.AI uses one light palette, including before Svelte hydrates.
+				const isLQAI = () =>
+					window.location.pathname === '/lq-ai' || window.location.pathname.startsWith('/lq-ai/');
+				const applyLQAILightTheme = () => {
+					document.documentElement.classList.remove('dark', 'oled-dark', 'her');
+					document.documentElement.classList.add('light');
+					document.documentElement.style.colorScheme = 'light';
+					metaThemeColorTag.setAttribute('content', '#ffffff');
+				};
 
-				if (!localStorage?.theme) {
+				if (!isLQAI() && !localStorage?.theme) {
 					localStorage.theme = 'system';
 				}
 
-				if (localStorage.theme === 'system') {
+				if (isLQAI()) {
+					applyLQAILightTheme();
+				} else if (localStorage.theme === 'system') {
 					document.documentElement.classList.add(prefersDarkTheme ? 'dark' : 'light');
 					metaThemeColorTag.setAttribute('content', prefersDarkTheme ? '#171717' : '#ffffff');
 				} else if (localStorage.theme === 'oled-dark') {
@@ -82,6 +93,10 @@
 				document.head.appendChild(preload);
 
 				window.matchMedia('(prefers-color-scheme: dark)').addListener((e) => {
+					if (isLQAI()) {
+						applyLQAILightTheme();
+						return;
+					}
 					if (localStorage.theme === 'system') {
 						if (e.matches) {
 							document.documentElement.classList.add('dark');

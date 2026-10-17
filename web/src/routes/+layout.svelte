@@ -42,7 +42,8 @@
 	import { getFileContentById } from '$lib/apis/files';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { beforeNavigate } from '$app/navigation';
+	import { beforeNavigate, afterNavigate } from '$app/navigation';
+	import { applyLQAILightTheme, isLQAIPath } from '$lib/lq-ai/light-theme';
 	import { updated } from '$app/state';
 
 	import i18n, { initI18n, getLanguages, changeLanguage } from '$lib/i18n';
@@ -93,6 +94,14 @@
 		if (updated.current && !willUnload && to?.url) {
 			await unregisterServiceWorkers();
 			location.href = to.url.href;
+		}
+	});
+
+	// Also cover client-side entry into the LQ.AI shell.
+	afterNavigate(() => {
+		if (isLQAIPath(window.location.pathname)) {
+			applyLQAILightTheme(document);
+			theme.set('light');
 		}
 	});
 
@@ -769,6 +778,11 @@
 			return;
 		}
 		if (event.type === 'theme:update' && event.data?.theme) {
+			if (isLQAIPath(window.location.pathname)) {
+				applyLQAILightTheme(document);
+				theme.set('light');
+				return;
+			}
 			const newTheme = event.data.theme;
 			localStorage.setItem('theme', newTheme);
 			theme.set(newTheme);
@@ -888,7 +902,9 @@
 		document.addEventListener('touchend', touchendHandler);
 
 		if (typeof window !== 'undefined') {
-			if (window.applyTheme) {
+			if (isLQAIPath(window.location.pathname)) {
+				applyLQAILightTheme(document);
+			} else if (window.applyTheme) {
 				window.applyTheme();
 			}
 		}
@@ -941,7 +957,7 @@
 		// Call visibility change handler initially to set state on load
 		handleVisibilityChange();
 
-		theme.set(localStorage.theme);
+		theme.set(isLQAIPath(window.location.pathname) ? 'light' : (localStorage.theme ?? 'system'));
 
 		mobile.set(window.innerWidth < BREAKPOINT);
 
@@ -1165,13 +1181,15 @@
 {/if}
 
 <Toaster
-	theme={$theme.includes('dark')
-		? 'dark'
-		: $theme === 'system'
-			? window.matchMedia('(prefers-color-scheme: dark)').matches
-				? 'dark'
-				: 'light'
-			: 'light'}
+	theme={isLQAIPath($page.url.pathname)
+		? 'light'
+		: $theme.includes('dark')
+			? 'dark'
+			: $theme === 'system'
+				? window.matchMedia('(prefers-color-scheme: dark)').matches
+					? 'dark'
+					: 'light'
+				: 'light'}
 	richColors
 	position="top-right"
 	closeButton
