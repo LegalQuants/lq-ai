@@ -15048,11 +15048,9 @@ paths:
         \ calls this with the authenticated user's UUID during\nC2 prompt assembly\
         \ so shadows actually shape the system prompt;\ncallers that don't care about\
         \ user-scope (e.g., admin tooling)\nomit ``user_id`` and get the registry\
-        \ view directly.\n\nCache key strategy (D8.1b decision): the gateway-side\
-        \ cache stays\nkeyed on ``(name, user_id)``. Team-membership changes are\n\
-        operator-mediated and rare; the existing 60s skill-cache TTL\nabsorbs propagation\
-        \ lag without a per-membership signature in\nthe key. Re-evaluate if team-membership\
-        \ churn becomes routine."
+        \ view directly.\n\nUser-resolved gateway reads bypass the TTL cache so the\
+        \ current\nreplacement and membership agree with the backend's tool binding.\n\
+        Registry-only callers retain the gateway's 60s cache."
       operationId: get_skill_internal_api_v1_internal_skills__skill_name__get
       parameters:
       - in: path
