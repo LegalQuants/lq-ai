@@ -197,3 +197,67 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 function docBody(win: Window) {
 	return win.document.body;
 }
+
+// The general baseline matrix opts out of autonomous mode, so it never opens
+// the DE-324 bell. Check this opt-in surface separately with zero exceptions.
+describe('DE-324 populated notification bell accessibility', () => {
+	for (const viewport of viewports)
+		for (const theme of themes) {
+			it(`populated bell/${viewport.id}/${theme}`, () => {
+				fixtures();
+				cy.intercept('GET', '**/api/v1/users/me/preferences', {
+					...preferences,
+					autonomous_enabled: true
+				});
+				cy.intercept('GET', '**/api/v1/autonomous/notifications**', {
+					notifications: Array.from({ length: 10 }, (_, i) => ({
+						id: `bell-${i}`,
+						user_id: user.id,
+						session_id: 'synthetic-session',
+						channel: 'in_app',
+						title: `Review ${i} completed`,
+						body: 'A background review completed. Open the receipt to inspect the result.',
+						payload: null,
+						read_at: null,
+						created_at: '2026-10-17T12:00:00Z',
+						updated_at: '2026-10-17T12:00:00Z'
+					})),
+					total_count: 102,
+					limit: 10,
+					offset: 0
+				});
+				cy.viewport(viewport.width, viewport.height);
+				cy.visit('/lq-ai/settings/account', {
+					onBeforeLoad(win) {
+						win.localStorage.clear();
+						win.localStorage.setItem('locale', 'en-US');
+						win.localStorage.setItem('theme', theme);
+						win.localStorage.setItem(
+							'lq_ai_auth',
+							JSON.stringify({
+								access_token: 'synthetic-a11y-token',
+								refresh_token: null,
+								expires_at: Date.now() + 3600000,
+								user
+							})
+						);
+					}
+				});
+				cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '99+');
+				cy.get('[data-testid="lq-ai-notification-bell-trigger"]')
+					.should('have.attr', 'aria-label', 'Notifications, 99+ (102 unread)')
+					.click();
+				cy.get('[data-testid="lq-ai-notification-bell-dropdown"] li.item').should(
+					'have.length',
+					10
+				);
+				cy.document().then(async (doc) => {
+					await doc.fonts.ready;
+				});
+				cy.injectAxe();
+				cy.checkA11y('[data-testid="lq-ai-notification-bell"]', {
+					runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }
+				});
+			});
+		}
+});

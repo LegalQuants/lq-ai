@@ -762,7 +762,7 @@ describe('DE-324 — shell notification bell', () => {
 				});
 			cy.get(dropdown)
 				.contains('button', 'Mark shown read')
-				.should('have.attr', 'aria-label', 'Mark shown notifications as read')
+				.should('have.text', 'Mark shown read')
 				.click();
 			cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '93');
 			cy.get(dropdown).find('[role="alert"]').should('contain.text', '1 notification');

@@ -39,7 +39,11 @@
 
 	$: badge = badgeText($bell.unreadCount);
 	$: triggerLabel =
-		$bell.unreadCount > 0 ? `Notifications, ${$bell.unreadCount} unread` : 'Notifications';
+		badge === '99+'
+			? `Notifications, 99+ (${$bell.unreadCount} unread)`
+			: $bell.unreadCount > 0
+				? `Notifications, ${$bell.unreadCount} unread`
+				: 'Notifications';
 
 	afterNavigate(() => {
 		open = false;
@@ -135,7 +139,6 @@
 						class="mark-all"
 						on:click={handleMarkAllRead}
 						disabled={$bell.markingAll || $bell.pendingIds.size > 0}
-						aria-label="Mark shown notifications as read"
 					>
 						{$bell.markingAll ? 'Marking…' : 'Mark shown read'}
 					</button>
@@ -177,7 +180,7 @@
 								class="mark-read"
 								on:click={() => handleMarkRead(notification.id)}
 								disabled={$bell.pendingIds.has(notification.id) || $bell.markingAll}
-								aria-label={`Mark "${notification.title}" as read`}
+								aria-label={`${$bell.pendingIds.has(notification.id) ? 'Marking…' : 'Mark read'}: ${notification.title}`}
 							>
 								{$bell.pendingIds.has(notification.id) ? 'Marking…' : 'Mark read'}
 							</button>
@@ -348,7 +351,7 @@
 
 	.item-date {
 		font-size: 11px;
-		color: var(--lq-text-tertiary);
+		color: var(--lq-text-secondary);
 		white-space: nowrap;
 	}
 
