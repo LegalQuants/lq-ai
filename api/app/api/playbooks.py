@@ -85,6 +85,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import require_document_matter_access, require_matter
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db, get_session_factory
 from app.models.document import Document
@@ -481,7 +482,9 @@ async def execute_playbook(
     if file_missing_or_unowned and not user.is_admin:
         raise HTTPException(status_code=404, detail="target document not found")
 
+    await require_document_matter_access(db, [body.target_document_id], user, need="write")
     if body.project_id is not None:
+        await require_matter(db, body.project_id, user, need="write")
         project = await db.get(Project, body.project_id)
         project_missing_or_unowned = (
             project is None or project.archived_at is not None or project.owner_id != user.id
@@ -537,6 +540,9 @@ async def get_playbook_execution(
     if not user.is_admin and execution.user_id != user.id:
         raise HTTPException(status_code=404, detail="execution not found")
 
+    if execution.project_id is not None:
+        await require_matter(db, execution.project_id, user, include_archived=True)
+    await require_document_matter_access(db, [execution.target_document_id], user)
     return PlaybookExecutionSchema.model_validate(execution)
 
 
@@ -646,6 +652,7 @@ async def get_easy_playbook_generation(
         raise HTTPException(status_code=404, detail="generation not found")
     if not user.is_admin and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="generation not found")
+    await require_document_matter_access(db, row.document_ids, user)
     return EasyPlaybookGenerationSchema.model_validate(row)
 
 
@@ -685,6 +692,7 @@ async def _load_caller_owned_documents(
             continue
         if user.is_admin or file_row.owner_id == user.id:
             out.append(doc)
+    await require_document_matter_access(db, document_ids, user, need="write")
     return out
 
 

@@ -157,7 +157,9 @@ class _FakeGateway:
             usage=ChatCompletionUsage(prompt_tokens=50, completion_tokens=20, total_tokens=70),
         )
 
-    async def call_tool(self, provider: str, op: str, args: dict) -> dict:
+    async def call_tool(
+        self, provider: str, op: str, args: dict, *, max_allowed_tier: int | None = None
+    ) -> dict:
         self.call_tool_calls.append((provider, op, args))
         return {"payload": self._authority_payload}
 

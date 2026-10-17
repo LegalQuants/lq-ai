@@ -134,6 +134,12 @@ class ChatCompletionRequest(BaseModel):
     chat_id: str | None = None
     anonymize: bool = True
 
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] | None = None
+    """How much hidden reasoning to ask the model for. The gateway maps it to
+    Ollama's ``think``, sends it as it is to OpenAI and Azure OpenAI (it is
+    OpenAI's own parameter), and sends nothing for it to Anthropic. Omitted
+    from the wire when unset."""
+
     lq_ai_privileged: bool = False
     """M2-B3: backend forwards ``Project.privileged`` here when the chat
     lives in a project. The gateway's anonymization middleware skips
@@ -197,6 +203,24 @@ class ChatCompletionRequest(BaseModel):
     resolves to the user's row first and falls back to the
     filesystem-canonical built-in. Omitted means "registry-only",
     which is the right behavior for non-user-bearing callers."""
+
+    lq_ai_restore_tool_arguments: bool | None = None
+    """This application holds the call's tool arguments as originals (ADR 0038 D7).
+
+    ``None`` (the default) leaves the field out of the request body, so every
+    call that does not ask is sent exactly as it was before the field existed,
+    also to a gateway that does not know it.
+
+    The gateway restores a reply's text and, by default, returns a tool
+    call's arguments as the model wrote them. Set for a governed run's call
+    that is offered tools or carries earlier tool calls and results, on a
+    route that pseudonymizes, it restores the
+    arguments of the calls the reply makes, and it pseudonymizes the tool text
+    this application sends back with the conversation, the earlier calls'
+    arguments and the tool results, so what is held does not leave as such.
+    Ordinary chat does not set it, and its tool text is sent as it is.
+    Mirrors
+    :attr:`gateway.app.providers.openai_schema.ChatCompletionRequest.lq_ai_restore_tool_arguments`."""
 
     lq_ai_purpose: str | None = None
     """M2-E2: tag for the gateway's routing-log ``purpose`` column.

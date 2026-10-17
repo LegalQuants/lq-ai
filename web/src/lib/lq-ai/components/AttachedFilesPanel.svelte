@@ -18,6 +18,8 @@
 	import { MAX_CHAT_ATTACHED_FILES } from '../chat/attachedFiles';
 
 	export let chatFiles: FileMeta[] = [];
+	/** True while New harness is the chat's model, which uses no skill. */
+	export let newHarness = false;
 	export let projectFiles: FileMeta[] = [];
 	export let uploading: boolean = false;
 	// True when the chat already holds MAX_CHAT_ATTACHED_FILES files — the
@@ -59,7 +61,9 @@
 	<div>
 		<h3 class="text-sm font-semibold lq-heading">Attached files</h3>
 		<p class="text-xs lq-subtext mt-0.5">
-			Upload documents the skill should review.
+			{newHarness
+				? 'Upload documents for this chat. Pick the ones a request may read above the message box.'
+				: 'Upload documents the skill should review.'}
 		</p>
 	</div>
 

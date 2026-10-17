@@ -1,0 +1,809 @@
+{
+  "summary": {
+    "observed_at_utc": "2026-10-05T00:52:41.498429+00:00",
+    "seed_at_utc": "2026-10-04T00:43:25Z",
+    "original_chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+    "isolation_chat_id": "68363da0-dd20-4ac1-aeaf-04930299cbc5",
+    "resume": {
+      "name": "P5-next-day-resume",
+      "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+      "request": {
+        "content": "What was the reference I gave you?",
+        "model": "local",
+        "skills": [],
+        "file_ids": [],
+        "stream": true
+      },
+      "started_utc": "2026-10-05T00:51:59Z",
+      "status": 200,
+      "response": {
+        "type": "complete",
+        "lq_ai_message_id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e",
+        "message": {
+          "id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "assistant",
+          "content": "The reference provided was ALDERNEY-7.",
+          "model": "glm-4.7-flash:latest",
+          "provider": "host-ollama",
+          "routed_inference_tier": 1,
+          "tokens_in": 118,
+          "tokens_out": 386,
+          "created_at": "2026-10-05T00:52:21.003296+00:00"
+        },
+        "applied_skills": [],
+        "applied_file_ids": [],
+        "citations": [],
+        "routed_inference_tier": 1,
+        "routed_provider": "host-ollama"
+      },
+      "elapsed_seconds": 21.28,
+      "completed_observed_at_utc": "2026-10-05T00:52:21.006713+00:00"
+    },
+    "isolation": {
+      "name": "P5-next-day-isolation",
+      "chat_id": "68363da0-dd20-4ac1-aeaf-04930299cbc5",
+      "request": {
+        "content": "What did I ask you in my previous LQ.AI task?",
+        "model": "local",
+        "skills": [],
+        "file_ids": [],
+        "stream": true
+      },
+      "started_utc": "2026-10-05T00:52:21Z",
+      "status": 200,
+      "response": {
+        "type": "complete",
+        "lq_ai_message_id": "31c0227a-e862-4dbb-b649-7afc12d02872",
+        "message": {
+          "id": "31c0227a-e862-4dbb-b649-7afc12d02872",
+          "chat_id": "68363da0-dd20-4ac1-aeaf-04930299cbc5",
+          "role": "assistant",
+          "content": "I don't have access to the history of previous conversations or tasks outside of the current session. If you have a question you'd like to ask now, please let me know, and I'll do my best to help!",
+          "model": "glm-4.7-flash:latest",
+          "provider": "host-ollama",
+          "routed_inference_tier": 1,
+          "tokens_in": 18,
+          "tokens_out": 1313,
+          "created_at": "2026-10-05T00:52:41.482904+00:00"
+        },
+        "applied_skills": [],
+        "applied_file_ids": [],
+        "citations": [],
+        "routed_inference_tier": 1,
+        "routed_provider": "host-ollama"
+      },
+      "elapsed_seconds": 20.08,
+      "completed_observed_at_utc": "2026-10-05T00:52:41.485823+00:00"
+    },
+    "reseeded": false,
+    "services_or_config_changed": false,
+    "evaluator_copied_history_into_request": false,
+    "assessment": {
+      "status": "passed",
+      "scope": "Adapted live 14-probe P5; authenticated ordinary chat API, next-day resumption and fresh-chat isolation",
+      "evaluated_at_utc": "2026-10-05T00:54:44.907999+00:00",
+      "expected_reference_evaluator_only": "ALDERNEY-7",
+      "elapsed_seconds_seed_to_resume_start": 86914.0,
+      "resume_returns_seed_reference": true,
+      "new_chat_does_not_identify_prior_task": true,
+      "same_existing_user_verified": true,
+      "inference_receipts": {
+        "resume": {
+          "ts": "2026-10-05T00:52:20.922247Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 118,
+            "tokens_out": 386,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e"
+          }
+        },
+        "isolation": {
+          "ts": "2026-10-05T00:52:41.461768Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 18,
+            "tokens_out": 1313,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "31c0227a-e862-4dbb-b649-7afc12d02872"
+          }
+        }
+      },
+      "limits": [
+        "Application replay of stored conversation text, not provider-private or cross-task memory.",
+        "Existing history includes a same-day recall response; this is more than 24 hours after original seeding, not 24 hours since the most recent mention.",
+        "The fresh-chat control is one observed isolation check, not an exhaustive security test.",
+        "API-level reopening was tested; task-list UI navigation was not exercised.",
+        "Initial seed used Qwen; same-day and delayed resumption used GLM.",
+        "No service restart or crash-recovery experiment was performed during this delayed check."
+      ]
+    }
+  },
+  "preflight": {
+    "observed_at_utc": "2026-10-05T00:51:58.410441+00:00",
+    "original_chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+    "mutations_before_model_request": "authentication only",
+    "seed_at_utc": "2026-10-04T00:43:25Z",
+    "elapsed_seconds_since_seed": 86913.410693,
+    "services": [
+      {
+        "Name": "lq-ai-capability-baseline-api-1",
+        "Service": "api",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-arq-worker-1",
+        "Service": "arq-worker",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-gateway-1",
+        "Service": "gateway",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-gateway:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-ingest-worker-1",
+        "Service": "ingest-worker",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-postgres-1",
+        "Service": "postgres",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-proxy-1",
+        "Service": "proxy",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-proxy:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-redis-1",
+        "Service": "redis",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-rustfs-1",
+        "Service": "rustfs",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-rustfs-init-1",
+        "Service": "rustfs-init",
+        "State": "exited",
+        "Health": "",
+        "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0"
+      },
+      {
+        "Name": "lq-ai-capability-baseline-web-1",
+        "Service": "web",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "ghcr.io/legalquants/lq-ai-web:v0.8.0"
+      }
+    ],
+    "volume": {
+      "Name": "lq-ai-capability-baseline_pgdata",
+      "CreatedAt": "2026-10-04T00:38:45Z",
+      "Driver": "local",
+      "Labels": {
+        "com.docker.compose.config-hash": "9659b239695fd725388b857d39a7fa556a38d602efaf072521af2c3e3ba88c47",
+        "com.docker.compose.project": "lq-ai-capability-baseline",
+        "com.docker.compose.version": "5.5.1",
+        "com.docker.compose.volume": "pgdata"
+      }
+    },
+    "postgres_mounts": [
+      {
+        "Type": "volume",
+        "Name": "lq-ai-capability-baseline_pgdata",
+        "Destination": "/var/lib/postgresql/data",
+        "RW": true
+      }
+    ],
+    "local_alias": {
+      "primary": {
+        "provider": "host-ollama",
+        "model": "glm-4.7-flash:latest"
+      },
+      "fallback": []
+    },
+    "gateway_config_sha256": "518f58c27e93d82f663eb0c3f12d69baebbee47b07ceceda00cc8a0fcfcecf29",
+    "gateway_matches_recorded_config": true,
+    "model": {
+      "name": "glm-4.7-flash:latest",
+      "model": "glm-4.7-flash:latest",
+      "digest": "d1a8a26252f18b34301218d22abd2620a65b85ba4b78987842eb157e01321222",
+      "modified_at": "2026-04-28T00:07:35.499320477+08:00",
+      "size": 19019270852
+    },
+    "posture": {
+      "skill_workspaces_enabled": false,
+      "skill_script_runner_configured": false,
+      "orchestration_chat_enabled": false
+    },
+    "fresh_login_at_utc": "2026-10-05T00:51:59.639505+00:00",
+    "user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+    "chat": {
+      "method": "GET",
+      "path": "/chats/fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+      "status": 200,
+      "observed_at_utc": "2026-10-05T00:51:59.696417+00:00",
+      "body": {
+        "id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "title": "Capability baseline — P5-initial",
+        "archived_at": null,
+        "created_at": "2026-10-04T00:43:25.455196Z",
+        "updated_at": "2026-10-04T00:43:25.455196Z",
+        "message_count": 5,
+        "sticky_skills": []
+      }
+    },
+    "messages": {
+      "method": "GET",
+      "path": "/chats/fd6faabf-ec21-4d77-a3e8-df661b0cfc78/messages?limit=100",
+      "status": 200,
+      "observed_at_utc": "2026-10-05T00:51:59.715071+00:00",
+      "body": {
+        "items": [
+          {
+            "id": "cef83e81-771f-404d-bf19-4ba595dbf2f7",
+            "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+            "role": "user",
+            "kind": "user",
+            "content": "Remember this reference for later: ALDERNEY-7. Draft me two lines about anything.",
+            "applied_skills": [],
+            "routed_inference_tier": null,
+            "routed_provider": null,
+            "routed_model": null,
+            "requested_model": null,
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "cost_estimate": null,
+            "error_code": null,
+            "citations": [],
+            "created_at": "2026-10-04T00:43:25.459759Z",
+            "is_enhanced": false
+          },
+          {
+            "id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301",
+            "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+            "role": "assistant",
+            "kind": "ai",
+            "content": "Noted — ALDERNEY-7 will be kept in mind.\n\nTwo lines for you:\n\nThe old lighthouse keeper spoke to the gulls as if they owed him money,\nand every evening the sea replied in a language only rust could translate.",
+            "applied_skills": [],
+            "routed_inference_tier": 1,
+            "routed_provider": "host-ollama",
+            "routed_model": "qwen3.8:27b-mlx",
+            "requested_model": "local",
+            "prompt_tokens": 29,
+            "completion_tokens": 107,
+            "cost_estimate": null,
+            "error_code": null,
+            "citations": [],
+            "created_at": "2026-10-04T00:43:25.462528Z",
+            "is_enhanced": false
+          },
+          {
+            "id": "ab4af788-9c29-4529-a93c-3d70d1c03f9d",
+            "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+            "role": "user",
+            "kind": "user",
+            "content": "What was the reference I gave you?",
+            "applied_skills": [],
+            "routed_inference_tier": null,
+            "routed_provider": null,
+            "routed_model": null,
+            "requested_model": null,
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "cost_estimate": null,
+            "error_code": null,
+            "citations": [],
+            "created_at": "2026-10-04T00:55:40.892038Z",
+            "is_enhanced": false
+          },
+          {
+            "id": "71bc6b63-c95a-43f5-abf9-2d806c478c6c",
+            "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+            "role": "user",
+            "kind": "user",
+            "content": "What was the reference I gave you? Answer briefly.",
+            "applied_skills": [],
+            "routed_inference_tier": null,
+            "routed_provider": null,
+            "routed_model": null,
+            "requested_model": null,
+            "prompt_tokens": null,
+            "completion_tokens": null,
+            "cost_estimate": null,
+            "error_code": null,
+            "citations": [],
+            "created_at": "2026-10-04T01:06:50.758950Z",
+            "is_enhanced": false
+          },
+          {
+            "id": "ba0f1c17-14ea-4192-8526-01d4c9544c03",
+            "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+            "role": "assistant",
+            "kind": "ai",
+            "content": "The reference provided was ALDERNEY-7.",
+            "applied_skills": [],
+            "routed_inference_tier": 1,
+            "routed_provider": "host-ollama",
+            "routed_model": "glm-4.7-flash:latest",
+            "requested_model": "local",
+            "prompt_tokens": 97,
+            "completion_tokens": 217,
+            "cost_estimate": null,
+            "error_code": null,
+            "citations": [],
+            "created_at": "2026-10-04T01:06:50.769361Z",
+            "is_enhanced": false
+          }
+        ],
+        "next_cursor": null
+      }
+    },
+    "preferences": {
+      "method": "GET",
+      "path": "/users/me/preferences",
+      "status": 200,
+      "observed_at_utc": "2026-10-05T00:51:59.718369+00:00",
+      "body": {
+        "reasoning_visibility": "disclosure",
+        "featured_tools": "prominent",
+        "workspace_layout": "three_pane",
+        "trust_pills": "labels",
+        "provenance_pills": "always",
+        "autonomous_enabled": false
+      }
+    }
+  },
+  "isolation_before": {
+    "fresh_login_at_utc": "2026-10-05T00:52:21.402481+00:00",
+    "user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+    "messages": {
+      "method": "GET",
+      "path": "/chats/68363da0-dd20-4ac1-aeaf-04930299cbc5/messages?limit=100",
+      "status": 200,
+      "observed_at_utc": "2026-10-05T00:52:21.402453+00:00",
+      "body": {
+        "items": [],
+        "next_cursor": null
+      }
+    }
+  },
+  "resume_receipts": {
+    "method": "GET",
+    "path": "/chats/fd6faabf-ec21-4d77-a3e8-df661b0cfc78/receipts",
+    "status": 200,
+    "observed_at_utc": "2026-10-05T00:52:21.019828+00:00",
+    "body": [
+      {
+        "ts": "2026-10-04T00:43:25.459759Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "cef83e81-771f-404d-bf19-4ba595dbf2f7",
+          "message_kind": "user",
+          "role": "user",
+          "prompt_tokens": null,
+          "completion_tokens": null
+        }
+      },
+      {
+        "ts": "2026-10-04T00:43:25.462528Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301",
+          "message_kind": "ai",
+          "role": "assistant",
+          "prompt_tokens": 29,
+          "completion_tokens": 107
+        }
+      },
+      {
+        "ts": "2026-10-04T00:43:30.032061Z",
+        "kind": "inference",
+        "detail": {
+          "provider": "host-ollama",
+          "model": "qwen3.8:27b-mlx",
+          "tier": 1,
+          "tokens_in": 29,
+          "tokens_out": 107,
+          "latency_ms": 4563,
+          "refused": false,
+          "refusal_reason": null,
+          "anonymization_applied": false,
+          "message_id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301"
+        }
+      },
+      {
+        "ts": "2026-10-04T00:55:40.892038Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "ab4af788-9c29-4529-a93c-3d70d1c03f9d",
+          "message_kind": "user",
+          "role": "user",
+          "prompt_tokens": null,
+          "completion_tokens": null
+        }
+      },
+      {
+        "ts": "2026-10-04T00:57:45.527407Z",
+        "kind": "inference",
+        "detail": {
+          "provider": "host-ollama",
+          "model": "qwen3.8:27b-mlx",
+          "tier": 1,
+          "tokens_in": 104,
+          "tokens_out": 68,
+          "latency_ms": 124610,
+          "refused": false,
+          "refusal_reason": null,
+          "anonymization_applied": false,
+          "message_id": "4c27e126-80c0-4150-ae6e-fdbe0b6832cd"
+        }
+      },
+      {
+        "ts": "2026-10-04T01:06:50.758950Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "71bc6b63-c95a-43f5-abf9-2d806c478c6c",
+          "message_kind": "user",
+          "role": "user",
+          "prompt_tokens": null,
+          "completion_tokens": null
+        }
+      },
+      {
+        "ts": "2026-10-04T01:06:50.769361Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "ba0f1c17-14ea-4192-8526-01d4c9544c03",
+          "message_kind": "ai",
+          "role": "assistant",
+          "prompt_tokens": 97,
+          "completion_tokens": 217
+        }
+      },
+      {
+        "ts": "2026-10-04T01:06:58.830850Z",
+        "kind": "inference",
+        "detail": {
+          "provider": "host-ollama",
+          "model": "glm-4.7-flash:latest",
+          "tier": 1,
+          "tokens_in": 97,
+          "tokens_out": 217,
+          "latency_ms": null,
+          "refused": false,
+          "refusal_reason": null,
+          "anonymization_applied": false,
+          "message_id": "ba0f1c17-14ea-4192-8526-01d4c9544c03"
+        }
+      },
+      {
+        "ts": "2026-10-05T00:51:59.718259Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "a83acd67-de26-4796-a437-fca8bfd580f0",
+          "message_kind": "user",
+          "role": "user",
+          "prompt_tokens": null,
+          "completion_tokens": null
+        }
+      },
+      {
+        "ts": "2026-10-05T00:51:59.725791Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e",
+          "message_kind": "ai",
+          "role": "assistant",
+          "prompt_tokens": 118,
+          "completion_tokens": 386
+        }
+      },
+      {
+        "ts": "2026-10-05T00:52:20.922247Z",
+        "kind": "inference",
+        "detail": {
+          "provider": "host-ollama",
+          "model": "glm-4.7-flash:latest",
+          "tier": 1,
+          "tokens_in": 118,
+          "tokens_out": 386,
+          "latency_ms": null,
+          "refused": false,
+          "refusal_reason": null,
+          "anonymization_applied": false,
+          "message_id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e"
+        }
+      }
+    ]
+  },
+  "isolation_receipts": {
+    "method": "GET",
+    "path": "/chats/68363da0-dd20-4ac1-aeaf-04930299cbc5/receipts",
+    "status": 200,
+    "observed_at_utc": "2026-10-05T00:52:41.492824+00:00",
+    "body": [
+      {
+        "ts": "2026-10-05T00:52:21.404046Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "d7892292-cf80-453f-b7e2-f3fe257f6eff",
+          "message_kind": "user",
+          "role": "user",
+          "prompt_tokens": null,
+          "completion_tokens": null
+        }
+      },
+      {
+        "ts": "2026-10-05T00:52:21.405653Z",
+        "kind": "message",
+        "detail": {
+          "message_id": "31c0227a-e862-4dbb-b649-7afc12d02872",
+          "message_kind": "ai",
+          "role": "assistant",
+          "prompt_tokens": 18,
+          "completion_tokens": 1313
+        }
+      },
+      {
+        "ts": "2026-10-05T00:52:41.461768Z",
+        "kind": "inference",
+        "detail": {
+          "provider": "host-ollama",
+          "model": "glm-4.7-flash:latest",
+          "tier": 1,
+          "tokens_in": 18,
+          "tokens_out": 1313,
+          "latency_ms": null,
+          "refused": false,
+          "refusal_reason": null,
+          "anonymization_applied": false,
+          "message_id": "31c0227a-e862-4dbb-b649-7afc12d02872"
+        }
+      }
+    ]
+  },
+  "resume_persisted_messages": {
+    "method": "GET",
+    "path": "/chats/fd6faabf-ec21-4d77-a3e8-df661b0cfc78/messages?limit=100",
+    "status": 200,
+    "observed_at_utc": "2026-10-05T00:52:21.023750+00:00",
+    "body": {
+      "items": [
+        {
+          "id": "cef83e81-771f-404d-bf19-4ba595dbf2f7",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "user",
+          "kind": "user",
+          "content": "Remember this reference for later: ALDERNEY-7. Draft me two lines about anything.",
+          "applied_skills": [],
+          "routed_inference_tier": null,
+          "routed_provider": null,
+          "routed_model": null,
+          "requested_model": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T00:43:25.459759Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "assistant",
+          "kind": "ai",
+          "content": "Noted — ALDERNEY-7 will be kept in mind.\n\nTwo lines for you:\n\nThe old lighthouse keeper spoke to the gulls as if they owed him money,\nand every evening the sea replied in a language only rust could translate.",
+          "applied_skills": [],
+          "routed_inference_tier": 1,
+          "routed_provider": "host-ollama",
+          "routed_model": "qwen3.8:27b-mlx",
+          "requested_model": "local",
+          "prompt_tokens": 29,
+          "completion_tokens": 107,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T00:43:25.462528Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "ab4af788-9c29-4529-a93c-3d70d1c03f9d",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "user",
+          "kind": "user",
+          "content": "What was the reference I gave you?",
+          "applied_skills": [],
+          "routed_inference_tier": null,
+          "routed_provider": null,
+          "routed_model": null,
+          "requested_model": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T00:55:40.892038Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "71bc6b63-c95a-43f5-abf9-2d806c478c6c",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "user",
+          "kind": "user",
+          "content": "What was the reference I gave you? Answer briefly.",
+          "applied_skills": [],
+          "routed_inference_tier": null,
+          "routed_provider": null,
+          "routed_model": null,
+          "requested_model": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T01:06:50.758950Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "ba0f1c17-14ea-4192-8526-01d4c9544c03",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "assistant",
+          "kind": "ai",
+          "content": "The reference provided was ALDERNEY-7.",
+          "applied_skills": [],
+          "routed_inference_tier": 1,
+          "routed_provider": "host-ollama",
+          "routed_model": "glm-4.7-flash:latest",
+          "requested_model": "local",
+          "prompt_tokens": 97,
+          "completion_tokens": 217,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-04T01:06:50.769361Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "a83acd67-de26-4796-a437-fca8bfd580f0",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "user",
+          "kind": "user",
+          "content": "What was the reference I gave you?",
+          "applied_skills": [],
+          "routed_inference_tier": null,
+          "routed_provider": null,
+          "routed_model": null,
+          "requested_model": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-05T00:51:59.718259Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "805a0070-4711-4d64-9397-9fe5ed8e5b7e",
+          "chat_id": "fd6faabf-ec21-4d77-a3e8-df661b0cfc78",
+          "role": "assistant",
+          "kind": "ai",
+          "content": "The reference provided was ALDERNEY-7.",
+          "applied_skills": [],
+          "routed_inference_tier": 1,
+          "routed_provider": "host-ollama",
+          "routed_model": "glm-4.7-flash:latest",
+          "requested_model": "local",
+          "prompt_tokens": 118,
+          "completion_tokens": 386,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-05T00:51:59.725791Z",
+          "is_enhanced": false
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "isolation_persisted_messages": {
+    "method": "GET",
+    "path": "/chats/68363da0-dd20-4ac1-aeaf-04930299cbc5/messages?limit=100",
+    "status": 200,
+    "observed_at_utc": "2026-10-05T00:52:41.497791+00:00",
+    "body": {
+      "items": [
+        {
+          "id": "d7892292-cf80-453f-b7e2-f3fe257f6eff",
+          "chat_id": "68363da0-dd20-4ac1-aeaf-04930299cbc5",
+          "role": "user",
+          "kind": "user",
+          "content": "What did I ask you in my previous LQ.AI task?",
+          "applied_skills": [],
+          "routed_inference_tier": null,
+          "routed_provider": null,
+          "routed_model": null,
+          "requested_model": null,
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-05T00:52:21.404046Z",
+          "is_enhanced": false
+        },
+        {
+          "id": "31c0227a-e862-4dbb-b649-7afc12d02872",
+          "chat_id": "68363da0-dd20-4ac1-aeaf-04930299cbc5",
+          "role": "assistant",
+          "kind": "ai",
+          "content": "I don't have access to the history of previous conversations or tasks outside of the current session. If you have a question you'd like to ask now, please let me know, and I'll do my best to help!",
+          "applied_skills": [],
+          "routed_inference_tier": 1,
+          "routed_provider": "host-ollama",
+          "routed_model": "glm-4.7-flash:latest",
+          "requested_model": "local",
+          "prompt_tokens": 18,
+          "completion_tokens": 1313,
+          "cost_estimate": null,
+          "error_code": null,
+          "citations": [],
+          "created_at": "2026-10-05T00:52:21.405653Z",
+          "is_enhanced": false
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "publication": {
+    "transformation": "Group P5 records and omit duplicate top-level streaming events inside the two summary attempts. All other source fields retained.",
+    "raw_records_sha256": {
+      "P5-next-day-isolation-before.json": "a41d8454c5bc76ea91c9001ad61bd69564084891e9e6e48ab77661e84a818502",
+      "P5-next-day-isolation-persisted-messages.json": "dbb629b31d93c829a0a9347bf876804bec9903f246d60b5d0b69bc4ce7719b92",
+      "P5-next-day-isolation-receipts.json": "bff952a4c38d26141ab524fb461ef6f57bb34c2624aa24919b6ba10178399bb9",
+      "P5-next-day-isolation.json": "a68a4508821cddf07ba59157f273059d933da15ca4f6679d6238ff09d700d996",
+      "P5-next-day-preflight.json": "007a556b6fd964e6fc2110db3ff1183bf133692e4a415b0b3a7e5013720bea1f",
+      "P5-next-day-resume-persisted-messages.json": "7c1da7314147ece04e5cf4e52ba799aa9201d07b34b5f2991b2a6fa979572174",
+      "P5-next-day-resume-receipts.json": "81b31810e715b557b53ce835c6372a9faac9c1ac3c1e2cfa434f899a3412019e",
+      "P5-next-day-resume.json": "2b3221ae40d0fcabf10744452467abf4cb2af3e9690c7aa37a7c8c52ed129a42",
+      "P5-next-day-summary.json": "d81902bccd3f14e3627b63f02823d1c5dc7f1748105fa700c04c7a566fce76fa"
+    }
+  }
+}

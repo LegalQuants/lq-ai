@@ -100,6 +100,43 @@ def test_from_config_openai_compatible_no_key_ok() -> None:
     assert adapter.name == "vllm-local"
 
 
+def _hosted_compatible() -> ProviderConfig:
+    """A hosted OpenAI-compatible service: it names the key it needs."""
+    return ProviderConfig.model_validate(
+        {
+            "name": "openrouter",
+            "type": "openai_compatible",
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key_env": "OPENROUTER_API_KEY",
+            "tier": 2,
+            "models": [],
+        }
+    )
+
+
+@pytest.mark.unit
+def test_from_config_openai_compatible_declared_key_must_resolve() -> None:
+    """An ``openai_compatible`` entry that names a key and does not have it
+    is a missing key, not a keyless server: no adapter is built. Startup
+    then skips the provider with a warning, as it does for ``openai``."""
+
+    with pytest.raises(
+        ValueError, match=r"OpenAI-compatible provider 'openrouter'.*OPENROUTER_API_KEY"
+    ):
+        OpenAIAdapter.from_config(_hosted_compatible(), env={})
+    # Present but empty is the same as unset.
+    with pytest.raises(ValueError, match=r"(?i)environment variable"):
+        OpenAIAdapter.from_config(_hosted_compatible(), env={"OPENROUTER_API_KEY": ""})
+
+
+@pytest.mark.unit
+def test_from_config_openai_compatible_declared_key_resolves() -> None:
+    adapter = OpenAIAdapter.from_config(
+        _hosted_compatible(), env={"OPENROUTER_API_KEY": "sk-or-test"}
+    )
+    assert adapter.name == "openrouter"
+
+
 # --- Embeddings ---------------------------------------------------------
 
 
@@ -440,6 +477,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         anonymize=True,
         lq_ai_privileged=True,
         lq_ai_file_ids=["44444444-4444-4444-4444-444444444444"],
+        lq_ai_restore_tool_arguments=True,
     )
     with respx.mock(base_url="https://api.openai.com/v1") as router:
         route = router.post("/chat/completions").mock(
@@ -458,6 +496,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
             await client.aclose()
     sent = json.loads(route.calls.last.request.content)
     for forbidden in (
+        "lq_ai_restore_tool_arguments",
         "minimum_inference_tier",
         "lq_ai_project_minimum_inference_tier",
         "skill_name",

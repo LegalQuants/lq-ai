@@ -16,9 +16,12 @@ This folder is the home for LQ.AI's security artifacts. The PRD documents the pr
 | **Cryptographic implementations** (`cryptography.md`) | Landed | Documentation of cryptographic primitives used, key lifecycle, and known limitations. |
 | **Network access controls** (`network-access-controls.md`) | M2 (or earlier with [DE-103 IP allowlisting](../PRD.md#de-103--ip-allowlisting-and-geo-restriction)) | IP allowlisting, geo-restriction, outbound proxy configuration. |
 | **Audit logging** (`audit-logging.md`) | Landed | What is logged, retention, integrity protection. |
+| **Matter access control** ([`matter-access-control.md`](matter-access-control.md)) | Landed (ADR 0024) | Who can reach a matter, ethical screens, the share-scope default, and the limits of the guarantee. |
 | **Encrypted-at-rest provider keys** ([`encrypted-keys.md`](encrypted-keys.md)) | Landed (ADR 0011) | Operator workflow for the master-key + Fernet-wrapped `api_key_encrypted` path in `gateway.yaml`. Bootstrap, rotation, recovery. |
 | **Property-based testing** ([`property-tests.md`](property-tests.md)) | Landed (DE-230) | Hypothesis invariants over the anonymization round-trip / streaming rehydration, tier-floor refusal, and citation normalization/locators; CI profiles, budgets, and seed policy. Partially delivers DE-240. |
+| **Air-gap install verification** ([`air-gap-verification.md`](air-gap-verification.md)) | Local and source-head hosted CI passed; maintainer/security review pending (DE-032 + DE-233) | Sealed-network boot and Tier-1 chat, container DNS isolation, packet evidence and negative controls, plus the operator BOM, pre-fetch checklist and offline degradation list. |
 | **Past advisories** (`advisories/`) | As advisories are published | Historical security advisories with reporter credit. |
+| **Risk-acceptance register** ([`risk-acceptance-register.md`](risk-acceptance-register.md)) | Template (ADR 0029 H2) | Low/Info audit findings the committee has decided to carry, with the reasoning, the compensating control, and who accepted them. |
 
 ## Reporting a vulnerability
 

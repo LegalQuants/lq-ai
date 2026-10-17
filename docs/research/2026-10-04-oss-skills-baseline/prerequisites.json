@@ -1,0 +1,279 @@
+{
+  "records": {
+    "ingestion.json": {
+      "tracked": {
+        "status": 200,
+        "body": {
+          "id": "64907519-a403-4c8a-8db1-68c881761f2c",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "tracked-two-page.docx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "size_bytes": 1874,
+          "hash_sha256": "851d7afeed44d61602fb1d6f014e7c1f7f1c4d0c1fdcf20cd6adbb245203a3e1",
+          "ingestion_status": "failed",
+          "page_count": null,
+          "character_count": null,
+          "document_id": null,
+          "created_at": "2026-10-04T00:45:39.576374Z"
+        }
+      },
+      "clean": {
+        "status": 200,
+        "body": {
+          "id": "65a9172f-bb30-4d0c-a775-386e90512358",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "clean-accepted-two-page.docx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "size_bytes": 1345,
+          "hash_sha256": "2daa07ef9b4d629d4adea100961d5dd8c575124b414949d1ad8d50f6157fc8c0",
+          "ingestion_status": "failed",
+          "page_count": null,
+          "character_count": null,
+          "document_id": null,
+          "created_at": "2026-10-04T00:45:39.656483Z"
+        }
+      },
+      "page-review": {
+        "status": 200,
+        "body": {
+          "id": "d2e355a1-3c6d-4cff-b2db-72cc2496d010",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "page-review.pdf",
+          "mime_type": "application/pdf",
+          "size_bytes": 6694,
+          "hash_sha256": "c7091daf8bc4f5b59d68087d21a2191a92a1be2722f83a9473ebc9c2133e402f",
+          "ingestion_status": "ready",
+          "page_count": null,
+          "character_count": null,
+          "document_id": "3abd00f9-ff5c-4972-bc32-7f44ebddac1a",
+          "created_at": "2026-10-04T00:45:39.712609Z"
+        }
+      },
+      "first": {
+        "status": 200,
+        "body": {
+          "id": "cbafc890-b4cc-4156-aed6-ec1b57beeab2",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "first.pdf",
+          "mime_type": "application/pdf",
+          "size_bytes": 1535,
+          "hash_sha256": "9d72309fb6eba4ea706b6ba7904ebde7ec8034aebc4cc8fb1116a9aecf3deee0",
+          "ingestion_status": "ready",
+          "page_count": null,
+          "character_count": null,
+          "document_id": "f260bf35-8eec-4474-af9a-308e116ee61f",
+          "created_at": "2026-10-04T00:45:39.772614Z"
+        }
+      },
+      "second": {
+        "status": 200,
+        "body": {
+          "id": "ed5e4c2c-860e-4fc0-8d51-8cf20880728a",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "second.pdf",
+          "mime_type": "application/pdf",
+          "size_bytes": 1539,
+          "hash_sha256": "0ac084a20d20d3aac03d433c96aa11c19ca9c2060e0b8cc95e9480582cb8af1d",
+          "ingestion_status": "ready",
+          "page_count": null,
+          "character_count": null,
+          "document_id": "337f1932-be89-4b42-9400-c8833afc8102",
+          "created_at": "2026-10-04T00:45:39.832115Z"
+        }
+      },
+      "tracker": {
+        "status": 200,
+        "body": {
+          "id": "b1a0caea-469c-4e11-8a27-f6e216111da1",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "tracker.xlsx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "size_bytes": 1916,
+          "hash_sha256": "81492cf4ef908fc55463e72de42d6831e53cc0f491410b0a87a746757b339ddd",
+          "ingestion_status": "failed",
+          "page_count": null,
+          "character_count": null,
+          "document_id": null,
+          "created_at": "2026-10-04T00:45:39.886017Z"
+        }
+      },
+      "clause": {
+        "status": 200,
+        "body": {
+          "id": "ee122f66-80b7-4578-aa14-bc1f8d2bf8d8",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "clause.docx",
+          "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "size_bytes": 1292,
+          "hash_sha256": "8de5ae9741b84126888c7483cd66b96bd2953db6e178d9a576cd4f1d08229f7d",
+          "ingestion_status": "failed",
+          "page_count": null,
+          "character_count": null,
+          "document_id": null,
+          "created_at": "2026-10-04T00:45:39.944005Z"
+        }
+      },
+      "advice": {
+        "status": 200,
+        "body": {
+          "id": "b5cdf0da-8c23-4d1e-822e-01a0844681b3",
+          "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+          "project_id": null,
+          "filename": "advice-note.txt",
+          "mime_type": "text/plain",
+          "size_bytes": 230,
+          "hash_sha256": "89b3758ee357f0973be6d304f56c2216d4ecd836024e32d79533d67aaaa412a4",
+          "ingestion_status": "ready",
+          "page_count": null,
+          "character_count": null,
+          "document_id": "17af6a70-4ec6-4438-a154-9fba23ecf0cc",
+          "created_at": "2026-10-04T00:45:39.994241Z"
+        }
+      }
+    },
+    "uploads.json": {
+      "tracked": {
+        "id": "64907519-a403-4c8a-8db1-68c881761f2c",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "tracked-two-page.docx",
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "size_bytes": 1874,
+        "hash_sha256": "851d7afeed44d61602fb1d6f014e7c1f7f1c4d0c1fdcf20cd6adbb245203a3e1",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.576374Z"
+      },
+      "clean": {
+        "id": "65a9172f-bb30-4d0c-a775-386e90512358",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "clean-accepted-two-page.docx",
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "size_bytes": 1345,
+        "hash_sha256": "2daa07ef9b4d629d4adea100961d5dd8c575124b414949d1ad8d50f6157fc8c0",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.656483Z"
+      },
+      "page-review": {
+        "id": "d2e355a1-3c6d-4cff-b2db-72cc2496d010",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "page-review.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": 6694,
+        "hash_sha256": "c7091daf8bc4f5b59d68087d21a2191a92a1be2722f83a9473ebc9c2133e402f",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.712609Z"
+      },
+      "first": {
+        "id": "cbafc890-b4cc-4156-aed6-ec1b57beeab2",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "first.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": 1535,
+        "hash_sha256": "9d72309fb6eba4ea706b6ba7904ebde7ec8034aebc4cc8fb1116a9aecf3deee0",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.772614Z"
+      },
+      "second": {
+        "id": "ed5e4c2c-860e-4fc0-8d51-8cf20880728a",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "second.pdf",
+        "mime_type": "application/pdf",
+        "size_bytes": 1539,
+        "hash_sha256": "0ac084a20d20d3aac03d433c96aa11c19ca9c2060e0b8cc95e9480582cb8af1d",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.832115Z"
+      },
+      "tracker": {
+        "id": "b1a0caea-469c-4e11-8a27-f6e216111da1",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "tracker.xlsx",
+        "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "size_bytes": 1916,
+        "hash_sha256": "81492cf4ef908fc55463e72de42d6831e53cc0f491410b0a87a746757b339ddd",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.886017Z"
+      },
+      "clause": {
+        "id": "ee122f66-80b7-4578-aa14-bc1f8d2bf8d8",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "clause.docx",
+        "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "size_bytes": 1292,
+        "hash_sha256": "8de5ae9741b84126888c7483cd66b96bd2953db6e178d9a576cd4f1d08229f7d",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.944005Z"
+      },
+      "advice": {
+        "id": "b5cdf0da-8c23-4d1e-822e-01a0844681b3",
+        "owner_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+        "project_id": null,
+        "filename": "advice-note.txt",
+        "mime_type": "text/plain",
+        "size_bytes": 230,
+        "hash_sha256": "89b3758ee357f0973be6d304f56c2216d4ecd836024e32d79533d67aaaa412a4",
+        "ingestion_status": "pending",
+        "page_count": null,
+        "character_count": null,
+        "document_id": null,
+        "created_at": "2026-10-04T00:45:39.994241Z"
+      }
+    },
+    "P13-access-check.json": {
+      "method": "GET",
+      "path": "/autonomous/schedules",
+      "status": 200,
+      "response": {
+        "schedules": [],
+        "total_count": 0,
+        "limit": 50,
+        "offset": 0
+      }
+    },
+    "P13-user-posture.json": {
+      "method": "GET",
+      "path": "/users/me/preferences",
+      "status": 200,
+      "autonomous_enabled": false
+    }
+  },
+  "raw_records_sha256": {
+    "ingestion.json": "6873aae7619a2dc56db104d3e11386f535a1e0c8cbb16f73a3a5344ac061f3b1",
+    "uploads.json": "69dc776f0082f32d351f0afd7be46416fdf1ad256617adaf9fc9523761952ef3",
+    "P13-access-check.json": "35a5be3a60dfe646be222f0cc9ec94dcaa5709b7f412be5f4d7ceb251bb16256",
+    "P13-user-posture.json": "a71a77ed3e3f5b9389e0111afb3ab881731d9778f9346114a6aa0cde610cb769"
+  }
+}

@@ -16,6 +16,7 @@ human-attestation pipeline's domain (per CLAUDE.md and
 
 from __future__ import annotations
 
+import os
 import signal
 from pathlib import Path
 from typing import Any
@@ -348,6 +349,47 @@ def test_load_one_lists_references_for_on_demand_reading(tmp_path: Path) -> None
         ("references/b.md", 5),
         ("references/topic/c.md", 6),
     ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("size, admitted", [(65536, True), (65537, False)])
+def test_on_demand_listing_never_reads_a_whole_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, size: int, admitted: bool
+) -> None:
+    """Indexing must enforce the byte limit before allocating file contents."""
+    folder = tmp_path / "demo"
+    refs = folder / "references"
+    refs.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(
+        "---\nname: demo\ndescription: A demo skill for the test.\n---\n# Body\n"
+    )
+    reference = refs / "guide.md"
+    reference.write_bytes(b"x" * size)
+    original = Path.read_bytes
+    original_fdopen = os.fdopen
+    read_sizes: list[int] = []
+
+    def refuse_unbounded_read(path: Path) -> bytes:
+        assert path != reference, "reference indexing used an unbounded whole-file read"
+        return original(path)
+
+    def bounded_fdopen(descriptor: int, mode: str) -> Any:
+        stream = original_fdopen(descriptor, mode)
+        original_read = stream.read
+
+        def bounded_read(size: int = -1) -> bytes:
+            assert 0 <= size <= 65537, "reference read exceeded the byte limit plus sentinel"
+            read_sizes.append(size)
+            return original_read(size)
+
+        monkeypatch.setattr(stream, "read", bounded_read)
+        return stream
+
+    monkeypatch.setattr(Path, "read_bytes", refuse_unbounded_read)
+    monkeypatch.setattr(os, "fdopen", bounded_fdopen)
+    record = _load_one(folder)
+    assert record.on_demand_paths == ((reference,) if admitted else ())
+    assert read_sizes == ([65537] if admitted else [])
 
 
 @pytest.mark.unit

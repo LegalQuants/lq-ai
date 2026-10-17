@@ -21,7 +21,10 @@
 		"cy:open": "svelte-kit sync && cypress open",
 		"cy:run": "svelte-kit sync && cypress run",
 		"test:frontend": "vitest --passWithNoTests",
-		"pyodide:fetch": "node scripts/prepare-pyodide.js"
+		"pyodide:fetch": "node scripts/prepare-pyodide.js",
+		"cy:a11y": "node --experimental-strip-types scripts/run-a11y.ts gate",
+		"cy:a11y:baseline": "node --experimental-strip-types scripts/run-a11y.ts capture",
+		"cy:a11y:proof": "node --experimental-strip-types scripts/run-a11y.ts proof"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "3.2.2",
@@ -33,7 +36,9 @@
 		"@tailwindcss/typography": "^0.5.13",
 		"@typescript-eslint/eslint-plugin": "^8.31.1",
 		"@typescript-eslint/parser": "^8.31.1",
+		"axe-core": "4.14.0",
 		"cypress": "^13.15.0",
+		"cypress-axe": "1.7.0",
 		"eslint": "^8.56.0",
 		"eslint-config-prettier": "^9.1.0",
 		"eslint-plugin-cypress": "^3.4.0",

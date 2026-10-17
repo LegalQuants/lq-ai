@@ -46,6 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.main import app
+from app.models.file import File as FileModel
 from app.models.user import User
 from app.security import create_access_token, hash_password
 from tests.test_storage_streaming import FakeS3Client
@@ -565,6 +566,47 @@ async def test_upload_oversized_body_returns_413(
 # ---------------------------------------------------------------------------
 # 404 on unknown id
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_get_metadata_returns_ingestion_error_for_a_failed_file(
+    client: AsyncClient, db_user: User, db_session: AsyncSession
+) -> None:
+    """A failed ingest says why.
+
+    Regression: the ``File`` schema in backend-openapi.yaml documents
+    ``ingestion_error`` and the pipeline stores it, but ``FileMetadata``
+    omitted the field, so clients polling ``GET /files/{id}`` (the Easy
+    Playbook wizard among them) could only report "unknown reason".
+    """
+
+    token = _bearer_for(db_user)
+    files, _ = _multipart_body(filename="x.pdf", content_type="application/pdf", payload=b"abc")
+    upload = await client.post(
+        "/api/v1/files",
+        files=files,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert upload.status_code == 201, upload.text
+    # Nothing has failed yet: the field is present and null.
+    assert upload.json()["ingestion_error"] is None
+    file_id = upload.json()["id"]
+
+    # Through the ORM, not raw SQL: the client shares this session, whose
+    # identity map already holds the row.
+    row = await db_session.get(FileModel, uuid.UUID(file_id))
+    assert row is not None
+    row.ingestion_status = "failed"
+    row.ingestion_error = "parse_failed"
+    await db_session.flush()
+
+    metadata = await client.get(
+        f"/api/v1/files/{file_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert metadata.status_code == 200
+    assert metadata.json()["ingestion_status"] == "failed"
+    assert metadata.json()["ingestion_error"] == "parse_failed"
 
 
 @pytest.mark.integration

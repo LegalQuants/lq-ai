@@ -5,8 +5,9 @@
 	 * Multi-skill in a single message is allowed (PRD §3.4); attach order
 	 * is preserved on the wire.
 	 *
-	 * When a skill is attached, its frontmatter inputs render as a form via
-	 * `SkillInputForm`. Required inputs the user hasn't filled block submit.
+	 * When a skill is attached, its declared inputs render as a form via
+	 * `SkillInputForm`. Required inputs the user hasn't filled block submit
+	 * (a required document input is also satisfied by an attached file).
 	 *
 	 * Project context inheritance: `projectAttachedSkills` are surfaced as
 	 * already-attached and read-only; the user can still attach additional
@@ -21,9 +22,16 @@
 	export let projectAttachedSkills: string[] = [];
 	export let skillDetails: Record<string, Skill> = {};
 	export let skillInputs: Record<string, Record<string, unknown>> = {};
+	/** The chat's attached files that are ready; they satisfy a required document input. */
+	export let readyFileNames: string[] = [];
+	/** The chat's attached files still being ingested. */
+	export let processingFileNames: string[] = [];
+	/** Attached skills whose detail or input schema failed to load. */
+	export let failedSkillNames: string[] = [];
 
 	export let onAttach: (name: string) => void = () => undefined;
 	export let onDetach: (name: string) => void = () => undefined;
+	export let onRetry: (name: string) => void = () => undefined;
 	export let onUpdateInputs: (name: string, values: Record<string, unknown>) => void = () =>
 		undefined;
 
@@ -97,11 +105,19 @@
 					{#if skillDetails[name]}
 						<div class="mt-1">
 							<SkillInputForm
+								skillName={name}
 								inputs={skillDetails[name].inputs ?? []}
 								values={skillInputs[name] ?? {}}
+								{readyFileNames}
+								{processingFileNames}
 								onChange={(next) => onUpdateInputs(name, next)}
 							/>
 						</div>
+					{:else if failedSkillNames.includes(name)}
+						<p class="lq-load-error text-xs mt-1" data-testid={`lq-ai-skill-load-error-${name}`}>
+							Couldn't load this skill's inputs.
+							<button type="button" class="underline" on:click={() => onRetry(name)}>Retry</button>
+						</p>
 					{:else}
 						<p class="text-xs text-gray-500 italic mt-1">Loading skill details…</p>
 					{/if}
@@ -184,6 +200,16 @@
 
 	.lq-attached-skill-title {
 		color: var(--lq-accent);
+	}
+
+	.lq-load-error {
+		color: var(--lq-error);
+	}
+	.lq-load-error button {
+		background: transparent;
+		border: 0;
+		color: inherit;
+		cursor: pointer;
 	}
 
 	.lq-picker-dropdown {

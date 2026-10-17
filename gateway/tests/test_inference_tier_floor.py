@@ -452,3 +452,41 @@ async def test_streaming_refusal_returns_403_not_sse(
     assert body["error"]["code"] == "tier_below_minimum"
     assert upstream.called is False
     assert recorder.rows[0].refused is True
+
+
+@pytest.mark.integration
+@respx.mock
+@pytest.mark.parametrize("request_floor,skill_floor", [(1, 3), (3, 1)])
+async def test_bulk_inline_skill_cannot_relax_the_stronger_request_floor(
+    http_client: tuple[AsyncClient, RecordingRoutingLogWriter],
+    request_floor: int,
+    skill_floor: int,
+) -> None:
+    client, recorder = http_client
+    respx.get(f"{BACKEND_URL}/api/v1/internal/organization-profile").mock(
+        return_value=httpx.Response(
+            404, json={"error": {"code": "not_found", "message": "No profile"}}
+        )
+    )
+    upstream = _mock_anthropic_success()
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": "Selected column evidence"}],
+            "minimum_inference_tier": request_floor,
+            "lq_ai_purpose": "tabular_bulk_op",
+            "lq_ai_inline_skills": [
+                {
+                    "name": "bulk-report",
+                    "body": "Draft selected-column revisions.",
+                    "minimum_inference_tier": skill_floor,
+                    "source": "tabular-bulk-op",
+                }
+            ],
+        },
+    )
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["code"] == "tier_below_minimum"
+    assert not upstream.called
+    assert recorder.rows[-1].refused is True

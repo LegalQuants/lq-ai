@@ -105,8 +105,10 @@ done
 > one component substantively changed. Before tagging, set **both**
 > `api/app/__init__.py` and `gateway/app/__init__.py` to `X.Y.Z`; the
 > `version-consistency` job in `release.yml` fails the tag push if they disagree with
-> each other or with the tag. `web/package.json` tracks the OpenWebUI fork upstream and
-> is **not** bumped to match.
+> each other or with the tag. Regenerate the committed backend OpenAPI export with
+> `make openapi` so its `info.version` matches the API version; the export drift guard
+> checks it in CI. `web/package.json` tracks the OpenWebUI fork upstream and is **not**
+> bumped to match.
 >
 > The desktop launcher versions independently (`desktop-vX.Y.Z`) and records which
 > `vX.Y.Z` image set it ships against — see *Image ↔ launcher relationship* below.
@@ -188,6 +190,39 @@ git tag -a desktop-vX.Y.Z "$RELEASE_COMMIT" -m "Desktop release vX.Y.Z" && git p
 > `main`), not an older source tag that predates the pre-built-images feature. If you dispatch, pass
 > the *image* tag separately (`-f tag=vX.Y.Z`) and point `ref` at `main`. Pushing a `vX.Y.Z` tag from
 > `main` does this for you.
+
+### 4. Preserve validated mutation evidence (DE-229)
+
+The scoped nightly workflow is informational, not a release score threshold.
+Before publishing a percentage, select a run with valid evidence for **both**
+packages; a successful old PR CI run is not a mutation baseline.
+
+```bash
+# Discover a valid candidate and download to separate package directories:
+gh run list -R LegalQuants/lq-ai --workflow=mutation.yml --status=success -L 5
+gh run download <run-id> -R LegalQuants/lq-ai -n mutation-api-<run-id> -D /tmp/mutation-api
+gh run download <run-id> -R LegalQuants/lq-ai -n mutation-gateway-<run-id> -D /tmp/mutation-gateway
+```
+
+Confirm both `mutation-score.json` reports have `status: valid` and `measurement_origin: github-actions`, identify the
+measured commit and agree with the raw counts. Check module/test selections,
+configuration/lock digests and tool version before comparing to older scores.
+Use a fresh run if the tested code, configuration, dependency tree or tool has
+changed. Label any difference between the measured commit and the release commit.
+If no valid, applicable run exists, publish **“mutation score unavailable”**;
+do not reuse an older or incomplete number.
+
+Preserve each package's report, raw CI counts and outcome list in separate
+`api/` and `gateway/` directories under
+`docs/quality/mutation-baselines/<release>/` in the release PR. Add the history row
+in `docs/quality/mutation-scores.md` with permanent links to those files; reference
+the same links and measured commits in release notes. The source run URL remains
+in each report. GitHub's 90-day artifacts are diagnostic storage only and are
+not the durable source for a future README badge.
+
+Full DE-229 acceptance, including the badge/feed and excluded scopes, remains
+open in PRD §9 and follow-up tracker [#718](https://github.com/LegalQuants/lq-ai/issues/718). Issue #380
+closes with the scoped Python implementation in PR #434, not full DE-229 acceptance.
 
 ---
 
@@ -281,6 +316,8 @@ xcrun stapler validate /tmp/LQ.AI-*.dmg     # "The validate action worked!"
 
 ## See also
 
+- [`docs/quality/mutation-scores.md`](quality/mutation-scores.md) — the per-release mutation-score
+  record (step 4 above).
 - [`docs/INSTALL-MAC.md`](INSTALL-MAC.md) — the end-user install guide.
 - [`desktop/VERIFICATION.md`](../desktop/VERIFICATION.md) — the release-time verification protocol.
 - [`docs/lq-ai-macos-launcher-playbook.md`](lq-ai-macos-launcher-playbook.md) — the full playbook this
