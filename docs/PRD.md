@@ -4848,6 +4848,14 @@ migration alone does not authorize orchestration or helper enablement.
 
 **When to ship:** A clean follow-on once C2 ships; it touches the Matters route on its own time.
 
+**Inbox behavior:** Each Matter navigation starts a fresh inbox lifecycle; responses and
+action feedback from the previous Matter cannot populate the current one. The inbox
+requires a successful server opt-in read, stays hidden if that read fails, and reports
+the server's pending total with paginated loading. Resolving a proposal refills the first
+page so older pending proposals remain reachable. Acceptance refreshes Matter context
+without remounting the workspace. Regression coverage lives in the Matter route's
+`__tests__/proposal-inbox.test.ts` and `cypress/e2e/lq-ai-matter-proposals.cy.ts`.
+
 ---
 
 #### DE-324 — Global-chrome notification bell for autonomous notifications (M4-C2 finding)

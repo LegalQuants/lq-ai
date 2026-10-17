@@ -27,7 +27,14 @@ const preferences = {
 	provenance_pills: 'always',
 	autonomous_enabled: false
 };
-function fixtures(dashboard = false) {
+// Opt-in regression probe: simulate a slow cold bootstrap in the failing CI state.
+// This delays only the first config response; it never skips a state or an axe rule.
+const bootstrapDelayMs = Number(Cypress.env('a11yBootstrapDelayMs') ?? 0);
+if (!Number.isInteger(bootstrapDelayMs) || bootstrapDelayMs < 0 || bootstrapDelayMs > 20000)
+	throw new Error('a11yBootstrapDelayMs must be an integer between 0 and 20000');
+
+function fixtures(dashboard = false, delayBootstrap = false) {
+	let firstConfig = true;
 	let releaseActivity!: () => void;
 	const activityReady = new Promise<void>((resolve) => {
 		releaseActivity = resolve;
@@ -50,13 +57,24 @@ function fixtures(dashboard = false) {
 		'/api/v1/users/user/settings': { ui: {} },
 		'/api/v1/models': { data: [] }
 	};
+	const aliases: Record<string, string> = {
+		'/api/config': 'a11yConfig',
+		'/api/v1/auths': 'a11ySession',
+		'/api/v1/users/me': 'a11yUser',
+		'/api/v1/user-skills': 'a11yUserSkills',
+		'/api/v1/skills': 'a11yBuiltinSkills',
+		'/api/v1/teams': 'a11yTeams'
+	};
 	cy.intercept('**/api/**', async (req) => {
 		const path = new URL(req.url).pathname.replace(/\/$/, '');
 		// Hold the synthetic reads until loading contrast has been checked, without a timing guess.
 		if (dashboard && (path === '/api/v1/chats' || path === '/api/v1/projects')) await activityReady;
-		if (req.method === 'GET' && Object.hasOwn(reads, path))
-			req.reply({ statusCode: 200, body: reads[path] });
-		else if (req.method === 'POST' && path === '/api/v1/auths/update/timezone')
+		if (req.method === 'GET' && Object.hasOwn(reads, path)) {
+			if (aliases[path]) req.alias = aliases[path];
+			const delay = delayBootstrap && firstConfig && path === '/api/config' ? bootstrapDelayMs : 0;
+			if (path === '/api/config') firstConfig = false;
+			req.reply({ statusCode: 200, body: reads[path], delay });
+		} else if (req.method === 'POST' && path === '/api/v1/auths/update/timezone')
 			req.reply({ statusCode: 204 });
 		else {
 			req.reply({ statusCode: 500, body: { detail: 'Unexpected accessibility fixture request' } });
@@ -71,7 +89,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 			for (const theme of themes) {
 				const id = `${state.id}/${viewport.id}/${theme}`;
 				it(id, () => {
-					const releaseActivity = fixtures(state.id === 'dashboard');
+					const releaseActivity = fixtures(state.id === 'dashboard', id === 'skills/desktop/light');
 					cy.viewport(viewport.width, viewport.height);
 					cy.visit(state.path, {
 						onBeforeLoad(win) {
@@ -93,9 +111,21 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 						}
 					});
 					cy.location('pathname').should('eq', state.path);
+					// Document load does not mean either shell's async auth gate has mounted its route.
+					// Start the DOM-readiness budget after the intercepted bootstrap responses settle.
+					const bootstrapTimeout = { requestTimeout: 30000, responseTimeout: 30000 };
+					cy.wait(['@a11yConfig', '@a11ySession', '@a11yConfig'], bootstrapTimeout);
+					if (state.id !== 'login') cy.wait('@a11yUser', bootstrapTimeout);
 					if ('ready' in state) cy.get(state.ready, { timeout: 15000 }).should('be.visible');
 					if ('heading' in state)
 						cy.contains('h1,h2', state.heading, { timeout: 15000 }).should('be.visible');
+					if (state.id === 'skills') {
+						cy.wait(['@a11yUserSkills', '@a11yBuiltinSkills', '@a11yTeams'], bootstrapTimeout);
+						cy.contains(
+							'[data-testid="lq-ai-user-skills"]',
+							"You haven't created any skills yet."
+						).should('be.visible');
+					}
 					if ('dialog' in state) {
 						cy.contains('button', '+ New matter').first().click();
 						cy.get('[role="dialog"]').should('be.visible');
