@@ -20,6 +20,7 @@ export * as modelsApi from './models';
 export * as adminApi from './admin';
 export * as auditLogApi from './auditLog';
 export * as intakeBridgesApi from './intakeBridges';
+export * as communitySkillsApi from './communitySkills';
 export * as savedPromptsApi from './savedPrompts';
 export * as userSkillsApi from './userSkills';
 export * as teamsApi from './teams';

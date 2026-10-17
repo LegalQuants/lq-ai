@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tabular import TabularCellCitation, TabularExecution
@@ -38,6 +39,7 @@ from app.tabular.nodes import (
     extract_cell,
     make_aggregate_node,
 )
+from app.tabular.state import TabularExecutionState
 
 from .test_nodes import _chunk, _StubGateway
 
@@ -341,14 +343,17 @@ async def test_aggregate_node_persists_located_cell_citations_end_to_end(
 
     aggregate_node = make_aggregate_node(db_session)
     await aggregate_node(
-        {
-            "execution_id": str(execution.id),
-            "columns": list(execution.columns),
-            "judge_model": "smart",
-            "documents": [{"id": str(doc_id), "name": "Sample NDA"}],
-            "per_cell_results": [located, unlocated],
-            "error": None,
-        }
+        cast(
+            TabularExecutionState,
+            {
+                "execution_id": str(execution.id),
+                "columns": list(execution.columns),
+                "judge_model": "smart",
+                "documents": [{"id": str(doc_id), "name": "Sample NDA"}],
+                "per_cell_results": [located, unlocated],
+                "error": None,
+            },
+        )
     )
 
     persisted = (
@@ -378,3 +383,60 @@ async def test_aggregate_node_persists_located_cell_citations_end_to_end(
     assert execution.status == "completed"
     assert execution.results is not None
     assert execution.results["schema_version"] == "m3-c2-v2"
+
+
+@pytest.mark.integration
+async def test_aggregate_failure_rolls_back_citations_and_grid(db_session: AsyncSession) -> None:
+    """A rejected results write must not leave committed provenance behind."""
+
+    doc_id = uuid.uuid4()
+    execution = TabularExecution(
+        user_id=None,
+        status="running",
+        document_ids=[doc_id],
+        columns=[{"name": "Term", "query": "What is the term?"}],
+    )
+    db_session.add(execution)
+    await db_session.commit()
+    execution_id = execution.id
+    # Fail the grid UPDATE after the session has flushed its citation INSERT.
+    # DDL is transactional and is removed by rollback/the outer test fixture.
+    await db_session.execute(
+        text(
+            "ALTER TABLE tabular_executions ADD CONSTRAINT test_reject_completed "
+            "CHECK (status <> 'completed')"
+        )
+    )
+    cell = _in_flight_cell(
+        doc_id,
+        "Term",
+        [
+            {
+                "chunk_id": str(uuid.uuid4()),
+                "source_offset_start": 0,
+                "source_offset_end": 1,
+                "verification_method": "exact_match",
+                "verification_confidence": 1.0,
+            }
+        ],
+    )
+    with pytest.raises(IntegrityError, match="test_reject_completed"):
+        await make_aggregate_node(db_session)(
+            cast(
+                TabularExecutionState,
+                {
+                    "execution_id": str(execution_id),
+                    "documents": [{"id": str(doc_id), "name": "Sample NDA"}],
+                    "per_cell_results": [cell],
+                },
+            )
+        )
+    await db_session.rollback()
+
+    citations = await db_session.scalars(
+        select(TabularCellCitation).where(TabularCellCitation.execution_id == execution_id)
+    )
+    assert list(citations) == []
+    await db_session.refresh(execution)
+    assert execution.status == "running"
+    assert execution.results is None

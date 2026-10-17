@@ -38,7 +38,9 @@ from app.playbooks.nodes import (
     _parse_json_object,
     _shape_results_payload,
     _summarize,
+    make_retrieve_node,
 )
+from app.playbooks.state import PlaybookExecutionState
 from app.security import hash_password
 
 # ---------------------------------------------------------------------------
@@ -259,6 +261,53 @@ async def _make_playbook_with_position(
 
 
 @pytest.mark.integration
+async def test_retrieve_finds_single_keyword_match_beyond_fallback_chunks(
+    db_session: AsyncSession,
+) -> None:
+    """A late clause matching one keyword must not fall back to the first four chunks."""
+    owner = await _make_user(db_session)
+    chunks_text = [
+        "The parties agree to cooperate.",
+        "Notices must be delivered in writing.",
+        "Each party bears its own expenses.",
+        "Amendments require both parties' signatures.",
+        "Expiry occurs on the fifth anniversary of signing.",
+    ]
+    _file, doc, chunks = await _make_doc_with_chunks(
+        db_session,
+        owner=owner,
+        normalized_text="".join(chunks_text),
+        chunks_text=chunks_text,
+    )
+    position_id = str(uuid.uuid4())
+    state = PlaybookExecutionState(
+        target_document_id=str(doc.id),
+        positions=[
+            {
+                "id": position_id,
+                "issue": "Term",
+                "description": "Contract expiry",
+                "standard_language": "The agreement expires after five years.",
+                "fallback_tiers": [],
+                "redline_strategy": "",
+                "severity_if_missing": "high",
+                "detection_keywords": ["term", "duration", "expiry"],
+                "detection_examples": [],
+                "position_order": 0,
+            }
+        ],
+    )
+
+    result = await make_retrieve_node(db_session)(state)
+
+    assert len(result["retrievals"]) == 1
+    retrieval = result["retrievals"][0]
+    assert retrieval["position_id"] == position_id
+    assert [chunk["id"] for chunk in retrieval["chunks"]] == [str(chunks[4].id)]
+    assert retrieval["chunks"][0]["content"] == chunks_text[4]
+
+
+@pytest.mark.integration
 async def test_executor_classifies_matches_standard_end_to_end(
     db_session: AsyncSession,
 ) -> None:
@@ -389,6 +438,7 @@ async def test_executor_drafts_redline_for_deviates_verdict(
 
     await db_session.refresh(execution)
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "deviates"
     assert positions[0]["redline"] is not None
@@ -445,6 +495,7 @@ async def test_executor_marks_missing_when_keyword_not_in_document(
 
     await db_session.refresh(execution)
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "missing"
     assert positions[0]["redline"] is None
@@ -500,6 +551,7 @@ async def test_executor_persists_error_on_gateway_failure(
     # The gateway swallowed the error per-call; the executor still
     # writes a completed row with a 'missing' verdict for the position.
     assert execution.status == "completed"
+    assert execution.results is not None
     positions = execution.results["positions"]
     assert positions[0]["verdict"] == "missing"
     assert positions[0]["confidence"] == 0.5  # low → 0.5

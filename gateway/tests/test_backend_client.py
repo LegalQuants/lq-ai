@@ -321,6 +321,30 @@ async def test_get_skill_caches_successful_fetch() -> None:
 
 @pytest.mark.unit
 @respx.mock
+async def test_user_resolved_skill_replacement_is_fresh_within_cache_ttl() -> None:
+    route = respx.get("http://api.test/api/v1/internal/skills/alpha").mock(
+        side_effect=[
+            httpx.Response(
+                200, json={"name": "alpha", "scope": "builtin", "content_md": "builtin"}
+            ),
+            httpx.Response(200, json={"name": "alpha", "scope": "team", "content_md": "team"}),
+            httpx.Response(200, json={"name": "alpha", "scope": "user", "content_md": "user"}),
+            httpx.Response(404, json={"detail": "access revoked"}),
+        ]
+    )
+    client = _client_with_respx()
+    for body in ("builtin", "team", "user"):
+        skill = await client.get_skill("alpha", user_id="user-a")
+        assert skill.content_md == body
+    with pytest.raises(SkillNotFound):
+        await client.get_skill("alpha", user_id="user-a")
+    assert route.call_count == 4
+    assert all(call.request.url.params["user_id"] == "user-a" for call in route.calls)
+    assert await client.cache.size() == 0
+
+
+@pytest.mark.unit
+@respx.mock
 async def test_get_skill_does_not_cache_failure() -> None:
     route = respx.get("http://api.test/api/v1/internal/skills/alpha").mock(
         return_value=httpx.Response(500, text="boom")

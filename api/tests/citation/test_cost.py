@@ -373,7 +373,7 @@ async def test_resolve_ensemble_uses_per_model_calibration(
     # WITHOUT calibration (db=None) the conservative default applies
     # and the request passes the budget.
     result_default = await _resolve_ensemble_config(
-        gateway=_Gw(),
+        gateway=_Gw(),  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=True,
         skill_registry=None,
@@ -386,7 +386,7 @@ async def test_resolve_ensemble_uses_per_model_calibration(
     # WITH calibration (real db_session + seeded rows) the per-model
     # average is $0.020/call, so 2 x 3 x 0.020 = $0.12 — falls back.
     result_calibrated = await _resolve_ensemble_config(
-        gateway=_Gw(),
+        gateway=_Gw(),  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=True,
         skill_registry=None,

@@ -138,7 +138,9 @@ async def test_handler_renders_canonical_envelope_for_arbitrary_lqai_error() -> 
     # this throwaway app — keeps the test exercising the real handler code.
     from app.main import _lqai_error_handler
 
-    test_app.add_exception_handler(LQAIError, _lqai_error_handler)
+    # Starlette types add_exception_handler as taking a handler of the base
+    # Exception; a narrower LQAIError handler is fine at runtime.
+    test_app.add_exception_handler(LQAIError, _lqai_error_handler)  # type: ignore[arg-type]
 
     @test_app.get("/raise-gateway-unreachable")
     async def _raise_gw() -> None:

@@ -177,6 +177,26 @@ class ChatCompletionRequest(BaseModel):
     """OpenAI-style tool_choice (``"auto"`` / ``"none"`` / a forced
     function). Forwarded verbatim to providers that support it."""
 
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high"] | None = None
+    """How much hidden reasoning to ask the model for, in OpenAI's vocabulary.
+
+    Hidden reasoning counts against ``max_tokens`` on a reasoning model, so a
+    caller with a fixed output limit uses this to keep room for the answer.
+    Unset (the default) sends nothing to the provider and leaves the model's
+    own default in place, so existing callers are unaffected.
+
+    What each adapter does with it:
+
+    * Ollama maps it to ``think``
+      (see :func:`app.providers.ollama._effort_to_think`).
+    * OpenAI and Azure OpenAI send it as it is: it is OpenAI's own parameter.
+    * Anthropic builds its body field by field and sends nothing for it.
+
+    What a given model does with a level is the model's business: some
+    treat every level as "on", and a model that does not take the parameter,
+    or cannot think, may refuse a request that carries it. A caller should
+    set it only for a route whose model it has been tried against."""
+
     # --- LQ.AI extensions (per gateway-openapi.yaml) -------------------------
     minimum_inference_tier: int | None = Field(default=None, ge=1, le=5)
     """D1: per-call request override of the tier floor. The most restrictive
@@ -279,12 +299,44 @@ class ChatCompletionRequest(BaseModel):
     callers (smoke scripts, internal admin tooling, etc.)."""
 
     lq_ai_purpose: str | None = None
-    """M2-E2: tag for the routing-log ``purpose`` column. Distinguishes
-    judge calls (Citation Engine Stage 3/4) from regular chat
-    completions so per-model cost calibration filters down to judge
-    traffic. Known values used in code: ``'judge_paraphrase'``;
-    ``None`` or any unknown value falls back to ``'chat'`` in the
-    persisted row. Stripped from the outbound provider body."""
+    """M2-E2: tag for the routing-log ``purpose`` column, so each kind of
+    traffic is recorded as what it is. The gateway keeps a closed set of
+    labels (see ``_KNOWN_PURPOSES`` in ``app/api/inference.py``): chat,
+    the Citation Engine judges, the tabular and playbook executors, a
+    legacy autonomous session and a governed run. ``None`` records
+    ``'chat'``; a value outside the set also falls back to ``'chat'``.
+    Stripped from the outbound provider body."""
+
+    lq_ai_restore_tool_arguments: bool = False
+    """The caller holds its tool arguments as originals: restore them, and cover its tool text.
+
+    A caller sets this when it acts on the arguments of the calls the model
+    makes, a search query or a note's text for instance, and keeps them as the
+    owner's own text. It asks for two things, which belong together.
+
+    On the way back. By default the anonymization middleware restores a reply's
+    text and leaves ``tool_calls[].function.arguments`` as the model wrote them.
+    When this is true and the request was pseudonymized, a non-streaming
+    response also has the pseudonyms in each call's arguments replaced by the
+    originals (see :func:`app.anonymization.middleware.post_anonymize_response`).
+    It has no effect on a request that was not pseudonymized, and none on the
+    streaming path.
+
+    On the way out. What the caller holds and sends back on a later turn, the
+    arguments of an assistant message's ``tool_calls`` and the content of a
+    ``tool`` message (the string values of its JSON), is pseudonymized with the
+    rest of the request, and a name the detector found anywhere in the request
+    is replaced wherever else it stands in that tool text. Member names, numbers
+    and the tool schemas are not rewritten, and the detector recognises what it
+    recognises: the claim is that no recognised entity leaves, not that none can.
+
+    Without it, tool messages and tool-call arguments are sent exactly as the
+    caller sent them. That is the right default for ordinary chat, whose research
+    tools return published sources and whose follow-up calls need the real values.
+
+    The field is stripped from the outbound body. The backend sets it on every
+    call of a governed run that is offered tools or carries earlier tool calls
+    and results, on a route that pseudonymizes (ADR 0038 D7)."""
 
 
 # --- Chat completion response -------------------------------------------------
@@ -335,6 +387,8 @@ class ChatCompletionResponse(BaseModel):
     # --- LQ.AI extensions ---------------------------------------------------
     routed_inference_tier: int | None = Field(default=None, ge=1, le=5)
     routed_provider: str | None = None
+    routed_model: str | None = None
+    """Gateway-resolved native model, independent of the upstream model label."""
     cost_estimate: float | None = None
     anonymization_applied: bool | None = None
     lq_ai_applied_skills: list[str] | None = None

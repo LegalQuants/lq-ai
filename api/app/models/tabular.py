@@ -6,7 +6,7 @@ landing in M3. Each row is one tabular execution — a row-per-document
 by column-per-spec grid run as a LangGraph workflow on the
 ``arq:m3a6`` queue (Decision C-3 from the Phase C prep doc).
 
-Two tables:
+Three tables:
 
 * :class:`TabularExecution` (migration ``0036_tabular_executions.py``)
   — one row per execution. Status lifecycle is
@@ -15,12 +15,15 @@ Two tables:
   (Decision C-9; bulk ops spawn siblings rather than mutating the
   original grid).
 * :class:`TabularCellCitation` (migration
-  ``0066_tabular_cell_citations.py``, DE-309) — offset-bearing
+  ``0079_tabular_cell_citations.py``, DE-309) — offset-bearing
   Citation-Engine provenance rows for grounded tabular cells. One row
   per (cell, cited chunk) pair whose extracted value was deterministically
   located in the chunk's canonical text. Fail-closed: an unlocatable
   value mints NO row (the cell renders unverified) — a row's existence
   is itself the verification claim.
+
+* :class:`TabularBulkOp` (migration ``0071_tabular_bulk_ops.py``)
+  — one retained bulk-operation result linked to its source execution.
 
 The CHECK constraints on ``status`` / offsets / method are enforced at
 the storage layer so application bugs can't insert invalid values.
@@ -248,4 +251,105 @@ class TabularCellCitation(Base):
             f"column={self.column_name!r} chunk_id={self.chunk_id} "
             f"span=[{self.source_offset_start}:{self.source_offset_end}] "
             f"method={self.verification_method!r}>"
+        )
+
+
+class TabularBulkOp(Base):
+    """One bulk operation over a completed tabular execution — DE-304 / ADR 0040.
+
+    Two kinds in v1 (CHECK-constrained per migration 0071):
+
+    * ``redline_rows`` — one redline-style review memo per parent grid
+      row; the items combine into a redline report on the execution
+      detail page.
+    * ``summarize_column`` — one memo synthesizing a single column
+      across all rows (``params['column_name']`` names the column);
+      results carry one item with ``document_id = null``.
+
+    Lifecycle: ``pending → running → completed | failed``. Per ADR 0040
+    D4, ``completed`` includes batches with per-item failures — item
+    failures are persisted inside ``results.items[*].error`` and never
+    block the batch. ``failed`` is reserved for whole-batch
+    orchestration crashes (``error_text`` populated).
+
+    ``execution_id`` is the causal-linkage column (ADR 0040 D1): the live parent link becomes null on hard deletion; source identity
+    and owner-accessible work product survive. ``params`` is snapshotted at request time (C-1 posture).
+
+    ``results`` JSONB shape::
+
+        {
+            "schema_version": "de304-v1",
+            "items": [
+                {"document_id", "document_name", "status", "output_text", "error", "cost_usd"}
+            ],
+            "summary": {"total_items": N, "failed_items": M},
+        }
+    """
+
+    __tablename__ = "tabular_bulk_ops"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    execution_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "tabular_executions.id",
+            ondelete="SET NULL",
+            name="fk_tabular_bulk_ops_execution_id",
+        ),
+        nullable=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+            name="fk_tabular_bulk_ops_user_id",
+        ),
+        nullable=False,
+    )
+    source_execution_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        server_default=text("'pending'"),
+    )
+    params: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    results: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    confirmed_cost_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 4),
+        nullable=True,
+    )
+    cost_actual_usd: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 4),
+        nullable=True,
+    )
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TabularBulkOp id={self.id} execution_id={self.execution_id} "
+            f"kind={self.kind!r} status={self.status!r}>"
         )

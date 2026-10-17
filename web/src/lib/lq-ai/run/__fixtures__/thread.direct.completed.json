@@ -1,0 +1,42 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "b1e2d9d5-0287-4a1c-aad2-9d5eb1946907",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "Thanks, that helps.",
+    "cost_estimate": null,
+    "created_at": "2026-10-09T23:51:08.179785Z",
+    "error_code": null,
+    "id": "d889ea9a-601e-4fba-84bc-33860254dc84",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [],
+    "autonomous_session_id": "f308ea09-6a08-434a-bfe2-21eba245505a",
+    "chat_id": "b1e2d9d5-0287-4a1c-aad2-9d5eb1946907",
+    "citations": [],
+    "completion_tokens": 30,
+    "content": "You're welcome.\n\nNothing was read or searched for this reply: it rests on this conversation only.",
+    "cost_estimate": 0.0714,
+    "created_at": "2026-10-09T23:51:08.179786Z",
+    "error_code": null,
+    "id": "fa999168-5314-4f3f-884b-047e0549db74",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": 20,
+    "requested_model": "selected/native",
+    "role": "assistant",
+    "routed_inference_tier": 1,
+    "routed_model": "native",
+    "routed_provider": "selected"
+  }
+]

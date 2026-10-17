@@ -107,17 +107,46 @@ Skills outside this catalog are also welcome — file an issue describing the us
 
 ---
 
+## Where does my contribution go?
+
+For jurisdiction and practice-area expansion, [ADR 0024](../docs/adr/0024-jurisdiction-and-practice-area-expansion.md)
+defines four routes:
+
+| Contribution shape | Route |
+|---|---|
+| Community work-product skill (S2) | [`LegalQuants/lq-skills`](https://github.com/LegalQuants/lq-skills/blob/main/CONTRIBUTING.md); `lq-ai/skills/` holds the curated first-party set. |
+| Authority source (S1) | `lq-ai` under [ADR 0021 D1–D6](../docs/adr/0021-content-source-registry-and-free-source-expansion.md), with the applicable gateway-egress security review. For authors outside the known-contributor circle, this includes the [external-contribution adversarial read](../docs/security/external-contribution-vetting.md). |
+| Corpus or statutory graph (S3) | An org-level repository under the DE-264 pattern; a maintainer decides placement per proposal. Operator-facing MCP wiring or live external lookups are S1-class changes in `lq-ai`. |
+| Practice area excluded by PRD §1.6 (S4) | A mini-PRD and committee-decided PRD amendment first; its S1/S2/S3 parts route normally once the amendment lands. |
+
+**Check the [contribution coverage map](../docs/contribute/coverage-map.md) before routing.**
+Compare the proposal with merged coverage and open claims across both repositories. The maintainer
+records or updates its jurisdiction, practice area, claim issue link, and status in the map in the
+same routing sweep, linking related or overlapping work.
+
+A proposal can have several parts: name each part and its route so they can proceed independently.
+Routing is a maintainer recommendation; a disputed route gets a second maintainer's review.
+These routes do not replace the applicable substantive or security review requirements.
+A separate community skill for a new domain, jurisdiction or regime follows S2 to `lq-skills`.
+A proposed change to an existing curated first-party skill follows this repository's existing
+review and attestation process; ask a maintainer to confirm whether the proposal is such a
+change or a separate community skill before routing it.
+Follow the contribution instructions in the destination repository. The process below applies
+to curated `lq-ai` skills containing legal substance.
+
+---
+
 ## The contribution process
 
 Skill contribution has five steps: claim, draft, attest, review, merge.
 
 ### 1. Claim
 
-**File or comment on a tracking issue first.** This avoids two contributors duplicating work on the same skill, surfaces any architectural or scope concerns early, and gives a maintainer the chance to flag related work.
+**Check the [contribution coverage map](../docs/contribute/coverage-map.md), then file or comment on a tracking issue first.** This avoids two contributors duplicating work on the same skill, surfaces any architectural or scope concerns early, and gives a maintainer the chance to flag related work.
 
 If a deferred-enhancement entry exists for the skill (e.g., DE-001 candidates, DE-002 regimes), comment on the existing issue or file a new one referencing the DE-### entry. If no entry exists, file an issue describing the skill: what it does, when it triggers, what inputs it takes, what output it produces, what perspective branching applies if any.
 
-A maintainer will respond within ~5 business days confirming the slot, suggesting refinements, or (rarely) flagging a scope concern.
+A maintainer will confirm the slot, suggest refinements, or (rarely) flag a scope concern. See [Review timelines](../CONTRIBUTING.md#review-timelines) for the current target and how the queue is prioritized.
 
 ### 2. Draft
 
@@ -182,7 +211,7 @@ In both cases, the attesting attorney's name appears in the skill's metadata and
 - **Practicing attorney reviewer** focuses on substantive accuracy: are the patterns correct? Are the severity calibrations reasonable? Is the recommended language clean? Are there scenarios where the skill would produce wrong output? Is the conservative-posture norm being followed?
 - **Engineer reviewer** focuses on the operational shape: is the frontmatter complete? Does the workflow run cleanly? Are the worked examples actually worked? Does the skill follow the format conventions? Are there integration concerns with the application or other skills?
 
-Reviewers will be assigned by maintainers when the PR is opened. If you have a specific reviewer in mind (e.g., a maintainer with relevant practice-area expertise), tag them in the PR description.
+Reviewers are assigned by maintainers from the **attorney-reviewer pool** (below) when the PR is opened. If you have a specific reviewer in mind (e.g., a maintainer with relevant practice-area expertise), tag them in the PR description.
 
 Review feedback typically falls into three categories:
 
@@ -191,6 +220,37 @@ Review feedback typically falls into three categories:
 3. **Scope concerns** — the skill does too much, too little, or the wrong thing. May require restructuring; in extreme cases, splitting into multiple skills or merging with an existing skill.
 
 Maintainer approval is required to merge; for skills with significant substantive content, a second maintainer review is preferred.
+
+#### The attorney-reviewer pool
+
+Skills with legal substance cannot merge without a practicing attorney, so the pool is the
+project's real throughput limit on skill work. It is a standing group rather than an ad-hoc
+search. Adopted by [ADR 0034](../docs/adr/0034-review-capacity-and-reviewer-roles.md).
+
+**Two distinct asks.** They are separated because they cost very different amounts of time, and
+conflating them has cost the project volunteers who could have helped with the lighter one:
+
+| | **Attestation review** | **Acceptance run** |
+|---|---|---|
+| What it is | Substantive sign-off on a skill's legal content — patterns, severity calibration, recommended language | Running a starter skill against a real document and recording what it did |
+| Judgment required | Full professional judgment; you are putting your name to it | Practising familiarity; you are reporting, not attesting |
+| Typical time | 2–4 hours per skill | 30–60 minutes per document set |
+| Output | A review on the PR, and the attestation paragraph if you authored | A recorded result per skill |
+
+The acceptance run is the lighter role and the one on the critical path: it is gate row **D4** of
+[ADR 0029](../docs/adr/0029-definition-of-1.0.md) (DE-051 / DE-236), which needs the ten starter
+skills run against a real corpus with results recorded per skill. An attorney pool of at least
+two, with one completed acceptance batch behind it, is also a precondition for setting a 1.0 date
+([ADR 0030](../docs/adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
+
+**Joining.** Open an issue or say so in GitHub Discussions, naming your jurisdiction and practice
+areas and which of the two asks you are offering. Joining commits you to nothing beyond
+responding when you are asked whether you have capacity for a specific engagement — declining a
+given skill is expected and carries no cost.
+
+**What you can expect back.** A named engagement with a scope and a deadline, the documents or
+skill in hand, and your review credited in the PR. Nothing is assigned to the pool at large in the
+hope that someone picks it up.
 
 ### 5. Merge
 
@@ -266,7 +326,7 @@ By contributing a skill, you agree that your contribution will be licensed under
 
 ## Questions?
 
-- **General skill-authoring questions** → GitHub Discussions or `#skill-authors` on Discord.
+- **General skill-authoring questions** → GitHub Discussions.
 - **Specific skill proposals** → file a GitHub Issue with the `skill-proposal` label, referencing the relevant DE-### entry if one exists.
 - **Substantive legal questions on a skill in review** → discuss in the PR thread; tag the practicing-attorney reviewer for substantive review.
 - **Cross-cutting skill conventions** → propose changes to the [Skill-Authoring Guide](../docs/skill-authoring-guide.md) via a PR; conventions changes go through maintainer review.

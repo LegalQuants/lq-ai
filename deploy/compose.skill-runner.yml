@@ -1,0 +1,44 @@
+# Opt-in overlay; paths resolve from the repository-root compose file.
+# Only this trusted broker receives engine access. Jobs never receive mounts.
+services:
+  api:
+    networks: [default, skill-runner]
+    environment:
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: http://skill-runner:8095
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:?Set a separate runner token}
+  arq-worker:
+    networks: [default, skill-runner]
+    environment:
+      LQ_AI_SKILL_SCRIPT_RUNNER_URL: http://skill-runner:8095
+      LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:?Set a separate runner token}
+  skill-runner:
+    build:
+      context: .
+      dockerfile: script_runner/Dockerfile
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 64
+    group_add: ["${LQ_SKILL_ENGINE_GID:-0}"]
+    networks: [skill-runner]
+    environment:
+      LQ_SCRIPT_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:?Set a separate runner token}
+      LQ_SCRIPT_INSTANCE: ${LQ_SKILL_RUNNER_INSTANCE:-lq-skills}
+    volumes:
+      - type: bind
+        source: ${LQ_SKILL_ENGINE_SOCKET:?Select a dedicated or rootless engine socket}
+        target: /var/run/docker.sock
+      - type: bind
+        source: ${LQ_SKILL_BUNDLES_FILE:?Select the reviewed bundle manifest}
+        target: /config/bundles.json
+        read_only: true
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8095/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+networks:
+  skill-runner:
+    internal: true

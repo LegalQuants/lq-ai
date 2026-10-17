@@ -1,0 +1,11 @@
+{
+  "checked_at": "2026-09-27T08:24:17.723659+00:00",
+  "completed_run": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+  "completed_run_unchanged_after_browser_reload": true,
+  "rejected_run": "fbc1b9cc-bc4b-49b6-af39-26e9212a04fc",
+  "rejected_child_admissions": 0,
+  "rejected_root_effect_count": 1,
+  "rejected_root_effect_intents": [
+    "plan"
+  ]
+}

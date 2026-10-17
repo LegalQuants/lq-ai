@@ -568,10 +568,10 @@ async def test_resolve_activates_on_skill_flag(
     registry = _StubSkillRegistry({"nda-review": _StubSkill(ensemble_verification=True)})
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=["nda-review"],
         project_ensemble_verification=False,
-        skill_registry=registry,
+        skill_registry=registry,  # type: ignore[arg-type]
         n_candidates=2,
         message_id=uuid.uuid4(),
     )
@@ -591,7 +591,7 @@ async def test_resolve_activates_on_project_flag(
     gw = _StubGatewayForActivation(config=_activation_config_off)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=True,
         skill_registry=None,
@@ -618,7 +618,7 @@ async def test_resolve_activates_on_gateway_default() -> None:
     gw = _StubGatewayForActivation(config=cfg)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=False,
         skill_registry=None,
@@ -640,7 +640,7 @@ async def test_resolve_no_activation_returns_none(
     gw = _StubGatewayForActivation(config=_activation_config_off)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=False,
         skill_registry=None,
@@ -678,7 +678,7 @@ async def test_resolve_returns_none_when_gateway_has_no_ensemble_config() -> Non
     gw = _StubGatewayForActivation(config=None)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=True,
         skill_registry=None,
@@ -707,7 +707,7 @@ async def test_resolve_cost_budget_fallback_returns_none() -> None:
     gw = _StubGatewayForActivation(config=cfg)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=False,
         skill_registry=None,
@@ -735,7 +735,7 @@ async def test_resolve_cost_budget_within_cap_activates() -> None:
     gw = _StubGatewayForActivation(config=cfg)
 
     result = await _resolve_ensemble_config(
-        gateway=gw,
+        gateway=gw,  # type: ignore[arg-type]
         applied_skills=[],
         project_ensemble_verification=False,
         skill_registry=None,
