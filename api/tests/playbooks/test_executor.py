@@ -38,7 +38,9 @@ from app.playbooks.nodes import (
     _parse_json_object,
     _shape_results_payload,
     _summarize,
+    make_retrieve_node,
 )
+from app.playbooks.state import PlaybookExecutionState
 from app.security import hash_password
 
 # ---------------------------------------------------------------------------
@@ -256,6 +258,53 @@ async def _make_playbook_with_position(
 # ---------------------------------------------------------------------------
 # End-to-end executor tests
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_retrieve_finds_single_keyword_match_beyond_fallback_chunks(
+    db_session: AsyncSession,
+) -> None:
+    """A late clause matching one keyword must not fall back to the first four chunks."""
+    owner = await _make_user(db_session)
+    chunks_text = [
+        "The parties agree to cooperate.",
+        "Notices must be delivered in writing.",
+        "Each party bears its own expenses.",
+        "Amendments require both parties' signatures.",
+        "Expiry occurs on the fifth anniversary of signing.",
+    ]
+    _file, doc, chunks = await _make_doc_with_chunks(
+        db_session,
+        owner=owner,
+        normalized_text="".join(chunks_text),
+        chunks_text=chunks_text,
+    )
+    position_id = str(uuid.uuid4())
+    state = PlaybookExecutionState(
+        target_document_id=str(doc.id),
+        positions=[
+            {
+                "id": position_id,
+                "issue": "Term",
+                "description": "Contract expiry",
+                "standard_language": "The agreement expires after five years.",
+                "fallback_tiers": [],
+                "redline_strategy": "",
+                "severity_if_missing": "high",
+                "detection_keywords": ["term", "duration", "expiry"],
+                "detection_examples": [],
+                "position_order": 0,
+            }
+        ],
+    )
+
+    result = await make_retrieve_node(db_session)(state)
+
+    assert len(result["retrievals"]) == 1
+    retrieval = result["retrievals"][0]
+    assert retrieval["position_id"] == position_id
+    assert [chunk["id"] for chunk in retrieval["chunks"]] == [str(chunks[4].id)]
+    assert retrieval["chunks"][0]["content"] == chunks_text[4]
 
 
 @pytest.mark.integration
