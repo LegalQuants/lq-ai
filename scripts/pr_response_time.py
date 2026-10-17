@@ -20,9 +20,9 @@ published number carries its own caveats. See ``RULES`` and ``CAVEATS`` below.
 
 PRs still waiting are the ones that matter most: a median over answered PRs
 alone flatters the number. The script therefore lists every PR with no
-response yet, with how long each has waited, and also prints a second median
-that counts those PRs at their current wait, which is a lower bound on the
-median the window will finally settle at.
+response yet, with how long each has waited, and also prints a provisional
+median that counts those PRs at their current wait. That figure can fall if
+a waiting PR closes without a maintainer response and leaves the population.
 
 Usage:
 
@@ -76,7 +76,7 @@ PER_PR_PAGE = 100
 RULES = [
     "Maintainer: a current member of the GitHub team given by --team (default "
     f"{DEFAULT_TEAM}), or the logins given by --maintainer. Membership is read as of "
-    "the run, not as of each response.",
+    "the run, not as of each response. Logins are compared case-insensitively.",
     "Substantive response: the earliest of (a) a review submitted by a maintainer, in any "
     "state, including a comment-only review; (b) a conversation comment by a maintainer; "
     "(c) the maintainer merging the PR; (d) the maintainer closing the PR. Reviews and "
@@ -109,6 +109,8 @@ CAVEATS = [
     "the median, which is one more way the median can flatter the picture. A PR in that "
     "list that was merged was merged by someone with write access who is not on the "
     "team today.",
+    "The median including current waits is provisional: PRs closed without a maintainer "
+    "response drop out, so the final median can be lower.",
     f"Only the first {PER_PR_PAGE} reviews and {PER_PR_PAGE} comments of each PR are read; "
     "a PR is flagged if it has more.",
 ]
@@ -227,12 +229,11 @@ class Report:
         return _median_days(self.answered)
 
     @property
-    def median_lower_bound_days(self) -> float | None:
-        """Median counting waiting PRs at their current wait.
+    def median_with_waiting_days(self) -> float | None:
+        """Provisional median counting waiting PRs at their current wait.
 
-        Every waiting PR's final time will be at least its current wait, so this
-        is a lower bound on the median the window settles at once every PR has
-        been answered.
+        Waiting PRs can leave the measured population by closing unanswered,
+        so the final answered-only median can be lower than this snapshot.
         """
         return _median_days(self.answered + self.waiting)
 
@@ -297,12 +298,14 @@ def parse_pr(node: dict[str, Any]) -> PullRequest:
 
 def first_maintainer_response(pr: PullRequest, maintainers: set[str]) -> Event | None:
     """The earliest event that counts as a substantive maintainer response."""
+    maintainer_logins = {login.casefold() for login in maintainers}
+    author_login = pr.author.login.casefold()
     candidates = [
         e
         for e in pr.events
-        if e.actor.login in maintainers
+        if e.actor.login.casefold() in maintainer_logins
         and not e.actor.is_bot
-        and e.actor.login != pr.author.login
+        and e.actor.login.casefold() != author_login
         and e.at >= pr.created_at
     ]
     return min(candidates, key=lambda e: e.at) if candidates else None
@@ -322,6 +325,7 @@ def classify(
     until: date,
     maintainer_source: str,
 ) -> Report:
+    maintainer_logins = {login.casefold() for login in maintainers}
     report = Report(
         repo=repo,
         since=since,
@@ -339,10 +343,10 @@ def classify(
         if pr.author.is_bot:
             report.automated.append(pr)
             continue
-        if pr.author.login in maintainers:
+        if pr.author.login.casefold() in maintainer_logins:
             report.maintainer_authored.append(pr)
             continue
-        response = first_maintainer_response(pr, maintainers)
+        response = first_maintainer_response(pr, maintainer_logins)
         if response is not None:
             report.answered.append(
                 Measured(pr, response, _hours_between(pr.created_at, response.at))
@@ -396,7 +400,7 @@ def render_text(report: Report) -> str:
         f"    closed with no maintainer response:    {len(report.closed_unanswered)}",
         "",
         f"Median time to first maintainer response (answered PRs):   {_fmt_days(report.median_answered_days)}",
-        f"Median with waiting PRs at their current wait (lower bound): {_fmt_days(report.median_lower_bound_days)}",
+        f"Provisional median including current waits: {_fmt_days(report.median_with_waiting_days)}",
     ]
     if report.answered:
         share = 100.0 * report.within_target / len(report.answered)
@@ -443,6 +447,7 @@ def _measured_json(m: Measured) -> dict[str, Any]:
         "author": m.pr.author.login,
         "draft": m.pr.is_draft,
         "merged": m.pr.merged,
+        "truncated": m.pr.truncated,
         "created_at": m.pr.created_at.isoformat(),
         "days": round(m.days, 2),
         "response": (
@@ -470,7 +475,7 @@ def render_json(report: Report) -> dict[str, Any]:
             "closed_unanswered": len(report.closed_unanswered),
         },
         "median_days_answered": _round(report.median_answered_days),
-        "median_days_lower_bound": _round(report.median_lower_bound_days),
+        "median_days_with_waiting": _round(report.median_with_waiting_days),
         "answered_within_target": report.within_target,
         "waiting": [_measured_json(m) for m in report.waiting],
         "closed_unanswered": [_measured_json(m) for m in report.closed_unanswered],

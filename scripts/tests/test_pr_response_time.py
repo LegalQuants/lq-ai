@@ -44,6 +44,7 @@ def node(
     draft: bool = False,
     created: datetime = T0,
     review_total: int | None = None,
+    comment_total: int | None = None,
 ) -> dict[str, Any]:
     reviews = reviews or []
     comments = comments or []
@@ -65,7 +66,10 @@ def node(
             "totalCount": review_total if review_total is not None else len(reviews),
             "nodes": reviews,
         },
-        "comments": {"totalCount": len(comments), "nodes": comments},
+        "comments": {
+            "totalCount": comment_total if comment_total is not None else len(comments),
+            "nodes": comments,
+        },
         "timelineItems": {"nodes": timeline},
     }
 
@@ -78,11 +82,16 @@ def comment(who: dict[str, str], at: datetime) -> dict[str, Any]:
     return {"author": who, "createdAt": iso(at)}
 
 
-def run(nodes: list[dict[str, Any]], maintainers: set[str] = MAINTAINERS) -> prt.Report:
+def run(
+    nodes: list[dict[str, Any]],
+    maintainers: set[str] = MAINTAINERS,
+    *,
+    now: datetime = NOW,
+) -> prt.Report:
     return prt.classify(
         [prt.parse_pr(n) for n in nodes],
         maintainers,
-        NOW,
+        now,
         repo="org/repo",
         since=date(2026, 7, 1),
         until=date(2026, 9, 30),
@@ -173,6 +182,31 @@ def test_deleted_account_is_never_a_maintainer() -> None:
     assert run([n]).waiting
 
 
+@pytest.mark.parametrize("kind", ["review", "comment", "merge", "close"])
+def test_maintainer_responses_match_logins_case_insensitively(kind: str) -> None:
+    actor = user("mAiNt")
+    at = T0 + timedelta(days=2)
+    events: dict[str, Any] = {
+        "review": {"reviews": [review(actor, at)]},
+        "comment": {"comments": [comment(actor, at)]},
+        "merge": {"merged_by": actor, "merged_at": at},
+        "close": {"closed_by": actor, "closed_at": at},
+    }[kind]
+    report = run([node(1, **events)], maintainers={"MaInT"})
+    assert report.answered[0].days == pytest.approx(2.0)
+    response = report.answered[0].response
+    assert response is not None
+    assert response.actor.login == "mAiNt"
+    assert report.maintainers == ["MaInT"]
+
+
+def test_first_response_ignores_authors_own_event_with_different_casing() -> None:
+    pr = prt.parse_pr(
+        node(1, author=user("MaInT"), comments=[comment(user("maint"), T0 + timedelta(days=1))])
+    )
+    assert prt.first_maintainer_response(pr, {"maint"}) is None
+
+
 # --- population --------------------------------------------------------------
 
 
@@ -187,6 +221,15 @@ def test_maintainer_authored_pr_is_excluded_and_counted() -> None:
     report = run([node(1, author=user("maint"))])
     assert [p.number for p in report.maintainer_authored] == [1]
     assert not report.waiting
+
+
+@pytest.mark.parametrize("author_login,maintainer_login", [("maint", "MAINT"), ("MAINT", "maint")])
+def test_maintainer_authored_exclusion_is_case_insensitive(
+    author_login: str, maintainer_login: str
+) -> None:
+    report = run([node(1, author=user(author_login))], maintainers={maintainer_login})
+    assert [p.number for p in report.maintainer_authored] == [1]
+    assert not report.answered and not report.waiting and not report.closed_unanswered
 
 
 def test_open_pr_without_response_is_waiting_with_wait_so_far() -> None:
@@ -218,7 +261,7 @@ def test_self_merge_by_non_maintainer_is_closed_unanswered_and_marked() -> None:
 # --- statistics --------------------------------------------------------------
 
 
-def test_median_over_answered_and_lower_bound_with_waiting() -> None:
+def test_median_over_answered_and_provisional_median_with_waiting() -> None:
     nodes = [
         node(1, reviews=[review(user("maint"), T0 + timedelta(days=1))]),
         node(2, reviews=[review(user("maint"), T0 + timedelta(days=3))]),
@@ -228,8 +271,27 @@ def test_median_over_answered_and_lower_bound_with_waiting() -> None:
     report = run(nodes)
     assert report.median_answered_days == pytest.approx(3.0)
     # answered 1, 3, 10 plus waiting 30 -> median of (3, 10)
-    assert report.median_lower_bound_days == pytest.approx(6.5)
+    assert report.median_with_waiting_days == pytest.approx(6.5)
     assert report.within_target == 2
+
+
+def test_provisional_median_can_fall_when_waiting_pr_closes_unanswered() -> None:
+    answered = node(1, reviews=[review(user("maint"), T0 + timedelta(days=1))])
+    before = run([answered, node(2)])
+    assert before.median_with_waiting_days == pytest.approx(15.5)
+    text = prt.render_text(before)
+    assert "Provisional median including current waits" in text
+    assert "lower bound" not in text
+    data = prt.render_json(before)
+    assert data["median_days_with_waiting"] == pytest.approx(15.5)
+    assert "median_days_lower_bound" not in data
+    assert any("provisional" in caveat and "closed" in caveat for caveat in data["caveats"])
+
+    closed_at = NOW + timedelta(days=1)
+    after = run([answered, node(2, closed_at=closed_at, closed_by=user("contrib"))], now=closed_at)
+    assert after.median_answered_days == pytest.approx(1.0)
+    assert after.median_with_waiting_days == pytest.approx(1.0)
+    assert len(after.closed_unanswered) == 1
 
 
 def test_median_is_none_when_nothing_measured() -> None:
@@ -243,6 +305,26 @@ def test_truncated_pr_is_flagged() -> None:
     report = run([n])
     assert report.answered[0].pr.truncated
     assert "more than" in prt.render_text(report)
+    assert prt.render_json(report)["answered"][0]["truncated"] is True
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_json_flags_incomplete_comments_when_the_first_response_was_not_fetched(
+    closed: bool,
+) -> None:
+    n = node(
+        1,
+        comments=[comment(user("someone"), T0 + timedelta(hours=1))] * prt.PER_PR_PAGE,
+        comment_total=prt.PER_PR_PAGE + 1,
+        closed_at=T0 + timedelta(days=20) if closed else None,
+        closed_by=user("contrib") if closed else None,
+    )
+    report = run([n])
+    bucket = "closed_unanswered" if closed else "waiting"
+    data = prt.render_json(report)
+    assert data["counts"][bucket] == 1
+    assert data[bucket][0]["truncated"] is True
+    assert "only the first page was read: #1" in prt.render_text(report)
 
 
 # --- output ------------------------------------------------------------------
@@ -271,7 +353,9 @@ def test_json_output_round_trips() -> None:
     }
     assert data["median_days_answered"] == 2.0
     assert data["waiting"][0]["number"] == 2
+    assert data["waiting"][0]["truncated"] is False
     assert data["answered"][0]["response"]["by"] == "maint"
+    assert data["answered"][0]["truncated"] is False
     assert data["rules"] == prt.RULES
 
 
