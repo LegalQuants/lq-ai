@@ -447,7 +447,7 @@ async def test_chat_attributed_fabricated_authority_quote_fails_gate(
 @pytest.mark.asyncio
 async def test_chat_unattributed_fabricated_authority_quote_dropped(
     db_session: AsyncSession,
-    seeded,
+    seeded: tuple[User, Chat, uuid.UUID],
     fake_authority_storage: dict[str, bytes],
 ) -> None:
     user, chat, message_id = seeded
