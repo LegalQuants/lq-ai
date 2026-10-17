@@ -4981,6 +4981,8 @@ without remounting the workspace. Regression coverage lives in the Matter route'
 
 #### DE-330 — Formalize the tabular `results` OpenAPI schema (typed cell/citation components)
 
+**Implementation (#422):** the hand-authored sketch now names the four tabular result components and uses OpenAPI 3.1 null unions matching the serialized Pydantic models. A focused conformance test checks their fields, required keys, types, references and nullability. The generated export remains runtime-driven; no new frontend rendering behavior is introduced.
+
 **Priority:** P3 · **Effort:** M · **Good first issue** (community-suitable)
 
 **Context:** The tabular execution detail (`GET /api/v1/tabular/executions/{id}`) returns `results` as a free-form `type: object, additionalProperties: true` in `docs/api/backend-openapi.yaml` — the grid's rows/cells/citations have no named OpenAPI components. So a generated client (Donna's `npm run gen:api`) sees `results` as an opaque object and emits no typed fields for cell results or their citations, even though the runtime JSON is well-structured. This surfaced when adding navigable-citation fields (`source_file_id` / `source_page` / `source_text`) to the tabular cell `Citation`: the new fields are present at runtime and documented in the `results` description, but cannot be expressed as typed properties without restructuring the whole `results` tree. The existing tabular-cell citation fields (`citation_id`, `document_id`, `chunk_id`, `confidence`) are already untyped for the same reason — this is a pre-existing gap, not introduced by the navigable-citations change.

@@ -7973,9 +7973,9 @@ components:
           type: array
           items: {$ref: '#/components/schemas/ColumnSpec'}
         results:
-          nullable: true
-          allOf:
+          anyOf:
             - $ref: '#/components/schemas/TabularResults'
+            - type: 'null'
           description: |
             Assembled grid (rows + per-cell results), populated by the
             aggregate node once status reaches ``completed``; ``null``
@@ -8015,7 +8015,7 @@ components:
         Aggregated grid shape for a completed tabular execution — the
         typed wire projection of ``tabular_executions.results``. The
         persisted JSONB is versioned via a ``schema_version`` key
-        (currently ``m3-c2-v1``); that key stays in the JSONB and is
+        (currently ``m3-c2-v2``; legacy executions retain ``m3-c2-v1``); that key stays in the JSONB and is
         NOT serialized on responses — the wire shape is rows-only.
       properties:
         rows:
@@ -8054,8 +8054,7 @@ components:
         citations the Citation Engine grounded it against.
       properties:
         value:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: >-
             The extracted value. ``null`` when ``confidence='failed'``.
         citations:
@@ -8071,32 +8070,29 @@ components:
           type: string
           enum: [high, medium, low, failed]
           description: |
-            Per-cell confidence from the Citation Engine cascade.
+            Per-cell extraction confidence, separate from offset verification.
             ``failed`` is the Decision C-10 state for cells where
             extraction itself errored (distinct from the Citation
             Engine's red ``unverified`` state).
         tier_used:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: |
-            Inference tier actually routed for this cell (DE-310). Set
-            on success; ``null`` on failure before a tier was selected.
+            Inference tier actually routed for this cell (DE-310). Reported
+            by the extraction response; ``null`` when unavailable.
         cost_usd:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             Per-cell cost (DE-310), serialized as a JSON string to
-            preserve decimal precision. Sums across cells to the parent
-            execution's ``cost_actual_usd``.
+            preserve decimal precision. Reported extraction costs sum to the
+            parent execution's ``cost_actual_usd``; unknown costs contribute
+            zero, and ensemble-judge/failed-response spend may be absent.
         error:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             Error message when ``confidence='failed'`` (model error, no
             citation found, Citation Engine rejection).
         verification_method:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             Per-cell ensemble Citation-Engine verification outcome
             (Donna #6): ``ensemble_strict`` / ``ensemble_majority``, or
@@ -8115,11 +8111,11 @@ components:
         rows (``tabular_cell_citations``): for each grounded cell whose
         extracted value was deterministically located in a cited chunk's
         canonical text, one row per (cell, chunk) hit. On
-        ``GET /api/v1/tabular/executions/{id}`` an execution with minted
-        rows serves those as the cell's citations — ``citation_id`` is
-        the real row id and the offset fields are populated. Executions
-        predating migration 0066 (no minted rows; per-execution presence
-        check) fall back to the legacy bridge: a deterministic
+        GET and cancel responses for an execution stamped ``m3-c2-v2``
+        serve minted rows as the cell's citations, even when none were minted — ``citation_id`` is
+        the real row id and the offset fields are populated. Legacy
+        ``m3-c2-v1`` executions keep the bridge; persisted version, not
+        minted-row presence, selects this fallback: a deterministic
         display-only ``citation_id = uuid5(NS, chunk_id)`` with ``null``
         offset fields. The export path always renders bridge ids
         (export shape unchanged by DE-309).
@@ -8137,7 +8133,8 @@ components:
           format: uuid
           description: |
             Minted ``tabular_cell_citations.id`` (DE-309) when offset
-            rows exist for the execution; otherwise the deterministic
+            rows exist for the cell in a minting-vintage execution. Legacy
+            executions and exports use the deterministic
             uuid5 bridge id (display-only, never resolvable against the
             Citation Engine).
         document_id:
@@ -8164,20 +8161,17 @@ components:
             outside read-time enrichment, or when the backing chunk row
             is missing/stale.
         source_page:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: |
             The cited chunk's ``document_chunks.page_start`` (nullable —
             best-effort page assignment).
         source_text:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             The cited chunk's full ``document_chunks.content``; the
             frontend locates/highlights the cited span within it.
         verification_method:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: |
             For minted DE-309 rows: the cascade method that established
             the offsets (e.g. ``exact_match``). For bridge citations:
@@ -8185,21 +8179,18 @@ components:
             ``verification_method`` (``ensemble_strict`` /
             ``ensemble_majority``), or ``null``.
         source_offset_start:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: |
             Char offset (inclusive) of the located cell value inside the
             cited chunk's content (= this citation's ``source_text``).
             ``null`` on bridge citations.
         source_offset_end:
-          type: integer
-          nullable: true
+          type: [integer, 'null']
           description: |
             Char offset (exclusive) — ``source_text[start:end]``
             re-derives the located value. ``null`` on bridge citations.
         verification_confidence:
-          type: number
-          nullable: true
+          type: [number, 'null']
           description: |
             The locating cascade's confidence in ``[0, 1]`` (``1.0`` for
             ``exact_match``). ``null`` on bridge citations.
