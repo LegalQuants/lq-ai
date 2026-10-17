@@ -2,7 +2,7 @@
 
 Tabular Review runs the same per-position extraction over **many documents at once** and lays the answers out in a grid: one row per document, one column per question. It is the "compare these N agreements on these M points" surface — the multi-document complement to the single-document Playbook engine ([docs/playbooks.md](playbooks.md)).
 
-This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes what shipped in M3-C2 (the grid + LangGraph workflow), M3-C1 (the `output_format: table` skill mode), and M3-C4a (XLSX/CSV export), plus the post-v0.4.0 additions: navigable per-cell citations (read-side source resolution, #125) and per-column ensemble verification honored at execution (#127). It is scrupulous about what still has **not** shipped: per-cell citations are resolved read-side but are **not** yet executor-minted Citation-Engine rows (DE-309; the enrichment fields are also untyped in the generated client, DE-330), per-cell cost/tier telemetry is not yet captured (DE-310), and bulk row/column operations are deferred (DE-304).
+This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes the grid, LangGraph workflow and XLSX/CSV export, plus navigable source resolution (#125), per-column ensemble verification (#127) and executor-minted positional provenance (DE-309, #420). Per-cell cost/tier telemetry (DE-310) and typed generated-client results (DE-330) remain deferred. Bulk operations have their own [ADR 0040](adr/0040-tabular-bulk-operations.md) implementation.
 
 ---
 
@@ -61,7 +61,7 @@ The `results` JSONB (validated by `app.schemas.tabular.TabularResults`) is:
 
 ```jsonc
 {
-  "schema_version": "m3-c2-v1",
+  "schema_version": "m3-c2-v2",
   "rows": [
     {
       "document_id": "<uuid>",
@@ -106,9 +106,9 @@ Each non-failed cell records the chunks the model cited as `cited_chunk_ids`. Th
 
 **Navigable source resolution (post-v0.4.0, #125).** `GET /api/v1/tabular/executions/{id}` now *enriches* each synthesized citation read-side with its source location: `source_file_id` (`documents.file_id`), `source_page` (`document_chunks.page_start`), and `source_text` (the chunk content). The handler (`api/app/api/tabular.py`) resolves these with **two batched IN-queries** across all cited chunks for the whole grid — one over `document_chunks`, one mapping documents to their files — rather than per-cell lookups. Existing executions are enriched on read too (the resolution is read-side, so no re-run or migration is needed). With these fields the drawer can offer a "jump to the source span" affordance.
 
-That synthetic `citation_id` is still **not** a real Citation-Engine row: the executor does not mint Citation-Engine rows, so the read-side resolution stops at chunk-grained source location rather than character-precise, cascade-verified provenance. This remains the same posture as the Playbook executor ([docs/playbooks.md](playbooks.md)) — chunk references + verbatim matched text, no M2 Citation Engine cascade in the executor. Executor-minted Citation-Engine provenance (resolvable `citation_id`, character-precise spans) stays deferred to **[DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)**, and the enrichment fields are not yet modeled in the generated API client (**[DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)**).
+**Minted provenance (DE-309, #420).** Extraction locates the cell value verbatim in each cited chunk and confirms it through the canonical verifier with `gateway=None` (no LLM judge). The aggregate node writes `tabular_cell_citations` rows (migration 0079) in the same transaction as the results. On GET and cancel, the persisted `m3-c2-v2` stamp selects these real ids and chunk-local offsets, even if no rows were minted. An unlocated new-vintage cell has an empty citation list; it does not regain synthetic citations merely because the execution has zero rows. The existing confidence badge still describes cell confidence, not positional verification. Legacy `m3-c2-v1` executions keep the display-only bridge with null offsets. Export also keeps bridge ids. Typed generated-client results remain **[DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)**.
 
-> **Why the bridge exists.** Before the M3-E1 fix (PR #80), the persisted key (`cited_chunk_ids`) did not map to the schema field (`citations`), so `CellResult.citations` deserialized empty on every cell and the citation drawer showed nothing — even though the grounding chunks were recorded all along. The `model_validator` is the contained read-side fix; a future executor that emits real `Citation` objects passes through untouched.
+> **Why the bridge remains.** Before the M3-E1 fix (PR #80), the persisted key (`cited_chunk_ids`) did not map to `citations`, so the drawer showed nothing even though grounding chunks were recorded. The validator still supports legacy executions and exports; GET/cancel replace its output with minted rows for `m3-c2-v2`.
 
 ---
 
@@ -149,9 +149,9 @@ Cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_a
 
 ## Known limitations
 
-- **Citations are read-side-resolved, not executor-minted Citation-Engine rows.** Cell citations now carry navigable `source_file_id`/`source_page`/`source_text` (#125), but the executor still does not mint real Citation-Engine rows; full cascade-verified provenance is [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work) and the enrichment fields are untyped in the generated client ([DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [Citations](#citations-how-the-cell-grounding-is-surfaced).
+- **Positional provenance is verbatim-only.** A paraphrased value that cannot be located mints no row. New-vintage GET/cancel responses expose no citations for that cell; legacy executions and exports retain synthetic bridge ids. The results remain untyped in the generated client ([DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [Citations](#citations-how-the-cell-grounding-is-surfaced).
 - **Per-cell `tier_used` + `cost_usd` are not captured** (always null / 0). [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
-- **Bulk operations are deferred.** The M3-C4 spec bundled export (shipped as M3-C4a) with bulk operations — "redline column N in all rows" and "summarize column N into a memo." Only export shipped; the bulk operations are **[DE-304](PRD.md#9-deferred-enhancements-and-identified-future-work)** (they surface an architectural choice about where the output lands that the substrate doesn't anticipate).
+- **Bulk-operation scope is bounded.** The current DE-304 implementation supports selected-row redline reports and single-column summaries; its retained work-product and execution rules are documented in [ADR 0040](adr/0040-tabular-bulk-operations.md).
 - **Lexical FTS retrieval, not vector.** A column query whose vocabulary diverges from the contract's wording may retrieve weaker chunks; low-confidence cells should be treated with corresponding skepticism.
 - **Sequential cell dispatch.** No per-cell parallelism in v0.3.0; large grids (toward the 200 × 10 ceiling) run cell-by-cell.
 

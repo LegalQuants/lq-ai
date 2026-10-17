@@ -52,7 +52,7 @@ from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
 from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
 from app.models.slack_workspace import SlackWorkspace
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.teams_tenant import TeamsTenant
 from app.models.tool_call_log import ToolCallLog
@@ -112,6 +112,7 @@ __all__ = [
     "SkillWorkspace",
     "SkillWorkspaceFile",
     "SlackWorkspace",
+    "TabularCellCitation",
     "TabularExecution",
     "Team",
     "TeamMember",
