@@ -20,6 +20,23 @@ The initial measurement comes from main at `3ecf284177b97ff6acdcaff5eda57bee0bf8
 
 Subsequent exceptions may only shrink relative to the PR base. Fixed entries are flagged as stale and must be removed or have their count reduced. The job rejects new exceptions/count growth and scanner/matrix changes. An intentional policy change or scanner upgrade needs its own maintainer-reviewed decision and update to these controls, not automatic regeneration to green.
 
+## Light-only LQ.AI appearance
+
+LQ.AI renders light regardless of the saved upstream appearance preference.
+The 28 inventory keys remain stable for exact baseline comparisons; their
+final `light`/`dark` segment now explicitly identifies the saved input, not a
+supported rendered theme. Test titles state that the expected UI is light.
+Every route/viewport/input combination asserts the light root class, absence
+of dark/OLED/custom-theme classes, light native controls and a white browser
+theme color. The populated notification-bell checks use the same assertions.
+
+The shared branding footer uses darker light-palette text. Its 120 old contrast
+exceptions are removed, leaving 110 existing exceptions for other elements;
+the complete footer is also scanned for contrast with zero exceptions before
+each page audit. No new exceptions, scanner changes or reduced state coverage
+are introduced. These source changes require a fresh gate and negative-proof
+run; the historical acceptance results below do not verify this revision.
+
 ## Reproduce
 
 From `web/`:
