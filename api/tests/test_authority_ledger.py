@@ -14,15 +14,20 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.tool_loop import ToolSourceRecord
-from app.citation.authority import store_authority_text, verify_and_persist_authority_citations
+from app.citation.authority import (
+    store_authority_text,
+    verify_and_persist_authority_citations,
+)
 from app.citation.gate import compute_and_record_gate
 from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
+from app.citation.verification import VerificationResult
 from app.models.chat import Chat, Message
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.message_authority_citation import (
@@ -37,7 +42,9 @@ from app.models.user import User
 
 async def _message_and_chat(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
     """Create minimal User → Chat → assistant Message; return (message_id, chat_id)."""
-    user = User(email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
+    user = User(
+        email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member"
+    )
     db.add(user)
     await db.flush()
     chat = Chat(owner_id=user.id, title="t")
@@ -55,7 +62,9 @@ async def _message_and_chat(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
 
 
 @pytest.mark.asyncio
-async def test_assemble_creates_authority_ledger_entry(db_session: AsyncSession) -> None:
+async def test_assemble_creates_authority_ledger_entry(
+    db_session: AsyncSession,
+) -> None:
     mid, _cid = await _message_and_chat(db_session)
     db_session.add(
         MessageAuthorityCitation(
@@ -205,7 +214,9 @@ async def _rows_for(db: AsyncSession, mid: uuid.UUID) -> list[MessageAuthorityCi
     return list(
         (
             await db.execute(
-                select(MessageAuthorityCitation).where(MessageAuthorityCitation.message_id == mid)
+                select(MessageAuthorityCitation).where(
+                    MessageAuthorityCitation.message_id == mid
+                )
             )
         )
         .scalars()
@@ -317,44 +328,44 @@ def _cfr_rec(ref: str = _CFR_PACKAGE_ID) -> ToolSourceRecord:
     )
 
 
+@pytest.mark.parametrize(
+    "cited_first", [True, False], ids=["cited-first", "cited-last"]
+)
 @pytest.mark.asyncio
 async def test_misattributed_verbatim_quote_fails_and_flags_gate(
-    db_session: AsyncSession, fake_storage: dict[str, bytes]
+    db_session: AsyncSession, fake_storage: dict[str, bytes], cited_first: bool
 ) -> None:
-    """F6: a quote verbatim-present in fetched authority B (the CFR body) but
-    attributed by its nearby cite to fetched authority A (title 17) persists a
-    FAIL row against A — verification is scoped to the ATTRIBUTED authority,
-    so a match in a different fetched body no longer exempts the passage."""
+    """A quote found only in B must FAIL when it cites A, in either ref order."""
     mid, _cid = await _message_and_chat(db_session)
-    await _seed_body(db_session)  # fetched: title 17 (_BODY)
+    await _seed_body(db_session)
     await store_authority_text(
         db_session, source_type="govinfo", external_ref=_CFR_PACKAGE_ID, text=_CFR_BODY
     )
-    text = f"Under 17 U.S.C. § 107:\n\n> {_CFR_BODY}\n"
+    refs = [_govinfo_rec(), _cfr_rec()]
+    if not cited_first:
+        refs.reverse()
     n = await verify_and_persist_authority_citations(
         db_session,
         message_id=mid,
-        assistant_text=text,
-        tool_sources=[_govinfo_rec(), _cfr_rec()],
+        assistant_text=f"Under 17 U.S.C. § 107:\n\n> {_CFR_BODY}\n",
+        tool_sources=refs,
         gateway=None,
     )
-    # One PASS row against the CFR body it actually matched, plus one FAIL
-    # row against the Copyright Act it is attributed to.
-    assert n == 2
+    # The quotation names A, so B's matching body is not a verified citation.
+    assert n == 1
     rows = await _rows_for(db_session, mid)
-    fails = [r for r in rows if r.verified is False]
-    assert len(fails) == 1
-    assert fails[0].external_ref == _PACKAGE_ID  # the attributed authority
-    assert fails[0].verification_method is None
-    assert fails[0].source_text == _CFR_BODY
-    passes = [r for r in rows if r.verified is True]
-    assert len(passes) == 1
-    assert passes[0].external_ref == _CFR_PACKAGE_ID
+    assert len(rows) == 1
+    assert rows[0].external_ref == _PACKAGE_ID
+    assert rows[0].verified is False
+    assert rows[0].verification_method is None
+    assert rows[0].source_text == _CFR_BODY
 
     await assemble_ledger_entries(db_session, message_id=mid)
     gate = await compute_and_record_gate(db_session, message_id=mid)
     assert gate is not None
     assert gate.gate_status == "flagged"
+    assert gate.fail_count == 1
+    assert gate.pass_count == 0
 
 
 @pytest.mark.asyncio
@@ -409,3 +420,120 @@ async def test_attribution_to_non_fetched_authority_dropped(
     )
     assert n == 0
     assert await _rows_for(db_session, mid) == []
+
+
+@pytest.mark.parametrize(
+    "cited_first", [True, False], ids=["cited-first", "cited-last"]
+)
+@pytest.mark.asyncio
+async def test_attributed_shared_verbatim_quote_is_order_invariant(
+    db_session: AsyncSession, fake_storage: dict[str, bytes], cited_first: bool
+) -> None:
+    """Shared wording must verify against the cited source, regardless of fetch order."""
+    mid, _cid = await _message_and_chat(db_session)
+    await _seed_body(db_session)
+    await store_authority_text(
+        db_session,
+        source_type="govinfo",
+        external_ref=_CFR_PACKAGE_ID,
+        text=f"Another fetched source includes the same wording: {_BODY}",
+    )
+    refs = [_govinfo_rec(), _cfr_rec()]
+    if not cited_first:
+        refs.reverse()
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=mid,
+        assistant_text=f"Under 17 U.S.C. § 107:\n\n> {_BODY}\n",
+        tool_sources=refs,
+        gateway=None,
+    )
+    assert n == 1
+    rows = await _rows_for(db_session, mid)
+    assert len(rows) == 1
+    assert rows[0].external_ref == _PACKAGE_ID
+    assert rows[0].verified is True
+    assert rows[0].verification_method == "exact_match"
+
+    await assemble_ledger_entries(db_session, message_id=mid)
+    gate = await compute_and_record_gate(db_session, message_id=mid)
+    assert gate is not None
+    assert gate.gate_status == "fiduciary_grade"
+    assert gate.pass_count == 1
+    assert gate.fail_count == 0
+
+
+@pytest.mark.parametrize(
+    "cited_first", [True, False], ids=["cited-first", "cited-last"]
+)
+@pytest.mark.parametrize(
+    "other_has_verbatim", [False, True], ids=["both-judge", "other-exact"]
+)
+@pytest.mark.asyncio
+async def test_attributed_paraphrase_is_order_invariant(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    cited_first: bool,
+    other_has_verbatim: bool,
+) -> None:
+    """Another source's exact/supporting match cannot suppress the cited judge check."""
+    mid, _cid = await _message_and_chat(db_session)
+    await _seed_body(db_session)
+    paraphrase = (
+        "Fair use permits reproduction of a protected work without infringement."
+    )
+    assert paraphrase not in _BODY
+    other_body = f"Another fetched source states: {_BODY}"
+    if other_has_verbatim:
+        other_body += f" {paraphrase}"
+    await store_authority_text(
+        db_session, source_type="govinfo", external_ref=_CFR_PACKAGE_ID, text=other_body
+    )
+    judged_bodies: list[str] = []
+
+    async def _estimate(
+        db: object, *, judge_model: str, authority_text: str
+    ) -> Decimal:
+        return Decimal("0.001")
+
+    async def _judge(
+        *, passage: str, authority_text: str, gateway: object, judge_model: str
+    ) -> VerificationResult:
+        assert passage == paraphrase
+        judged_bodies.append(authority_text)
+        return VerificationResult(
+            verified=True, method="paraphrase_judge", confidence=0.9, partial=True
+        )
+
+    monkeypatch.setattr(
+        "app.citation.authority_content_judge.estimate_authority_content_cost_usd",
+        _estimate,
+    )
+    monkeypatch.setattr(
+        "app.citation.authority_content_judge.judge_authority_content", _judge
+    )
+    refs = [_govinfo_rec(), _cfr_rec()]
+    if not cited_first:
+        refs.reverse()
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=mid,
+        assistant_text=f"Under 17 U.S.C. § 107:\n\n> {paraphrase}\n",
+        tool_sources=refs,
+        gateway=object(),
+    )
+    assert n == 1
+    assert judged_bodies == [_BODY]
+    rows = await _rows_for(db_session, mid)
+    assert len(rows) == 1
+    assert rows[0].external_ref == _PACKAGE_ID
+    assert rows[0].verified is True
+    assert rows[0].verification_method == "paraphrase_judge"
+
+    await assemble_ledger_entries(db_session, message_id=mid)
+    gate = await compute_and_record_gate(db_session, message_id=mid)
+    assert gate is not None
+    assert gate.gate_status == "supported_only"
+    assert gate.supported_count == 1
+    assert gate.fail_count == 0

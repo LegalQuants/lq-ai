@@ -301,7 +301,9 @@ async def verify_and_persist_authority_citations(
         "eu_legislation",
     }
     refs = [
-        r for r in tool_sources if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
+        r
+        for r in tool_sources
+        if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
     ]
     if not refs:
         return 0
@@ -324,7 +326,9 @@ async def verify_and_persist_authority_citations(
     # miss).  These stay bindable in Pass C so an attributed passage FAILs
     # against them instead of vanishing — "couldn't check" never becomes
     # "passed".
-    failed_refs: list[tuple[str, str, str]] = []  # (source_type, external_ref, content_kind)
+    failed_refs: list[
+        tuple[str, str, str]
+    ] = []  # (source_type, external_ref, content_kind)
     seen: set[tuple[str, str]] = set()
     for r in refs:
         assert r.external_ref is not None  # guaranteed by the `refs` filter above
@@ -362,13 +366,35 @@ async def verify_and_persist_authority_citations(
     if not targets and not failed_refs:
         return 0
 
+    # Resolve attribution before either verification pass. Attributed quotes
+    # must be checked against their cited source, even when another fetched
+    # authority contains the same wording or supports the same paraphrase.
+    # Unattributed quotes retain the first-success search across fetched bodies.
+    bindable: list[tuple[str, str, str]] = [
+        (source_type, external_ref, content_kind)
+        for source_type, external_ref, content_kind, _target in targets
+    ] + failed_refs
+    bound_passages: list[tuple[str, tuple[str, str, str] | None]] = []
+    for attributed in attribute_authority_passages(assistant_text):
+        bound: tuple[str, str, str] | None = None
+        for parsed_ref in attributed.references:  # proximity-ordered
+            for source_type, external_ref, content_kind in bindable:
+                if reference_matches_external_ref(parsed_ref, external_ref):
+                    bound = (source_type, external_ref, content_kind)
+                    break
+            if bound is not None:
+                break
+        bound_passages.append((attributed.passage, bound))
+
     persisted = 0
     rows: list[MessageAuthorityCitation] = []
     # Keyed by (passage, external_ref): a match only exempts the passage from
     # Pass C's FAIL tier for the authority it actually verified against.
     verbatim_matched: set[tuple[str, str]] = set()
-    for passage in passages:
+    for passage, bound in bound_passages:
         for source_type, external_ref, content_kind, target in targets:
+            if bound is not None and (source_type, external_ref, content_kind) != bound:
+                continue
             try:
                 off = locate_passage(passage, target.normalized_content)
             except Exception:
@@ -388,7 +414,9 @@ async def verify_and_persist_authority_citations(
                 # structurally unreachable in this loop (a miss `continue`s
                 # before a candidate exists), so passing gateway through
                 # would be dishonest. Mirrors caselaw.py's verbatim pass.
-                result = await verify(cand, target, gateway=None, judge_model=judge_model)
+                result = await verify(
+                    cand, target, gateway=None, judge_model=judge_model
+                )
             except Exception:
                 log.warning(
                     "authority verify: verify() failed, skipping passage",
@@ -427,9 +455,9 @@ async def verify_and_persist_authority_citations(
         rows = []
 
     # --- Pass B: whole-body paraphrase judge (SUPPORTED tier) --------------
-    # Passages that missed verbatim matching in every fetched body are
-    # judged against each body in full, budget-bounded. Mirrors caselaw.py's
-    # "Unattributed: B1b all-opinions SUPPORTED-or-drop" loop.
+    # Attributed passages are judged against their bound body only. For
+    # unattributed passages, retain the all-bodies SUPPORTED-or-drop search.
+    # A match in another body never suppresses the cited authority's check.
     judge_supported: set[tuple[str, str]] = set()  # (passage, external_ref)
     if gateway is not None:
         from app.citation.authority_content_judge import (
@@ -439,10 +467,18 @@ async def verify_and_persist_authority_citations(
         )
 
         spent: Decimal = Decimal("0")
-        for passage in passages:
-            if any(p == passage for p, _ in verbatim_matched):
+        for passage, bound in bound_passages:
+            if bound is None:
+                if any(p == passage for p, _ in verbatim_matched):
+                    continue
+            elif (passage, bound[1]) in verbatim_matched:
                 continue
             for source_type, external_ref, content_kind, target in targets:
+                if (
+                    bound is not None
+                    and (source_type, external_ref, content_kind) != bound
+                ):
+                    continue
                 body = target.normalized_content
                 try:
                     est = await estimate_authority_content_cost_usd(
@@ -508,27 +544,15 @@ async def verify_and_persist_authority_citations(
     # budget) or a body-load failure still fails an attributed, unverified
     # passage — fail-closed, same row shape, no new statuses.
     supported = verbatim_matched | judge_supported
-    bindable: list[tuple[str, str, str]] = [
-        (source_type, external_ref, content_kind)
-        for source_type, external_ref, content_kind, _target in targets
-    ] + failed_refs
     failed: set[str] = set()
-    for attributed in attribute_authority_passages(assistant_text):
+    for passage, bound in bound_passages:
         try:
-            if attributed.passage in failed:
+            if passage in failed:
                 continue
-            bound: tuple[str, str, str] | None = None
-            for parsed_ref in attributed.references:  # proximity-ordered
-                for source_type, external_ref, content_kind in bindable:
-                    if reference_matches_external_ref(parsed_ref, external_ref):
-                        bound = (source_type, external_ref, content_kind)
-                        break
-                if bound is not None:
-                    break
             if bound is None:
                 continue  # unattributed, or attributed to a non-fetched authority
             source_type, external_ref, content_kind = bound
-            if (attributed.passage, external_ref) in supported:
+            if (passage, external_ref) in supported:
                 continue  # verified against the very authority it is attributed to
             log.info(
                 "authority verify: attributed passage unverified — FAIL row",
@@ -537,7 +561,7 @@ async def verify_and_persist_authority_citations(
                     "external_ref": external_ref,
                 },
             )
-            failed.add(attributed.passage)
+            failed.add(passage)
             rows.append(
                 MessageAuthorityCitation(
                     message_id=message_id,
@@ -545,8 +569,8 @@ async def verify_and_persist_authority_citations(
                     external_ref=external_ref,
                     content_kind=content_kind,
                     source_offset_start=0,
-                    source_offset_end=len(attributed.passage),
-                    source_text=attributed.passage,
+                    source_offset_end=len(passage),
+                    source_text=passage,
                     verified=False,
                     verification_method=None,
                     verification_confidence=None,
