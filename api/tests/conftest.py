@@ -7,12 +7,13 @@ Implements the test DB strategy locked in CONTRIBUTING.md:
 - per-test fixture: opens a connection, BEGIN, yields an AsyncSession,
   ROLLBACK on teardown — so each test starts from the migrated baseline
   with no leakage from prior tests
-
 - after migrating, a copy of the migrated database is kept as a template, so
   a test whose code commits through its own engine and reads global state
   can take a fresh database of its own (``isolated_db_url``)
 - arq's pool creation fails at once (``_arq_unreachable``): no Redis runs in
   the test environment, and arq's retries otherwise cost ~5 s per enqueue
+- bcrypt hashes at its minimum cost (``BCRYPT_ROUNDS=4``) unless the
+  environment sets one: at the production default each hash takes ~0.2 s
 
 Test database name pattern: lq_ai_test_<random_hex_8>. Created from a
 connection to the default `postgres` database; dropped at session teardown.
@@ -47,6 +48,15 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, SessionTransaction
 
 API_DIR = Path(__file__).resolve().parent.parent
+
+# The suite hashes passwords, refresh tokens and MFA recovery codes thousands
+# of times (an MFA enrollment alone hashes ten codes), and at the production
+# cost of 12 each bcrypt hash or check takes ~0.2 s. Cost 4 is bcrypt's
+# minimum. Verification follows whatever cost a hash was minted with, so the
+# code under test is the same; only the work factor differs, as the
+# ``bcrypt_rounds`` setting allows for CI. Set before any test imports
+# ``app.config``, so the cached settings see it.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
 
 
 def _split_url(url: str) -> tuple[str, str]:
