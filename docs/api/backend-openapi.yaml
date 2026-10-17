@@ -8142,9 +8142,8 @@ components:
           format: uuid
           description: The source ``documents.id`` this citation lands in.
         chunk_id:
-          type: string
+          type: [string, 'null']
           format: uuid
-          nullable: true
           description: |
             The cited ``document_chunks.id``, when the cascade resolved
             one. ``null`` for chunk-boundary-spanning citations.
@@ -8152,9 +8151,8 @@ components:
           type: string
           enum: [high, medium, low, failed]
         source_file_id:
-          type: string
+          type: [string, 'null']
           format: uuid
-          nullable: true
           description: |
             The source document's ``documents.file_id`` — the
             ``files.id`` the frontend's doc panel keys off. ``null``
