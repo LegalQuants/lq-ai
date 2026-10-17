@@ -70,6 +70,7 @@ from app.model_discovery import ModelDiscoverer
 from app.providers import (
     AnthropicAdapter,
     AzureOpenAIAdapter,
+    BedrockAdapter,
     OllamaAdapter,
     OpenAIAdapter,
     ProviderAdapter,
@@ -149,7 +150,7 @@ def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     (a) the provider is **disabled** (``enabled=False``); or
     (b) the provider's ``type`` has **no adapter implementation** yet
-        (vertex/bedrock, or any unknown type).
+        (Vertex, the reserved Bedrock SigV4 slot, or any unknown type).
 
     Both mean "no live adapter was built" — they are not distinguished in
     the return value. A caller that needs to tell "disabled" from
@@ -186,12 +187,13 @@ def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
         # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape with
         # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
         return AzureOpenAIAdapter.from_config(provider)
+    if provider.type == "bedrock" and provider.bedrock_protocol is not None:
+        return BedrockAdapter.from_config(provider)
     if provider.type == "ollama":
         # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
         # backbone per PRD §1.5.1 / §6.1.
         return OllamaAdapter.from_config(provider)
-    # B6 lands the remaining adapters (Vertex, Bedrock); until then there
-    # is no adapter for those types (or any unknown type).
+    # Vertex and the reserved Bedrock SigV4 slot remain unimplemented.
     return None
 
 
@@ -310,9 +312,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
             continue
         if adapter is None:
-            # Disabled, or a type with no adapter yet (vertex/bedrock).
+            # Disabled, or a type/transport with no adapter yet.
             if provider.enabled:
-                # B6 lands the remaining adapters (Vertex, Bedrock).
                 logger.debug(
                     "no adapter for provider %r (type=%s); awaiting B6",
                     provider.name,

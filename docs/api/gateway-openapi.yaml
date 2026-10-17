@@ -1451,6 +1451,12 @@ components:
             Replacement plaintext provider key. Same handling as
             ProviderKeySetRequest.api_key.
 
+    # Bedrock configuration (gateway.yaml, not a new HTTP endpoint):
+    # type=bedrock + bedrock_protocol=messages|chat_completions|responses;
+    # bedrock_endpoint=runtime (default)|mantle; base_url includes the exact
+    # AWS protocol prefix. Without bedrock_protocol, the old SigV4 slot is
+    # still unimplemented. Existing provider-key endpoints rotate/revoke
+    # these entries. Configured model IDs are not entitlement verification.
     ProviderKeyStatus:
       type: object
       required: [provider, type, configured, last4, source]

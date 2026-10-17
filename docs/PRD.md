@@ -2463,6 +2463,40 @@ Hand-rolled implementation needs: `cryptography` for RSA signing (already a gate
 
 #### DE-035 — AWS Bedrock provider adapter (Anthropic on Bedrock)
 
+**Updated scope (maintainer-directed 2026-10-17):** implement the three
+compatible APIs — Anthropic Messages, OpenAI Chat Completions and OpenAI
+Responses — through the existing gateway provider abstraction. Each
+`type: bedrock` entry explicitly selects `bedrock_protocol` and a validated
+AWS protocol base URL; runtime is the default endpoint family, with explicit
+Mantle selection for required model/capability support. API keys use the
+existing encrypted/runtime/env resolver. Messages/OpenAI translation is
+reused; Responses is stateless (`store=false`, `background=false`) with
+complete function-call/result history and streaming arguments. ADR 0027's
+timeout/error classification remains binding.
+
+**Status:** replacement implementation present; **live AWS verification and
+application acceptance pending**. This is not a claim that every model,
+region or endpoint/protocol pair is supported. No SDK dependency or new
+public inference endpoint is introduced. Embeddings, SigV4/STS refresh,
+server-side tools, background jobs and remote stored sessions remain out of
+scope for this initial compatible-API implementation.
+
+**Acceptance:** mocked protocol/error/retention coverage; current CI and
+security review; successful unary, streaming and governed function-call/result
+evidence for all three protocols against actual AWS; full application
+acceptance at the exact reviewed SHA. An entitlement error or skipped
+provider test does not satisfy live verification.
+
+**Credit:** Jason Lee / @dropthejase's [PR #265](https://github.com/LegalQuants/lq-ai/pull/265)
+provided the original three-protocol design and translation/test examples.
+See [replacement design](proposals/bedrock-compatible-provider.md) and
+[required AWS verification](bedrock-verification.md).
+
+**Deferred original InvokeModel/SigV4 design (not implemented):** the
+historical specification below remains source material for a separately
+scoped IAM/STS implementation; its transport-specific acceptance criteria
+are not claims about the compatible-API implementation above.
+
 **Priority:** P1 · **Effort:** M
 
 **Context:** PRD §4 calls for Bedrock support as one of the v1 providers. M1 ships the Anthropic, OpenAI, and Ollama adapters; the Bedrock adapter is the Tier-3 path for operators who want Anthropic-quality models routed through their own AWS account under their existing AWS DPA, with no third-party processor introduced.
