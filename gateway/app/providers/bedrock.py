@@ -85,9 +85,11 @@ class BedrockAdapter(ProviderAdapter):
                 }
             )
             factory = AnthropicAdapter if self._protocol == "messages" else OpenAIAdapter
-            self._delegate = factory.from_config(
+            delegate = factory.from_config(
                 delegate_config, client=self._client, key_resolver=resolver
             )
+            delegate.strict_stream = True
+            self._delegate = delegate
 
     @classmethod
     def from_config(
@@ -194,7 +196,14 @@ class BedrockAdapter(ProviderAdapter):
             result = from_responses_response(payload, model=model)
             self._observed_success = True
             return result
-        except (ProviderAdapterError, httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        except (
+            ProviderAdapterError,
+            httpx.HTTPError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as exc:
             raise self._safe_error(exc) from None
 
     async def _responses_stream(
@@ -211,10 +220,23 @@ class BedrockAdapter(ProviderAdapter):
         self, stream: AsyncIterator[ChatCompletionChunk]
     ) -> AsyncIterator[ChatCompletionChunk]:
         try:
+            produced_output = False
             async for chunk in stream:
+                produced_output |= any(
+                    choice.delta.content or choice.delta.tool_calls for choice in chunk.choices
+                )
                 yield chunk
+            if not produced_output:
+                raise ProviderEmptyResponseError("Bedrock returned no content or tool calls")
             self._observed_success = True
-        except (ProviderAdapterError, httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        except (
+            ProviderAdapterError,
+            httpx.HTTPError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as exc:
             raise self._safe_error(exc) from None
 
     async def embeddings(self, request: EmbeddingsRequest, *, model: str) -> EmbeddingsResponse:

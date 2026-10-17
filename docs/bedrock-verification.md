@@ -15,7 +15,9 @@ The deferred plan below defines the proposed follow-up issue's scope.
   synthetic tool result; they do not execute a backend tool.
 - Key masking, rotation, revocation and restart after revocation; strict
   protocol/origin configuration, sanitized failures, timeout classes and
-  stateless Responses behavior.
+  stateless Responses behavior. Messages/Chat Completions streams must
+  reject explicit errors, malformed events and missing terminal markers;
+  empty streams must not mark the adapter healthy.
 - Full gateway regressions, lint, formatting and strict types; normal CI,
   stack smoke and maintainer security review at the final PR SHA. The
   existing API suite continues to test provider-independent tool governance.

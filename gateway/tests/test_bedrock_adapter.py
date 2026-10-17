@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet
 from app.config import ProviderConfig
 from app.providers.base import (
     ProviderAuthError,
+    ProviderEmptyResponseError,
     ProviderHTTPError,
     ProviderTimeoutError,
     ProviderUnsupportedError,
@@ -369,6 +370,110 @@ async def test_truncated_stream_fails() -> None:
                 chunks.append(chunk)
         assert any(x.choices[0].delta.content == "partial" for x in chunks)
         assert not any(x.choices[0].finish_reason for x in chunks)
+
+
+@pytest.mark.parametrize("protocol", ["messages", "chat_completions"])
+@pytest.mark.parametrize("failure", ["truncated", "error"])
+async def test_delegated_stream_failure_is_not_a_clean_success(protocol: str, failure: str) -> None:
+    if protocol == "messages":
+        events = [
+            {"type": "message_start", "message": {"id": "msg-1", "model": "native"}},
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "partial"},
+            },
+        ]
+        if failure == "error":
+            events.extend(
+                [
+                    {"type": "error", "error": {"message": KEY}},
+                    {"type": "message_stop"},
+                ]
+            )
+        content = sse(events)
+    else:
+        common = {"id": "chat-1", "created": 1, "model": "native"}
+        frames = [{**common, "choices": [{"index": 0, "delta": {"content": "partial"}}]}]
+        if failure == "error":
+            frames.extend(
+                [
+                    {**common, "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+                    {"error": {"message": KEY}},
+                ]
+            )
+        content = "".join(f"data: {json.dumps(frame)}\n\n" for frame in frames).encode()
+        if failure == "error":
+            content += b"data: [DONE]\n\n"
+
+    async def handle(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=content)
+
+    cfg = provider(protocol)
+    async with httpx.AsyncClient(
+        base_url=cfg.base_url, transport=httpx.MockTransport(handle)
+    ) as client:
+        adapter = BedrockAdapter.from_config(cfg, env={"BEDROCK_TEST_KEY": KEY}, client=client)
+        result = await adapter.chat_completion(request(), model="native", stream=True)
+        assert isinstance(result, AsyncIterator)
+        with pytest.raises(ProviderHTTPError) as error:
+            _ = [chunk async for chunk in result]
+        assert KEY not in str(error.value.to_envelope())
+        assert not (await adapter.health_check()).reachable
+
+
+@pytest.mark.parametrize("protocol", ["messages", "chat_completions"])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_malformed_delegated_payload_is_sanitized(protocol: str, stream: bool) -> None:
+    async def handle(req: httpx.Request) -> httpx.Response:
+        if stream:
+            return httpx.Response(200, content=f"data: {json.dumps([KEY])}\n\n".encode())
+        return httpx.Response(200, json=[KEY])
+
+    cfg = provider(protocol)
+    async with httpx.AsyncClient(
+        base_url=cfg.base_url, transport=httpx.MockTransport(handle)
+    ) as client:
+        adapter = BedrockAdapter.from_config(cfg, env={"BEDROCK_TEST_KEY": KEY}, client=client)
+        with pytest.raises(ProviderHTTPError) as error:
+            result = await adapter.chat_completion(request(), model="native", stream=stream)
+            if isinstance(result, AsyncIterator):
+                _ = [chunk async for chunk in result]
+        assert KEY not in str(error.value.to_envelope())
+
+
+@pytest.mark.parametrize("protocol", ["messages", "chat_completions"])
+async def test_empty_delegated_stream_is_not_healthy(protocol: str) -> None:
+    if protocol == "messages":
+        content = sse(
+            [
+                {"type": "message_start", "message": {"id": "msg-1", "model": "native"}},
+                {"type": "message_delta", "delta": {"stop_reason": "end_turn"}},
+                {"type": "message_stop"},
+            ]
+        )
+    else:
+        payload = {
+            "id": "chat-1",
+            "created": 1,
+            "model": "native",
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+        }
+        content = f"data: {json.dumps(payload)}\n\ndata: [DONE]\n\n".encode()
+
+    async def handle(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=content)
+
+    cfg = provider(protocol)
+    async with httpx.AsyncClient(
+        base_url=cfg.base_url, transport=httpx.MockTransport(handle)
+    ) as client:
+        adapter = BedrockAdapter.from_config(cfg, env={"BEDROCK_TEST_KEY": KEY}, client=client)
+        result = await adapter.chat_completion(request(), model="native", stream=True)
+        assert isinstance(result, AsyncIterator)
+        with pytest.raises(ProviderEmptyResponseError):
+            _ = [chunk async for chunk in result]
+        assert not (await adapter.health_check()).reachable
 
 
 async def test_encrypted_key_is_resolved_and_client_remains_owned_by_caller() -> None:

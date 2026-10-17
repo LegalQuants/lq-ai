@@ -38,6 +38,10 @@ The following implementation choices carry that direction into the gateway:
    timeout exception implicit in #265 is rejected: every protocol preserves
    `ProviderTimeoutError` and the existing audit classification. Upstream
    bodies and credentials are not included in public error envelopes.
+6. Bedrock opts into strict validation on the reused streaming translators:
+   malformed/error events and missing native terminal markers fail the
+   request. A stream with no text or function calls cannot mark the adapter
+   healthy. Existing provider configurations retain their parsing behavior.
 
 These choices amend DE-035's initial transport plan. Its original
 InvokeModel/SigV4/Event Stream implementation remains deferred. An existing
