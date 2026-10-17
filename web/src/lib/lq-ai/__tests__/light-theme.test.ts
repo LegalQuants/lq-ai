@@ -82,6 +82,7 @@ describe('LQ.AI light-only theme', () => {
 	it('stays light when the OS changes to dark', () => {
 		const f = fixture('/lq-ai/chats', 'system', false);
 		runInNewContext(bootstrap, f.context);
+		expect(f.listeners).toHaveLength(1);
 		f.listeners.forEach((listener) => listener({ matches: true }));
 		expect([...f.classes]).toEqual(['light']);
 		expect(f.meta.get('content')).toBe('#ffffff');
@@ -103,6 +104,15 @@ describe('LQ.AI light-only theme', () => {
 			}
 		});
 		runInNewContext(bootstrap, f.context);
+		expect([...f.classes]).toEqual(['light']);
+	});
+
+	it('keeps the upstream system theme light under a dark OS', () => {
+		const f = fixture('/auth', 'system', true);
+		runInNewContext(bootstrap, f.context);
+		expect([...f.classes]).toEqual(['light']);
+		expect(f.meta.get('content')).toBe('#ffffff');
+		f.listeners.forEach((listener) => listener({ matches: true }));
 		expect([...f.classes]).toEqual(['light']);
 	});
 

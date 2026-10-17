@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,9 +20,9 @@ from app.tools.governance import _reset_provider_tier_cache_for_tests
 
 
 @pytest.fixture(autouse=True)
-def _reset_tier_cache() -> None:
+def _reset_tier_cache() -> Iterator[None]:
     _reset_provider_tier_cache_for_tests()
-    yield  # type: ignore[misc]
+    yield
     _reset_provider_tier_cache_for_tests()
 
 
@@ -30,12 +31,12 @@ def _reset_tier_cache() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_registry_has_courtlistener_and_govinfo():
+def test_registry_has_courtlistener_and_govinfo() -> None:
     assert "courtlistener" in SOURCE_REGISTRY and "govinfo" in SOURCE_REGISTRY
     assert "search_authority" in SOURCE_REGISTRY["govinfo"].ops
 
 
-def test_edgar_registered_with_sec_filing_kind():
+def test_edgar_registered_with_sec_filing_kind() -> None:
     spec = SOURCE_REGISTRY["edgar"]
     assert spec.type == "edgar"
     assert spec.content_kinds == ("sec_filing",)
@@ -120,7 +121,7 @@ async def test_resolve_egress_tier_from_governance_cache(
 # ---------------------------------------------------------------------------
 
 
-def test_govinfo_adapter_from_response_get():
+def test_govinfo_adapter_from_response_get() -> None:
     fa = GovInfoAdapter().from_response(
         "get_authority",
         {
@@ -142,15 +143,15 @@ def test_govinfo_adapter_from_response_get():
 # ---------------------------------------------------------------------------
 
 
-def test_content_kind_from_id_uscode_returns_statute():
+def test_content_kind_from_id_uscode_returns_statute() -> None:
     assert _content_kind_from_id("USCODE-2022-title15") == "statute"
 
 
-def test_content_kind_from_id_cfr_returns_regulation():
+def test_content_kind_from_id_cfr_returns_regulation() -> None:
     assert _content_kind_from_id("CFR-2023-title12-vol1") == "regulation"
 
 
-def test_content_kind_from_id_unknown_returns_unknown():
+def test_content_kind_from_id_unknown_returns_unknown() -> None:
     """A non-USCODE/CFR package_id must return 'unknown', not 'statute'.
 
     Returning 'statute' for an unrecognised id would be a confident mislabel
@@ -166,7 +167,7 @@ def test_content_kind_from_id_unknown_returns_unknown():
 # ---------------------------------------------------------------------------
 
 
-def test_edgar_get_authority_maps_to_fetched_authority():
+def test_edgar_get_authority_maps_to_fetched_authority() -> None:
     payload = {
         "external_ref": "1005010_000119312509237465_dex992.htm",
         "title": "dex992.htm",
@@ -182,7 +183,7 @@ def test_edgar_get_authority_maps_to_fetched_authority():
     assert fa.url.endswith("dex992.htm")
 
 
-def test_edgar_search_authority_is_title_only_body():
+def test_edgar_search_authority_is_title_only_body() -> None:
     payload = {
         "results": [
             {
@@ -206,7 +207,7 @@ def test_edgar_search_authority_is_title_only_body():
 # ---------------------------------------------------------------------------
 
 
-def test_eurlex_get_authority_maps_to_fetched_authority():
+def test_eurlex_get_authority_maps_to_fetched_authority() -> None:
     payload = {
         "external_ref": "32016R0679",
         "title": "32016R0679",
@@ -231,7 +232,7 @@ def test_eurlex_unsupported_op_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_eurlex_registered_get_only():
+def test_eurlex_registered_get_only() -> None:
     spec = SOURCE_REGISTRY["eurlex"]
     assert spec.type == "eurlex"
     assert spec.ops == ("get_authority",)

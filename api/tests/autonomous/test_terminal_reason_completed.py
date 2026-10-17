@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.nodes import make_delivery_node
+from app.autonomous.state import AutonomousSessionState
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 
@@ -30,7 +31,10 @@ async def test_delivery_writes_completed_audit_row_so_receipt_terminal_reason_po
     """delivery_node writes autonomous_session.completed before build_receipt
     so the receipt's terminal_reason is 'completed' (was None — the bug)."""
     node = make_delivery_node(db_session, mock_gateway)
-    state = {"session_id": running_session_at_delivery.id, "findings": []}
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_delivery.id),
+        "findings": [],
+    }
     await node(state)
 
     rows = (

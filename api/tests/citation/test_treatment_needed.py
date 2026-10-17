@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.ledger import message_ids_needing_treatment
 from app.models.chat import Chat, Message
@@ -18,7 +19,15 @@ pytestmark = pytest.mark.integration
 _NOW = datetime(2026, 6, 27, tzinfo=UTC)
 
 
-async def _entry(db, chat_id, *, source_kind, treatment_id=None, cc_id=None, user_id=None):
+async def _entry(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    *,
+    source_kind: str,
+    treatment_id: uuid.UUID | None = None,
+    cc_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+) -> uuid.UUID:
     from app.models.chat import MessageCitation
 
     msg = Message(chat_id=chat_id, role="assistant", kind="ai", content="x")
@@ -84,7 +93,7 @@ async def _entry(db, chat_id, *, source_kind, treatment_id=None, cc_id=None, use
 
 
 @pytest.fixture
-async def user(db_session):
+async def user(db_session: AsyncSession) -> User:
     u = User(email=f"n-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(u)
     await db_session.flush()
@@ -92,14 +101,14 @@ async def user(db_session):
 
 
 @pytest.fixture
-async def chat(db_session, user):
+async def chat(db_session: AsyncSession, user: User) -> uuid.UUID:
     c = Chat(owner_id=user.id, title="n")
     db_session.add(c)
     await db_session.flush()
     return c.id
 
 
-async def _treatment(db, *, cluster_id, as_of):
+async def _treatment(db: AsyncSession, *, cluster_id: int, as_of: datetime) -> CitationTreatment:
     t = CitationTreatment(
         cluster_id=cluster_id,
         opinion_id=cluster_id,
@@ -113,33 +122,33 @@ async def _treatment(db, *, cluster_id, as_of):
     return t
 
 
-async def test_null_treatment_caselaw_is_needed(db_session, chat):
+async def test_null_treatment_caselaw_is_needed(db_session: AsyncSession, chat: uuid.UUID) -> None:
     mid = await _entry(db_session, chat, source_kind="caselaw", treatment_id=None)
     out = await message_ids_needing_treatment(db_session, chat_id=chat, message_id=None, now=_NOW)
     assert mid in out
 
 
-async def test_fresh_treatment_not_needed(db_session, chat):
+async def test_fresh_treatment_not_needed(db_session: AsyncSession, chat: uuid.UUID) -> None:
     t = await _treatment(db_session, cluster_id=1, as_of=_NOW)
     mid = await _entry(db_session, chat, source_kind="caselaw", treatment_id=t.id)
     out = await message_ids_needing_treatment(db_session, chat_id=chat, message_id=None, now=_NOW)
     assert mid not in out
 
 
-async def test_stale_treatment_is_needed(db_session, chat):
+async def test_stale_treatment_is_needed(db_session: AsyncSession, chat: uuid.UUID) -> None:
     t = await _treatment(db_session, cluster_id=2, as_of=_NOW - timedelta(days=31))
     mid = await _entry(db_session, chat, source_kind="caselaw", treatment_id=t.id)
     out = await message_ids_needing_treatment(db_session, chat_id=chat, message_id=None, now=_NOW)
     assert mid in out
 
 
-async def test_non_caselaw_excluded(db_session, chat, user):
+async def test_non_caselaw_excluded(db_session: AsyncSession, chat: uuid.UUID, user: User) -> None:
     mid = await _entry(db_session, chat, source_kind="document", treatment_id=None, user_id=user.id)
     out = await message_ids_needing_treatment(db_session, chat_id=chat, message_id=None, now=_NOW)
     assert mid not in out
 
 
-async def test_message_id_scopes(db_session, chat):
+async def test_message_id_scopes(db_session: AsyncSession, chat: uuid.UUID) -> None:
     mid1 = await _entry(db_session, chat, source_kind="caselaw", treatment_id=None)
     mid2 = await _entry(db_session, chat, source_kind="caselaw", treatment_id=None)
     out = await message_ids_needing_treatment(db_session, chat_id=chat, message_id=mid1, now=_NOW)

@@ -69,6 +69,7 @@
 	<header class="lq-tabular-page__header">
 		<div class="lq-tabular-page__heading">
 			<h1>Tabular Review</h1>
+			<a href="/lq-ai/tabular/bulk-ops">Saved reports and memos</a>
 			<button
 				type="button"
 				class="lq-tabular-page__cta"

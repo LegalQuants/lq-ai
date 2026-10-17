@@ -11,9 +11,10 @@ share fixture machinery.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
@@ -27,12 +28,16 @@ from app.models.organization_profile import OrganizationProfile
 from app.skills import load_registry
 from app.skills.registry import MutableSkillRegistry
 
+if TYPE_CHECKING:
+    from app.models import User
+    from app.models.team import Team
+
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "skills"
 
 VALID_KEY = "test-gateway-secret-correct-horse"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -513,7 +518,7 @@ async def test_internal_skill_archived_shadow_falls_through(
 # ---------------------------------------------------------------------------
 
 
-async def _team_test_user(db_session: AsyncSession, suffix: str):
+async def _team_test_user(db_session: AsyncSession, suffix: str) -> User:
     """Build a fresh User row inside the internal-skills test context."""
 
     import uuid as _uuid
@@ -534,7 +539,7 @@ async def _team_test_user(db_session: AsyncSession, suffix: str):
     return user
 
 
-async def _team_with_member(db_session: AsyncSession, *, slug: str, member):
+async def _team_with_member(db_session: AsyncSession, *, slug: str, member: User) -> Team:
     """Create a team and add ``member`` as an admin in one shot.
 
     Returns the Team row so callers can populate team-scope skills.

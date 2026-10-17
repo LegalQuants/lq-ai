@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "skill": "vendor-privacy-policy-first-pass",
+  "fixture": "ai-training-policy",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/vendor-privacy-policy-first-pass/SKILL.md (AI/ML training on customer data without opt-out is flagged critical regardless of context; AI / ML use of data is a mandated summary topic) and test-plan.md Scenario 3 (AI-training rights without clear opt-out: critical red flag; broad advertiser sharing: critical or material). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "Vendor Privacy Policy First Pass",
+      "Bottom line",
+      "Structured summary",
+      "Red flags",
+      "Recommended next steps"
+    ],
+    "metrics": [
+      {
+        "id": "red_flag_items",
+        "kind": "section_items",
+        "section": "Red flags",
+        "min": 1,
+        "max": 10
+      },
+      {
+        "id": "critical_severity_mentions",
+        "kind": "regex_count",
+        "pattern": "\\bcritical\\b",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "training_flagged",
+        "kind": "regex_count",
+        "pattern": "train",
+        "min": 2,
+        "max": null
+      },
+      {
+        "id": "summary_topics",
+        "kind": "section_items",
+        "section": "Structured summary",
+        "min": 8,
+        "max": 12
+      }
+    ],
+    "min_chars": 1500,
+    "max_chars": 30000
+  }
+}

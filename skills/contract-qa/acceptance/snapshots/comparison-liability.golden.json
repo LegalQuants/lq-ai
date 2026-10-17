@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "skill": "contract-qa",
+  "fixture": "comparison-liability",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/contract-qa/SKILL.md (Type C comparison: one-sentence verdict using standard/unusual/aggressive/favorable vocabulary, quoted clause with [§ ref], typical-practice note, perspective read). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "verbatim_blockquote",
+        "kind": "blockquote_lines",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "verdict_vocabulary",
+        "kind": "regex_count",
+        "pattern": "standard|unusual|aggressive|favorable",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "cites_section_7",
+        "kind": "regex_count",
+        "pattern": "§\\s*7|section\\s*7",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 300,
+    "max_chars": 8000
+  }
+}

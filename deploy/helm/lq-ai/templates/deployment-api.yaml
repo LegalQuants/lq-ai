@@ -38,15 +38,19 @@ spec:
               value: "postgresql+asyncpg://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ include "lq-ai.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}"
             - name: REDIS_URL
               value: "redis://{{ include "lq-ai.fullname" . }}-redis:6379/0"
-            - name: MINIO_ENDPOINT
-              value: "{{ include "lq-ai.fullname" . }}-minio:9000"
-            - name: MINIO_ROOT_USER
-              value: {{ .Values.minio.rootUser }}
-            - name: MINIO_ROOT_PASSWORD
+            - name: S3_ENDPOINT_URL
+              value: "http://{{ include "lq-ai.fullname" . }}-rustfs:9000"
+            - name: S3_ACCESS_KEY
+              value: {{ default .Values.minio.rootUser .Values.objectStore.rootUser | quote }}
+            - name: S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.minio.rootPasswordSecretRef.name }}
-                  key: {{ .Values.minio.rootPasswordSecretRef.key }}
+                  name: {{ default .Values.minio.rootPasswordSecretRef.name .Values.objectStore.rootPasswordSecretRef.name }}
+                  key: {{ default .Values.minio.rootPasswordSecretRef.key .Values.objectStore.rootPasswordSecretRef.key }}
+            - name: S3_BUCKET
+              value: lq-ai-files
+            - name: S3_REGION
+              value: us-east-1
             - name: GATEWAY_URL
               value: "http://{{ include "lq-ai.fullname" . }}-gateway:8001"
             - name: LQ_AI_GATEWAY_KEY

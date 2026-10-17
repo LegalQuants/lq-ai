@@ -1,7 +1,7 @@
 """File ORM model — per docs/db-schema.md §`files`.
 
 Original uploaded files; the bytes themselves live in object storage
-(MinIO/S3) at `storage_path`. Metadata (filename, mime_type, size_bytes,
+(S3-compatible object storage) at `storage_path`. Metadata (filename, mime_type, size_bytes,
 hash_sha256, ingestion_status) lives in this row.
 
 Lifecycle (M1):
@@ -10,7 +10,7 @@ Lifecycle (M1):
 * Picked up by the document pipeline worker (Task C5) which flips status
   through `processing` → `ready` or `failed`.
 * Soft-deleted on `DELETE /api/v1/files/{id}` (Task C4) — `deleted_at` is
-  set to `now()`; the MinIO bytes are NOT reaped synchronously (per
+  set to `now()`; the object-store bytes are NOT reaped synchronously (per
   `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`).
 
 `project_id` references `projects(id)` once that table exists (Task C7);
@@ -33,7 +33,7 @@ from app.db.base import Base
 class File(Base):
     """A single uploaded file.
 
-    `storage_path` is the MinIO object key; per ADR 0005 we use the bare
+    `storage_path` is the S3 object key; per ADR 0005 we use the bare
     UUID as the key (no prefix) so the column carries the same string
     as `id`. The column is TEXT (not UUID) to leave room for a future
     migration that layers prefixes (`tenants/<tenant>/<file_id>`)

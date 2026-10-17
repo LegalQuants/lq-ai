@@ -1,0 +1,19 @@
+{{- $opsName := printf "%s-ops" (include "lq-ai.fullname" .) -}}
+{{- if and .Values.migrations.enabled (not (lookup "v1" "PersistentVolumeClaim" .Release.Namespace $opsName)) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $opsName }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.migrations.storageClass }}
+  storageClassName: {{ .Values.migrations.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.migrations.storage }}
+{{- end }}

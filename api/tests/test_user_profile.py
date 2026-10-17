@@ -15,7 +15,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -30,7 +30,7 @@ from app.models import AuditLog, User
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -184,4 +184,5 @@ async def test_patch_me_writes_audit_row(
         )
     ).scalar_one()
     assert audit.resource_type == "user"
+    assert audit.details is not None
     assert audit.details["fields"] == ["display_name"]

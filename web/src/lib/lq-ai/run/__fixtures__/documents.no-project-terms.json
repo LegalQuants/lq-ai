@@ -1,0 +1,56 @@
+{
+  "chat_id": "746fbcb1-3ea0-4221-9c2c-e4eaae2a8ad8",
+  "documents": [
+    {
+      "attached_to_project": false,
+      "characters": 68,
+      "file_id": "e8b60d1b-ea0c-4ce3-a130-0e57951c5310",
+      "filename": "msa.txt",
+      "matter_minimum_inference_tier": 2,
+      "matter_privileged": true,
+      "matters": [
+        "Board advice",
+        "Fixture",
+        "Vendor renewal"
+      ],
+      "mime_type": "text/plain",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 68
+    },
+    {
+      "attached_to_project": false,
+      "characters": 53,
+      "file_id": "70b06b04-06d3-4881-8be0-9ae67ae4913e",
+      "filename": "dpa.md",
+      "matter_minimum_inference_tier": 3,
+      "matter_privileged": false,
+      "matters": [
+        "Fixture",
+        "Vendor renewal"
+      ],
+      "mime_type": "text/markdown",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 53
+    },
+    {
+      "attached_to_project": false,
+      "characters": 20,
+      "file_id": "b0eb1608-b8e1-4ca5-8ded-da519a96d79a",
+      "filename": "loose-note.txt",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "text/plain",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 20
+    }
+  ],
+  "knowledge_bases": [],
+  "knowledge_bases_omitted": 0,
+  "max_documents": 8,
+  "project_id": null,
+  "suggested_file_ids": []
+}

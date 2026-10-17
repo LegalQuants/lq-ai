@@ -301,9 +301,7 @@ async def verify_and_persist_authority_citations(
         "eu_legislation",
     }
     refs = [
-        r
-        for r in tool_sources
-        if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
+        r for r in tool_sources if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
     ]
     if not refs:
         return 0
@@ -326,9 +324,7 @@ async def verify_and_persist_authority_citations(
     # miss).  These stay bindable in Pass C so an attributed passage FAILs
     # against them instead of vanishing — "couldn't check" never becomes
     # "passed".
-    failed_refs: list[
-        tuple[str, str, str]
-    ] = []  # (source_type, external_ref, content_kind)
+    failed_refs: list[tuple[str, str, str]] = []  # (source_type, external_ref, content_kind)
     seen: set[tuple[str, str]] = set()
     for r in refs:
         assert r.external_ref is not None  # guaranteed by the `refs` filter above
@@ -414,9 +410,7 @@ async def verify_and_persist_authority_citations(
                 # structurally unreachable in this loop (a miss `continue`s
                 # before a candidate exists), so passing gateway through
                 # would be dishonest. Mirrors caselaw.py's verbatim pass.
-                result = await verify(
-                    cand, target, gateway=None, judge_model=judge_model
-                )
+                result = await verify(cand, target, gateway=None, judge_model=judge_model)
             except Exception:
                 log.warning(
                     "authority verify: verify() failed, skipping passage",
@@ -474,10 +468,7 @@ async def verify_and_persist_authority_citations(
             elif (passage, bound[1]) in verbatim_matched:
                 continue
             for source_type, external_ref, content_kind, target in targets:
-                if (
-                    bound is not None
-                    and (source_type, external_ref, content_kind) != bound
-                ):
+                if bound is not None and (source_type, external_ref, content_kind) != bound:
                     continue
                 body = target.normalized_content
                 try:

@@ -10,6 +10,9 @@ export const configPath = (): string => join(dataDir(), 'config.enc')
 /** The chmod-600 .env handed to docker compose (lives in app data, NOT the repo). */
 export const envPath = (): string => join(dataDir(), '.env')
 
+/** Host-visible deployment journal and snapshots (outside Docker's VM). */
+export const opsPath = (): string => join(dataDir(), 'ops')
+
 /**
  * The release compose file. Bundled into the app at build time under resources/.
  * In dev (electron-vite) it is read from the repo root.

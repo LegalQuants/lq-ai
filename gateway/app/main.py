@@ -70,10 +70,12 @@ from app.model_discovery import ModelDiscoverer
 from app.providers import (
     AnthropicAdapter,
     AzureOpenAIAdapter,
+    BedrockAdapter,
     OllamaAdapter,
     OpenAIAdapter,
     ProviderAdapter,
 )
+from app.providers.base_url_policy import ProviderEgressRefused, validate_llm_base_url
 from app.providers.tool.base import ToolProviderAdapter
 from app.providers.tool.courtlistener import CourtListenerToolAdapter
 from app.providers.tool.echo import EchoToolAdapter
@@ -132,6 +134,15 @@ def _resolve_mcp_config_path() -> Path | None:
 
 
 def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
     """Construct the adapter for one provider, or ``None`` if no live
     adapter can be built.
 
@@ -139,7 +150,7 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     (a) the provider is **disabled** (``enabled=False``); or
     (b) the provider's ``type`` has **no adapter implementation** yet
-        (vertex/bedrock, or any unknown type).
+        (Vertex, the reserved Bedrock SigV4 slot, or any unknown type).
 
     Both mean "no live adapter was built" — they are not distinguished in
     the return value. A caller that needs to tell "disabled" from
@@ -161,6 +172,11 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
 
     if not provider.enabled:
         return None
+    # Egress guard (#288, GW-04): the prompt-carrying LLM path must not send
+    # cleartext to a public host or use a non-http(s) scheme. Validate before
+    # building any adapter so a bad base_url fails at startup — matching the
+    # build-time validation the tool path already does.
+    validate_llm_base_url(provider.base_url)
     if provider.type == "anthropic":
         return AnthropicAdapter.from_config(provider)
     if provider.type in ("openai", "openai_compatible"):
@@ -171,16 +187,26 @@ def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
         # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape with
         # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
         return AzureOpenAIAdapter.from_config(provider)
+    if provider.type == "bedrock" and provider.bedrock_protocol is not None:
+        return BedrockAdapter.from_config(provider)
     if provider.type == "ollama":
         # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
         # backbone per PRD §1.5.1 / §6.1.
         return OllamaAdapter.from_config(provider)
-    # B6 lands the remaining adapters (Vertex, Bedrock); until then there
-    # is no adapter for those types (or any unknown type).
+    # Vertex and the reserved Bedrock SigV4 slot remain unimplemented.
     return None
 
 
 def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+    from app.config_revision import configuration_revision
+
+    adapter = _build_tool_adapter(provider)
+    if adapter is not None:
+        adapter.configuration_revision = configuration_revision(provider)
+    return adapter
+
+
+def _build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
     """Construct the tool adapter for one provider, or ``None`` if disabled
     or no adapter exists for the type. Validates the base_url against the
     provider's egress policy at build time so a misconfig fails at startup."""
@@ -261,6 +287,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for provider in config.providers:
         try:
             adapter = build_adapter(provider)
+        except ProviderEgressRefused as exc:
+            # Deliberate: an egress-policy violation is fatal at startup.
+            # Skipping the provider would let the router fall through to the
+            # next candidate in the chain, silently sending prompts somewhere
+            # the operator did not choose.
+            logger.error(
+                "refusing to start: provider %r (type=%s) has a base_url that "
+                "violates LLM egress policy: %s",
+                provider.name,
+                provider.type,
+                exc.reason,
+            )
+            raise
         except ValueError as exc:
             # Missing/unresolvable key for a supported provider — non-fatal
             # at startup; the provider is skipped and chat requests routing
@@ -273,9 +312,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
             continue
         if adapter is None:
-            # Disabled, or a type with no adapter yet (vertex/bedrock).
+            # Disabled, or a type/transport with no adapter yet.
             if provider.enabled:
-                # B6 lands the remaining adapters (Vertex, Bedrock).
                 logger.debug(
                     "no adapter for provider %r (type=%s); awaiting B6",
                     provider.name,

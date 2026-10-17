@@ -42,9 +42,7 @@ from app.models.user import User
 
 async def _message_and_chat(db: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
     """Create minimal User → Chat → assistant Message; return (message_id, chat_id)."""
-    user = User(
-        email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member"
-    )
+    user = User(email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db.add(user)
     await db.flush()
     chat = Chat(owner_id=user.id, title="t")
@@ -214,9 +212,7 @@ async def _rows_for(db: AsyncSession, mid: uuid.UUID) -> list[MessageAuthorityCi
     return list(
         (
             await db.execute(
-                select(MessageAuthorityCitation).where(
-                    MessageAuthorityCitation.message_id == mid
-                )
+                select(MessageAuthorityCitation).where(MessageAuthorityCitation.message_id == mid)
             )
         )
         .scalars()
@@ -328,9 +324,7 @@ def _cfr_rec(ref: str = _CFR_PACKAGE_ID) -> ToolSourceRecord:
     )
 
 
-@pytest.mark.parametrize(
-    "cited_first", [True, False], ids=["cited-first", "cited-last"]
-)
+@pytest.mark.parametrize("cited_first", [True, False], ids=["cited-first", "cited-last"])
 @pytest.mark.asyncio
 async def test_misattributed_verbatim_quote_fails_and_flags_gate(
     db_session: AsyncSession, fake_storage: dict[str, bytes], cited_first: bool
@@ -422,9 +416,7 @@ async def test_attribution_to_non_fetched_authority_dropped(
     assert await _rows_for(db_session, mid) == []
 
 
-@pytest.mark.parametrize(
-    "cited_first", [True, False], ids=["cited-first", "cited-last"]
-)
+@pytest.mark.parametrize("cited_first", [True, False], ids=["cited-first", "cited-last"])
 @pytest.mark.asyncio
 async def test_attributed_shared_verbatim_quote_is_order_invariant(
     db_session: AsyncSession, fake_storage: dict[str, bytes], cited_first: bool
@@ -463,12 +455,8 @@ async def test_attributed_shared_verbatim_quote_is_order_invariant(
     assert gate.fail_count == 0
 
 
-@pytest.mark.parametrize(
-    "cited_first", [True, False], ids=["cited-first", "cited-last"]
-)
-@pytest.mark.parametrize(
-    "other_has_verbatim", [False, True], ids=["both-judge", "other-exact"]
-)
+@pytest.mark.parametrize("cited_first", [True, False], ids=["cited-first", "cited-last"])
+@pytest.mark.parametrize("other_has_verbatim", [False, True], ids=["both-judge", "other-exact"])
 @pytest.mark.asyncio
 async def test_attributed_paraphrase_is_order_invariant(
     db_session: AsyncSession,
@@ -480,9 +468,7 @@ async def test_attributed_paraphrase_is_order_invariant(
     """Another source's exact/supporting match cannot suppress the cited judge check."""
     mid, _cid = await _message_and_chat(db_session)
     await _seed_body(db_session)
-    paraphrase = (
-        "Fair use permits reproduction of a protected work without infringement."
-    )
+    paraphrase = "Fair use permits reproduction of a protected work without infringement."
     assert paraphrase not in _BODY
     other_body = f"Another fetched source states: {_BODY}"
     if other_has_verbatim:
@@ -492,9 +478,7 @@ async def test_attributed_paraphrase_is_order_invariant(
     )
     judged_bodies: list[str] = []
 
-    async def _estimate(
-        db: object, *, judge_model: str, authority_text: str
-    ) -> Decimal:
+    async def _estimate(db: object, *, judge_model: str, authority_text: str) -> Decimal:
         return Decimal("0.001")
 
     async def _judge(
@@ -510,9 +494,7 @@ async def test_attributed_paraphrase_is_order_invariant(
         "app.citation.authority_content_judge.estimate_authority_content_cost_usd",
         _estimate,
     )
-    monkeypatch.setattr(
-        "app.citation.authority_content_judge.judge_authority_content", _judge
-    )
+    monkeypatch.setattr("app.citation.authority_content_judge.judge_authority_content", _judge)
     refs = [_govinfo_rec(), _cfr_rec()]
     if not cited_first:
         refs.reverse()

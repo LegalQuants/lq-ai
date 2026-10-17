@@ -15,10 +15,17 @@
 	 * nothing for empty citation arrays — see MessageBubble's docstring).
 	 */
 	import type { FileMeta } from '../types';
+	import { MAX_CHAT_ATTACHED_FILES } from '../chat/attachedFiles';
 
 	export let chatFiles: FileMeta[] = [];
+	/** True while New harness is the chat's model, which uses no skill. */
+	export let newHarness = false;
 	export let projectFiles: FileMeta[] = [];
 	export let uploading: boolean = false;
+	// True when the chat already holds MAX_CHAT_ATTACHED_FILES files — the
+	// backend rejects sends above the cap, so the attach affordance is
+	// disabled with an inline notice instead of failing at send time.
+	export let attachLimitReached: boolean = false;
 	export let onUpload: (file: File) => void = () => undefined;
 	export let onDetach: (file: FileMeta) => void = () => undefined;
 
@@ -54,7 +61,9 @@
 	<div>
 		<h3 class="text-sm font-semibold lq-heading">Attached files</h3>
 		<p class="text-xs lq-subtext mt-0.5">
-			Upload documents the skill should review.
+			{newHarness
+				? 'Upload documents for this chat. Pick the ones a request may read above the message box.'
+				: 'Upload documents the skill should review.'}
 		</p>
 	</div>
 
@@ -62,11 +71,16 @@
 		type="button"
 		class="lq-btn-secondary text-sm font-medium disabled:opacity-50"
 		on:click={() => fileInput?.click()}
-		disabled={uploading}
+		disabled={uploading || attachLimitReached}
 		data-testid="lq-ai-upload-btn"
 	>
 		{uploading ? 'Uploading…' : '+ Files'}
 	</button>
+	{#if attachLimitReached}
+		<p class="text-xs lq-subtext" data-testid="lq-ai-attach-limit-notice">
+			Limit of {MAX_CHAT_ATTACHED_FILES} files per chat reached — detach one to add another.
+		</p>
+	{/if}
 	<input
 		bind:this={fileInput}
 		type="file"

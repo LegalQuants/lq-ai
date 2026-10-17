@@ -4,6 +4,8 @@ import {
 	psArgs,
 	pullArgs,
 	upArgs,
+	upServicesWaitArgs,
+	migrationArgs,
 	downArgs,
 	downVArgs,
 	adminFixtureArgs
@@ -35,6 +37,38 @@ export async function snapshot(base: string[], runner: Runner = runDocker): Prom
 /** Runner that accepts the same (args, env?) shape as {@link runDocker}. */
 type StartRunner = (args: string[], env?: NodeJS.ProcessEnv) => Promise<RunResult>
 
+export interface MigrationPlan {
+	title?: string
+	action: 'none' | 'apply' | 'verify' | 'conflict'
+	reason: string
+	detection: { facts?: Record<string, unknown> }
+	checks?: { name: string; passed: boolean; message: string }[]
+}
+
+export type ConfirmMigration = (plan: MigrationPlan) => Promise<boolean>
+export type MigrationProgress = (message: string) => void
+
+function parseMigrationPlan(stdout: string): MigrationPlan {
+	const lines = stdout.trim().split('\n').filter(Boolean)
+	for (let index = lines.length - 1; index >= 0; index -= 1) {
+		try {
+			const value = JSON.parse(lines[index]!) as { plan?: MigrationPlan }
+			if (value.plan) return value.plan
+		} catch {
+			// Compose may prefix informational lines; keep searching from the end.
+		}
+	}
+	throw new Error(`Migration plan returned invalid JSON: ${stdout.slice(-500)}`)
+}
+
+function assertSucceeded(result: RunResult, phase: string): void {
+	if (result.code !== 0) {
+		throw new Error(
+			`${phase} failed: ${result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`}`
+		)
+	}
+}
+
 /**
  * Start the stack: refresh images, then bring them up.
  *
@@ -56,6 +90,86 @@ export const startStack = async (
 ): Promise<RunResult> => {
 	await runner(pullArgs(base), env) // best-effort refresh; failure is non-fatal
 	return runner(upArgs(base), env)
+}
+
+/**
+ * Start the release stack through ADR 0037's plan → apply → up → verify gate.
+ * The Python migration service owns all component logic; Electron only drives
+ * Docker and supplies the single required human confirmation.
+ */
+export const startStackWithMigrations = async (
+	base: string[],
+	env: NodeJS.ProcessEnv,
+	confirm: ConfirmMigration,
+	onProgress: MigrationProgress = () => {},
+	runner: StartRunner = runDocker
+): Promise<RunResult> => {
+	await runner(pullArgs(base), env) // still best-effort for offline starts
+	// `plan` must inspect an offline volume. `down` preserves every named volume.
+	const stopped = await runner(downArgs(base), env)
+	assertSucceeded(stopped, 'Stack stop before migration plan')
+	onProgress('Checking deployment migrations…')
+	const planned = await runner(migrationArgs(base, ['--actor', 'launcher', 'plan', '--json']), env)
+	if (![0, 10].includes(planned.code)) {
+		throw new Error(
+			`Migration plan failed: ${planned.stderr.trim() || planned.stdout.trim() || `exit ${planned.code}`}`
+		)
+	}
+	if (planned.code === 10) {
+		const plan = parseMigrationPlan(planned.stdout)
+		if (plan.action === 'apply') {
+			if (!(await confirm(plan))) {
+				await runner(downArgs(base), env)
+				return { code: 130, stdout: '', stderr: 'Migration cancelled.' }
+			}
+			onProgress('Snapshotting the existing object store…')
+			const applied = await runner(
+				migrationArgs(base, ['--actor', 'launcher', 'apply', '--yes', '--json']),
+				env
+			)
+			assertSucceeded(applied, 'Migration apply')
+		}
+		if (plan.action === 'apply' || plan.action === 'verify') {
+			onProgress('Starting RustFS for verification…')
+			const store = await runner(upServicesWaitArgs(base, ['rustfs']), env)
+			assertSucceeded(store, 'RustFS start')
+			onProgress('Verifying every stored document…')
+			const verified = await runner(
+				migrationArgs(base, ['--actor', 'launcher', 'verify', '--json']),
+				env
+			)
+			assertSucceeded(verified, 'Migration verify')
+		}
+	}
+	onProgress('Starting LQ.AI…')
+	return runner(upArgs(base), env)
+}
+
+export const migrationStatus = (
+	base: string[],
+	env: NodeJS.ProcessEnv,
+	runner: StartRunner = runDocker
+): Promise<RunResult> =>
+	runner(
+		migrationArgs(base, ['--actor', 'launcher', 'status', '--json'], {
+			noDeps: true
+		}),
+		env
+	)
+
+export const rollbackMigration = async (
+	base: string[],
+	env: NodeJS.ProcessEnv,
+	runner: StartRunner = runDocker
+): Promise<RunResult> => {
+	const stopped = await runner(downArgs(base), env)
+	assertSucceeded(stopped, 'Stack stop before migration rollback')
+	return runner(
+		migrationArgs(base, ['--actor', 'launcher', 'rollback', '0001', '--yes', '--json'], {
+			noDeps: true
+		}),
+		env
+	)
 }
 
 export const stopStack = (base: string[]): Promise<RunResult> => runDocker(downArgs(base))
