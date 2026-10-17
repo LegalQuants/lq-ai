@@ -108,7 +108,7 @@ The surface in-house counsel touches every day. Every row is wired end-to-end in
 
 ## 2. Inference gateway and providers
 
-The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls. As of the legal-research + MCP milestone this extends from inference egress to **tool egress**: case-law (CourtListener) and MCP-connector calls also leave only through the gateway, SSRF-guarded and audited (see [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4)). The backend (`api/app`) holds exactly one outbound HTTP client, pointed at the gateway. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI remains deferred. The Bedrock compatible-API implementation now covers explicit Messages, Chat Completions and stateless Responses transports, but live AWS verification and application acceptance remain pending; see [the required verification gates](bedrock-verification.md).
+The Inference Gateway is the security boundary — the only component holding privileged provider API keys and the only component making outbound calls. As of the legal-research + MCP milestone this extends from inference egress to **tool egress**: case-law (CourtListener) and MCP-connector calls also leave only through the gateway, SSRF-guarded and audited (see [§5.5](#55-legal-research-and-connectors-mcp-gateway-brokered-shipped-after-m4)). The backend (`api/app`) holds exactly one outbound HTTP client, pointed at the gateway. Four provider adapters ship: Anthropic, OpenAI, Azure OpenAI, Ollama (local Tier 1). Google Vertex AI remains deferred. The Bedrock compatible-API implementation now covers explicit Messages, Chat Completions and stateless Responses transports, with live AWS verification deferred beyond 0.9.1 by maintainer direction; see [release acceptance and the deferred verification plan](bedrock-verification.md).
 
 | Capability | Status | Verification |
 |---|---|---|
@@ -117,7 +117,7 @@ The Inference Gateway is the security boundary — the only component holding pr
 | Anthropic / OpenAI / Ollama provider adapters | M1 | `gateway/app/providers/{anthropic,openai,ollama}.py`; Ollama via `docker compose --profile local` |
 | Azure OpenAI provider adapter | M2 | `gateway/app/providers/azure_openai.py` ([DE-267](PRD.md#9-deferred-enhancements-and-identified-future-work), closed in M2) |
 | Google Vertex AI provider adapter | deferred (community-friendly) | Wire-format spec in PRD §9 (DE-034) |
-| AWS Bedrock compatible-API provider | implemented; live AWS/application verification pending | `gateway/app/providers/bedrock.py`; [verification gates](bedrock-verification.md); credit @dropthejase, #265 |
+| AWS Bedrock compatible-API provider | implemented; live AWS verification deferred beyond 0.9.1 | `gateway/app/providers/bedrock.py`; [verification gates](bedrock-verification.md); credit @dropthejase, #265 |
 | Tier enforcement (Tiers 1–5) + privileged-matter tier floor | M1 | `gateway/app/tier_floor.py` |
 | Anonymization pre/post middleware | M2 | `gateway/app/anonymization/middleware.py` (wired on the request path at `gateway/app/api/inference.py`); see §3.2. Recognizer accuracy on a legal corpus is empirically unmeasured — [DE-282](PRD.md#9-deferred-enhancements-and-identified-future-work). |
 | Routing log (per-inference) | M1 | `gateway/app/routing_log.py` |

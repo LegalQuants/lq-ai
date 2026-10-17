@@ -1,4 +1,4 @@
-"""Opt-in, billable AWS gate: six cases, at most 18 inference requests.
+"""Deferred, opt-in AWS verification: six cases, at most 18 billable requests.
 
 Run only as documented in docs/bedrock-verification.md. A skip is not a pass.
 The explicit opt-in fails (rather than skips) when credentials are absent.
@@ -90,7 +90,7 @@ async def test_live_bedrock_protocol_and_tool_roundtrip(
     protocol: str, stream: bool, record_property: Any
 ) -> None:
     if os.environ.get("LQ_AI_BEDROCK_VERIFY") != "1":
-        pytest.skip("AWS gate pending: set LQ_AI_BEDROCK_VERIFY=1 to authorize billable calls")
+        pytest.skip("Live AWS verification deferred; explicit billable opt-in is required")
     if not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
         pytest.fail("AWS verification blocked: AWS_BEARER_TOKEN_BEDROCK is not configured")
     region = os.environ.get("LQ_AI_BEDROCK_TEST_REGION", "us-east-1")

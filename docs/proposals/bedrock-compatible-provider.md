@@ -1,7 +1,7 @@
 # Bedrock compatible-API replacement for PR #265
 
 Status: maintainer-directed implementation, 17 October 2026; live AWS
-verification and application acceptance pending.
+verification and application acceptance against AWS deferred beyond 0.9.1.
 
 Origin and credit: Jason Lee / @dropthejase,
 [PR #265](https://github.com/LegalQuants/lq-ai/pull/265). The original
@@ -13,7 +13,10 @@ sign-offs have been repaired.
 ## Maintainer direction
 
 Keep Claude Messages, Chat Completions and Responses in the replacement.
-Require live AWS verification during implementation and before acceptance.
+The maintainer initially required live AWS verification, then explicitly
+deferred it beyond PR #744 / 0.9.1 on 17 October 2026. Release acceptance
+uses mocked gateway contracts, existing regression suites, CI and security
+review; no live AWS compatibility is claimed.
 The following implementation choices carry that direction into the gateway:
 
 1. Each `type: bedrock` entry explicitly sets `bedrock_protocol` to
@@ -92,12 +95,13 @@ observed state. A successful request is not a privacy-tier certification.
 
 ## Verification and release status
 
-[AWS Bedrock verification](../bedrock-verification.md) defines early account
-access, per-protocol live adapter evidence and full application acceptance.
-Mocked CI cannot clear the live gates. Missing credentials, skips and
-entitlement failures leave the corresponding gate pending. Protocol support
-must not be described as live verified until its matrix row passes at the
-exact implementation SHA.
+[Bedrock verification](../bedrock-verification.md) separates 0.9.1 release
+acceptance from deferred account access, live adapter evidence and full
+application acceptance against AWS. The latter are follow-up work, not
+merge gates for #744 under the maintainer decision. Mocked CI does not
+establish actual AWS compatibility. Protocol support must not be described
+as live verified until its matrix row passes at the exact implementation
+SHA. The opt-in live test suite remains available for that follow-up.
 
 Embeddings, SigV4/STS/cross-account credential refresh, remote sessions,
 background jobs, built-in/server-side tools and live AWS model discovery

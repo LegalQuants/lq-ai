@@ -2475,22 +2475,25 @@ complete function-call/result history and streaming arguments. ADR 0027's
 timeout/error classification remains binding.
 
 **Status:** replacement implementation present; **live AWS verification and
-application acceptance pending**. This is not a claim that every model,
+application acceptance against AWS deferred beyond PR #744 / 0.9.1** by
+maintainer direction on 2026-10-17. This is not a claim that every model,
 region or endpoint/protocol pair is supported. No SDK dependency or new
 public inference endpoint is introduced. Embeddings, SigV4/STS refresh,
 server-side tools, background jobs and remote stored sessions remain out of
 scope for this initial compatible-API implementation.
 
-**Acceptance:** mocked protocol/error/retention coverage; current CI and
-security review; successful unary, streaming and governed function-call/result
-evidence for all three protocols against actual AWS; full application
-acceptance at the exact reviewed SHA. An entitlement error or skipped
-provider test does not satisfy live verification.
+**0.9.1 acceptance:** mocked gateway HTTP unary/streaming function-call/result
+round trips for all three protocols and endpoint families; key lifecycle,
+error/timeout and stateless Responses regressions; current CI and security
+review. Live account/model access, actual AWS protocol calls and full
+application acceptance against AWS move to follow-up work and do not block
+this PR/release. They remain unverified: mocked tests, skipped provider tests
+and entitlement errors must not be described as live verification.
 
 **Credit:** Jason Lee / @dropthejase's [PR #265](https://github.com/LegalQuants/lq-ai/pull/265)
 provided the original three-protocol design and translation/test examples.
 See [replacement design](proposals/bedrock-compatible-provider.md) and
-[required AWS verification](bedrock-verification.md).
+[release acceptance and deferred AWS verification](bedrock-verification.md).
 
 **Deferred original InvokeModel/SigV4 design (not implemented):** the
 historical specification below remains source material for a separately

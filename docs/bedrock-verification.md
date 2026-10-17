@@ -1,14 +1,35 @@
-# Required AWS Bedrock verification
+# Bedrock release acceptance and deferred AWS verification
 
-**Status: pending.** No successful live AWS check or application acceptance
-is claimed for this replacement. Mocked tests and skipped provider tests do
-not pass these gates. Record the exact implementation commit for every run.
+**Maintainer decision, 17 October 2026:** no live AWS check is required for
+PR #744 or the 0.9.1 release. Account/model access, live adapter checks and
+full application acceptance against AWS are deferred to follow-up work. No
+successful live AWS check or application acceptance against AWS is claimed.
+The deferred plan below defines the proposed follow-up issue's scope.
 
-## Gate A — account/model access, early
+## Required for PR #744 / 0.9.1
 
-Before committing to the full implementation effort, arrange a dedicated
-test account/key, an approved region and entitled models. Use synthetic
-prompts, never matter data. Keep the key in the local test environment's
+- Real gateway HTTP routing with mocked AWS: unary and streaming
+  function-call/result continuation for Messages, Chat Completions and
+  Responses, with explicit runtime/Mantle base paths, preserved call IDs
+  and arguments, routed provider/tier and usage. These tests supply a
+  synthetic tool result; they do not execute a backend tool.
+- Key masking, rotation, revocation and restart after revocation; strict
+  protocol/origin configuration, sanitized failures, timeout classes and
+  stateless Responses behavior.
+- Full gateway regressions, lint, formatting and strict types; normal CI,
+  stack smoke and maintainer security review at the final PR SHA. The
+  existing API suite continues to test provider-independent tool governance.
+
+These checks establish the implementation contracts without AWS calls.
+They do not verify account entitlement, actual provider behavior, retention,
+logging, residency or a live application round trip. The following deferred
+checks are retained for a follow-up issue and are not release blockers.
+
+## Deferred A — account/model access
+
+When the follow-up is scheduled, arrange a dedicated test account/key, an
+approved region and entitled models. Use synthetic prompts, never matter
+data. Keep the key in the local test environment's
 `AWS_BEARER_TOKEN_BEDROCK`; do not put it in a command argument, committed
 file, PR, screenshot or test report. The gateway runtime encrypted-key path
 is also available for application acceptance.
@@ -16,25 +37,25 @@ is also available for application acceptance.
 Use the AWS model-card/native examples to establish account access before
 diagnosing adapter behavior. An entitlement denial is a blocked access
 check, not a successful protocol test. If access is unavailable, record an
-owner/action and revise the delivery estimate immediately.
+owner/action on the follow-up issue.
 
 Suggested starting matrix, checked against AWS documentation on 17 October
 2026; actual account access remains unverified:
 
 | Protocol | Endpoint / region | Candidate model | Access | Adapter | Application |
 | --- | --- | --- | --- | --- | --- |
-| Messages | runtime / us-east-1 | us.anthropic.claude-haiku-4-5-20251001-v1:0 | pending | pending | pending |
-| Chat Completions | runtime / us-east-1 | openai.gpt-oss-20b-1:0 | pending | pending | pending |
-| Responses | mantle / us-east-1 | google.gemma-4-31b | pending | pending | pending |
+| Messages | runtime / us-east-1 | us.anthropic.claude-haiku-4-5-20251001-v1:0 | deferred | deferred | deferred |
+| Chat Completions | runtime / us-east-1 | openai.gpt-oss-20b-1:0 | deferred | deferred | deferred |
+| Responses | mantle / us-east-1 | google.gemma-4-31b | deferred | deferred | deferred |
 
 The Haiku profile can process in other US regions. Use an approved model
 and routing profile if that does not meet the test environment's policy.
 Gemma's model card specifies Mantle's `/openai/v1` path. No model-name
 heuristic chooses that path in the adapter.
 
-## Gate B — real adapter requests during implementation
+## Deferred B — real adapter requests
 
-As each protocol is implemented, verify the actual adapter against AWS.
+In the follow-up, verify the actual adapter against AWS at a recorded SHA.
 The opt-in provider test exercises unary and streaming completion, a
 function proposal and a continuation with a synthetic local tool result.
 It sends at most **18 requests**, each with a maximum output budget of
@@ -72,7 +93,8 @@ The XML records protocol, model, region, endpoint, streaming mode, token
 usage and AWS request IDs when supplied. Keep a companion record with
 implementation SHA, timestamp, runner and secret-free configuration. Retain
 only redacted/synthetic evidence. A pass on the direct adapter test does
-not pass Gate C or prove that the backend governed the synthetic local tool.
+not establish deferred C or prove that the backend governed the synthetic
+local tool.
 
 Also verify safe invalid/revoked credential and unavailable-model behavior.
 Record controlled timeout/throttle fault injection separately from actual
@@ -81,7 +103,7 @@ sanitized request evidence for `store=false` and `background=false` on
 Responses; verify relevant account logging/retention configuration
 separately. Never log authorization headers.
 
-## Gate C — normal application acceptance before merge
+## Deferred C — application acceptance against AWS
 
 Run the replacement at the exact reviewed SHA through application → API →
 gateway → AWS. For **each protocol**:
@@ -97,8 +119,9 @@ gateway → AWS. For **each protocol**:
 Confirm expectations before running. Record each as matches, differs or
 not-reached with evidence and SHA. A blocked/skipped/error-only row remains
 unverified. Re-run affected checks after implementation/config changes.
-The feature is not merge-ready until the required live/application rows
-are complete and normal CI/security review is green.
+Completion of this follow-up requires the live/application rows above.
+For #744 / 0.9.1, the release checks at the top of this document apply; the
+maintainer has explicitly deferred these live checks.
 
 ## Source checks
 
