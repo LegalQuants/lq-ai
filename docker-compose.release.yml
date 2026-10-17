@@ -235,6 +235,8 @@ services:
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Apply the same independent reference-read switch to API and worker.
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       # Shared with arq-worker so chat and autonomous calls apply one default.
       LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
@@ -356,6 +358,7 @@ services:
       # the gateway and the provider (ADR 0038 D2). Empty disables export.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME:-lq-ai-arq-worker}
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}

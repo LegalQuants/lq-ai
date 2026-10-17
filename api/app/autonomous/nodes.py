@@ -216,6 +216,7 @@ async def _run_analysis_loop(
 
     allowed = PLANNER_ALLOWLIST
     skill_tool_schemas = None
+    binding = None
     settings = get_settings()
     optional_enabled = bool(settings.skill_workspaces_enabled or settings.skill_script_runner_url)
     try:
@@ -280,7 +281,14 @@ async def _run_analysis_loop(
             break
         try:
             validate_action_args(decision.next_intent, decision.args)
-            act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
+            act = await guarded_tool_call(
+                session,
+                decision.next_intent,
+                decision.args,
+                db,
+                gateway,
+                expected_skill_binding=binding,
+            )
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
         except AuditedRetrievalOwnershipDenied:

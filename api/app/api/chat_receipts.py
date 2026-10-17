@@ -1,6 +1,6 @@
 """GET /api/v1/chats/{chat_id}/receipts — replay-at-read event log.
 
-Wave D.1 T5 (spec §7.6). Merges chronological events from four source
+Wave D.1 T5 (spec §7.6). Merges chronological events from source
 tables into a single timestamp-ordered stream:
 
 * ``messages`` (one event per row; ``kind='message'``)
@@ -9,6 +9,8 @@ tables into a single timestamp-ordered stream:
   if ``refused=True``)
 * ``audit_log`` (``kind='audit'`` or ``kind='retrieval'`` if
   ``action='inference.kb_chunks_retrieved'``)
+* ``tool_call_log`` local reference-read outcomes (``kind='audit'``;
+  metadata only, without arguments or reference contents)
 
 A governed run hosted in the chat (ADR 0038 D1) is a turn like any other, so
 its records come through the same feed (D2): its message and pinned skills as
@@ -61,6 +63,7 @@ from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 from app.models.chat import Chat, Message
 from app.models.inference import InferenceRoutingLog
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -241,6 +244,34 @@ async def _build_receipt_events(
                         },
                     )
                 )
+
+    # Local reference reads are governed tool calls, not verified sources.
+    # Project their existing metadata into the audit feed; never expose the
+    # reference text or model-supplied arguments as receipt details.
+    if "audit" in requested:
+        reads = await db.scalars(
+            select(ToolCallLog).where(
+                ToolCallLog.chat_id == chat_id,
+                ToolCallLog.origin == "chat",
+                ToolCallLog.tool == "skill_reference_read",
+            )
+        )
+        for read in reads:
+            events.append(
+                ReceiptEvent(
+                    ts=read.created_at,
+                    kind="audit",
+                    detail={
+                        "action": "skill.reference_read",
+                        "provider": read.provider,
+                        "tool": read.tool,
+                        "outcome": read.outcome,
+                        "tier": read.tier,
+                        "cost_usd": str(read.cost_usd) if read.cost_usd is not None else None,
+                        "message_id": str(read.message_id) if read.message_id else None,
+                    },
+                )
+            )
 
     # audit + retrieval (retrieval is the T7-bound action
     # `inference.kb_chunks_retrieved` rendered as its own kind so the UI

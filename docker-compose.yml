@@ -263,6 +263,8 @@ services:
       LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       # JWT (auth — per ADR 0002 the backend owns auth)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Ordinary reference reads have an independent host switch, shared with workers.
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
       JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
       # Observability
@@ -444,6 +446,7 @@ services:
       # the gateway and the provider (ADR 0038 D2). Empty disables export.
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: ${LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME:-lq-ai-arq-worker}
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       # Skills loader — the worker's on_startup installs the skill
       # registry via the shared bootstrap (app/skills/bootstrap.py) so
       # skill_ref autonomous sessions resolve on this process. Mounted

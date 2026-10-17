@@ -581,3 +581,57 @@ async def test_background_planner_reads_a_reference_file(
     assert GUIDE not in json.dumps(result["analysis_plan_trace"])
     audit = list(await db_session.scalars(select(AuditLog).where(AuditLog.user_id == owner.id)))
     assert GUIDE not in json.dumps([row.details for row in audit])
+
+
+@pytest.mark.parametrize("change", ["replace", "remove"])
+async def test_background_refuses_reference_changed_after_planner_binding(
+    db_session: AsyncSession,
+    registry: MutableSkillRegistry,
+    skills_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
+    owner = make_user()
+    owner.autonomous_enabled = True
+    db_session.add(owner)
+    await db_session.flush()
+    project = Project(owner_id=owner.id, name="Fixture", slug=f"fixture-{uuid4()}")
+    db_session.add(project)
+    await db_session.flush()
+    session = AutonomousSession(
+        user_id=owner.id,
+        project_id=project.id,
+        trigger_kind="manual",
+        params={"skill_ref": "ref-demo", "model": "fixture"},
+    )
+    db_session.add(session)
+    await db_session.flush()
+    monkeypatch.setattr(app.state, "skill_registry", registry, raising=False)
+    monkeypatch.setattr(get_settings(), "skill_workspaces_enabled", False)
+    monkeypatch.setattr(get_settings(), "skill_script_runner_url", None)
+    monkeypatch.setattr(get_settings(), "skill_reference_read_enabled", True)
+    file = skills_dir / "ref-demo" / "references" / "guide.md"
+
+    class ChangingGateway(_ScriptedGateway):
+        async def chat_completion(self, request: Any, *, request_id: object = None) -> Any:
+            response = await super().chat_completion(request, request_id=request_id)
+            if change == "replace":
+                file.write_text("Replacement contents must not reach the planner")
+            else:
+                file.unlink()
+            return response
+
+    gateway = ChangingGateway(
+        [{"next_intent": "skill_reference_read", "args": {"path": "references/guide.md"}}]
+    )
+    with pytest.raises(ToolNotGranted):
+        await make_analysis_node(db_session, gateway)(
+            {"session_id": str(session.id), "query": "Follow the guide", "retrieved_chunks": []}
+        )
+    assert len(gateway.captured_requests) == 1
+    audit = list(await db_session.scalars(select(AuditLog).where(AuditLog.user_id == owner.id)))
+    assert not any(
+        row.details.get("tool") == "skill_reference_read"
+        and row.details.get("outcome") == "success"
+        for row in audit
+    )

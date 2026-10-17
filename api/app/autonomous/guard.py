@@ -99,7 +99,7 @@ from app.autonomous.orchestration.contracts import ExecutionScope, RunCorrelatio
 from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
 from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, WorkspaceAccess
-from app.errors import Conflict, CostCapReached, SessionHalted, ToolNotGranted
+from app.errors import Conflict, CostCapReached, Forbidden, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
     AutonomousFinding,
@@ -112,7 +112,7 @@ from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
 from app.observability_helpers import get_tracer, quiet_span, record_attributes
-from app.skills.binding import resolve_binding
+from app.skills.binding import SkillBinding, resolve_binding
 from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, current_registry, parse_skill_tool
 
 log = logging.getLogger(__name__)
@@ -199,6 +199,7 @@ async def guarded_tool_call(
     inference_binding: InferenceBinding | None = None,
     workspace_access: WorkspaceAccess | None = None,
     skill_tools: SkillTools | None = None,
+    expected_skill_binding: SkillBinding | None = None,
     correlation: RunCorrelation | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
@@ -227,6 +228,8 @@ async def guarded_tool_call(
             the legacy session cap for this path. No provider I/O in settlement.
         source_binding: Internal exact authority-source selection and pricing.
             Requires both a durable effect and approved scope. Never model params.
+        expected_skill_binding: The legacy planner's server-resolved skill snapshot.
+            Refuse a changed skill before dispatch; never accepted from model params.
         correlation: The chat turn a governed run is bound to, resolved by the
             adapter from server records. Labels the routing-log and
             tool-call-log rows this call writes; never part of ``params`` or of
@@ -245,7 +248,7 @@ async def guarded_tool_call(
     """
     if session.project_id is not None:
         from app.authz.matters import require_matter
-        from app.errors import Forbidden, NotFound
+        from app.errors import NotFound
         from app.models.user import User
 
         user = await db.get(User, session.user_id)
@@ -372,11 +375,18 @@ async def guarded_tool_call(
             record = skill_tools.registry.current().get(name) if isinstance(name, str) else None
             if record is None:
                 raise ToolNotGranted("A current installed skill is required")
-            skill_binding = await resolve_binding(
-                db, session.user_id, record.name, skill_tools.registry
-            )
+            try:
+                skill_binding = await resolve_binding(
+                    db, session.user_id, record.name, skill_tools.registry
+                )
+            except Forbidden:
+                if expected_skill_binding is None:
+                    raise
+                raise ToolNotGranted("Pinned skill artifact is unavailable or changed") from None
             if skill_binding is None or intent not in skill_tools.available(skill_binding):
                 raise ToolNotGranted("Optional skill capability is not enabled")
+            if expected_skill_binding is not None and skill_binding != expected_skill_binding:
+                raise ToolNotGranted("Skill changed or access was revoked; start a new invocation")
             if execution_scope and (
                 effect is None or skill_binding.digest != execution_scope.skill.digest
             ):
