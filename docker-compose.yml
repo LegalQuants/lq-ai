@@ -259,6 +259,12 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Shared with arq-worker —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
       # Shared with arq-worker so chat and autonomous calls apply one default.
       LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       # JWT (auth — per ADR 0002 the backend owns auth)
@@ -437,6 +443,12 @@ services:
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Same value as the api service —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
       LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Observability. The worker executes governed runs, so it exports spans
