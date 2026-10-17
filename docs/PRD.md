@@ -4406,7 +4406,9 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **Specific scope:** Add a bell + unread-count indicator to the global `/lq-ai` shell chrome that derives the autonomous unread count (reusing `GET /autonomous/notifications?unread=true`), opens a recent-items dropdown, and links into the rail Notifications page. Gate its visibility on `autonomous_enabled`. Reconcile with the §3.15 Slack/Teams bridge webhook channel (DE-312) so the surfaces don't duplicate.
 
-**When to ship:** A later cross-cutting chrome pass; deferred from C2 to keep that task contained.
+**Implementation (0.9.1 candidate, acceptance pending):** The `/lq-ai` shell mounts the bell only after a successful preference response confirms the current signed-in user's autonomous opt-in. Cached flags alone never enable it. The badge uses the server unread total (visually capped at `99+`); the dropdown shows the newest ten unread items, offers per-item and **Mark shown read** actions, and links to the Notifications page. Lists refresh on navigation, opening and completed read actions; superseded responses are ignored. Failed reads stay retryable, and loading/unavailable states are distinct from a confirmed empty inbox. There is no polling or new delivery channel; existing email/webhook delivery is unchanged.
+
+**Acceptance:** Pending checks of stale/failed preference loads, session changes, delayed responses, off-page unread counts, partial failures, keyboard/focus and phone/desktop light/dark layouts. This entry does not yet claim the feature is shipped.
 
 ---
 

@@ -18,10 +18,9 @@
 	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
 	import TopTabBar from '$lib/lq-ai/components/TopTabBar.svelte';
 	import AmbientTrustChrome from '$lib/lq-ai/components/AmbientTrustChrome.svelte';
-	import NotificationBell from '$lib/lq-ai/components/NotificationBell.svelte';
 	import SessionTimeoutWarning from '$lib/lq-ai/components/SessionTimeoutWarning.svelte';
-	import { preferences, initPreferences } from '$lib/lq-ai/stores/preferences';
-	import { shouldShowBell } from '$lib/lq-ai/autonomous/notification-bell';
+	import NotificationBell from '$lib/lq-ai/components/NotificationBell.svelte';
+	import { autonomousChromeEnabled, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
 	import '$lib/lq-ai/styles/typography.css';
@@ -61,18 +60,21 @@
 			}
 			console.error('lq-ai: failed to refresh user', e);
 		}
-		// Sync preferences so autonomous-gated chrome (notification bell)
-		// renders for opted-in users. Non-opted-in users keep the default
-		// (autonomous_enabled: false) and see NO chrome change. Not awaited:
-		// the localStorage cache applies synchronously and the fresh server
-		// value lands reactively — don't delay shell boot on it.
-		void initPreferences();
 		booted = true;
 	}
 
 	let activityHandler: (() => void) | null = null;
 
 	onMount(() => {
+		// Layouts survive client-side sign-in/navigation. Sync each new signed-in user,
+		// and let the store discard responses from an earlier session.
+		let preferenceUserId: string | null = null;
+		const unsubscribePreferences = auth.subscribe((session) => {
+			const userId = session.access_token ? (session.user?.id ?? null) : null;
+			if (userId === preferenceUserId) return;
+			preferenceUserId = userId;
+			if (userId) void initPreferences();
+		});
 		gate();
 		if (!isAuthExempt($page.url.pathname)) {
 			startTracker(() => goto('/lq-ai/login?reason=idle-timeout'));
@@ -81,6 +83,7 @@
 				window.addEventListener(e, activityHandler!, { passive: true })
 			);
 		}
+		return unsubscribePreferences;
 	});
 
 	onDestroy(() => {
@@ -103,7 +106,7 @@
 				</a>
 				<div style="display: inline-flex; align-items: center; gap: var(--lq-space-3);">
 					<AmbientTrustChrome />
-					{#if shouldShowBell($preferences.autonomous_enabled)}
+					{#if $autonomousChromeEnabled}
 						<NotificationBell />
 					{/if}
 					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm);">⚙</a>

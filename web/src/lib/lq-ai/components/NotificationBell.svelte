@@ -3,19 +3,18 @@
 	 * NotificationBell — global-chrome bell for autonomous notifications (DE-324).
 	 *
 	 * Mounted in the /lq-ai shell topbar, gated by the parent layout on
-	 * `$preferences.autonomous_enabled` — this component assumes the caller has
-	 * verified opt-in (non-opted-in users get zero DOM because the layout never
-	 * mounts it). The gating decision itself is `shouldShowBell` in
-	 * `$lib/lq-ai/autonomous/notification-bell` (unit-tested there).
+	 * `autonomousChromeEnabled`: a successful preference response for the current
+	 * signed-in user must confirm opt-in before this component is mounted.
+	 * Cached enabled flags alone emit no bell DOM or notification requests.
 	 *
 	 * Behavior:
 	 *   - Fetches unread notifications (newest first) via
 	 *     `GET /autonomous/notifications?unread=true` on mount and after every
-	 *     client-side navigation (afterNavigate — no polling loop).
+	 *     client-side navigation, on opening, and after reads — no polling loop.
 	 *   - Badge shows the server-side unread total (`total_count`), capped at
 	 *     99+ to mirror the autonomous rail badge.
 	 *   - Click → dropdown listing the newest unread items with per-item
-	 *     "Mark read" and a "Mark all read" bulk action (Promise.allSettled,
+	 *     "Mark read" and a "Mark shown read" bulk action (Promise.allSettled,
 	 *     mirroring the notifications page), plus a "View all" link to
 	 *     /lq-ai/autonomous/notifications.
 	 *
@@ -23,71 +22,43 @@
 	 * not a WAI-ARIA menu): aria-expanded trigger, Escape-to-close via
 	 * svelte:window, close-on-focusout with a tick + requestAnimationFrame
 	 * defer so clicks on items register before the focusout teardown.
-	 * Fetch errors are swallowed (best-effort chrome badge — same posture as
-	 * the autonomous rail badge in autonomous/+layout.svelte).
+	 * Loading and unavailable states remain distinct from an empty inbox; failed
+	 * reads remain retryable. Async list responses are ordered against reads.
 	 */
-	import { tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { afterNavigate } from '$app/navigation';
-
 	import { autonomousApi } from '$lib/lq-ai/api';
-	import {
-		afterMarkAllRead,
-		afterMarkRead,
-		badgeText,
-		snippet,
-		type BellState
-	} from '$lib/lq-ai/autonomous/notification-bell';
+	import { badgeText, snippet } from '$lib/lq-ai/autonomous/notification-bell';
+	import { createNotificationBell } from '$lib/lq-ai/autonomous/notification-bell-controller';
 
 	const VIEW_ALL_HREF = '/lq-ai/autonomous/notifications';
-	/** How many unread items the dropdown shows; the badge uses the full total. */
-	const DROPDOWN_LIMIT = 10;
-
-	let state: BellState = { items: [], unreadCount: 0 };
+	const bell = createNotificationBell(autonomousApi);
 	let open = false;
 	let rootEl: HTMLDivElement;
 	let triggerEl: HTMLButtonElement;
 
-	/** Ids with an in-flight mark-read call. */
-	let pendingIds: Set<string> = new Set();
-	let markingAll = false;
-
-	$: badge = badgeText(state.unreadCount);
+	$: badge = badgeText($bell.unreadCount);
 	$: triggerLabel =
-		state.unreadCount > 0
-			? `Notifications, ${state.unreadCount} unread`
-			: 'Notifications';
+		$bell.unreadCount > 0 ? `Notifications, ${$bell.unreadCount} unread` : 'Notifications';
 
-	async function refresh(): Promise<void> {
-		try {
-			const resp = await autonomousApi.listNotifications(true, DROPDOWN_LIMIT);
-			state = { items: resp.notifications, unreadCount: resp.total_count };
-		} catch {
-			// Best-effort badge — do not surface errors in global chrome.
-		}
-	}
-
-	// Runs on initial mount AND after every client-side navigation.
 	afterNavigate(() => {
 		open = false;
-		refresh();
+		void bell.refresh();
 	});
+	// Preference confirmation can mount this component after the initial navigation
+	// callbacks have already run, so initial loading cannot rely on afterNavigate.
+	onMount(() => void bell.refresh());
+	onDestroy(() => bell.destroy());
 
 	function toggle(): void {
 		open = !open;
+		if (open) void bell.refresh();
 	}
 
-	/**
-	 * Defer a frame on focusout: clicking an item briefly nulls focus before
-	 * the new target registers, so an immediate `relatedTarget` check would
-	 * close the dropdown and swallow the click. (Mirrors MessageOverflowMenu.)
-	 */
 	async function handleFocusout(): Promise<void> {
 		await tick();
 		requestAnimationFrame(() => {
-			if (!rootEl) return;
-			if (!rootEl.contains(document.activeElement)) {
-				open = false;
-			}
+			if (rootEl && !rootEl.contains(document.activeElement)) open = false;
 		});
 	}
 
@@ -98,36 +69,21 @@
 		}
 	}
 
-	async function handleMarkRead(id: string): Promise<void> {
-		if (pendingIds.has(id)) return;
-		pendingIds = new Set(pendingIds).add(id);
-		try {
-			await autonomousApi.readNotification(id);
-			state = afterMarkRead(state, id);
-		} catch {
-			// Keep the item visible so the user can retry; page surface has full errors.
-		} finally {
-			const next = new Set(pendingIds);
-			next.delete(id);
-			pendingIds = next;
-		}
+	function handleMarkRead(id: string): void {
+		// Keep focus inside the disclosure when a pending/removed row loses its button.
+		triggerEl?.focus();
+		void bell.markRead(id);
 	}
 
-	async function handleMarkAllRead(): Promise<void> {
-		const ids = state.items.map((n) => n.id);
-		if (ids.length === 0 || markingAll) return;
-		markingAll = true;
-		try {
-			const results = await Promise.allSettled(
-				ids.map((id) => autonomousApi.readNotification(id))
-			);
-			const succeeded = ids.filter((_, i) => results[i].status === 'fulfilled');
-			state = afterMarkAllRead(state, succeeded);
-			// The unread total may exceed the visible page — resync with the server.
-			await refresh();
-		} finally {
-			markingAll = false;
-		}
+	function handleMarkAllRead(): void {
+		triggerEl?.focus();
+		void bell.markShownRead();
+	}
+
+	function handleRetry(): void {
+		// The retry control disappears after success; retain disclosure focus.
+		triggerEl?.focus();
+		void bell.refresh();
 	}
 
 	function formatDate(iso: string): string {
@@ -146,7 +102,12 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<div class="bell" bind:this={rootEl} on:focusout={handleFocusout} data-testid="lq-ai-notification-bell">
+<div
+	class="bell"
+	bind:this={rootEl}
+	on:focusout={handleFocusout}
+	data-testid="lq-ai-notification-bell"
+>
 	<button
 		type="button"
 		class="trigger"
@@ -168,24 +129,35 @@
 		<div class="dropdown" data-testid="lq-ai-notification-bell-dropdown">
 			<div class="dropdown-header">
 				<span class="dropdown-title">Notifications</span>
-				{#if state.items.length > 0}
+				{#if $bell.items.length > 0}
 					<button
 						type="button"
 						class="mark-all"
 						on:click={handleMarkAllRead}
-						disabled={markingAll}
-						aria-label="Mark all notifications as read"
+						disabled={$bell.markingAll || $bell.pendingIds.size > 0}
+						aria-label="Mark shown notifications as read"
 					>
-						{markingAll ? 'Marking…' : 'Mark all read'}
+						{$bell.markingAll ? 'Marking…' : 'Mark shown read'}
 					</button>
 				{/if}
 			</div>
 
-			{#if state.items.length === 0}
+			{#if $bell.status === 'error'}
+				<p class="empty" role="status">
+					Notifications unavailable. <button type="button" on:click={handleRetry}>Retry</button>
+				</p>
+			{/if}
+			{#if $bell.actionError}
+				<p class="empty" role="alert">{$bell.actionError}</p>
+			{/if}
+			{#if $bell.status === 'loading' && $bell.items.length === 0}
+				<p class="empty" role="status">Loading notifications…</p>
+			{:else if $bell.status === 'ready' && $bell.items.length === 0}
 				<p class="empty">No unread notifications.</p>
-			{:else}
+			{/if}
+			{#if $bell.items.length > 0}
 				<ul class="items" aria-label="Unread notifications">
-					{#each state.items as notification (notification.id)}
+					{#each $bell.items as notification (notification.id)}
 						<li class="item">
 							<div class="item-body">
 								<div class="item-header-row">
@@ -204,10 +176,10 @@
 								type="button"
 								class="mark-read"
 								on:click={() => handleMarkRead(notification.id)}
-								disabled={pendingIds.has(notification.id) || markingAll}
+								disabled={$bell.pendingIds.has(notification.id) || $bell.markingAll}
 								aria-label={`Mark "${notification.title}" as read`}
 							>
-								{pendingIds.has(notification.id) ? 'Marking…' : 'Mark read'}
+								{$bell.pendingIds.has(notification.id) ? 'Marking…' : 'Mark read'}
 							</button>
 						</li>
 					{/each}
@@ -278,7 +250,8 @@
 		top: 100%;
 		margin-top: var(--lq-space-1);
 		width: 340px;
-		max-width: 90vw;
+		/* Reserve the shell's trailing Settings control and page padding on phones. */
+		max-width: calc(100vw - 5 * var(--lq-space-4));
 		background: var(--lq-canvas, #ffffff);
 		border: 1px solid var(--lq-border, #e5e7eb);
 		border-radius: var(--lq-radius, 6px);
@@ -288,6 +261,7 @@
 
 	.dropdown-header {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--lq-space-3);
