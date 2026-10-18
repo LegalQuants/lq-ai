@@ -8111,14 +8111,14 @@ components:
         rows (``tabular_cell_citations``): for each grounded cell whose
         extracted value was deterministically located in a cited chunk's
         canonical text, one row per (cell, chunk) hit. On
-        GET and cancel responses for an execution stamped ``m3-c2-v2``
+        GET, cancel and export responses for an execution stamped ``m3-c2-v2``
         serve minted rows as the cell's citations, even when none were minted — ``citation_id`` is
         the real row id and the offset fields are populated. Legacy
         ``m3-c2-v1`` executions keep the bridge; persisted version, not
         minted-row presence, selects this fallback: a deterministic
         display-only ``citation_id = uuid5(NS, chunk_id)`` with ``null``
-        offset fields. The export path always renders bridge ids
-        (export shape unchanged by DE-309).
+        offset fields. CSV citation links and XLSX comments use the same
+        minted citation ids; unlocated cells have no export citation.
 
         The ``source_file_id`` / ``source_page`` / ``source_text``
         navigation fields are enriched at read time on
