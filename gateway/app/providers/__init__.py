@@ -28,6 +28,7 @@ from app.providers.base import (
     ProviderTimeoutError,
     ProviderUnsupportedError,
 )
+from app.providers.bedrock import BedrockAdapter
 from app.providers.ollama import OllamaAdapter, ProviderModelNotFound
 from app.providers.openai import OpenAIAdapter
 from app.providers.openai_schema import (
@@ -49,6 +50,7 @@ from app.providers.openai_schema import (
 __all__ = [
     "AnthropicAdapter",
     "AzureOpenAIAdapter",
+    "BedrockAdapter",
     "ChatCompletionChoice",
     "ChatCompletionChunk",
     "ChatCompletionChunkChoice",

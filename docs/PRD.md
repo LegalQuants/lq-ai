@@ -2463,6 +2463,43 @@ Hand-rolled implementation needs: `cryptography` for RSA signing (already a gate
 
 #### DE-035 — AWS Bedrock provider adapter (Anthropic on Bedrock)
 
+**Updated scope (maintainer-directed 2026-10-17):** implement the three
+compatible APIs — Anthropic Messages, OpenAI Chat Completions and OpenAI
+Responses — through the existing gateway provider abstraction. Each
+`type: bedrock` entry explicitly selects `bedrock_protocol` and a validated
+AWS protocol base URL; runtime is the default endpoint family, with explicit
+Mantle selection for required model/capability support. API keys use the
+existing encrypted/runtime/env resolver. Messages/OpenAI translation is
+reused; Responses is stateless (`store=false`, `background=false`) with
+complete function-call/result history and streaming arguments. ADR 0027's
+timeout/error classification remains binding.
+
+**Status:** replacement implementation present; **live AWS verification and
+application acceptance against AWS deferred beyond PR #744 / 0.9.1** by
+maintainer direction on 2026-10-17. This is not a claim that every model,
+region or endpoint/protocol pair is supported. No SDK dependency or new
+public inference endpoint is introduced. Embeddings, SigV4/STS refresh,
+server-side tools, background jobs and remote stored sessions remain out of
+scope for this initial compatible-API implementation.
+
+**0.9.1 acceptance:** mocked gateway HTTP unary/streaming function-call/result
+round trips for all three protocols and endpoint families; key lifecycle,
+error/timeout and stateless Responses regressions; current CI and security
+review. Live account/model access, actual AWS protocol calls and full
+application acceptance against AWS move to follow-up work and do not block
+this PR/release. They remain unverified: mocked tests, skipped provider tests
+and entitlement errors must not be described as live verification.
+
+**Credit:** Jason Lee / @dropthejase's [PR #265](https://github.com/LegalQuants/lq-ai/pull/265)
+provided the original three-protocol design and translation/test examples.
+See [replacement design](proposals/bedrock-compatible-provider.md) and
+[release acceptance and deferred AWS verification](bedrock-verification.md).
+
+**Deferred original InvokeModel/SigV4 design (not implemented):** the
+historical specification below remains source material for a separately
+scoped IAM/STS implementation; its transport-specific acceptance criteria
+are not claims about the compatible-API implementation above.
+
 **Priority:** P1 · **Effort:** M
 
 **Context:** PRD §4 calls for Bedrock support as one of the v1 providers. M1 ships the Anthropic, OpenAI, and Ollama adapters; the Bedrock adapter is the Tier-3 path for operators who want Anthropic-quality models routed through their own AWS account under their existing AWS DPA, with no third-party processor introduced.
@@ -4860,7 +4897,9 @@ migration alone does not authorize orchestration or helper enablement.
 
 **Specific scope:** Add a bell + unread-count indicator to the global `/lq-ai` shell chrome that derives the autonomous unread count (reusing `GET /autonomous/notifications?unread=true`), opens a recent-items dropdown, and links into the rail Notifications page. Gate its visibility on `autonomous_enabled`. Reconcile with the §3.15 Slack/Teams bridge webhook channel (DE-312) so the surfaces don't duplicate.
 
-**When to ship:** A later cross-cutting chrome pass; deferred from C2 to keep that task contained.
+**Implementation (0.9.1 candidate, acceptance pending):** The `/lq-ai` shell mounts the bell only after a successful preference response confirms the current signed-in user's autonomous opt-in. Cached flags alone never enable it. The badge uses the server unread total (visually capped at `99+`); the dropdown shows the newest ten unread items, offers per-item and **Mark shown read** actions, and links to the Notifications page. Lists refresh on navigation, opening and completed read actions; superseded responses are ignored. Failed reads stay retryable, and loading/unavailable states are distinct from a confirmed empty inbox. There is no polling or new delivery channel; existing email/webhook delivery is unchanged.
+
+**Acceptance:** Pending checks of stale/failed preference loads, session changes, delayed responses, off-page unread counts, partial failures, keyboard/focus and phone/desktop light/dark layouts. This entry does not yet claim the feature is shipped.
 
 ---
 
