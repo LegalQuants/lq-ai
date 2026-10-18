@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -227,7 +228,7 @@ class _StubGateway:
     ) -> _StubResponse:
         if getattr(request, "lq_ai_purpose", None) == "judge_paraphrase":
             self.judge_calls += 1
-            payload = _JUDGE_PAYLOAD
+            payload: Mapping[str, object] = _JUDGE_PAYLOAD
         else:
             self.extraction_calls += 1
             payload = _EXTRACTION_PAYLOAD
@@ -523,7 +524,7 @@ async def test_paid_failure_charge_halts_later_ensemble(
     assert response.results.ensemble_halted_at_ceiling is True
     assert response.results.ensemble_halted_cells == 2
     assert response.results.rows[0].cells["C0"].tier_used == 3
-    assert Decimal(response.results.rows[0].cells["C0"].cost_usd) == Decimal("0.03")
+    assert response.results.rows[0].cells["C0"].cost_usd == Decimal("0.03")
 
 
 @pytest.mark.integration
