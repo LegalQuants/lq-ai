@@ -93,3 +93,28 @@ def test_execution_results_ref_is_nullable_in_openapi_31() -> None:
 
 def test_results_wire_contract_does_not_expose_persisted_vintage() -> None:
     assert "schema_version" not in _components()["TabularResults"]["properties"]
+
+
+@pytest.mark.parametrize("vintage", ["m3-c2-v1", "m3-c2-v2"])
+def test_older_results_default_halt_metadata_without_exposing_vintage(vintage: str) -> None:
+    results = TabularResults.model_validate({"schema_version": vintage, "rows": []})
+    wire = results.model_dump(mode="json")
+    assert wire["ensemble_halted_at_ceiling"] is False
+    assert wire["ensemble_halted_cells"] == 0
+    assert "schema_version" not in wire
+    documented = _components()["TabularResults"]
+    for field, default in [
+        ("ensemble_halted_at_ceiling", False),
+        ("ensemble_halted_cells", 0),
+    ]:
+        assert field not in documented["required"]
+        assert documented["properties"][field]["default"] == default
+
+
+def test_halted_results_serialize_halt_metadata() -> None:
+    results = TabularResults.model_validate(
+        {"rows": [], "ensemble_halted_at_ceiling": True, "ensemble_halted_cells": 2}
+    )
+    wire = results.model_dump(mode="json")
+    assert wire["ensemble_halted_at_ceiling"] is True
+    assert wire["ensemble_halted_cells"] == 2

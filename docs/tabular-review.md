@@ -2,7 +2,7 @@
 
 Tabular Review runs the same per-position extraction over **many documents at once** and lays the answers out in a grid: one row per document, one column per question. It is the "compare these N agreements on these M points" surface — the multi-document complement to the single-document Playbook engine ([docs/playbooks.md](playbooks.md)).
 
-This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes the grid, LangGraph workflow and XLSX/CSV export, plus navigable source resolution (#125), per-column ensemble verification (#127) and executor-minted positional provenance (DE-309, #420). Per-cell cost/tier telemetry (DE-310) and typed generated-client results (DE-330) remain deferred. Bulk operations have their own [ADR 0040](adr/0040-tabular-bulk-operations.md) implementation.
+This document is the implementation companion to [PRD §3.14](PRD.md#314-tabular--multi-document-review-m3). It describes the grid, LangGraph workflow and XLSX/CSV export, navigable source resolution (#125), per-column ensemble verification (#127), executor-minted positional provenance (DE-309, #420), per-cell cost/tier telemetry (DE-310), typed API results (DE-330), and the estimated ensemble backstop (DE-331). Bulk operations have their own [ADR 0040](adr/0040-tabular-bulk-operations.md) implementation.
 
 ---
 
@@ -27,7 +27,7 @@ The executor (`api/app/tabular/executor.py`) is a three-node LangGraph graph run
 
 1. **`load_documents_node`** — resolves `document_ids` to `Document` rows in the operator's selection order (missing / soft-deleted documents are skipped silently; the row is preserved as audit but the result set is honest about which sources resolved). It joins the parent `File` so each row's display name is the operator-uploaded filename, not the document UUID.
 2. **`extract_cells_node`** — for each `(document, column)` pair: runs a lexical full-text search (FTS) over that document's `document_chunks` using the column's `query` as keyword input (top-K = 4 chunks; falls back to the first N chunks when FTS yields nothing, so the LLM still sees document content), then dispatches one structured-output LLM call. The model returns `{value, cited_chunk_indices, confidence, justification}`; the node maps `cited_chunk_indices` → `cited_chunk_ids` against the retrieved chunks. Every cell is wrapped in its own try/except: any failure (no chunks retrieved, gateway error, malformed response, empty value) lands as `confidence='failed'` with a populated `error` (Decision C-10) rather than aborting the run. Dispatch is sequential in v0.3.0; per-cell parallelism is a follow-on if the 2,000-cell latency forces it.
-3. **`aggregate_node`** — groups per-cell results by document into the `results` JSONB and flips status to `completed` (or `failed` if a prior node set `state['error']`). It writes `cost_actual_usd` as the sum of per-cell costs — which is currently always 0 (see [Per-cell cost & tier](#per-cell-cost--tier-telemetry)).
+3. **`aggregate_node`** — groups per-cell results by document into the `results` JSONB and flips status to `completed` (or `failed` if a prior node set `state['error']`). It writes `cost_actual_usd` as the sum of reported per-cell extraction costs, including known charges from unusable received responses (see [Per-cell cost & tier](#per-cell-cost--tier-telemetry)).
 
 Retrieval is **lexical FTS, not vector search** — the column query is treated as keyword input over the document's chunks. This is a deliberate v0.3.0 choice: it needs no embedding pre-pass and keeps each cell's context small. It also means a column query whose wording diverges from the contract's vocabulary may retrieve weaker chunks; the FTS-falls-back-to-first-N behavior keeps the cell from failing outright, but the operator should treat low-confidence cells accordingly.
 
@@ -49,7 +49,15 @@ A column's `ensemble_verification` flag is **honored at execution**. The executo
 
 When a column resolves to ensemble-on and a cell has grounding chunks, `extract_cell` runs **one** Stage-4 ensemble verify pass (`_verify_cell_ensemble`, `api/app/tabular/nodes.py`) over the concatenation of that cell's cited chunks: the extracted `value` is the claim, the cited chunk text is the source. Stages 1–2 usually miss (a short value rarely equals the long concatenation) so Stage 4 fires — but a near-verbatim single-chunk value can legitimately hit `exact_match`/`tolerant_match` instead, which is a *stronger* verification, not an error. The pass is defensively wrapped: a verification failure (or any exception) degrades to `verification_method = None` and **never** fails the cell or alters its `value`/`confidence`/`citations`.
 
-The resulting `verification_method` — `ensemble_strict`, `ensemble_majority`, or `None` — persists on each cell and is **mirrored onto each synthesized `Citation`** by the read-side validator. Cost preview reflects the premium: `ensemble_cells_count` (= `n_docs × count-of-ensemble-columns`) and `ensemble_premium_usd` are added to the preview response, and the premium is included in `estimated_cost_usd` (`api/app/tabular/cost.py`). There is **no** mid-run / per-cell cost ceiling on the tabular ensemble path the way the chat path has one — that is deferred as **[DE-331](PRD.md#9-deferred-enhancements-and-identified-future-work)**; the pre-flight preview + the operator's `confirmed_cost_usd` ceiling are the only economic guard.
+The resulting `verification_method` — `ensemble_strict`, `ensemble_majority`, or `None` — persists on each cell. Cost preview reflects the premium: `ensemble_cells_count` (= `n_docs × count-of-ensemble-columns`) and `ensemble_premium_usd` are added to the preview response, and the premium is included in `estimated_cost_usd` (`api/app/tabular/cost.py`).
+
+### Estimated ensemble cost backstop (DE-331)
+
+Before dispatching each ensemble-eligible cell, the executor compares reported extraction spend so far plus estimates for previously granted ensemble passes and the next pass against the confirmed estimate. A projection exactly equal to the estimate is allowed. Once a projection exceeds it, ensemble verification is skipped for all remaining eligible cells; extraction continues and individual extraction failures remain visible. Known charges from received responses count even when parsing fails.
+
+The estimate for a granted pass is reserved even when that cell later fails extraction and never reaches a judge. The current cell's extraction charge is unknown at dispatch time, and actual judge charges are not returned by the verification cascade. This is an **estimated ensemble backstop**, not a cap on the final bill. Runs without a confirmed estimate apply no backstop.
+
+Results expose optional, defaulted `ensemble_halted_at_ceiling` (false) and `ensemble_halted_cells` (zero). The result view displays the halt reason, skipped count and billing limitation. Older persisted results keep their prior behavior; the provenance version remains `m3-c2-v2` and is not exposed on the wire.
 
 ---
 
@@ -62,6 +70,8 @@ The `results` JSONB (validated by `app.schemas.tabular.TabularResults`) is:
 ```jsonc
 {
   "schema_version": "m3-c2-v2",
+  "ensemble_halted_at_ceiling": false,
+  "ensemble_halted_cells": 0,
   "rows": [
     {
       "document_id": "<uuid>",

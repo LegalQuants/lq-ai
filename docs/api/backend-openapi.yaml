@@ -8016,8 +8016,21 @@ components:
         typed wire projection of ``tabular_executions.results``. The
         persisted JSONB is versioned via a ``schema_version`` key
         (currently ``m3-c2-v2``; legacy executions retain ``m3-c2-v1``); that key stays in the JSONB and is
-        NOT serialized on responses — the wire shape is rows-only.
+        NOT serialized on responses. The wire shape includes rows and defaulted ensemble-halt metadata.
       properties:
+        ensemble_halted_at_ceiling:
+          type: boolean
+          default: false
+          description: >-
+            Ensemble verification stopped when the projected spend exceeded
+            the confirmed estimate. Extraction continued. This is an
+            estimated backstop; final charges may exceed the estimate.
+        ensemble_halted_cells:
+          type: integer
+          default: 0
+          description: >-
+            Number of ensemble-eligible cells skipped after the backstop
+            halted verification. Zero for older results or runs without a halt.
         rows:
           type: array
           items: {$ref: '#/components/schemas/TabularRow'}
@@ -8085,7 +8098,8 @@ components:
             Per-cell cost (DE-310), serialized as a JSON string to
             preserve decimal precision. Reported extraction costs sum to the
             parent execution's ``cost_actual_usd``; unknown costs contribute
-            zero, and ensemble-judge/failed-response spend may be absent.
+            zero. Known charges on received responses survive parsing failures;
+            unreported charges and ensemble-judge spend may be absent.
         error:
           type: [string, 'null']
           description: |

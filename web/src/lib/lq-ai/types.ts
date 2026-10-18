@@ -1239,6 +1239,10 @@ export interface TabularRow {
  */
 export interface TabularResults {
 	rows: TabularRow[];
+	/** Absent on older results; defaults to false. Estimated backstop only. */
+	ensemble_halted_at_ceiling?: boolean;
+	/** Absent on older results; defaults to zero. */
+	ensemble_halted_cells?: number;
 }
 
 /**

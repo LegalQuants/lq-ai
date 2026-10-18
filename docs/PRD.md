@@ -4995,6 +4995,8 @@ without remounting the workspace. Regression coverage lives in the Matter route'
 
 #### DE-331 — Mid-run ensemble verification cost ceiling for Tabular Review
 
+**Implementation (#423):** the executor applies an estimated ensemble backstop using reported extraction charges plus granted-pass estimates and the next pass estimate. Known paid-response parsing failures count through DE-310 telemetry. A strict `>` comparison permits the exact boundary; a halt skips later ensemble passes while extraction continues. Defaulted result fields and a visible result-view notice explain the skipped count and that final charges may exceed the estimate. Executor regressions cover charged failures, successful charges, unknown costs and the exact boundary. The existing `m3-c2-v2` provenance contract is retained.
+
 **Priority:** P3 · **Effort:** M
 
 **Context:** Tabular ensemble verification (Donna #6) runs one Stage-4 ensemble `verify()` pass per cell when a column's effective `ensemble_verification` flag is true, fanning out N parallel judge calls per cell across the up-to-200×10 cell grid. Unlike the chat-send path — which runs a per-message cost pre-flight (`_resolve_ensemble_config` in `api/app/api/chats.py`) and falls back to a single judge when the estimate exceeds `citation_engine.ensemble_verification.max_cost_per_message_usd` — the tabular executor has no mid-run cost ceiling. Cost is instead gated up-front: `POST /api/v1/tabular/preview-cost` surfaces the ensemble premium and the operator confirms `confirmed_cost_usd` before kickoff (Decision C-5). That up-front gate is sufficient for the v1 acceptance, but a long run whose live judge costs drift above the estimate will not self-throttle the way chat does.

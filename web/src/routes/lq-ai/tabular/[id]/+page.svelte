@@ -17,6 +17,7 @@
 	import { flattenSkillInputs } from '$lib/lq-ai/chat/skillInputs';
 	import type { SkillSummary, SkillInputDef } from '$lib/lq-ai/types';
 	import TabularGrid from '$lib/lq-ai/components/TabularGrid.svelte';
+	import TabularEnsembleHaltNotice from '$lib/lq-ai/components/TabularEnsembleHaltNotice.svelte';
 	import TabularCitationModal from '$lib/lq-ai/components/TabularCitationModal.svelte';
 	import type {
 		TabularBulkOpKind,
@@ -398,6 +399,7 @@
 					<span class="lq-tabres__progress-text">{formatProgress(fraction)}</span>
 				</div>
 			{/if}
+			<TabularEnsembleHaltNotice results={execution.results} />
 			{#if execution.error_text}
 				<pre
 					class="lq-tabres__banner-error"
