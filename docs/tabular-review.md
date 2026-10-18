@@ -150,7 +150,7 @@ DE-310 (#421) propagates the gateway's `routed_inference_tier` and `cost_estimat
 ## Known limitations
 
 - **Positional provenance is verbatim-only.** A paraphrased value that cannot be located mints no row. New-vintage GET/cancel responses and exports expose no citations for that cell; only genuine legacy executions retain synthetic bridge ids. See [Citations](#citations-how-the-cell-grounding-is-surfaced).
-- **Cost totals include reported extraction costs only.** Missing annotations remain null per cell and contribute zero to the aggregate; failed-response and ensemble-judge spend may be absent. [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
+- **Cost totals include reported extraction costs only.** Missing annotations remain null per cell and contribute zero to the stored aggregate. The result page says "Extraction cost not reported" when no cell has a reported cost and marks known subtotals as partial when other costs are missing. A reported zero remains distinguishable from unknown cost. Failed-response and ensemble-judge spend may be absent. [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
 - **Bulk-operation scope is bounded.** The current DE-304 implementation supports selected-row redline reports and single-column summaries; its retained work-product and execution rules are documented in [ADR 0040](adr/0040-tabular-bulk-operations.md).
 - **Lexical FTS retrieval, not vector.** A column query whose vocabulary diverges from the contract's wording may retrieve weaker chunks; low-confidence cells should be treated with corresponding skepticism.
 - **Sequential cell dispatch.** No per-cell parallelism in v0.3.0; large grids (toward the 200 × 10 ceiling) run cell-by-cell.

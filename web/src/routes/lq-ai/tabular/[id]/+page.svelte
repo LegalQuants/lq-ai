@@ -29,6 +29,7 @@
 		isTerminalStatus,
 		progressFraction,
 		formatProgress,
+		formatReportedExtractionCost,
 		bulkOpKindLabel,
 		bulkOpStatusSummary,
 		bulkOpItemHeading,
@@ -373,7 +374,11 @@
 				{/if}
 				{#if execution.status === 'completed'}
 					<span class="lq-tabres__banner-cost" data-testid="lq-tabres-cost">
-						{formatCostUsd(execution.cost_actual_usd)} actual
+						{formatReportedExtractionCost(
+							execution.results,
+							execution.cost_actual_usd,
+							docCount * colCount
+						)}
 						{#if execution.cost_estimate_usd}
 							(est. {formatCostUsd(execution.cost_estimate_usd)})
 						{/if}

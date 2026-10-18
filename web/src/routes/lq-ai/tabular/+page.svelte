@@ -106,7 +106,12 @@
 				<tr>
 					<th scope="col">Skill</th>
 					<th scope="col" class="lq-tabular-table__compact">Scope</th>
-					<th scope="col" class="lq-tabular-table__compact">Cost</th>
+					<th
+						scope="col"
+						class="lq-tabular-table__compact"
+						title="Recorded extraction costs only; unreported costs are excluded. Open a result for cost availability."
+						>Reported sum / estimate</th
+					>
 					<th scope="col" class="lq-tabular-table__compact">Status</th>
 					<th scope="col" class="lq-tabular-table__compact">Created</th>
 				</tr>

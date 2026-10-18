@@ -12,6 +12,7 @@ import {
 	isTerminalStatus,
 	progressFraction,
 	formatProgress,
+	formatReportedExtractionCost,
 	cellRenderState,
 	confidenceChipLabel,
 	bulkOpKindLabel,
@@ -34,6 +35,78 @@ function cell(over: Partial<TabularCellResult> = {}): TabularCellResult {
 		...over
 	};
 }
+
+describe('reported extraction cost wording', () => {
+	const grid = (...cells: TabularCellResult[]): TabularResults => ({
+		rows: [
+			{
+				document_id: 'd1',
+				document_name: 'sample',
+				cells: Object.fromEntries(cells.map((c, i) => [String(i), c]))
+			}
+		]
+	});
+	it('does not present an all-unknown aggregate zero as actual cost', () => {
+		expect(
+			formatReportedExtractionCost(
+				grid(cell({ cost_usd: null }), cell({ cost_usd: null })),
+				'0.0000',
+				2
+			)
+		).toBe('Extraction cost not reported');
+	});
+	it('distinguishes an explicitly reported zero from missing cost', () => {
+		expect(formatReportedExtractionCost(grid(cell({ cost_usd: '0' })), '0.0000', 1)).toBe(
+			'$0.00 reported extraction cost'
+		);
+	});
+	it('labels a known subtotal as partial when another cost is missing', () => {
+		expect(
+			formatReportedExtractionCost(
+				grid(cell({ cost_usd: '0.01' }), cell({ cost_usd: null })),
+				'0.0100',
+				2
+			)
+		).toBe('$0.01 reported extraction cost (partial)');
+	});
+	it('labels an incomplete grid as partial', () => {
+		expect(formatReportedExtractionCost(grid(cell()), '0.0050', 2)).toBe(
+			'$0.01 reported extraction cost (partial)'
+		);
+	});
+	it('does not treat a failed-cell zero placeholder as measured spend', () => {
+		expect(
+			formatReportedExtractionCost(
+				grid(cell({ confidence: 'failed', tier_used: null, cost_usd: '0' })),
+				'0',
+				1
+			)
+		).toBe('Extraction cost not reported');
+	});
+	it('shows a fully reported sum without claiming a complete billing total', () => {
+		expect(
+			formatReportedExtractionCost(
+				grid(cell({ cost_usd: '0.03' }), cell({ cost_usd: '0.02' })),
+				'0.05',
+				2
+			)
+		).toBe('$0.05 reported extraction cost');
+	});
+	it.each([null, '', 'not-a-cost'])('handles unavailable or invalid aggregate %j', (total) => {
+		expect(formatReportedExtractionCost(grid(cell()), total, 1)).toBe(
+			'Extraction cost not reported'
+		);
+	});
+	it('does not count missing or invalid cell telemetry as reported', () => {
+		expect(
+			formatReportedExtractionCost(
+				grid(cell({ cost_usd: undefined }), cell({ cost_usd: 'NaN' })),
+				'0',
+				2
+			)
+		).toBe('Extraction cost not reported');
+	});
+});
 
 describe('tabular result page-helpers', () => {
 	describe('TABULAR_POLL_INTERVAL_MS', () => {

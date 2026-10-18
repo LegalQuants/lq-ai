@@ -21,6 +21,28 @@ import type {
 	TabularExecutionStatus,
 	TabularResults
 } from '$lib/lq-ai/types';
+import { formatCostUsd } from '../page-helpers';
+
+/** A sum of reported extraction costs is not a complete billing total. */
+export function formatReportedExtractionCost(
+	results: TabularResults | null,
+	total: string | null,
+	expectedCells: number
+): string {
+	const cells = results?.rows.flatMap((row) => Object.values(row.cells)) ?? [];
+	const reported = cells.filter((cell) => {
+		if (cell.cost_usd == null || cell.cost_usd.trim() === '') return false;
+		const cost = Number(cell.cost_usd);
+		if (!Number.isFinite(cost) || cost < 0) return false;
+		// Pre-response failures use a zero placeholder without routing telemetry.
+		return !(cell.confidence === 'failed' && cell.tier_used == null && cost === 0);
+	});
+	if (!reported.length || total == null || total.trim() === '' || !Number.isFinite(Number(total))) {
+		return 'Extraction cost not reported';
+	}
+	const partial = reported.length < Math.max(expectedCells, cells.length);
+	return `${formatCostUsd(total)} reported extraction cost${partial ? ' (partial)' : ''}`;
+}
 
 export const TABULAR_POLL_INTERVAL_MS = 3000;
 
