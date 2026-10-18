@@ -29,6 +29,8 @@
 
 /// <reference types="cypress" />
 
+export {};
+
 const EXECUTION_ID = 'tex-1';
 const KB_ID = 'kb-1';
 const SKILL_NAME = 'contract-snapshot';
@@ -537,11 +539,13 @@ describe('M3-C3 — Tabular Review happy path', () => {
 		cy.get('[data-testid="lq-memo-source-coverage"]').should('contain', 'Gamma.pdf: Missing');
 		cy.get('[data-testid="lq-draft-markdown"] h2').should('have.text', 'Partial memo');
 		cy.get('[data-testid="lq-draft-markdown"] strong').should('have.text', 'Two');
-		cy.contains('Partial draft — incomplete').should('be.visible');
+		cy.get('.lq-bulkops__item').contains('Partial draft — incomplete').scrollIntoView();
+		cy.get('.lq-bulkops__item').contains('Partial draft — incomplete').should('be.visible');
 		cy.visit('/lq-ai/tabular/bulk-ops/memo-partial');
 		cy.wait('@savedMemo');
 		cy.get('[data-testid="lq-memo-source-coverage"]').should('contain', 'Gamma.pdf: Missing');
 		cy.get('[data-testid="lq-draft-markdown"] h2').should('have.text', 'Partial memo');
-		cy.contains('Partial draft — incomplete').should('be.visible');
+		cy.get('article').contains('Partial draft — incomplete').scrollIntoView();
+		cy.get('article').contains('Partial draft — incomplete').should('be.visible');
 	});
 });

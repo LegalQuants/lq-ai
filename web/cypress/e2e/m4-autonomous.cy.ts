@@ -1,7 +1,7 @@
 /**
  * M4-C2 — Autonomous Dashboard E2E.
  *
- * Five scenarios, all intercept-based (deterministic; no real seed data):
+ * Six scenarios, all intercept-based (deterministic; no real seed data):
  *
  *   1. Opt-in gating  — Autonomous tab absent when disabled; direct visit
  *                       to /lq-ai/autonomous redirects to settings.
@@ -14,6 +14,7 @@
  *                          endpoint and surfaces a success banner.
  *   5. Opt-out        — After disabling, the tab disappears and a direct
  *                       visit to /lq-ai/autonomous redirects back to settings.
+ *   6. Run now        — Select a skill, submit, then navigate to its receipt.
  *
  * Auth strategy: set lq_ai_auth in localStorage (token + user) before each
  * visit and intercept GET /api/v1/users/me so the layout gate passes. Also
@@ -27,6 +28,8 @@
 
 /// <reference types="cypress" />
 
+import { rejectUnexpectedApiRequests } from '../support/mocked-api';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -38,6 +41,8 @@ const PRECEDENT_ID = 'prec-0001-aaaa-bbbb';
 // The inherited OpenWebUI root needs a config response even on LQ.AI routes.
 // Keep this deterministic spec independent of a running backend.
 beforeEach(() => {
+	rejectUnexpectedApiRequests();
+	cy.intercept('GET', '**/api/version', { body: { version: 'test' } });
 	cy.intercept('GET', '**/api/config', {
 		statusCode: 200,
 		body: {
@@ -227,6 +232,13 @@ function interceptBaseRequests(autonomousEnabled: boolean): void {
 	);
 	cy.intercept('GET', '**/api/v1/teams**', { statusCode: 200, body: [] }).as('listTeams');
 	cy.intercept('GET', '**/api/v1/skills**', { statusCode: 200, body: [] }).as('listSkills');
+	cy.intercept('GET', '**/api/v1/playbooks**', { body: [] }).as('listPlaybooks');
+	cy.intercept('GET', '**/api/v1/knowledge-bases**', { body: [] }).as('listKbs');
+	// This is an operator-switch read, not a list of runs. It starts on
+	// autonomous page mount, including outside the Run-now scenario.
+	cy.intercept('GET', '**/api/v1/autonomous/orchestration/chat-runs', {
+		body: { enabled: false }
+	}).as('chatCapabilities');
 	// Autonomous sub-pages also hit notifications for the unread badge.
 	cy.intercept('GET', '**/api/v1/autonomous/notifications**', {
 		statusCode: 200,
@@ -392,6 +404,7 @@ describe('M4-C2 — Scenario 2: receipt view and halt', () => {
 		});
 
 		cy.wait('@listSessions');
+		cy.wait('@chatCapabilities').its('response.body.enabled').should('eq', false);
 
 		// The sessions table should render one row with the running session.
 		cy.contains('td', 'running').should('exist');
@@ -588,6 +601,7 @@ describe('M4-C2 — Scenario 6: Run now', () => {
 		cy.wait('@listSessions');
 
 		// Open the modal via the header button.
+		cy.wait('@chatCapabilities').its('response.body.enabled').should('eq', false);
 		cy.contains('button', 'Run now').click();
 
 		// Modal renders with its title.
@@ -633,7 +647,6 @@ describe('DE-324 — shell notification bell', () => {
 
 	beforeEach(() => {
 		// No request in these tests reaches a live API, provider or existing dev stack.
-		cy.intercept({ pathname: '/api/**' }, { statusCode: 200, body: {} });
 		cy.intercept('GET', '**/api/config', {
 			statusCode: 200,
 			body: {

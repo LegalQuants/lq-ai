@@ -15,14 +15,16 @@ Counts and CI facts below were verified on 2026-09-15 against `main` at `791309c
 | Backend (api) pytest | 238 | `api/tests/` (root 131 + `autonomous/` 51 + `integration/` 21 + `citation/` 21 + `tabular/` 7 + `models/` 3 + `chat/` 2 + `playbooks/` 2) | `find api/tests -name "test_*.py" \| wc -l` |
 | Gateway pytest | 74 | `gateway/tests/` (incl. `anonymization/` 7) | `find gateway/tests -name "test_*.py" \| wc -l` |
 | Web unit (Vitest) | 84 | `web/src/` (74 in `lib/lq-ai`, 9 in `routes/lq-ai`, 1 in `lib/`) | `find web/src -name "*.test.ts" \| wc -l` |
-| Web E2E (Cypress) | 13 spec files, all LQ.AI-authored | `web/cypress/e2e/` | `ls web/cypress/e2e/*.cy.ts \| wc -l` |
+| Web E2E (Cypress) | 18 checked-in specs: 13 deterministic, 3 opt-in LLM, 2 explicitly excluded | `web/cypress/e2e/` | `ls web/cypress/e2e/*.cy.ts \| wc -l` |
 | Cross-cutting contract | 2 | `tests/` (`test_error_code_contract.py`, `test_observability.py`) | `ls tests/test_*.py` |
 | Slack bridge pytest | 3 | `slack-bridge/tests/` (`test_signing.py`, `test_oauth.py`, `test_config.py`) | `ls slack-bridge/tests/test_*.py` |
 | Teams bridge pytest | 2 | `teams-bridge/tests/` (`test_oauth.py`, `test_config.py`) | `ls teams-bridge/tests/test_*.py` |
 | Word add-in (Vitest) | 2 | `word-addin/src/taskpane/__tests__/` (`auth.test.ts`, `version.test.ts`) | `ls word-addin/src/taskpane/__tests__/` |
 | Desktop launcher (Vitest) | 9 | `desktop/src/core/*.test.ts` + `desktop/src/main/orchestrator.test.ts` | `find desktop/src -name "*.test.ts" \| wc -l` |
 
-All 13 Cypress spec files are LQ.AI-authored (the `m2-*`/`m3-*`/`m4-*` and `wave-*` specs). The four specs inherited from upstream OpenWebUI (`chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts`) were removed with the OpenWebUI v0.11.0 rebase (#541).
+All 18 checked-in Cypress spec files are LQ.AI-authored (the `m2-*`/`m3-*`/`m4-*` and `wave-*` specs). The four specs inherited from upstream OpenWebUI (`chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts`) were removed with the OpenWebUI v0.11.0 rebase (#541).
+
+The current Cypress inventory is validated on every config load by `web/cypress/spec-tracks.ts`; `cd web && npm run cy:inventory` prints the exact tracks and exclusion reasons. The nonexistent `lq-ai-orchestration-demo.cy.ts` entry was removed; this does not close the governed-runs browser coverage gap below. The provider-free community-skills installer is included. See [the Cypress track guide](../web/cypress/README.md). These Cypress counts were verified on 18 October 2026; older subsystem counts above retain their dated scope.
 
 The E2E tool is **Cypress**, not Playwright. The `e2e` pytest marker text in `api/pyproject.toml` ("end-to-end tests via Playwright") predates that reality; no Playwright tests exist in the repository.
 
@@ -40,6 +42,8 @@ Read the workflows yourself: [.github/workflows/ci.yml](../.github/workflows/ci.
 - **Release image (skills corpus):** `./scripts/release-image-check.sh` on a recursive checkout — builds only the `skills` stage of `api/Dockerfile.release` and asserts the community skill manifests are baked in; runs no test suites.
 
 **`stack-smoke.yml`** — on dependency-manifest/Dockerfile/migration PR paths, pushes to `main`, and manual dispatch. Runs `scripts/stack-smoke.sh`: builds every default-profile compose image, boots the stack to healthy (api boot runs `alembic upgrade head`), probes health endpoints and lazily-imported deps, soaks, asserts no restarts. It proves "builds, migrates, boots, and holds" — **not** that features work.
+
+**`e2e.yml`** — scheduled nightly and manual dispatch: builds/boots an isolated Compose stack in CI, seeds the admin fixture, and runs the default 13-spec deterministic Cypress track without provider keys. Selection and inventory validation live in `web/cypress/spec-tracks.ts`; direct local Cypress runs use the same selection. General per-PR rollout remains #706; this repair does not change workflow triggers.
 
 **`desktop-release.yml`** — only on `desktop-v*` tag push or manual dispatch: runs the desktop Vitest suite + typecheck before building the .dmg.
 
@@ -146,7 +150,7 @@ Known non-deterministic tests. A flake stays listed until the fix merges with a 
 
 | Gap | Impact | Closed by |
 |---|---|---|
-| Cypress not in CI | the 13 E2E specs only run when someone runs them | roadmap 4.2 |
+| General Cypress E2E not on PRs | the deterministic track runs nightly/manually; changes still need local evidence before merge | #706 (per-PR rollout); image caching remains separate |
 | No coverage measurement/gate | the 80% api / 90% gateway targets are aspirational; no floor is enforced | roadmap 4.3 (ratchet from measured floor) |
 | Bridge, word-addin, and cross-cutting `tests/` suites not in any workflow | regressions in those packages land silently | fold into 4.2/4.3 wiring |
 | No mutation / property-based / full accessibility audit / contract / chaos / perf testing | see the engineering-discipline roadmap | 4.4–4.9, DE-229/230/231/232, DE-250/251/252/253 |

@@ -26,6 +26,8 @@
 
 /// <reference types="cypress" />
 
+import { rejectUnexpectedApiRequests } from '../support/mocked-api';
+
 const SHA = 'abc123def4567890abc123def4567890abc123de';
 const TEAM_ID = '00000000-0000-4000-8000-000000000001';
 const CONTENT_HASH = 'a'.repeat(64);
@@ -141,6 +143,8 @@ function setAuthStorage(win: Window): void {
 }
 
 function interceptBaseRequests(): void {
+	rejectUnexpectedApiRequests();
+	cy.intercept('GET', '**/api/version', { body: { version: 'test' } });
 	cy.intercept('GET', '**/api/v1/users/me', { statusCode: 200, body: mockUser }).as('getMe');
 	cy.intercept('GET', '**/api/v1/admin/bootstrap-status', {
 		statusCode: 200,
