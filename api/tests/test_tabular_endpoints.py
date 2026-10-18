@@ -16,6 +16,8 @@ with no migration / backfill / re-run.
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from collections.abc import AsyncIterator, Callable
 from decimal import Decimal
@@ -24,6 +26,7 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.cost import invalidate_cache as invalidate_judge_cache
@@ -150,6 +153,81 @@ async def _insert_execution(
     db.add(execution)
     await db.flush()
     return execution
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("format", ["csv", "xlsx"])
+@pytest.mark.parametrize("case", ["zero", "mixed", "grounded", "legacy"])
+async def test_export_citations_match_get_provenance(
+    client: AsyncClient, db_session: AsyncSession, format: str, case: str
+) -> None:
+    """Exports preserve real ids and empty cells, while genuine legacy rows keep bridges."""
+    user = await _make_user(db_session)
+    content = "Term: five (5) years. Law: the State of Delaware. Notice: ninety (90) days."
+    doc, chunk = await _make_doc_with_chunk(db_session, owner=user, content=content, page_start=1)
+    values = {"Term": "5 years", "Law": "the State of Delaware", "Notice": "90 days"}
+    grounded = {"Law"} if case == "mixed" else set(values) if case == "grounded" else set()
+    if case == "grounded":
+        values.update(Term="five (5) years", Notice="ninety (90) days")
+    cells = {
+        name: {"value": value, "cited_chunk_ids": [str(chunk.id)], "confidence": "high"}
+        for name, value in values.items()
+    }
+    execution = await _insert_execution(
+        db_session,
+        owner=user,
+        document_ids=[doc.id],
+        rows=[{"document_id": str(doc.id), "document_name": "sample.txt", "cells": cells}],
+        schema_version="m3-c2-v1" if case == "legacy" else "m3-c2-v2",
+    )
+    execution.columns = [{"name": name, "query": name} for name in values]
+    expected: dict[str, str] = {}
+    for name in grounded:
+        citation = TabularCellCitation(
+            execution_id=execution.id,
+            document_id=doc.id,
+            chunk_id=chunk.id,
+            column_name=name,
+            source_offset_start=content.index(values[name]),
+            source_offset_end=content.index(values[name]) + len(values[name]),
+            verification_method="exact_match",
+            verification_confidence=Decimal("1.00"),
+        )
+        db_session.add(citation)
+        await db_session.flush()
+        expected[name] = str(citation.id)
+    if case == "legacy":
+        bridge = str(uuid.uuid5(_TABULAR_CITATION_NAMESPACE, str(chunk.id)))
+        expected = dict.fromkeys(values, bridge)
+    await db_session.flush()
+    # Export first: a preceding GET must not be needed to repair provenance.
+    exported = await client.get(
+        f"/api/v1/tabular/executions/{execution.id}/export?format={format}", headers=_bearer(user)
+    )
+    assert exported.status_code == 200, exported.text
+    if format == "csv":
+        row = next(csv.DictReader(io.StringIO(exported.text)))
+        assert {name: row[name] for name in values} == values
+        assert row["citation_links"] == ";".join(
+            f"{name}:{expected[name]}" for name in values if name in expected
+        )
+    else:
+        sheet = load_workbook(io.BytesIO(exported.content)).active
+        assert sheet is not None
+        for index, (name, value) in enumerate(values.items(), start=2):
+            cell = sheet.cell(row=2, column=index)
+            assert cell.value == value
+            if name in expected:
+                assert cell.comment is not None
+                assert expected[name] in cell.comment.text
+            else:
+                assert cell.comment is None
+    fetched = await client.get(f"/api/v1/tabular/executions/{execution.id}", headers=_bearer(user))
+    assert fetched.status_code == 200
+    for name, cell in fetched.json()["results"]["rows"][0]["cells"].items():
+        assert [c["citation_id"] for c in cell["citations"]] == (
+            [expected[name]] if name in expected else []
+        )
 
 
 @pytest.mark.integration

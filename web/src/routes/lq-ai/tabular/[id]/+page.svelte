@@ -421,51 +421,60 @@
 					final work product.
 				</p>
 				<div class="lq-bulkops__form">
-					<label class="lq-bulkops__radio">
-						<input
-							type="radio"
-							name="bulk-op-kind"
-							value="redline_rows"
-							bind:group={bulkOpKind}
-							on:change={changeBulkOpKind}
-							data-testid="lq-bulkops-kind-redline"
-						/>
-						Draft revisions for a column
-					</label>
-					<label class="lq-bulkops__radio">
-						<input
-							type="radio"
-							name="bulk-op-kind"
-							value="summarize_column"
-							bind:group={bulkOpKind}
-							on:change={changeBulkOpKind}
-							data-testid="lq-bulkops-kind-summarize"
-						/>
-						Summarize a column
-					</label>
+					<fieldset class="lq-bulkops__kinds">
+						<legend>Operation</legend>
+						<label class="lq-bulkops__radio">
+							<input
+								type="radio"
+								name="bulk-op-kind"
+								value="redline_rows"
+								bind:group={bulkOpKind}
+								on:change={changeBulkOpKind}
+								data-testid="lq-bulkops-kind-redline"
+							/>
+							Draft revisions for a column
+						</label>
+						<label class="lq-bulkops__radio">
+							<input
+								type="radio"
+								name="bulk-op-kind"
+								value="summarize_column"
+								bind:group={bulkOpKind}
+								on:change={changeBulkOpKind}
+								data-testid="lq-bulkops-kind-summarize"
+							/>
+							Summarize a column
+						</label>
+					</fieldset>
 					{#if columnNames.length > 0}
+						<label class="lq-bulkops__field">
+							<span>Column</span>
+							<select
+								bind:value={bulkOpColumn}
+								on:change={resetBulkOpPreview}
+								data-testid="lq-bulkops-column"
+								aria-label="Column to process"
+							>
+								{#each columnNames as name}
+									<option value={name}>{name}</option>
+								{/each}
+							</select>
+						</label>
+					{/if}
+					<label class="lq-bulkops__field">
+						<span>Drafting skill</span>
 						<select
-							bind:value={bulkOpColumn}
-							on:change={resetBulkOpPreview}
-							data-testid="lq-bulkops-column"
-							aria-label="Column to process"
+							bind:value={bulkOpSkill}
+							on:change={loadBulkOpInputs}
+							aria-label="Drafting skill"
+							data-testid="lq-bulkops-skill"
 						>
-							{#each columnNames as name}
-								<option value={name}>{name}</option>
+							<option value="">Choose a drafting skill</option>
+							{#each eligibleBulkSkills as skill (skill.name)}
+								<option value={skill.name}>{skill.title} · {skill.version}</option>
 							{/each}
 						</select>
-					{/if}
-					<select
-						bind:value={bulkOpSkill}
-						on:change={loadBulkOpInputs}
-						aria-label="Drafting skill"
-						data-testid="lq-bulkops-skill"
-					>
-						<option value="">Choose a drafting skill</option>
-						{#each eligibleBulkSkills as skill (skill.name)}
-							<option value={skill.name}>{skill.title} · {skill.version}</option>
-						{/each}
-					</select>
+					</label>
 					<button
 						type="button"
 						class="lq-bulkops__btn"
@@ -725,18 +734,60 @@
 	}
 	.lq-bulkops h2 {
 		margin: 0;
-		font-size: 1.125rem;
+		font-size: 1rem;
+		font-weight: 600;
 	}
 	.lq-bulkops__hint {
 		margin: 0;
-		font-size: 0.8125rem;
+		font-size: 0.875rem;
 		color: var(--lq-text-secondary);
 	}
 	.lq-bulkops__form {
+		display: grid;
+		grid-template-columns: minmax(10rem, 1fr) minmax(14rem, 2fr) auto;
+		align-items: end;
+		gap: 1rem;
+		font-size: 0.875rem;
+		line-height: 1.5;
+	}
+	.lq-bulkops__kinds {
+		grid-column: 1 / -1;
 		display: flex;
-		align-items: center;
-		gap: 0.75rem;
 		flex-wrap: wrap;
+		gap: 0.75rem 1.25rem;
+		border: 0;
+		margin: 0;
+		padding: 0;
+	}
+	.lq-bulkops__kinds legend,
+	.lq-bulkops__field > span {
+		font-size: 0.8125rem;
+		color: var(--lq-text-secondary);
+	}
+	.lq-bulkops__kinds legend {
+		margin-bottom: 0.5rem;
+	}
+	.lq-bulkops__field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		min-width: 0;
+	}
+	.lq-bulkops__field select {
+		width: 100%;
+		min-height: 2.5rem;
+		padding: 0.5rem 2rem 0.5rem 0.75rem;
+		border: 1px solid var(--lq-border-strong);
+		border-radius: var(--lq-radius);
+		background-color: var(--lq-canvas);
+		color: var(--lq-text);
+		font: inherit;
+	}
+	.lq-bulkops__field select:focus-visible,
+	.lq-bulkops__btn:focus-visible,
+	.lq-bulkops__radio input:focus-visible {
+		outline: 2px solid var(--lq-accent);
+		outline-offset: 2px;
 	}
 	.lq-bulkops__radio {
 		display: inline-flex;
@@ -745,11 +796,14 @@
 		font-size: 0.875rem;
 	}
 	.lq-bulkops__btn {
-		padding: 0.375rem 0.75rem;
+		min-height: 2.5rem;
+		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--lq-border);
 		border-radius: 0.375rem;
-		background: var(--lq-surface);
-		font-size: 0.8125rem;
+		background: var(--lq-canvas);
+		color: var(--lq-text);
+		font: inherit;
+		font-size: 0.875rem;
 		cursor: pointer;
 	}
 	.lq-bulkops__btn:disabled {
@@ -815,5 +869,13 @@
 		font-weight: 600;
 		font-size: 0.75rem;
 		text-transform: uppercase;
+	}
+	@media (max-width: 640px) {
+		.lq-bulkops__form {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.lq-bulkops__kinds {
+			flex-direction: column;
+		}
 	}
 </style>

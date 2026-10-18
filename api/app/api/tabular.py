@@ -434,9 +434,7 @@ async def get_tabular_execution(
 
     row = await _load_caller_execution(db, execution_id=execution_id, user=user)
     response = await _to_response(db, row)
-    minted = await _load_minted_citations(db, execution_id=execution_id)
-    if _mints_cell_citations(row):
-        _apply_minted_citations(response, minted)
+    await _resolve_cell_citations(db, row, response.results)
     await _enrich_cell_citations(db, response)
     return response
 
@@ -512,9 +510,7 @@ async def cancel_tabular_execution(
     # minting-vintage execution's partial grid must not serve
     # uuid5-bridge citations for cells the locator never grounded.
     response = await _to_response(db, row)
-    minted = await _load_minted_citations(db, execution_id=execution_id)
-    if _mints_cell_citations(row):
-        _apply_minted_citations(response, minted)
+    await _resolve_cell_citations(db, row, response.results)
     await _enrich_cell_citations(db, response)
     return response
 
@@ -918,6 +914,7 @@ async def export_tabular_execution(
 
     columns = [ColumnSpec.model_validate(c) for c in (row.columns or [])]
     results = TabularResults.model_validate(row.results) if row.results else TabularResults(rows=[])
+    await _resolve_cell_citations(db, row, results)
 
     await audit_action(
         db,
@@ -1052,7 +1049,7 @@ def _build_xlsx_comment(citations: list[Citation]) -> object:
     for c in shown:
         cid = c.citation_id
         conf = c.confidence
-        lines.append(f"- {str(cid)[:8]} ({conf})")
+        lines.append(f"- {cid} ({conf})")
     if total > len(shown):
         lines.append(f"- ... and {total - len(shown)} more")
     return Comment("\n".join(lines), "LQ.AI")
@@ -1200,8 +1197,21 @@ async def _load_minted_citations(
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def _resolve_cell_citations(
+    db: AsyncSession, row: TabularExecution, results: TabularResults | None
+) -> None:
+    """Project provenance consistently for GET, cancellation and both export formats.
+
+    Only genuine legacy executions keep bridge ids. A minting-vintage
+    execution with zero located rows must clear every bridge citation.
+    """
+    if _mints_cell_citations(row):
+        minted = await _load_minted_citations(db, execution_id=row.id)
+        _apply_minted_citations(results, minted)
+
+
 def _apply_minted_citations(
-    response: TabularExecutionResponse,
+    results: TabularResults | None,
     minted: list[TabularCellCitation],
 ) -> None:
     """Replace bridge citations with the execution's minted rows (DE-309).
@@ -1216,14 +1226,14 @@ def _apply_minted_citations(
     the navigation fields from ``chunk_id`` exactly as before.
     """
 
-    if response.results is None:
+    if results is None:
         return
 
     by_cell: dict[tuple[uuid.UUID, str], list[TabularCellCitation]] = {}
     for row in minted:
         by_cell.setdefault((row.document_id, row.column_name), []).append(row)
 
-    for tab_row in response.results.rows:
+    for tab_row in results.rows:
         for column_name, cell in tab_row.cells.items():
             rows_for_cell = by_cell.get((tab_row.document_id, column_name), [])
             cell.citations = [

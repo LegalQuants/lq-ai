@@ -137,7 +137,7 @@ The confirmation modal is mandatory above a ~$1.00 threshold (Decision C-5).
 - **XLSX** — each grid cell with at least one citation carries an openpyxl `Comment` listing the citation ids + confidences (up to 5 per comment; the cell retains the full count). Operators hover any cell in Excel / Numbers / Google Sheets to see the sources.
 - **CSV** — a trailing `citation_links` column per row carries a semicolon-separated list of `"<column_name>:<citation_id>"` pairs across the row's cells; empty when no cell in the row had citations.
 
-Because export reads the grid through the same `TabularResults.model_validate` path as the API, it picks up the citation bridge described above — the `citation_links` column and XLSX comments carry the same synthetic citation ids. (The read-side `source_file_id`/`source_page`/`source_text` enrichment is applied by the `GET /tabular/executions/{id}` handler, not by `model_validate`, so the export surfaces the citation ids rather than the resolved source spans.)
+Exports use the same provenance resolver as GET and cancellation. For minting-vintage executions (`m3-c2-v2`), CSV citation links and XLSX comments contain the real minted citation IDs; unlocated cells have no citation, including executions that minted zero rows. Genuine legacy executions retain their display-only bridge IDs. XLSX comments retain full citation IDs. Source passages and highlights remain available in the result dialog.
 
 ---
 
@@ -149,7 +149,7 @@ Cells persist `tier_used: null` and `cost_usd: "0"`, and the execution's `cost_a
 
 ## Known limitations
 
-- **Positional provenance is verbatim-only.** A paraphrased value that cannot be located mints no row. New-vintage GET/cancel responses expose no citations for that cell; legacy executions and exports retain synthetic bridge ids. The results remain untyped in the generated client ([DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)). See [Citations](#citations-how-the-cell-grounding-is-surfaced).
+- **Positional provenance is verbatim-only.** A paraphrased value that cannot be located mints no row. New-vintage GET/cancel responses and exports expose no citations for that cell; only genuine legacy executions retain synthetic bridge ids. See [Citations](#citations-how-the-cell-grounding-is-surfaced).
 - **Per-cell `tier_used` + `cost_usd` are not captured** (always null / 0). [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).
 - **Bulk-operation scope is bounded.** The current DE-304 implementation supports selected-row redline reports and single-column summaries; its retained work-product and execution rules are documented in [ADR 0040](adr/0040-tabular-bulk-operations.md).
 - **Lexical FTS retrieval, not vector.** A column query whose vocabulary diverges from the contract's wording may retrieve weaker chunks; low-confidence cells should be treated with corresponding skepticism.

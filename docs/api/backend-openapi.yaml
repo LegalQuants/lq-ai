@@ -2988,6 +2988,11 @@ paths:
           semicolon-separated list of ``"<column_name>:<citation_id>"``
           pairs across the row's cells; empty when no cell had citations.
 
+        Executions stamped ``m3-c2-v2`` use the same minted citation IDs
+        as GET and cancellation; unlocated cells have no export citation.
+        Genuine legacy executions retain their display-only bridge IDs.
+        XLSX comments retain full citation IDs.
+
         The execution must be in ``status='completed'`` — pending /
         running / cancelled / failed rows return 409 (partial grids would
         mislead downstream consumers).

@@ -34,8 +34,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # migration (no minted rows): a stable, display-only
 # ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always maps to
 # the same id. Bridge citations carry NO offsets and are never resolvable
-# against the Citation Engine. The export path also still renders bridge
-# ids (export shape intentionally unchanged by DE-309).
+# against the Citation Engine. GET, cancellation and exports replace these
+# bridges with minted provenance for executions stamped m3-c2-v2.
 _TABULAR_CITATION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "tabular-citation.lq.ai")
 
 TabularExecutionStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
@@ -130,7 +130,7 @@ class Citation(BaseModel):
     # --- Offset-bearing provenance fields (DE-309) -------------------------
     # Populated only from minted ``tabular_cell_citations`` rows on
     # ``GET /tabular/executions/{id}``. ``None`` on bridge-fallback
-    # citations (pre-migration executions) and on the export path.
+    # citations (pre-migration executions).
     source_offset_start: int | None = None
     """Char offset (inclusive) of the located cell value inside the
     cited chunk's content (= this citation's ``source_text``)."""
@@ -212,7 +212,7 @@ class TabularRow(BaseModel):
         REPLACES these bridge citations for executions stamped
         ``m3-c2-v2``, including executions that minted no rows (the
         vintage check in ``app.api.tabular``). Legacy executions and
-        the export path keep bridge citations. Cells that already carry
+        their exports keep bridge citations. Cells that already carry
         ``citations`` pass through untouched.
         """
 

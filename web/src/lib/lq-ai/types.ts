@@ -1187,14 +1187,20 @@ export interface TabularColumnSpec {
 /**
  * Lightweight citation projection used inside `TabularCellResult`.
  * Distinct from the existing `Citation` interface above — the
- * grid-cell surface only needs the IDs + confidence to render the chip
- * and route a click to the existing M2-C2 citation drawer.
+ * Includes source passages and chunk-local offsets for the cell dialog.
  */
 export interface TabularCitation {
 	citation_id: string;
 	document_id: string;
 	chunk_id?: string | null;
 	confidence: TabularCellConfidence;
+	source_file_id?: string | null;
+	source_page?: number | null;
+	source_text?: string | null;
+	source_offset_start?: number | null;
+	source_offset_end?: number | null;
+	verification_method?: string | null;
+	verification_confidence?: number | null;
 }
 
 /**
