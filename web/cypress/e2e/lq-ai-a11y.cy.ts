@@ -6,7 +6,7 @@ import {
 	type Finding,
 	type Impact
 } from '../support/a11y-gate';
-import { states, viewports, themes } from '../support/a11y-states';
+import { states, viewports, savedThemePreferences } from '../support/a11y-states';
 
 const user = {
 	id: 'a11y-user',
@@ -83,19 +83,31 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 	});
 	return releaseActivity;
 }
+// The final inventory-key segment records the saved input preference only.
+// Assert the actual palette rather than treating a saved dark value as dark UI.
+function assertLightOnlyUI() {
+	cy.get('html')
+		.should('have.class', 'light')
+		.and('not.have.class', 'dark')
+		.and('not.have.class', 'oled-dark')
+		.and('not.have.class', 'her')
+		.and('have.css', 'color-scheme', 'light');
+	cy.get('meta[name="theme-color"]').should('have.attr', 'content', '#ffffff');
+}
+
 describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', () => {
 	for (const state of states)
 		for (const viewport of viewports)
-			for (const theme of themes) {
-				const id = `${state.id}/${viewport.id}/${theme}`;
-				it(id, () => {
+			for (const savedTheme of savedThemePreferences) {
+				const id = `${state.id}/${viewport.id}/${savedTheme}`;
+				it(`${state.id}/${viewport.id}/light UI (saved ${savedTheme})`, () => {
 					const releaseActivity = fixtures(state.id === 'dashboard', id === 'skills/desktop/light');
 					cy.viewport(viewport.width, viewport.height);
 					cy.visit(state.path, {
 						onBeforeLoad(win) {
 							win.localStorage.clear();
 							win.localStorage.setItem('locale', 'en-US');
-							win.localStorage.setItem('theme', theme);
+							win.localStorage.setItem('theme', savedTheme);
 							win.localStorage.setItem('token', 'synthetic-a11y-token');
 							if (state.id !== 'login')
 								win.localStorage.setItem(
@@ -116,6 +128,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					const bootstrapTimeout = { requestTimeout: 30000, responseTimeout: 30000 };
 					cy.wait(['@a11yConfig', '@a11ySession', '@a11yConfig'], bootstrapTimeout);
 					if (state.id !== 'login') cy.wait('@a11yUser', bootstrapTimeout);
+					assertLightOnlyUI();
 					if ('ready' in state) cy.get(state.ready, { timeout: 15000 }).should('be.visible');
 					if ('heading' in state)
 						cy.contains('h1,h2', state.heading, { timeout: 15000 }).should('be.visible');
@@ -163,6 +176,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					cy.document().then(async (doc) => {
 						await doc.fonts.ready;
 					});
+					assertLightOnlyUI();
 					if (Cypress.env('injectViolation') && id === 'login/desktop/light')
 						cy.document().then((doc) => {
 							const button = doc.createElement('button');
@@ -170,6 +184,9 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 							doc.querySelector('#lq-main')!.append(button);
 						});
 					cy.injectAxe();
+					cy.checkA11y('[data-testid="lq-ai-dual-branding-footer"]', {
+						runOnly: { type: 'rule', values: ['color-contrast'] }
+					});
 					cy.window()
 						.then(
 							(win) =>
@@ -227,3 +244,69 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 function docBody(win: Window) {
 	return win.document.body;
 }
+
+// The general baseline matrix opts out of autonomous mode, so it never opens
+// the DE-324 bell. Check this opt-in surface separately with zero exceptions.
+describe('DE-324 populated notification bell accessibility', () => {
+	for (const viewport of viewports)
+		for (const savedTheme of savedThemePreferences) {
+			it(`populated bell/${viewport.id}/light UI (saved ${savedTheme})`, () => {
+				fixtures();
+				cy.intercept('GET', '**/api/v1/users/me/preferences', {
+					...preferences,
+					autonomous_enabled: true
+				});
+				cy.intercept('GET', '**/api/v1/autonomous/notifications**', {
+					notifications: Array.from({ length: 10 }, (_, i) => ({
+						id: `bell-${i}`,
+						user_id: user.id,
+						session_id: 'synthetic-session',
+						channel: 'in_app',
+						title: `Review ${i} completed`,
+						body: 'A background review completed. Open the receipt to inspect the result.',
+						payload: null,
+						read_at: null,
+						created_at: '2026-10-17T12:00:00Z',
+						updated_at: '2026-10-17T12:00:00Z'
+					})),
+					total_count: 102,
+					limit: 10,
+					offset: 0
+				});
+				cy.viewport(viewport.width, viewport.height);
+				cy.visit('/lq-ai/settings/account', {
+					onBeforeLoad(win) {
+						win.localStorage.clear();
+						win.localStorage.setItem('locale', 'en-US');
+						win.localStorage.setItem('theme', savedTheme);
+						win.localStorage.setItem(
+							'lq_ai_auth',
+							JSON.stringify({
+								access_token: 'synthetic-a11y-token',
+								refresh_token: null,
+								expires_at: Date.now() + 3600000,
+								user
+							})
+						);
+					}
+				});
+				assertLightOnlyUI();
+				cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '99+');
+				cy.get('[data-testid="lq-ai-notification-bell-trigger"]')
+					.should('have.attr', 'aria-label', 'Notifications, 99+ (102 unread)')
+					.click();
+				cy.get('[data-testid="lq-ai-notification-bell-dropdown"] li.item').should(
+					'have.length',
+					10
+				);
+				cy.document().then(async (doc) => {
+					await doc.fonts.ready;
+				});
+				assertLightOnlyUI();
+				cy.injectAxe();
+				cy.checkA11y('[data-testid="lq-ai-notification-bell"]', {
+					runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }
+				});
+			});
+		}
+});

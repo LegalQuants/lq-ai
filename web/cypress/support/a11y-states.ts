@@ -12,7 +12,9 @@ export const viewports = [
 	{ id: 'desktop', width: 1440, height: 900 },
 	{ id: 'phone', width: 390, height: 844 }
 ] as const;
-export const themes = ['light', 'dark'] as const;
+// These are saved upstream preferences, not supported LQ.AI render themes.
+// Keep the inventory keys stable; both inputs must render the light-only UI.
+export const savedThemePreferences = ['light', 'dark'] as const;
 export const stateIds = states.flatMap((s) =>
-	viewports.flatMap((v) => themes.map((t) => `${s.id}/${v.id}/${t}`))
+	viewports.flatMap((v) => savedThemePreferences.map((t) => `${s.id}/${v.id}/${t}`))
 );

@@ -58,66 +58,6 @@
 			"count": 1
 		},
 		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".min-h-screen > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
-			"count": 1
-		},
-		{
 			"state": "login/desktop/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -136,36 +76,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": ["label:nth-child(3) > .lq-text-label"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
 			"count": 1
 		},
 		{
@@ -190,66 +100,6 @@
 			"count": 1
 		},
 		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".min-h-screen > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".min-h-screen > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
-			"count": 1
-		},
-		{
 			"state": "login/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -268,36 +118,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": ["label:nth-child(3) > .lq-text-label"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".lq-shell > footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "login/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [
-				".lq-shell > footer > span:nth-child(2) > .underline.hover\\:text-gray-700.dark\\:hover\\:text-gray-200"
-			],
 			"count": 1
 		},
 		{
@@ -368,34 +188,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -526,34 +318,6 @@
 		},
 		{
 			"state": "dashboard/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/desktop/dark",
 			"rule": "label-content-name-mismatch",
 			"impact": "serious",
 			"target": ["a[aria-label=\"Enhance Prompt\"]"],
@@ -669,34 +433,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".activity-card.svelte-xqgcu7:nth-child(2) > .lq-text-body-sm"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -820,34 +556,6 @@
 		},
 		{
 			"state": "dashboard/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
-			"state": "dashboard/phone/dark",
 			"rule": "label-content-name-mismatch",
 			"impact": "serious",
 			"target": ["a[aria-label=\"Enhance Prompt\"]"],
@@ -910,66 +618,10 @@
 			"count": 1
 		},
 		{
-			"state": "matters/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "matters/desktop/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "matters/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -980,66 +632,10 @@
 			"count": 1
 		},
 		{
-			"state": "matters/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "matters/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "matters/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1057,34 +653,6 @@
 			"count": 1
 		},
 		{
-			"state": "new-matter/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "new-matter/desktop/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1096,34 +664,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".nmm-optional"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1141,34 +681,6 @@
 			"count": 1
 		},
 		{
-			"state": "new-matter/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "new-matter/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1183,66 +695,10 @@
 			"count": 1
 		},
 		{
-			"state": "new-matter/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "new-matter/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "knowledge/desktop/light",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1253,34 +709,6 @@
 			"count": 1
 		},
 		{
-			"state": "knowledge/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "knowledge/phone/light",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1288,66 +716,10 @@
 			"count": 1
 		},
 		{
-			"state": "knowledge/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "knowledge/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "knowledge/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1365,34 +737,6 @@
 			"count": 1
 		},
 		{
-			"state": "skills/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "skills/desktop/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1404,34 +748,6 @@
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-text-caption"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "skills/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1449,34 +765,6 @@
 			"count": 1
 		},
 		{
-			"state": "skills/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "skills/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1491,66 +779,10 @@
 			"count": 1
 		},
 		{
-			"state": "skills/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["strong"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "skills/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "appearance/desktop/light",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		},
 		{
@@ -1561,34 +793,6 @@
 			"count": 1
 		},
 		{
-			"state": "appearance/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/desktop/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "appearance/phone/light",
 			"rule": "color-contrast",
 			"impact": "serious",
@@ -1596,66 +800,10 @@
 			"count": 1
 		},
 		{
-			"state": "appearance/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/light",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
-			"count": 1
-		},
-		{
 			"state": "appearance/phone/dark",
 			"rule": "color-contrast",
 			"impact": "serious",
 			"target": [".lq-kbd"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(1)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["span:nth-child(1) > strong"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": ["footer > span:nth-child(2)"],
-			"count": 1
-		},
-		{
-			"state": "appearance/phone/dark",
-			"rule": "color-contrast",
-			"impact": "serious",
-			"target": [".underline"],
 			"count": 1
 		}
 	]

@@ -2463,6 +2463,43 @@ Hand-rolled implementation needs: `cryptography` for RSA signing (already a gate
 
 #### DE-035 — AWS Bedrock provider adapter (Anthropic on Bedrock)
 
+**Updated scope (maintainer-directed 2026-10-17):** implement the three
+compatible APIs — Anthropic Messages, OpenAI Chat Completions and OpenAI
+Responses — through the existing gateway provider abstraction. Each
+`type: bedrock` entry explicitly selects `bedrock_protocol` and a validated
+AWS protocol base URL; runtime is the default endpoint family, with explicit
+Mantle selection for required model/capability support. API keys use the
+existing encrypted/runtime/env resolver. Messages/OpenAI translation is
+reused; Responses is stateless (`store=false`, `background=false`) with
+complete function-call/result history and streaming arguments. ADR 0027's
+timeout/error classification remains binding.
+
+**Status:** replacement implementation present; **live AWS verification and
+application acceptance against AWS deferred beyond PR #744 / 0.9.1** by
+maintainer direction on 2026-10-17. This is not a claim that every model,
+region or endpoint/protocol pair is supported. No SDK dependency or new
+public inference endpoint is introduced. Embeddings, SigV4/STS refresh,
+server-side tools, background jobs and remote stored sessions remain out of
+scope for this initial compatible-API implementation.
+
+**0.9.1 acceptance:** mocked gateway HTTP unary/streaming function-call/result
+round trips for all three protocols and endpoint families; key lifecycle,
+error/timeout and stateless Responses regressions; current CI and security
+review. Live account/model access, actual AWS protocol calls and full
+application acceptance against AWS move to follow-up work and do not block
+this PR/release. They remain unverified: mocked tests, skipped provider tests
+and entitlement errors must not be described as live verification.
+
+**Credit:** Jason Lee / @dropthejase's [PR #265](https://github.com/LegalQuants/lq-ai/pull/265)
+provided the original three-protocol design and translation/test examples.
+See [replacement design](proposals/bedrock-compatible-provider.md) and
+[release acceptance and deferred AWS verification](bedrock-verification.md).
+
+**Deferred original InvokeModel/SigV4 design (not implemented):** the
+historical specification below remains source material for a separately
+scoped IAM/STS implementation; its transport-specific acceptance criteria
+are not claims about the compatible-API implementation above.
+
 **Priority:** P1 · **Effort:** M
 
 **Context:** PRD §4 calls for Bedrock support as one of the v1 providers. M1 ships the Anthropic, OpenAI, and Ollama adapters; the Bedrock adapter is the Tier-3 path for operators who want Anthropic-quality models routed through their own AWS account under their existing AWS DPA, with no third-party processor introduced.
@@ -4866,7 +4903,9 @@ without remounting the workspace. Regression coverage lives in the Matter route'
 
 **Specific scope:** Add a bell + unread-count indicator to the global `/lq-ai` shell chrome that derives the autonomous unread count (reusing `GET /autonomous/notifications?unread=true`), opens a recent-items dropdown, and links into the rail Notifications page. Gate its visibility on `autonomous_enabled`. Reconcile with the §3.15 Slack/Teams bridge webhook channel (DE-312) so the surfaces don't duplicate.
 
-**When to ship:** A later cross-cutting chrome pass; deferred from C2 to keep that task contained.
+**Implementation (0.9.1 candidate, acceptance pending):** The `/lq-ai` shell mounts the bell only after a successful preference response confirms the current signed-in user's autonomous opt-in. Cached flags alone never enable it. The badge uses the server unread total (visually capped at `99+`); the dropdown shows the newest ten unread items, offers per-item and **Mark shown read** actions, and links to the Notifications page. Lists refresh on navigation, opening and completed read actions; superseded responses are ignored. Failed reads stay retryable, and loading/unavailable states are distinct from a confirmed empty inbox. There is no polling or new delivery channel; existing email/webhook delivery is unchanged.
+
+**Acceptance:** Pending checks of stale/failed preference loads, session changes, delayed responses, off-page unread counts, partial failures, keyboard/focus and phone/desktop light/dark layouts. This entry does not yet claim the feature is shipped.
 
 ---
 
@@ -5374,9 +5413,9 @@ So the single longest phase (image pull) has neither a stream nor a poll. The re
 
 #### DE-370 — Attributed-authority FAIL tier (chat)
 
-**Priority:** P2 · **Effort:** M · **Status (2026-07-01): filed (WS-E PR1c).**
+**Priority:** P2 · **Effort:** M · **Status (2026-07-25): SHIPPED — attribution parser (`api/app/citation/authority_attribution.py`) + Pass C in `verify_and_persist_authority_citations`.**
 
-WS-E PR1c verifies chat quotes of fetched authority verbatim (PASS) and via a whole-body paraphrase judge (SUPPORTED), but **drops** a quote that matches no fetched body rather than FAILing it — because chat blockquotes are unattributed (a blockquote may quote an uploaded document or caselaw, not the fetched statute), so a FAIL would be a false-positive. DE-370 adds an attribution parser (blockquote → nearby statute/reg citation → matched `get_authority` ref) so a quote attributed to authority *X* that is not in *X*'s fetched text FAILs and flags the fiduciary gate. This is the B1c-analog for authority (mirrors the caselaw B1b→B1c staging: SUPPORTED-without-FAIL first, attributed-FAIL as a dedicated follow-up). Needs a reliable statute/reg citation-attribution parser (formats vary — "17 U.S.C. § 107", "17 USC 107", "40 CFR 1500.1"), so it is its own slice, not folded into PR1c.
+WS-E PR1c verified chat quotes of fetched authority verbatim (PASS) and via a whole-body paraphrase judge (SUPPORTED), but **dropped** a quote that matches no fetched body rather than FAILing it — because chat blockquotes are unattributed (a blockquote may quote an uploaded document or caselaw, not the fetched statute), so a FAIL would be a false-positive. DE-370 closes that gap with a deterministic citation-attribution parser (blockquote → nearby statute/reg/CELEX citation → matched fetched `external_ref`): a quote attributed to authority *X* that was neither verbatim-matched nor judge-supported in any fetched body persists an unverified FAIL row against *X* (the same row shape as the autonomous path's no-locate FAIL) and flags the fiduciary gate. Shipped scope: US Code forms ("17 U.S.C. § 107", "17 USC 107", "17 U.S.C. §§ 107-108"), CFR forms ("40 CFR 1500.1", "40 C.F.R. § 1500.1", "29 C.F.R. part 1910"), raw CELEX ids ("32016R0679"), and EU instrument citations that map to CELEX deterministically ("Regulation (EU) 2016/679", "Directive 95/46/EC", "Regulation (EC) No 45/2001"); textual EU shorthands needing a name registry ("the GDPR", "Article 6(1)(a) GDPR") are intentionally left unattributed — never guessed. "Nearby" is a 300-char window before/after the blockquote block (clamped at adjacent blockquotes) plus the block itself. The false-positive guard holds: an attribution only counts when the parsed reference matches an authority actually fetched this turn (title/section match against GovInfo `USCODE-…`/`CFR-…` package or granule ids; exact CELEX match for EUR-Lex), so unattributed and non-fetched-attributed quotes keep drop-on-miss and uploaded-doc/caselaw quotes can never FAIL spuriously. Fail-closed: an attributed unverified passage FAILs even when the Pass-B judge was skipped (budget or `gateway=None`) — "couldn't check" never becomes "passed". This completes the B1c-analog for authority (mirrors the caselaw B1b→B1c staging).
 
 ---
 

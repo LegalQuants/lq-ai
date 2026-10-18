@@ -137,14 +137,18 @@ providers:
 
   - name: bedrock
     type: bedrock
-    base_url: https://bedrock-runtime.${AWS_REGION:-us-east-1}.amazonaws.com
-    aws_region: us-east-1
-    aws_access_key_env: AWS_ACCESS_KEY_ID
-    aws_secret_key_env: AWS_SECRET_ACCESS_KEY
-    tier: 3  # AWS Bedrock routes through customer's AWS account
+    # One protocol per entry: messages, chat_completions, or responses.
+    # Additional entries may share this key with different explicit protocols.
+    # No SigV4/STS credentials are consumed by the compatible-API adapter.
+    bedrock_protocol: messages
+    bedrock_endpoint: runtime  # mantle is an explicit opt-in for models requiring it
+    base_url: https://bedrock-runtime.${AWS_REGION:-us-east-1}.amazonaws.com/anthropic
+    api_key_env: AWS_BEARER_TOKEN_BEDROCK
+    tier: 3  # Operator must verify terms, retention/logging and regional requirements.
     models:
-      - anthropic.claude-opus-4-7-v1:0
-      - anthropic.claude-sonnet-4-6-v1:0
+      # Select an entitled model/profile for the configured region; this is not
+      # a claim that the account has access. See docs/bedrock-verification.md.
+      - us.anthropic.claude-haiku-4-5-20251001-v1:0
 
   - name: azure-openai
     type: azure_openai
