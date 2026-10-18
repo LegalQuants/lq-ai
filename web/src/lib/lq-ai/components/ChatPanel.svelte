@@ -217,6 +217,7 @@
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
+	import CompactPanel from './CompactPanel.svelte';
 
 	// ---- component props ----
 	export let projectIdFilter: string | undefined = undefined;
@@ -1623,20 +1624,26 @@
 	$: enhanceButtonAriaLabel = enhanceIsRefine ? 'Refine prompt' : 'Enhance prompt';
 </script>
 
-<div class="flex flex-1 h-full min-h-0 overflow-hidden" data-testid="lq-ai-chat-shell">
-	<ChatSidebar
-		groups={filteredGroups}
-		activeChatId={activeChat?.id ?? null}
-		activeProjectId={activeProject?.id ?? null}
-		{archivedToggle}
-		hideProjectFilter={!!projectIdFilter}
-		onSelectChat={selectChat}
-		onNewChat={createNewChat}
-		onSelectProject={selectProject}
-		onToggleArchived={toggleArchived}
-	/>
+<div
+	class="flex flex-1 h-full min-h-0 overflow-hidden"
+	class:compact-matter={!!projectIdFilter}
+	data-testid="lq-ai-chat-shell"
+>
+	<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
+		<ChatSidebar
+			groups={filteredGroups}
+			activeChatId={activeChat?.id ?? null}
+			activeProjectId={activeProject?.id ?? null}
+			{archivedToggle}
+			hideProjectFilter={!!projectIdFilter}
+			onSelectChat={selectChat}
+			onNewChat={createNewChat}
+			onSelectProject={selectProject}
+			onToggleArchived={toggleArchived}
+		/>
+	</CompactPanel>
 
-	<section class="flex-1 flex flex-col overflow-hidden">
+	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
 			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
 			data-testid="lq-ai-chat-header"
@@ -1691,111 +1698,118 @@
 				class:lq-composer-fit={selectedRunProfile !== null}
 				data-testid="lq-ai-composer"
 			>
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-2 flex-wrap">
-						<!-- ADR 0038 D1 — New harness is an experimental entry in this picker. -->
-						<ModelPicker
-							models={availableModels}
-							selectedId={harnessChosen ? NEW_HARNESS_ID : currentModelId}
-							harness={pickerHarness}
-							onSelect={selectModel}
-						/>
-						{#if runProfilesError && !harnessChosen}
-							<span class="text-xs lq-run-hint" data-testid="lq-ai-run-profiles-error">
-								New harness could not be checked: {runProfilesError}
-							</span>
-						{/if}
-					</div>
-					{#if !harnessChosen}
-						<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
+				<CompactPanel
+					id="matter-chat-options"
+					title="Chat options"
+					enabled={!!projectIdFilter}
+					spaced
+				>
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2 flex-wrap">
+							<!-- ADR 0038 D1 — New harness is an experimental entry in this picker. -->
+							<ModelPicker
+								models={availableModels}
+								selectedId={harnessChosen ? NEW_HARNESS_ID : currentModelId}
+								harness={pickerHarness}
+								onSelect={selectModel}
+							/>
+							{#if runProfilesError && !harnessChosen}
+								<span class="text-xs lq-run-hint" data-testid="lq-ai-run-profiles-error">
+									New harness could not be checked: {runProfilesError}
+								</span>
+							{/if}
+						</div>
+						{#if !harnessChosen}
+							<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
-						<button
-							type="button"
-							role="switch"
-							aria-checked={stickyEnabled}
-							on:click={toggleSticky}
-							data-testid="lq-ai-sticky-toggle"
-							title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
-							class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
-								? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
-								: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
-						>
-							<span
-								class="inline-block w-2 h-2 rounded-full {stickyEnabled
-									? 'bg-emerald-500'
-									: 'bg-gray-300 dark:bg-gray-600'}"
-							></span>
-							Keep skills on
-						</button>
-					{/if}
-				</div>
-
-				<!-- ADR 0038 D1 — names the run that is blocking a new one, in any chat. -->
-				{#if activeRun}
-					<RunActiveNotice
-						active={activeRun}
-						currentChatId={activeChat.id}
-						busy={closingActiveRun}
-						error={activeRunError}
-						onOpen={openActiveRunChat}
-						onClose={closeActiveRun}
-					/>
-				{/if}
-
-				{#if selectedRunProfile}
-					<!-- The one part of the composer that gives way: see `.lq-composer-fit`. -->
-					<div class="lq-harness-strip" data-testid="lq-ai-harness-strip">
-						<RunModePanel
-							profile={selectedRunProfile}
-							documentsRead={runDocuments}
-							selectedDocuments={selectedDocumentIds.length}
-						>
-							{#if takesDocuments(selectedRunProfile)}
-								<!-- One picker per draft: whether it starts open is decided when it is drawn. -->
-								{#key draftNumber}
-									<RunDocumentPicker
-										documents={runDocuments?.documents ?? []}
-										selected={selectedDocumentIds}
-										max={runDocuments?.max_documents ?? selectedRunProfile.max_documents ?? 8}
-										min={minDocuments(selectedRunProfile)}
-										inMatter={runDocuments
-											? runDocuments.project_id !== null
-											: composerProjectId !== null}
-										loading={runDocumentsLoading}
-										error={runDocumentsError}
-										onToggle={toggleRunDocument}
-										onRefresh={() => void loadRunDocuments()}
-									/>
-								{/key}
-								<!-- Not picked: a run lists every knowledge base attached to the matter. -->
-								<RunKnowledgeBases read={runDocuments} />
-							{/if}
-						</RunModePanel>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={stickyEnabled}
+								on:click={toggleSticky}
+								data-testid="lq-ai-sticky-toggle"
+								title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+								class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
+									? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
+									: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
+							>
+								<span
+									class="inline-block w-2 h-2 rounded-full {stickyEnabled
+										? 'bg-emerald-500'
+										: 'bg-gray-300 dark:bg-gray-600'}"
+								></span>
+								Keep skills on
+							</button>
+						{/if}
 					</div>
-				{:else if !harnessChosen}
-					<!-- Not beside New harness, usable or not: a run does not use the chat's skills. -->
-					<SkillPicker
-						availableSkills={$skillsStore}
-						selectedSkillNames={attachedSkillNames}
-						{projectAttachedSkills}
-						{skillDetails}
-						{skillInputs}
-						readyFileNames={attachedReadyNames}
-						processingFileNames={attachedProcessingNames}
-						{failedSkillNames}
-						onAttach={attachSkill}
-						onDetach={detachSkill}
-						onRetry={loadSkillDetail}
-						onUpdateInputs={updateSkillInputs}
-					/>
-				{/if}
 
-				<SavedPromptsPanel
-					onInsert={(text) => {
-						composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
-					}}
-				/>
+					<!-- ADR 0038 D1 — names the run that is blocking a new one, in any chat. -->
+					{#if activeRun}
+						<RunActiveNotice
+							active={activeRun}
+							currentChatId={activeChat.id}
+							busy={closingActiveRun}
+							error={activeRunError}
+							onOpen={openActiveRunChat}
+							onClose={closeActiveRun}
+						/>
+					{/if}
+
+					{#if selectedRunProfile}
+						<!-- The one part of the composer that gives way: see `.lq-composer-fit`. -->
+						<div class="lq-harness-strip" data-testid="lq-ai-harness-strip">
+							<RunModePanel
+								profile={selectedRunProfile}
+								documentsRead={runDocuments}
+								selectedDocuments={selectedDocumentIds.length}
+							>
+								{#if takesDocuments(selectedRunProfile)}
+									<!-- One picker per draft: whether it starts open is decided when it is drawn. -->
+									{#key draftNumber}
+										<RunDocumentPicker
+											documents={runDocuments?.documents ?? []}
+											selected={selectedDocumentIds}
+											max={runDocuments?.max_documents ?? selectedRunProfile.max_documents ?? 8}
+											min={minDocuments(selectedRunProfile)}
+											inMatter={runDocuments
+												? runDocuments.project_id !== null
+												: composerProjectId !== null}
+											loading={runDocumentsLoading}
+											error={runDocumentsError}
+											onToggle={toggleRunDocument}
+											onRefresh={() => void loadRunDocuments()}
+										/>
+									{/key}
+									<!-- Not picked: a run lists every knowledge base attached to the matter. -->
+									<RunKnowledgeBases read={runDocuments} />
+								{/if}
+							</RunModePanel>
+						</div>
+					{:else if !harnessChosen}
+						<!-- Not beside New harness, usable or not: a run does not use the chat's skills. -->
+						<SkillPicker
+							availableSkills={$skillsStore}
+							selectedSkillNames={attachedSkillNames}
+							{projectAttachedSkills}
+							{skillDetails}
+							{skillInputs}
+							readyFileNames={attachedReadyNames}
+							processingFileNames={attachedProcessingNames}
+							{failedSkillNames}
+							onAttach={attachSkill}
+							onDetach={detachSkill}
+							onRetry={loadSkillDetail}
+							onUpdateInputs={updateSkillInputs}
+						/>
+					{/if}
+
+					<SavedPromptsPanel
+						onInsert={(text) => {
+							composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
+						}}
+					/>
+				</CompactPanel>
 
 				{#if sendError ?? inputsError}
 					<div
@@ -1816,7 +1830,7 @@
 					</div>
 				{/if}
 
-				<div class="flex items-end gap-2">
+				<div class="composer-row flex items-end gap-2">
 					<div class="lq-composer-wrap flex-1">
 						<textarea
 							class="lq-composer w-full text-sm resize-none"
@@ -1935,15 +1949,17 @@
 	</section>
 
 	{#if activeChat}
-		<AttachedFilesPanel
-			{chatFiles}
-			newHarness={harnessChosen}
-			{projectFiles}
-			{uploading}
-			{attachLimitReached}
-			onUpload={uploadAttached}
-			onDetach={detachFile}
-		/>
+		<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
+			<AttachedFilesPanel
+				{chatFiles}
+				newHarness={harnessChosen}
+				{projectFiles}
+				{uploading}
+				{attachLimitReached}
+				onUpload={uploadAttached}
+				onDetach={detachFile}
+			/>
+		</CompactPanel>
 	{/if}
 
 	{#if activeChat && receiptsDrawerOpen}
@@ -1980,6 +1996,31 @@
 <style>
 	@import '$lib/lq-ai/styles/practice.css';
 
+	.chat-conversation,
+	.lq-composer-wrap {
+		min-width: 0;
+		min-height: 0;
+	}
+
+	@media (max-width: 1279px) {
+		.compact-matter {
+			flex-direction: column;
+			min-width: 0;
+		}
+
+		.compact-matter .chat-conversation {
+			min-height: 0;
+		}
+
+		.compact-matter .composer-row {
+			flex-wrap: wrap;
+		}
+
+		.compact-matter .lq-composer-wrap {
+			flex: 1 0 100%;
+		}
+	}
+
 	.lq-composer-wrap {
 		/* Anchor for the slash-invocation popover (Wave D.2 Task 7.1).
 		   The popover renders absolutely-positioned just above the
@@ -2008,7 +2049,7 @@
 	.lq-composer-fit > :global(*) {
 		flex-shrink: 0;
 	}
-	.lq-composer-fit > .lq-harness-strip {
+	.lq-composer-fit .lq-harness-strip {
 		flex-shrink: 1;
 		min-height: 6rem;
 		overflow-y: auto;

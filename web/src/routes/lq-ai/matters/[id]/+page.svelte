@@ -7,6 +7,7 @@
 	import type { Project } from '$lib/lq-ai/types';
 	import MatterRail from '$lib/lq-ai/components/MatterRail.svelte';
 	import ChatPanel from '$lib/lq-ai/components/ChatPanel.svelte';
+	import CompactPanel from '$lib/lq-ai/components/CompactPanel.svelte';
 	import { bannerVisible } from './proposal-helpers';
 	import { createProposalInbox } from './proposal-inbox';
 
@@ -169,12 +170,14 @@
 		{/if}
 
 		<div class="matter-workspace">
-			<MatterRail
-				{matter}
-				bind:activeChatId
-				onMatterUpdate={handleMatterUpdate}
-				onMatterArchived={handleMatterArchived}
-			/>
+			<CompactPanel id="matter-details" title="Matter details">
+				<MatterRail
+					{matter}
+					bind:activeChatId
+					onMatterUpdate={handleMatterUpdate}
+					onMatterArchived={handleMatterArchived}
+				/>
+			</CompactPanel>
 			<div class="matter-chat-pane">
 				<ChatPanel
 					projectIdFilter={matter.id}
@@ -205,6 +208,12 @@
 		min-width: 0;
 		min-height: 0;
 		display: flex;
+	}
+
+	@media (max-width: 1279px) {
+		.matter-workspace {
+			flex-direction: column;
+		}
 	}
 
 	/* Match the outer layout's overflow-y: auto on main — the rail scrolls
@@ -342,5 +351,11 @@
 	.proposal-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	@media (max-width: 1279px) {
+		.proposal-banner {
+			max-height: min(25vh, 10rem);
+		}
 	}
 </style>
