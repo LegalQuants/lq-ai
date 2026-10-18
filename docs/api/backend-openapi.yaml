@@ -8121,8 +8121,8 @@ components:
         minted citation ids; unlocated cells have no export citation.
 
         The ``source_file_id`` / ``source_page`` / ``source_text``
-        navigation fields are enriched at read time on
-        ``GET /api/v1/tabular/executions/{id}`` ONLY — via two batched
+        navigation fields are enriched at read time on GET and
+        cancellation responses — via two batched
         ``IN`` queries (chunks, then documents; no N+1) — so the
         frontend can open the cited source in its doc panel (same UX as
         chat citations). They are ``null`` on the list/export paths,
@@ -8132,11 +8132,11 @@ components:
           type: string
           format: uuid
           description: |
-            Minted ``tabular_cell_citations.id`` (DE-309) when offset
-            rows exist for the cell in a minting-vintage execution. Legacy
-            executions and exports use the deterministic
-            uuid5 bridge id (display-only, never resolvable against the
-            Citation Engine).
+            Minted ``tabular_cell_citations.id`` (DE-309) for a grounded
+            cell in a minting-vintage execution, consistently on GET,
+            cancellation and exports. Only genuine legacy executions
+            and their exports use the deterministic uuid5 bridge id
+            (display-only, never resolvable against the Citation Engine).
         document_id:
           type: string
           format: uuid
