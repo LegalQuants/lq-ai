@@ -4724,7 +4724,7 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 #### DE-310 — Tabular per-cell `tier_used` + `cost_usd` propagation from the gateway (M3-E1 finding F6 telemetry)
 
-**Implementation (#421):** successful cells persist the gateway's routed tier and reported extraction cost (fixed-point decimal string). Missing annotations stay null, and the aggregate sums only reported extraction costs. Ensemble-judge and failed-response spend are not fully included; this is not complete billed-spend accounting.
+**Implementation (#421):** cells persist the gateway's routed tier and reported extraction cost (fixed-point decimal string), including failed extractions when a response was received but its content was empty, malformed or lacked a usable value. Missing response annotations stay null, and the aggregate includes reported costs from both successful and failed cells. Calls without a received response retain the existing zero placeholder, which is not proof of zero spend. Ensemble-judge spend and costs without received annotations are not included; this is not complete billed-spend accounting.
 
 **Priority:** P3 (telemetry completeness) · **Effort:** M (depends on gateway response surface)
 

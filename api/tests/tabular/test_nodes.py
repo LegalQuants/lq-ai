@@ -16,7 +16,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -64,6 +64,7 @@ class _StubGateway:
       * ``dict`` — JSON-serialized as the LLM response content;
       * ``str`` — returned verbatim (malformed-JSON tests);
       * ``Exception`` — raised on the call (transport-failure tests);
+      * ``_StubResponse`` — returned directly (response-shape tests);
       * ``(payload, tier, cost)`` tuple — the payload as above plus the
         gateway's ``routed_inference_tier`` / ``cost_estimate``
         annotations stamped on the response (DE-310 tests).
@@ -77,6 +78,8 @@ class _StubGateway:
         if not self.payloads:
             return _StubResponse(choices=[_StubChoice(message=_StubMessage(content=""))])
         payload = self.payloads.pop(0)
+        if isinstance(payload, _StubResponse):
+            return payload
         tier: int | None = None
         cost: float | None = None
         if isinstance(payload, tuple):
@@ -286,6 +289,8 @@ async def test_extract_cell_marks_failed_on_gateway_error() -> None:
     assert cell["confidence"] == "failed"
     assert cell["value"] is None
     assert cell["error"] is not None and "provider down" in cell["error"]
+    assert cell["tier_used"] is None
+    assert cell["cost_usd"] == "0"
 
 
 @pytest.mark.unit
@@ -323,11 +328,70 @@ async def test_extract_cell_with_no_chunks_marks_failed() -> None:
     )
     assert cell["confidence"] == "failed"
     assert gateway.calls_received == []
+    assert cell["tier_used"] is None
+    assert cell["cost_usd"] == "0"
 
 
 # ---------------------------------------------------------------------------
 # extract_cell — per-cell tier_used + cost_usd propagation (DE-310)
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("choices", "reason"),
+    [
+        ([], "empty response from gateway"),
+        ([cast(_StubChoice, object())], "malformed gateway response"),
+        ([_StubChoice(_StubMessage(""))], "empty response content"),
+        ([_StubChoice(_StubMessage("not json"))], "no value in extraction response"),
+        ([_StubChoice(_StubMessage("[]"))], "no value in extraction response"),
+        ([_StubChoice(_StubMessage("{}"))], "no value in extraction response"),
+        ([_StubChoice(_StubMessage('{"value": "  "}'))], "no value in extraction response"),
+    ],
+)
+async def test_failed_response_preserves_reported_tier_and_cost(
+    choices: list[_StubChoice], reason: str
+) -> None:
+    """A charged response stays charged even when no value can be extracted."""
+    gateway = _StubGateway(
+        payloads=[_StubResponse(choices=choices, routed_inference_tier=3, cost_estimate=0.0035)]
+    )
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="doc",
+        chunks=[_chunk(0)],
+        column=ColumnSpec(name="A", query="?", minimum_inference_tier=2),
+    )
+    assert cell["confidence"] == "failed"
+    assert cell["value"] is None
+    assert cell["error"] == reason
+    assert cell["cited_chunk_ids"] == []
+    assert cell["cell_citations"] == []
+    assert cell["tier_used"] == 3
+    assert cell["cost_usd"] == "0.0035"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("tier", "cost", "expected_cost"),
+    [(None, None, None), (3, None, None), (None, 0.0035, "0.0035"), (3, 0.0, "0.0")],
+)
+async def test_failed_response_keeps_unknown_and_zero_cost_distinct(
+    tier: int | None, cost: float | None, expected_cost: str | None
+) -> None:
+    gateway = _StubGateway(payloads=[("not json", tier, cost)])
+    cell = await extract_cell(
+        gateway=gateway,  # type: ignore[arg-type]
+        judge_model="smart",
+        document_name="doc",
+        chunks=[_chunk(0)],
+        column=ColumnSpec(name="A", query="?"),
+    )
+    assert cell["confidence"] == "failed"
+    assert cell["tier_used"] == tier
+    assert cell["cost_usd"] == expected_cost
 
 
 @pytest.mark.unit

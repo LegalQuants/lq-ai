@@ -289,6 +289,60 @@ def test_results_payload_does_not_persist_cell_citations() -> None:
 
 
 @pytest.mark.integration
+async def test_aggregate_retains_charged_failures_in_saved_cost(db_session: AsyncSession) -> None:
+    """Failed and successful extractions both contribute their reported spend."""
+    doc_id = uuid.uuid4()
+    execution = TabularExecution(
+        user_id=None,
+        status="running",
+        document_ids=[doc_id],
+        columns=[{"name": name, "query": "?"} for name in ("Malformed", "Empty", "Valid")],
+    )
+    db_session.add(execution)
+    await db_session.flush()
+    gateway = _StubGateway(
+        payloads=[
+            ("not json", 3, 0.0035),
+            ("", 4, 0.0025),
+            ({"value": "answer", "confidence": "high"}, 2, 0.001),
+        ]
+    )
+    cells = []
+    for name in ("Malformed", "Empty", "Valid"):
+        cell = await extract_cell(
+            gateway=gateway,  # type: ignore[arg-type]
+            judge_model="smart",
+            document_name="doc",
+            chunks=[_chunk(0)],
+            column=ColumnSpec(name=name, query="?"),
+        )
+        cell.update(document_id=str(doc_id), column_name=name)
+        cells.append(cell)
+    await make_aggregate_node(db_session)(
+        cast(
+            TabularExecutionState,
+            {
+                "execution_id": str(execution.id),
+                "documents": [{"id": str(doc_id), "name": "doc"}],
+                "per_cell_results": cells,
+            },
+        )
+    )
+    await db_session.refresh(execution)
+    assert execution.status == "completed"
+    assert execution.cost_actual_usd == Decimal("0.0070")
+    assert execution.results is not None
+    assert execution.results["summary"]["failed_cells"] == 2
+    saved = execution.results["rows"][0]["cells"]
+    assert saved["Malformed"]["tier_used"] == 3
+    assert saved["Malformed"]["cost_usd"] == "0.0035"
+    assert saved["Malformed"]["confidence"] == "failed"
+    assert saved["Empty"]["tier_used"] == 4
+    assert saved["Empty"]["cost_usd"] == "0.0025"
+    assert saved["Empty"]["confidence"] == "failed"
+
+
+@pytest.mark.integration
 async def test_aggregate_node_persists_located_cell_citations_end_to_end(
     db_session: AsyncSession,
 ) -> None:

@@ -312,7 +312,7 @@ async def extract_cell(
       without a gateway call.
     * Gateway raises → ``confidence='failed'`` with ``error`` populated.
     * LLM response is malformed JSON or missing ``value`` →
-      ``confidence='failed'``.
+      ``confidence='failed'``, retaining any received tier/cost annotations.
     """
 
     if not chunks:
@@ -346,21 +346,30 @@ async def extract_cell(
         )
         return _failed_cell(f"{type(exc).__name__}: {exc}")
 
+    # A received response can be billable even when its content is unusable.
+    # Capture telemetry before parsing so every post-response failure keeps it.
+    tier_used = getattr(response, "routed_inference_tier", None)
+    cost_usd = _cost_usd_str(getattr(response, "cost_estimate", None))
+
     try:
         choices = response.choices
         if not choices:
-            return _failed_cell("empty response from gateway")
+            return _failed_cell(
+                "empty response from gateway", tier_used=tier_used, cost_usd=cost_usd
+            )
         content = choices[0].message.content
     except AttributeError:
-        return _failed_cell("malformed gateway response")
+        return _failed_cell("malformed gateway response", tier_used=tier_used, cost_usd=cost_usd)
 
     if not content:
-        return _failed_cell("empty response content")
+        return _failed_cell("empty response content", tier_used=tier_used, cost_usd=cost_usd)
 
     parsed = _parse_cell_response(content)
     value = parsed.get("value")
     if not value or not isinstance(value, str) or not value.strip():
-        return _failed_cell("no value in extraction response")
+        return _failed_cell(
+            "no value in extraction response", tier_used=tier_used, cost_usd=cost_usd
+        )
 
     confidence = _coerce_confidence(parsed.get("confidence"))
     cited_indices = _coerce_chunk_indices(
@@ -423,8 +432,8 @@ async def extract_cell(
         "value": value,
         "cited_chunk_ids": cited_chunk_ids,
         "confidence": confidence,
-        "tier_used": getattr(response, "routed_inference_tier", None),
-        "cost_usd": _cost_usd_str(getattr(response, "cost_estimate", None)),
+        "tier_used": tier_used,
+        "cost_usd": cost_usd,
         "error": None,
         "verification_method": verification_method,
         "cell_citations": cell_citations,
@@ -580,13 +589,16 @@ async def _locate_cell_citations(
     return located
 
 
-def _failed_cell(reason: str) -> dict[str, Any]:
+def _failed_cell(
+    reason: str, *, tier_used: int | None = None, cost_usd: str | None = "0"
+) -> dict[str, Any]:
+    """Keep received telemetry; retain the existing no-response placeholder otherwise."""
     return {
         "value": None,
         "cited_chunk_ids": [],
         "confidence": "failed",
-        "tier_used": None,
-        "cost_usd": "0",
+        "tier_used": tier_used,
+        "cost_usd": cost_usd,
         "error": reason,
         "verification_method": None,
         "cell_citations": [],
@@ -873,10 +885,10 @@ def _sum_cell_costs(per_cell_results: list[Any]) -> Decimal:
 
     ``cost_usd`` carries the gateway's per-call ``cost_estimate``
     annotation as a decimal string (DE-310), so this sum is the reported
-    extraction cost. Cells without a recorded cost (failed before the
-    gateway call, or the gateway had no rate configured for the routed
-    model) contribute 0. Ensemble judge spend is not included — see
-    the DE-310 note in :func:`extract_cell`."""
+    extraction cost, including received responses whose content could
+    not be parsed into a cell value. Cells without a recorded cost
+    contribute 0. Ensemble judge spend and calls without a received
+    annotation are not included — see the DE-310 note in :func:`extract_cell`."""
 
     total = Decimal("0")
     for cell in per_cell_results:
