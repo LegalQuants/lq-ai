@@ -10,6 +10,10 @@
 import { getAccessToken } from '../auth/store';
 import { apiRequest, LQ_AI_API_BASE_URL, LQAIApiError } from './client';
 import type {
+	TabularBulkOp,
+	TabularBulkOpCreateRequest,
+	TabularBulkOpPreviewRequest,
+	TabularBulkOpPreviewResponse,
 	TabularExecution,
 	TabularExecutionCreate,
 	TabularExecutionSummary,
@@ -37,9 +41,7 @@ export async function previewTabularCost(
  * {@link getTabularExecution} until status reaches a terminal state
  * (`completed` / `failed` / `cancelled`).
  */
-export async function executeTabular(
-	body: TabularExecutionCreate
-): Promise<TabularExecution> {
+export async function executeTabular(body: TabularExecutionCreate): Promise<TabularExecution> {
 	return apiRequest<TabularExecution>('/tabular/execute', {
 		method: 'POST',
 		body: body as unknown as Record<string, unknown>
@@ -60,9 +62,7 @@ export async function listTabularExecutions(): Promise<TabularExecutionSummary[]
  * the (potentially large) `results` payload once status is terminal.
  */
 export async function getTabularExecution(executionId: string): Promise<TabularExecution> {
-	return apiRequest<TabularExecution>(
-		`/tabular/executions/${encodeURIComponent(executionId)}`
-	);
+	return apiRequest<TabularExecution>(`/tabular/executions/${encodeURIComponent(executionId)}`);
 }
 
 /**
@@ -80,12 +80,49 @@ export async function deleteTabularExecution(executionId: string): Promise<void>
  * `cancelled`; the worker's per-cell loop honors this at the next
  * cell-iteration boundary. Already-terminal rows return 409.
  */
-export async function cancelTabularExecution(
-	executionId: string
-): Promise<TabularExecution> {
+export async function cancelTabularExecution(executionId: string): Promise<TabularExecution> {
 	return apiRequest<TabularExecution>(
 		`/tabular/executions/${encodeURIComponent(executionId)}/cancel`,
 		{ method: 'POST' }
+	);
+}
+
+/**
+ * POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost —
+ * DE-304 / ADR 0040. Synchronous cost preview for a proposed bulk op;
+ * no row is created. Mirrors {@link previewTabularCost} (Decision
+ * C-5): call before arming the confirmation gate.
+ */
+export async function previewTabularBulkOpCost(
+	executionId: string,
+	body: TabularBulkOpPreviewRequest
+): Promise<TabularBulkOpPreviewResponse> {
+	return apiRequest<TabularBulkOpPreviewResponse>(
+		`/tabular/executions/${encodeURIComponent(executionId)}/bulk-ops/preview-cost`,
+		{
+			method: 'POST',
+			body: body as unknown as Record<string, unknown>
+		}
+	);
+}
+
+/**
+ * POST /api/v1/tabular/executions/{id}/bulk-ops — DE-304 / ADR 0040.
+ * Creates the bulk-op row at `status='pending'` and enqueues the
+ * worker job. Returns 202 + the row; poll
+ * {@link getTabularExecution} — the op appears in its `bulk_ops`
+ * array (the read-side).
+ */
+export async function createTabularBulkOp(
+	executionId: string,
+	body: TabularBulkOpCreateRequest
+): Promise<TabularBulkOp> {
+	return apiRequest<TabularBulkOp>(
+		`/tabular/executions/${encodeURIComponent(executionId)}/bulk-ops`,
+		{
+			method: 'POST',
+			body: body as unknown as Record<string, unknown>
+		}
 	);
 }
 
@@ -144,4 +181,12 @@ export async function exportTabularExecution(
 	const m = /filename="([^"]+)"/.exec(cd);
 	const filename = m ? m[1] : `tabular-${executionId}.${format}`;
 	return { blob, filename };
+}
+
+/** Retained reports remain accessible without their source execution. */
+export function listTabularBulkOps(offset = 0): Promise<TabularBulkOp[]> {
+	return apiRequest<TabularBulkOp[]>(`/tabular/bulk-ops?offset=${offset}&limit=50`);
+}
+export function getTabularBulkOp(id: string): Promise<TabularBulkOp> {
+	return apiRequest<TabularBulkOp>(`/tabular/bulk-ops/${encodeURIComponent(id)}`);
 }

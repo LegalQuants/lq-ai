@@ -35,14 +35,24 @@ from app.models.mcp_oauth import MCPOAuthState, MCPOAuthToken
 from app.models.message_authority_citation import MessageAuthorityCitation
 from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.message_tool_source import MessageToolSource
+from app.models.orchestration import (
+    OrchestrationAccount,
+    OrchestrationAdmission,
+    OrchestrationEffect,
+    OrchestrationFile,
+    OrchestrationPlan,
+    OrchestrationRoot,
+)
 from app.models.organization_profile import OrganizationProfile
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.project import Project, ProjectFile, ProjectSkill
 from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.project_member import ProjectMember
 from app.models.research import ResearchClusterMetadata, ResearchOpinionMetadata
 from app.models.saved_prompt import SavedPrompt
+from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
 from app.models.slack_workspace import SlackWorkspace
-from app.models.tabular import TabularExecution
+from app.models.tabular import TabularCellCitation, TabularExecution
 from app.models.team import Team, TeamMember
 from app.models.teams_tenant import TeamsTenant
 from app.models.tool_call_log import ToolCallLog
@@ -80,6 +90,12 @@ __all__ = [
     "MessageAuthorityCitation",
     "MessageCaselawCitation",
     "MessageToolSource",
+    "OrchestrationAccount",
+    "OrchestrationAdmission",
+    "OrchestrationEffect",
+    "OrchestrationFile",
+    "OrchestrationPlan",
+    "OrchestrationRoot",
     "OrganizationProfile",
     "Playbook",
     "PlaybookExecution",
@@ -88,11 +104,15 @@ __all__ = [
     "Project",
     "ProjectFile",
     "ProjectKnowledgeBase",
+    "ProjectMember",
     "ProjectSkill",
     "ResearchClusterMetadata",
     "ResearchOpinionMetadata",
     "SavedPrompt",
+    "SkillWorkspace",
+    "SkillWorkspaceFile",
     "SlackWorkspace",
+    "TabularCellCitation",
     "TabularExecution",
     "Team",
     "TeamMember",
@@ -106,3 +126,5 @@ __all__ = [
     "WorkProductAttribution",
     "WorkProductFiduciaryGate",
 ]
+
+from .storage_deletion import StorageDeletion as StorageDeletion

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Fiduciary Gate</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --fid: #f5b544;
+    --ok: #34d399;
+    --fail: #f87171;
+    --neutral: #6b7280;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header h1::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fid); margin-right: 8px; vertical-align: middle;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 360px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--fid); margin: 18px 0 8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .hint { font-size: 11.5px; color: var(--text-faint); margin: 0 0 10px; line-height: 1.4; }
+
+  .chip {
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 8px 9px; border-radius: 5px; margin-bottom: 7px;
+    border: 1px solid var(--border); background: var(--bg-elev-2);
+  }
+  .chip-top { display: flex; align-items: center; gap: 6px; }
+  .chip-kind { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-dim); flex: 1; }
+  .chip-remove {
+    background: transparent; border: none; color: var(--text-faint); cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 2px 4px; border-radius: 3px;
+  }
+  .chip-remove:hover { color: var(--fail); background: rgba(248,113,113,0.10); }
+  .chip-claim { font-size: 11.5px; color: var(--text); line-height: 1.4; }
+  .chip-claim.prov { color: var(--text-faint); font-style: italic; }
+
+  .status-select {
+    width: 100%; background: var(--bg-elev-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
+    font: 11px ui-monospace, Menlo, monospace; cursor: pointer;
+  }
+  .status-select:focus { outline: none; border-color: var(--fid); }
+  .status-select.bkt-pass { border-color: rgba(52,211,153,0.5); color: var(--ok); }
+  .status-select.bkt-supported { border-color: rgba(245,181,68,0.5); color: var(--fid); }
+  .status-select.bkt-fail { border-color: rgba(248,113,113,0.5); color: var(--fail); }
+  .status-select.bkt-excluded { border-color: rgba(107,114,128,0.5); color: var(--neutral); }
+
+  .chip-bucket { font-size: 10px; font-family: ui-monospace, Menlo, monospace; color: var(--text-faint); }
+  .chip-bucket b { color: var(--text-dim); }
+
+  .add-btn {
+    width: 100%; background: var(--bg-elev-2); border: 1px dashed var(--border-hover);
+    color: var(--text-dim); padding: 7px 10px; border-radius: 5px; cursor: pointer;
+    font-size: 12px; margin-bottom: 4px;
+  }
+  .add-btn:hover { border-color: var(--fid); color: var(--fid); }
+  .reset-btn {
+    width: 100%; background: transparent; border: 1px solid var(--border);
+    color: var(--text-faint); padding: 6px 10px; border-radius: 5px; cursor: pointer;
+    font-size: 11px; margin-top: 4px;
+  }
+  .reset-btn:hover { border-color: var(--border-hover); color: var(--text-dim); }
+
+  .caveat {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--fid); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+  }
+  .caveat .lab {
+    display: block; font-weight: 700; color: var(--fid); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .caveat code { color: var(--text); font-size: 11px; }
+
+  .legend-table { font-size: 11px; border-collapse: collapse; width: 100%; }
+  .legend-table td { padding: 3px 2px; border-bottom: 1px dashed var(--border); vertical-align: middle; }
+  .legend-table code { font-family: ui-monospace, Menlo, monospace; color: var(--text-dim); font-size: 10.5px; }
+  .bucket-tag {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 2px 6px; border-radius: 3px; white-space: nowrap; font-family: ui-monospace, Menlo, monospace;
+    border: 1px solid transparent;
+  }
+  .bucket-tag.pass { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .bucket-tag.supported { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .bucket-tag.fail { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
+  .bucket-tag.excluded { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
+
+  .content-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 15%, rgba(245,181,68,0.05), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(125,211,252,0.03), transparent 55%), var(--bg);
+  }
+  .panel-wrap { max-width: 760px; margin: 0 auto; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .tile {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 10px; text-align: center;
+  }
+  .tile .n { font-size: 26px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; line-height: 1; }
+  .tile .lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); margin-top: 6px; }
+  .tile.pass { border-color: rgba(52,211,153,0.35); } .tile.pass .n { color: var(--ok); }
+  .tile.supported { border-color: rgba(245,181,68,0.35); } .tile.supported .n { color: var(--fid); }
+  .tile.fail { border-color: rgba(248,113,113,0.35); } .tile.fail .n { color: var(--fail); }
+  .tile.excluded { border-color: rgba(107,114,128,0.35); } .tile.excluded .n { color: var(--neutral); }
+
+  .verdict-card {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .verdict-badge {
+    display: inline-block; font-size: 15px; font-weight: 800; letter-spacing: 0.03em;
+    padding: 6px 14px; border-radius: 6px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .verdict-badge.pass { background: rgba(52,211,153,0.14); color: var(--ok); border: 1px solid rgba(52,211,153,0.4); }
+  .verdict-badge.supported { background: rgba(245,181,68,0.14); color: var(--fid); border: 1px solid rgba(245,181,68,0.4); }
+  .verdict-badge.fail { background: rgba(248,113,113,0.14); color: var(--fail); border: 1px solid rgba(248,113,113,0.4); }
+  .verdict-explain { font-size: 12.5px; color: var(--text-dim); line-height: 1.55; margin-top: 10px; }
+  .verdict-internal { font-size: 10.5px; color: var(--text-faint); margin-top: 8px; font-family: ui-monospace, Menlo, monospace; }
+  .verdict-internal code { color: var(--text-dim); }
+
+  .rule-card {
+    background: var(--bg-elev); border: 1px solid var(--border); border-left: 3px solid var(--fid);
+    border-radius: 0 8px 8px 0; padding: 12px 16px; margin-bottom: 16px;
+  }
+  .rule-card .lab { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--fid); margin: 0 0 6px; }
+  .rule-card .summary { font-size: 12.5px; color: var(--text-dim); margin: 0 0 8px; line-height: 1.5; }
+  .rule-card .summary b { color: var(--fid); font-weight: 700; }
+  .rule-card .full { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; margin: 0; }
+  .rule-card .applied {
+    font-size: 12px; color: var(--text); margin-top: 10px; padding-top: 8px;
+    border-top: 1px dashed var(--border); line-height: 1.5;
+  }
+
+  .breakdown-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .breakdown-card .block-lab {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-faint); margin: 0 0 8px;
+  }
+  .bd-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 12px; }
+  .bd-row:last-child { border-bottom: none; }
+  .bd-row .kind { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-faint); min-width: 74px; }
+  .bd-row .claim { flex: 1; color: var(--text-dim); }
+  .bd-row .claim.prov { font-style: italic; color: var(--text-faint); }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 200px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--fid); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Fiduciary Gate</h1>
+    <span class="subtitle">Assemble a turn's citation set — the PASS / SUPPORTED / FAIL gate recomputes live, deterministically (ADR 0018 D3).</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>This turn's citation set</h2>
+      <p class="hint">Each chip is one <code>citation_ledger_entry</code>. Change its <code>verification_status</code> — the gate recomputes live (<code>compute_and_record_gate</code>: pure DB, no egress).</p>
+      <div id="chip-list"></div>
+      <button class="add-btn" id="btn-add">+ Add citation</button>
+      <button class="reset-btn" id="btn-reset">&#8635; Reset to example turn</button>
+
+      <h2>Known gap</h2>
+      <div class="caveat">
+        <span class="lab">Verdict-tier parity</span>
+        Chat vs autonomous verdict-tier parity gaps remain (DE-370 / DE-371) — the gate runs on both the chat and autonomous paths, but tier handling is not yet identical across them.
+      </div>
+
+      <h2>Status &rarr; bucket (gate.py)</h2>
+      <table class="legend-table">
+        <tr><td><code>exact_match</code></td><td><span class="bucket-tag pass">PASS</span></td></tr>
+        <tr><td><code>tolerant_match</code></td><td><span class="bucket-tag pass">PASS</span></td></tr>
+        <tr><td><code>paraphrase_judge</code></td><td><span class="bucket-tag supported">SUPPORTED</span></td></tr>
+        <tr><td><code>ensemble_strict</code></td><td><span class="bucket-tag supported">SUPPORTED</span></td></tr>
+        <tr><td><code>ensemble_majority</code></td><td><span class="bucket-tag supported">SUPPORTED</span></td></tr>
+        <tr><td><code>unverified</code></td><td><span class="bucket-tag fail">FAIL</span></td></tr>
+        <tr><td><code>failed</code></td><td><span class="bucket-tag fail">FAIL</span></td></tr>
+        <tr><td><code>provenance</code></td><td><span class="bucket-tag excluded">excluded</span></td></tr>
+      </table>
+      <p class="hint" style="margin-top:8px">Provenance entries are a source the tool call returned this turn — not an assertion — so <code>compute_and_record_gate</code> skips them before bucketing (<code>continue</code>, not counted).</p>
+    </aside>
+
+    <div class="content-wrap">
+      <div class="panel-wrap">
+        <div class="tiles" id="tiles"></div>
+        <div class="verdict-card" id="verdict-card"></div>
+        <div class="rule-card">
+          <p class="lab">ADR 0018 D3 — the fiduciary-grade gate</p>
+          <p class="summary"><b>In short:</b> fiduciary-grade only when every citation is ledger-backed. (Paraphrase — not a verbatim quote of the ADR.)</p>
+          <p class="full">In full: a drafted answer / memo / clause is fiduciary-grade <b>iff every assertion's citation resolves to a ledger entry whose <code>verification_status</code> is in the PASS set, with no entry in the FAIL set left un-surfaced</b>. SUPPORTED entries are permitted, but only labeled distinctly as &ldquo;supported, not verbatim&rdquo; — never presented as a verbatim quote.</p>
+          <div class="applied" id="rule-applied"></div>
+        </div>
+        <div class="breakdown-card">
+          <p class="block-lab">Per-citation breakdown</p>
+          <div id="breakdown"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// Copied verbatim from api/app/citation/gate.py — do not paraphrase.
+const PASS_STATUSES = new Set(["exact_match", "tolerant_match"]);
+const SUPPORTED_STATUSES = new Set(["paraphrase_judge", "ensemble_strict", "ensemble_majority"]);
+const FAIL_STATUSES = new Set(["unverified", "failed"]);
+const PROVENANCE = "provenance";
+
+// The 8 selectable statuses: the 7 verification_status values gate.py buckets
+// (2 PASS + 3 SUPPORTED + 2 FAIL) plus "provenance" (not an assertion).
+const ALL_STATUSES = [
+  "exact_match", "tolerant_match",
+  "paraphrase_judge", "ensemble_strict", "ensemble_majority",
+  "unverified", "failed",
+  "provenance"
+];
+
+// A synthetic turn's starting citation_ledger_entry set (illustrative — not fetched).
+function exampleCitations() {
+  return [
+    { id: "c1", source_kind: "kb_document", status: "exact_match",
+      claim: "The License Agreement grants a non-exclusive right to use the Software for internal business purposes only." },
+    { id: "c2", source_kind: "caselaw", status: "tolerant_match",
+      claim: "Work-product protection lets an attorney prepare a case with a degree of privacy, free from unnecessary intrusion by opposing counsel." },
+    { id: "c3", source_kind: "statute", status: "paraphrase_judge",
+      claim: "Under 42 U.S.C. § 1983, a person acting under color of state law who deprives another of a federally protected right may be held liable." },
+    { id: "c4", source_kind: "regulation", status: "ensemble_majority",
+      claim: "Reasonable accommodation does not require changes that would impose an undue hardship on the employer's operations." },
+    { id: "c5", source_kind: "caselaw", status: "unverified",
+      claim: "The statute of limitations for this claim is tolled during the defendant's absence from the jurisdiction." },
+    { id: "c6", source_kind: "caselaw", status: "provenance",
+      claim: null, label: "CourtListener search: “tolling doctrine” — 9 candidate opinions returned" }
+  ];
+}
+
+let citations = exampleCitations();
+let nextId = citations.length + 1;
+
+function bucketOf(status) {
+  // Mirrors compute_and_record_gate's branch order exactly, including the
+  // defensive final branch (an unrecognized status is excluded + logged,
+  // never counted) — unreachable here since the <select> only offers the
+  // 8 known values, but kept faithful to the source.
+  if (status === PROVENANCE) return "excluded";
+  if (PASS_STATUSES.has(status)) return "pass";
+  if (SUPPORTED_STATUSES.has(status)) return "supported";
+  if (FAIL_STATUSES.has(status)) return "fail";
+  return "excluded";
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function computeGate(list) {
+  let pass = 0, supported = 0, fail = 0, excluded = 0;
+  for (const c of list) {
+    const b = bucketOf(c.status);
+    if (b === "pass") pass++;
+    else if (b === "supported") supported++;
+    else if (b === "fail") fail++;
+    else excluded++;
+  }
+  const total = pass + supported + fail;
+  // Exact upsert logic from compute_and_record_gate.
+  let gateStatus;
+  if (fail > 0) gateStatus = "flagged";
+  else if (supported > 0) gateStatus = "supported_only";
+  else gateStatus = "fiduciary_grade";
+  return { pass, supported, fail, excluded, total, gateStatus };
+}
+
+function tierOf(gateStatus) {
+  // The brief's instruction: display the real ADR 0018 tiers PASS / SUPPORTED /
+  // FAIL, not gate.py's internal gate_status string ("flagged"). The internal
+  // value is still shown, in small print, for verify-in-source traceability.
+  if (gateStatus === "flagged") return { tier: "FAIL", cls: "fail", label: "FAIL — not fiduciary-grade" };
+  if (gateStatus === "supported_only") return { tier: "SUPPORTED", cls: "supported", label: "SUPPORTED — labeled, not verbatim" };
+  return { tier: "PASS", cls: "pass", label: "PASS — fiduciary-grade" };
+}
+
+function renderChips() {
+  const wrap = document.getElementById("chip-list");
+  wrap.innerHTML = "";
+  citations.forEach((c, idx) => {
+    const bkt = bucketOf(c.status);
+    const isProv = c.status === PROVENANCE;
+    const div = document.createElement("div");
+    div.className = "chip";
+    const claimHtml = isProv
+      ? `<span class="chip-claim prov">provenance — ${escapeHtml(c.label || "source consulted, no quote")}</span>`
+      : `<span class="chip-claim">${escapeHtml(c.claim || "(untitled citation — set a claim in real use)")}</span>`;
+    const options = ALL_STATUSES.map(s =>
+      `<option value="${s}" ${s === c.status ? "selected" : ""}>${s}</option>`).join("");
+    div.innerHTML = `
+      <div class="chip-top">
+        <span class="chip-kind">${escapeHtml(c.source_kind)}</span>
+        <button class="chip-remove" data-idx="${idx}" title="Remove citation">&times;</button>
+      </div>
+      ${claimHtml}
+      <select class="status-select bkt-${bkt}" data-idx="${idx}">${options}</select>
+      <span class="chip-bucket">bucket: <b>${bkt === "excluded" ? "excluded (not an assertion)" : bkt.toUpperCase()}</b></span>
+    `;
+    wrap.appendChild(div);
+  });
+
+  wrap.querySelectorAll(".status-select").forEach(sel => {
+    sel.addEventListener("change", e => {
+      const idx = parseInt(e.target.dataset.idx, 10);
+      citations[idx].status = e.target.value;
+      renderAll();
+    });
+  });
+  wrap.querySelectorAll(".chip-remove").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const idx = parseInt(e.target.dataset.idx, 10);
+      citations.splice(idx, 1);
+      renderAll();
+    });
+  });
+}
+
+function renderTiles(gate) {
+  const wrap = document.getElementById("tiles");
+  wrap.innerHTML = `
+    <div class="tile pass"><div class="n">${gate.pass}</div><div class="lab">PASS</div></div>
+    <div class="tile supported"><div class="n">${gate.supported}</div><div class="lab">SUPPORTED</div></div>
+    <div class="tile fail"><div class="n">${gate.fail}</div><div class="lab">FAIL</div></div>
+    <div class="tile excluded"><div class="n">${gate.excluded}</div><div class="lab">excluded (provenance)</div></div>
+  `;
+}
+
+function renderVerdict(gate) {
+  const t = tierOf(gate.gateStatus);
+  const wrap = document.getElementById("verdict-card");
+  let explain;
+  if (gate.total === 0) {
+    explain = "No assertions in this set (empty, or every entry is provenance-only). With nothing to fail, the gate vacuously reports fiduciary-grade — there is no citation left un-surfaced, but there is also no verified claim to stand behind.";
+  } else if (t.tier === "FAIL") {
+    explain = `${gate.fail} of ${gate.total} counted citation${gate.fail === 1 ? "" : "s"} landed in the FAIL bucket (<code>unverified</code> / <code>failed</code>). Per D3, a FAIL entry left un-surfaced means the draft is not fiduciary-grade — flagged, never silently emitted.`;
+  } else if (t.tier === "SUPPORTED") {
+    explain = `No FAIL entries, but ${gate.supported} of ${gate.total} counted citation${gate.supported === 1 ? "" : "s"} is SUPPORTED (<code>paraphrase_judge</code> / <code>ensemble_strict</code> / <code>ensemble_majority</code>) — backed by the source but not a verbatim quote. Permitted, but must render labeled distinctly as “supported, not verbatim.”`;
+  } else {
+    explain = `All ${gate.total} counted citation${gate.total === 1 ? "" : "s"} verified verbatim (<code>exact_match</code> / <code>tolerant_match</code>). Every assertion resolves to a PASS-set ledger entry with no un-surfaced FAIL — fiduciary-grade per D3.`;
+  }
+  wrap.innerHTML = `
+    <span class="verdict-badge ${t.cls}">${t.label}</span>
+    <p class="verdict-explain">${explain}</p>
+    <p class="verdict-internal">Recorded on <code>work_product_fiduciary_gate</code>: <code>gate_status = "${gate.gateStatus}"</code> · <code>pass_count=${gate.pass}</code> · <code>supported_count=${gate.supported}</code> · <code>fail_count=${gate.fail}</code> · <code>total_assertions=${gate.total}</code>. A re-finalize replaces this row — the ledger, not the gate row, is the history.</p>
+  `;
+}
+
+function renderRuleApplied(gate) {
+  const t = tierOf(gate.gateStatus);
+  document.getElementById("rule-applied").innerHTML =
+    `<b>Applied to this turn:</b> ${gate.pass} PASS, ${gate.supported} SUPPORTED, ${gate.fail} FAIL (${gate.excluded} provenance excluded) &rarr; verdict <b>${t.tier}</b>.`;
+}
+
+function renderBreakdown() {
+  const wrap = document.getElementById("breakdown");
+  wrap.innerHTML = citations.map(c => {
+    const bkt = bucketOf(c.status);
+    const claimHtml = c.status === PROVENANCE
+      ? `<span class="claim prov">${escapeHtml(c.label || "source consulted, no quote")}</span>`
+      : `<span class="claim">${escapeHtml(c.claim || "(untitled citation)")}</span>`;
+    return `
+      <div class="bd-row">
+        <span class="bucket-tag ${bkt}">${bkt === "excluded" ? "excl." : bkt.toUpperCase()}</span>
+        <span class="kind">${escapeHtml(c.source_kind)} / ${escapeHtml(c.status)}</span>
+        ${claimHtml}
+      </div>
+    `;
+  }).join("") || `<p class="hint">No citations in this turn's set.</p>`;
+}
+
+function renderOutput() {
+  document.getElementById("pane-verify").innerHTML = `
+    <p class="src-label">Verify these claims in source</p>
+    <a class="file" href="${REPO}api/app/citation/gate.py" target="_blank" rel="noopener">api/app/citation/gate.py</a>
+    <span style="color:var(--text-faint)">PASS_STATUSES, SUPPORTED_STATUSES, FAIL_STATUSES, compute_and_record_gate</span><br>
+    <a class="file" href="${REPO}docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md" target="_blank" rel="noopener">docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md</a>
+    <span style="color:var(--text-faint)">D3 — "Fiduciary-grade" is a computed gate over ledger entries</span>
+  `;
+  document.getElementById("pane-why").innerHTML = `
+    <p style="margin:0 0 6px"><strong>Why a deterministic count, not a model judgment?</strong></p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6"><code>compute_and_record_gate</code> is pure DB — it reads the turn's <code>citation_ledger_entry</code> rows and buckets their already-computed <code>verification_status</code> (mirrored from the cascade) into PASS / SUPPORTED / FAIL. No egress, no re-verification, no model call at gate time; the gate can't be argued with any more than a sum can.</p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6">Provenance-only entries (a tool source the model consulted, not a quoted assertion) are excluded from the counts entirely — they have no <code>verification_status</code> in the PASS/SUPPORTED/FAIL universe to check, so counting them either way would misstate what was actually asserted.</p>
+    <p style="color:var(--text-dim);margin:0;line-height:1.6">Internally the recorded <code>gate_status</code> is <code>"flagged"</code> / <code>"supported_only"</code> / <code>"fiduciary_grade"</code> — this playground surfaces those as the ADR's own tier names, FAIL / SUPPORTED / PASS, since that's the vocabulary a reviewing lawyer reasons in.</p>
+  `;
+}
+
+function renderAll() {
+  const gate = computeGate(citations);
+  renderChips();
+  renderTiles(gate);
+  renderVerdict(gate);
+  renderRuleApplied(gate);
+  renderBreakdown();
+}
+
+document.getElementById("btn-add").addEventListener("click", () => {
+  citations.push({ id: "c" + (nextId++), source_kind: "kb_document", status: "unverified",
+    claim: "New citation — set its status below." });
+  renderAll();
+});
+document.getElementById("btn-reset").addEventListener("click", () => {
+  citations = exampleCitations();
+  nextId = citations.length + 1;
+  renderAll();
+});
+
+document.querySelectorAll(".output-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".output-tab").forEach(t => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".output-body .pane").forEach(p => p.classList.toggle("active", p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+renderAll();
+renderOutput();
+</script>
+</body>
+</html>

@@ -18,9 +18,11 @@
 	export let tone: LqTone = 'neutral';
 	export let onClick: (() => void) | undefined = undefined;
 	export let onRemove: (() => void) | undefined = undefined;
+	let klass = '';
+	export { klass as class };
 </script>
 
-<span class="lq-pill lq-pill-tone-{tone}">
+<span {...$$restProps} class="lq-pill lq-pill-tone-{tone} {klass}">
 	{#if onClick}
 		<button type="button" class="lq-pill-label lq-pill-label-clickable" on:click={onClick}>
 			{text}
@@ -29,12 +31,7 @@
 		<span class="lq-pill-label">{text}</span>
 	{/if}
 	{#if onRemove}
-		<button
-			type="button"
-			class="lq-pill-remove"
-			aria-label="Remove {text}"
-			on:click={onRemove}
-		>
+		<button type="button" class="lq-pill-remove" aria-label="Remove {text}" on:click={onRemove}>
 			<IconX size={12} />
 		</button>
 	{/if}
@@ -88,22 +85,22 @@
 		outline-offset: 1px;
 	}
 
-	.lq-pill-tone-sage {
+	.lq-pill-tone-accent {
 		background: var(--lq-accent-soft, #e8f4ec);
 		color: var(--lq-accent, #1f7a6b);
 		border-color: var(--lq-accent-border, #c5e6d1);
 	}
-	.lq-pill-tone-slate {
+	.lq-pill-tone-info {
 		background: var(--lq-tier-soft, #e8eff7);
 		color: var(--lq-tier, #355a82);
 		border-color: var(--lq-tier-border, #d4e2f1);
 	}
-	.lq-pill-tone-amber {
+	.lq-pill-tone-warning {
 		background: var(--lq-warn-soft, #fdf3e2);
 		color: var(--lq-warn, #a16e1f);
 		border-color: var(--lq-warn-border, #ead9c5);
 	}
-	.lq-pill-tone-red {
+	.lq-pill-tone-danger {
 		background: var(--lq-error-soft, #fbeaea);
 		color: var(--lq-error, #b54848);
 		border-color: var(--lq-error-border, #f1d2d2);

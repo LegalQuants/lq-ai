@@ -38,8 +38,9 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from sqlalchemy import ColumnElement, Select, Text, and_, func, select
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import ColumnElement, Select, Text, and_, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import AdminUser
@@ -553,14 +554,40 @@ async def remove_alias(
     return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
 
 
-@router.get("/config")
+class SkillResourcePolicy(BaseModel):
+    """Current API/worker host policy for installed skill reference reads."""
+
+    reference_read_enabled: bool
+    max_files: int
+    max_read_bytes: int
+    scope: str
+
+
+class AdminConfigResponse(BaseModel):
+    """Preserve gateway configuration and add the API host's resource policy."""
+
+    model_config = ConfigDict(extra="allow")
+    skill_resource_policy: SkillResourcePolicy
+
+
+@router.get("/config", response_model=AdminConfigResponse)
 async def get_admin_config(
     _admin: AdminUser,
     gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
 ) -> dict[str, Any]:
     """Return the gateway's sanitized current config (D0.5)."""
 
-    return await gateway.get_admin_config()
+    from app.config import get_settings
+    from app.skills.capabilities import MAX_FILE_BYTES, MAX_REFERENCE_FILES
+
+    payload = dict(await gateway.get_admin_config())
+    payload["skill_resource_policy"] = {
+        "reference_read_enabled": get_settings().skill_reference_read_enabled,
+        "max_files": MAX_REFERENCE_FILES,
+        "max_read_bytes": MAX_FILE_BYTES,
+        "scope": "installed skill references/",
+    }
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +606,27 @@ async def get_admin_config(
 # GatewayClient maps each via ``map_gateway_error_code`` to a backend typed
 # exception, so the same 4xx surfaces to the caller (the 400 master-key case
 # maps to ValidationError → 400, not a 500).
+
+
+class ToolProviderSetRequest(BaseModel):
+    """Request body for ``POST /api/v1/admin/tool-providers``."""
+
+    # ``extra="forbid"`` is the api-layer SSRF backstop (ADR 0014): a client
+    # cannot smuggle a ``base_url``/``allowlist`` field through — egress
+    # defaults are gateway-owned. Mirrors the gateway request models.
+    model_config = ConfigDict(extra="forbid")
+
+    type: str = Field(min_length=1)
+    api_key: str | None = Field(default=None, min_length=1)
+
+
+class ToolProviderPatchRequest(BaseModel):
+    """Request body for ``PATCH /api/v1/admin/tool-providers/{type}``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    api_key: str | None = Field(default=None, min_length=1)
+    enabled: bool | None = None
 
 
 class ProviderKeySetRequest(BaseModel):
@@ -649,10 +697,160 @@ async def revoke_provider_key(
 
 
 # ---------------------------------------------------------------------------
+# Donna #3 — runtime tool/authority-provider admin proxy
+# ---------------------------------------------------------------------------
+# Proxies the gateway's ``/admin/v1/tool-providers`` surface (enable/disable
+# an authority source + optional runtime key), mirroring the provider-keys
+# proxy above. Unlike provider-keys, every write here ALSO records an
+# ``audit_log`` row (D1) — enabling/disabling a research authority source is
+# an auditable governance action, not just a key rotation. The audit row is
+# written AFTER the gateway call succeeds: a failing gateway call raises
+# before the audit line runs, so a change that didn't happen is never
+# recorded. This matches ``update_tier_policy`` above.
+#
+# Each write pre-validates ``type``/``provider_type`` against
+# ``SOURCE_REGISTRY`` for a fast, gateway-independent 404 (spec §5) before
+# ever making a network call to the gateway.
+
+
+def _reshape_tool_provider_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Project the gateway status row to the public contract (spec §5)."""
+
+    return {
+        "type": row["type"],
+        "enabled": row["enabled"],
+        "name": row.get("name"),
+        "has_key": row["has_key"],
+        "key_required": row["key_required"],
+        "egress_tier": row.get("egress_tier"),
+    }
+
+
+@router.get("/tool-providers")
+async def list_tool_providers(
+    _admin: AdminUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> dict[str, Any]:
+    """List authority-source status via the gateway. No secret is returned."""
+
+    result = await gateway.list_tool_providers_admin()
+    return {
+        "tool_providers": [
+            _reshape_tool_provider_row(row) for row in result.get("tool_providers", [])
+        ]
+    }
+
+
+@router.post("/tool-providers")
+async def set_tool_provider(
+    body: ToolProviderSetRequest,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Enable an authority source (+optional key). 400/404 propagate from gateway."""
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if body.type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {body.type!r}")
+    row = await gateway.set_tool_provider(body.model_dump(mode="json", exclude_none=True))
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.enabled",
+        resource_type="tool_provider",
+        resource_id=body.type,
+        request=request,
+        details={"has_key_supplied": body.api_key is not None},
+    )
+    await db.commit()
+    return _reshape_tool_provider_row(row)
+
+
+@router.patch("/tool-providers/{provider_type}")
+async def patch_tool_provider(
+    provider_type: str,
+    body: ToolProviderPatchRequest,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Rotate key and/or toggle enabled. 400/404/409 propagate from gateway."""
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if provider_type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {provider_type!r}")
+    row = await gateway.patch_tool_provider(
+        provider_type, body.model_dump(mode="json", exclude_none=True)
+    )
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.updated",
+        resource_type="tool_provider",
+        resource_id=provider_type,
+        request=request,
+        details={
+            "has_key_supplied": body.api_key is not None,
+            "enabled": body.enabled,
+        },
+    )
+    await db.commit()
+    return _reshape_tool_provider_row(row)
+
+
+@router.delete(
+    "/tool-providers/{provider_type}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def disable_tool_provider(
+    provider_type: str,
+    admin: AdminUser,
+    request: Request,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> Response:
+    """Disable an authority source. 404/409 propagate from the gateway.
+
+    Uses the canonical DELETE-204 recipe (``response_class=Response`` plus an
+    explicit empty ``Response`` return) so the 204 carries a genuinely empty
+    body.
+    """
+
+    from app.research.registry import SOURCE_REGISTRY
+
+    if provider_type not in SOURCE_REGISTRY:
+        raise HTTPException(status_code=404, detail=f"unknown source type {provider_type!r}")
+    await gateway.delete_tool_provider(provider_type)
+    from app.audit import audit_action
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="tool_provider.disabled",
+        resource_type="tool_provider",
+        resource_id=provider_type,
+        request=request,
+        details={},
+    )
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
 # Wave C — RBAC three-role management (PRD §5.2)
 # ---------------------------------------------------------------------------
 
-_ROLE_ENUM = frozenset({"admin", "member", "viewer"})
+_ROLE_ENUM = frozenset({"admin", "member", "viewer", "auditor"})
 
 
 class AdminUserRow(BaseModel):
@@ -661,7 +859,7 @@ class AdminUserRow(BaseModel):
     id: _uuid_mod.UUID
     email: str
     display_name: str | None
-    role: str  # 'admin' | 'member' | 'viewer'
+    role: str  # 'admin' | 'member' | 'viewer' | 'auditor'
     is_admin: bool
     mfa_enabled: bool
     must_change_password: bool
@@ -855,6 +1053,252 @@ async def update_user_role(
         email=target.email,
         role=target.role,
         is_admin=target.is_admin,
+    )
+
+
+# ---------------------------------------------------------------------------
+# User provisioning — POST /admin/users, POST /admin/users/{id}/reset-password
+# ---------------------------------------------------------------------------
+# The RBAC surface shipped with a list endpoint and a role-patch endpoint but
+# no way to *create* a user: there is no signup, no invite, and `app/cli.py`
+# exposes only `reset-admin-password`. A deployment's second user therefore
+# required a hand-written bcrypt INSERT. These two handlers close that gap
+# using the machinery the first-run bootstrap already relies on
+# (`app.admin_bootstrap.generate_password` + `must_change_password=True`), so
+# a provisioned user is forced through `/auth/change-password` on first login
+# exactly like the bootstrap admin.
+#
+# The generated password is returned in the response body **once** and is
+# never persisted, logged, or written to the audit row — only its bcrypt hash
+# reaches the database.
+
+
+class AdminUserCreateRequest(BaseModel):
+    """``POST /admin/users`` body."""
+
+    email: EmailStr
+    display_name: str | None = Field(default=None, max_length=200)
+    role: str = Field(
+        default="member",
+        description="One of admin / member / viewer / auditor.",
+    )
+
+
+class AdminUserCreatedResponse(BaseModel):
+    """``POST /admin/users`` response — carries the initial password once.
+
+    ``initial_password`` is returned in this response only and cannot be
+    retrieved later. Use
+    ``POST /admin/users/{id}/reset-password`` to mint a new one.
+    """
+
+    user_id: str
+    email: str
+    display_name: str | None
+    role: str
+    is_admin: bool
+    must_change_password: bool
+    initial_password: str
+
+
+class AdminPasswordResetResponse(BaseModel):
+    """``POST /admin/users/{id}/reset-password`` response."""
+
+    user_id: str
+    email: str
+    initial_password: str
+    sessions_revoked: int
+
+
+@router.post(
+    "/users",
+    response_model=AdminUserCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a user with a generated initial password (admin-only)",
+)
+async def create_user(
+    body: AdminUserCreateRequest,
+    request: Request,
+    response: Response,
+    admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AdminUserCreatedResponse:
+    """POST /api/v1/admin/users — provision a user.
+
+    Admin-only. Generates a CSPRNG initial password, stores only its bcrypt
+    hash, and sets ``must_change_password=True`` so the new user is forced to
+    rotate it on first login. ``is_admin`` is derived from ``role`` (True iff
+    ``role='admin'``), keeping the two admin signals in sync exactly as
+    :func:`update_user_role` and the first-run bootstrap do.
+
+    Returns 201 with the plaintext password and ``Cache-Control: no-store``.
+    The password is never stored or logged by this handler.
+    Returns 409 if the email is already taken — ``users.email`` is CITEXT, so
+    the collision is case-insensitive.
+    """
+
+    from app.admin_bootstrap import generate_password
+    from app.audit import audit_action
+    from app.errors import Conflict
+    from app.security import hash_password
+
+    if body.role not in _ROLE_ENUM:
+        raise HTTPException(
+            status_code=422,
+            detail=f"role must be one of {sorted(_ROLE_ENUM)}",
+        )
+
+    display_name = (body.display_name or "").strip() or None
+    plaintext = generate_password()
+
+    # Race-safe insert on the unique CITEXT `email` column, mirroring
+    # `ensure_first_run_admin`. A lost race yields no row, which we surface
+    # as the same 409 an up-front existence check would have produced.
+    stmt = (
+        pg_insert(UserORM)
+        .values(
+            email=str(body.email),
+            display_name=display_name,
+            hashed_password=hash_password(plaintext),
+            is_admin=body.role == "admin",
+            role=body.role,
+            mfa_enabled=False,
+            must_change_password=True,
+        )
+        .on_conflict_do_nothing(index_elements=["email"])
+        .returning(UserORM.id)
+    )
+    inserted_id = (await db.execute(stmt)).scalar_one_or_none()
+
+    if inserted_id is None:
+        # Nothing was written (ON CONFLICT DO NOTHING), so there is no dirty
+        # state to roll back — `get_db`'s session context manager discards
+        # the transaction when the error propagates.
+        raise Conflict(
+            message="A user with that email already exists.",
+            details={"email": str(body.email)},
+        )
+
+    # The audit row records who was created, by whom, and with what role —
+    # never the password.
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="user.created",
+        resource_type="user",
+        resource_id=str(inserted_id),
+        request=request,
+        details={
+            "target_user_email": str(body.email),
+            "role": body.role,
+            "is_admin": body.role == "admin",
+        },
+    )
+    await db.commit()
+
+    response.headers["Cache-Control"] = "no-store"
+    return AdminUserCreatedResponse(
+        user_id=str(inserted_id),
+        email=str(body.email),
+        display_name=display_name,
+        role=body.role,
+        is_admin=body.role == "admin",
+        must_change_password=True,
+        initial_password=plaintext,
+    )
+
+
+@router.post(
+    "/users/{user_id}/reset-password",
+    response_model=AdminPasswordResetResponse,
+    summary="Reset a user's password to a generated value (admin-only)",
+)
+async def reset_user_password(
+    user_id: str,
+    request: Request,
+    response: Response,
+    admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AdminPasswordResetResponse:
+    """POST /api/v1/admin/users/{user_id}/reset-password — mint a new password.
+
+    Admin-only. Generates a fresh CSPRNG password, sets
+    ``must_change_password=True``, and revokes every active refresh session
+    for the target user so an attacker holding a stolen refresh token cannot
+    outlive the reset. This is the same revocation the self-service
+    ``/auth/change-password`` path performs.
+
+    Increments the target's credential version, immediately invalidating
+    existing access tokens and MFA challenges. Existing MFA enrollment is
+    preserved. The password response uses ``Cache-Control: no-store``.
+    """
+
+    from app.admin_bootstrap import generate_password
+    from app.audit import audit_action
+    from app.errors import NotFound
+    from app.models.user import UserSession
+    from app.security import hash_password
+
+    try:
+        target_uuid = _uuid_mod.UUID(user_id)
+    except (TypeError, ValueError):
+        raise NotFound(message="user not found") from None
+
+    target = (
+        await db.execute(
+            select(UserORM)
+            .where(UserORM.id == target_uuid)
+            # Password changes do not modify the user key. NO KEY UPDATE
+            # still serializes credential mutation/session issuance, while
+            # allowing audit inserts to take KEY SHARE on another admin.
+            # FOR UPDATE deadlocks when two admins reset each other.
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one_or_none()
+    if target is None or target.deleted_at is not None:
+        raise NotFound(message="user not found")
+
+    plaintext = generate_password()
+    target.hashed_password = hash_password(plaintext)
+    target.credential_version += 1
+    target.must_change_password = True
+
+    # RETURNING rather than `rowcount` so the count is typed and portable.
+    revoked_ids = (
+        (
+            await db.execute(
+                update(UserSession)
+                .where(UserSession.user_id == target.id, UserSession.revoked_at.is_(None))
+                .values(revoked_at=func.now())
+                .returning(UserSession.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    sessions_revoked = len(revoked_ids)
+
+    await audit_action(
+        db,
+        user_id=admin.id,
+        action="user.password_reset",
+        resource_type="user",
+        resource_id=str(target.id),
+        request=request,
+        details={
+            "target_user_email": target.email,
+            "sessions_revoked": sessions_revoked,
+        },
+    )
+    await db.commit()
+
+    response.headers["Cache-Control"] = "no-store"
+    return AdminPasswordResetResponse(
+        user_id=str(target.id),
+        email=target.email,
+        initial_password=plaintext,
+        sessions_revoked=sessions_revoked,
     )
 
 

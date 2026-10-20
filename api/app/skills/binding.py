@@ -1,0 +1,129 @@
+"""Resolve exact skill identities without granting authority from skill text."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from uuid import UUID
+
+from pydantic import ValidationError
+from sqlalchemy import Select, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.errors import ToolNotGranted
+from app.models.team import TeamMember
+from app.models.user_skill import UserSkill
+from app.skills.capabilities import SkillCapabilities
+from app.skills.references import ReferenceSnapshot
+from app.skills.registry import MutableSkillRegistry, SkillRecord
+
+
+@dataclass(frozen=True)
+class SkillBinding:
+    name: str
+    key: str
+    digest: str
+    capabilities: SkillCapabilities
+    bundle_digest: str | None = None
+    reference_paths: tuple[str, ...] = ()
+    """The skill's on-demand ``references/`` files, as paths relative to the
+    skill folder. Their contents are covered by ``digest``."""
+    reference_snapshots: tuple[tuple[str, ReferenceSnapshot], ...] = field(
+        default=(), repr=False, compare=False
+    )
+    """Ephemeral bytes from the hashed artifact; never policy, audit, or trace data."""
+    reference_folder: Path | None = field(default=None, repr=False, compare=False)
+    instructions: str = field(default="", repr=False, compare=False)
+
+
+def bind_record(record: SkillRecord) -> SkillBinding:
+    from app.autonomous.orchestration.policy import load_pinned_skill
+
+    pinned = load_pinned_skill(record)
+    return SkillBinding(
+        name=record.name,
+        key=f"{record.source}:{record.name}",
+        digest=pinned.pin.digest,
+        capabilities=record.frontmatter.lq_ai.capabilities
+        if record.frontmatter.lq_ai
+        else SkillCapabilities(),
+        bundle_digest=pinned.bundle_digest,
+        reference_paths=tuple(
+            path.relative_to(record.folder).as_posix() for path in record.on_demand_paths
+        ),
+        reference_snapshots=pinned.reference_snapshots,
+        reference_folder=record.folder,
+        instructions=record.body,
+    )
+
+
+def _bind_row(row: UserSkill) -> SkillBinding:
+    try:
+        capabilities = SkillCapabilities.model_validate(
+            (row.frontmatter_extra or {}).get("capabilities", {})
+        )
+    except ValidationError:
+        raise ToolNotGranted("Invalid optional skill capabilities") from None
+    if capabilities.scripts:
+        raise ToolNotGranted("Database skills cannot install executable scripts")
+    digest = hashlib.sha256(
+        json.dumps(
+            [str(row.id), row.version, row.body, row.frontmatter_extra],
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return SkillBinding(
+        row.slug, f"{row.scope}:{row.id}", digest, capabilities, instructions=row.body
+    )
+
+
+def _visible_rows(owner_id: UUID) -> Select[tuple[UserSkill]]:
+    return (
+        select(UserSkill)
+        .where(
+            UserSkill.archived_at.is_(None),
+            ((UserSkill.scope == "user") & (UserSkill.owner_user_id == owner_id))
+            | (
+                (UserSkill.scope == "team")
+                & UserSkill.owner_team_id.in_(
+                    select(TeamMember.team_id).where(TeamMember.user_id == owner_id)
+                )
+            ),
+        )
+        .execution_options(populate_existing=True)
+    )
+
+
+async def resolve_binding(
+    db: AsyncSession,
+    owner_id: UUID,
+    name: str,
+    registry: MutableSkillRegistry,
+) -> SkillBinding | None:
+    rows = list(
+        await db.scalars(
+            _visible_rows(owner_id)
+            .where(UserSkill.slug == name)
+            .order_by(UserSkill.updated_at.desc(), UserSkill.id.desc())
+        )
+    )
+    row = next((r for r in rows if r.scope == "user"), rows[0] if rows else None)
+    if row is not None:
+        return _bind_row(row)
+    record = registry.current().get(name)
+    return bind_record(record) if record else None
+
+
+async def revalidate_binding(
+    db: AsyncSession,
+    owner_id: UUID,
+    binding: SkillBinding,
+    registry: MutableSkillRegistry,
+) -> None:
+    current = await resolve_binding(db, owner_id, binding.name, registry)
+    if current != binding:
+        raise ToolNotGranted("Skill changed or access was revoked; start a new invocation")

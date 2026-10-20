@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import denied_file_ids, denied_kb_ids, require_matter, require_resource_write
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import Conflict, LQAIError, NotFound, ValidationError
@@ -57,6 +58,8 @@ from app.models.document import Document, DocumentChunk
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.project import Project
+from app.models.project_knowledge_base import ProjectKnowledgeBase
+from app.models.user import User
 from app.schemas.knowledge import (
     AttachFileRequest,
     KBFileResponse,
@@ -97,12 +100,14 @@ async def _load_visible_kb(
     owner_id: uuid.UUID,
     *,
     include_archived: bool = False,
+    need_write: bool = False,
 ) -> KnowledgeBase:
     """Load a KB scoped to the caller; 404 on miss / cross-user / archived."""
 
     stmt = select(KnowledgeBase).where(
         KnowledgeBase.id == kb_id,
         KnowledgeBase.owner_id == owner_id,
+        KnowledgeBase.id.not_in(denied_kb_ids(owner_id)),
     )
     if not include_archived:
         stmt = stmt.where(KnowledgeBase.archived_at.is_(None))
@@ -112,6 +117,23 @@ async def _load_visible_kb(
         raise NotFound(
             f"Knowledge base {kb_id} not found.",
             details={"kb_id": str(kb_id)},
+        )
+    if row.project_id is not None:
+        user = await db.get(User, owner_id)
+        if user is None:
+            raise NotFound("Resource not found.")
+        await require_matter(db, row.project_id, user, include_archived=True)
+    if need_write:
+        actor = await db.get(User, owner_id)
+        if actor is None:
+            raise NotFound("Resource not found.")
+        await require_resource_write(
+            db,
+            actor,
+            row.project_id,
+            select(ProjectKnowledgeBase.project_id).where(
+                ProjectKnowledgeBase.knowledge_base_id == row.id
+            ),
         )
     return row
 
@@ -131,6 +153,7 @@ async def _load_visible_file_for_kb(
     stmt = select(FileModel).where(
         FileModel.id == file_id,
         FileModel.owner_id == owner_id,
+        FileModel.id.not_in(denied_file_ids(owner_id)),
         FileModel.deleted_at.is_(None),
     )
     result = await db.execute(stmt)
@@ -146,24 +169,17 @@ async def _load_visible_file_for_kb(
 async def _load_visible_project_for_kb(
     db: AsyncSession,
     project_id: uuid.UUID,
-    owner_id: uuid.UUID,
+    user: User,
 ) -> Project:
-    """Validate that ``project_id`` is owned by the caller (active) before
-    accepting it as the KB's project association."""
+    """Validate the caller may contribute to ``project_id`` (active) before
+    accepting it as the KB's matter association.
 
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == owner_id,
-        Project.archived_at.is_(None),
-    )
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise NotFound(
-            f"Project {project_id} not found.",
-            details={"project_id": str(project_id)},
-        )
-    return row
+    ``write``, not ``read``: attaching a knowledge base decides what every
+    chat in the matter retrieves from, so it is a change to the matter, not
+    a use of it.
+    """
+
+    return await require_matter(db, project_id, user, need="write")
 
 
 async def _kb_counts(db: AsyncSession, kb_id: uuid.UUID) -> tuple[int, int]:
@@ -248,7 +264,7 @@ async def create_kb(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> KnowledgeBaseResponse:
     if payload.project_id is not None:
-        await _load_visible_project_for_kb(db, payload.project_id, user.id)
+        await _load_visible_project_for_kb(db, payload.project_id, user)
 
     kb = KnowledgeBase(
         owner_id=user.id,
@@ -309,13 +325,30 @@ async def list_kbs(
         Query(description="Filter by project association."),
     ] = None,
 ) -> list[KnowledgeBaseResponse]:
-    stmt = select(KnowledgeBase).where(KnowledgeBase.owner_id == user.id)
+    stmt = select(KnowledgeBase).where(
+        KnowledgeBase.owner_id == user.id, KnowledgeBase.id.not_in(denied_kb_ids(user.id))
+    )
     if archived is True:
         stmt = stmt.where(KnowledgeBase.archived_at.is_not(None))
     else:
         stmt = stmt.where(KnowledgeBase.archived_at.is_(None))
     if project_id is not None:
-        stmt = stmt.where(KnowledgeBase.project_id == project_id)
+        # A KB is "in project X" iff a ``project_knowledge_bases`` join row
+        # links them. Attach/detach (POST/DELETE /projects/{id}/knowledge-bases)
+        # and chat retrieval both key off this junction table; filtering here
+        # on the legacy ``knowledge_bases.project_id`` column instead made every
+        # KB linked via the current endpoints invisible on the matter page even
+        # though retrieval used it. The legacy column is intentionally left in
+        # place (dropping it is a separate migration) but is no longer read by
+        # this filter.
+        stmt = stmt.where(
+            select(ProjectKnowledgeBase.knowledge_base_id)
+            .where(
+                ProjectKnowledgeBase.project_id == project_id,
+                ProjectKnowledgeBase.knowledge_base_id == KnowledgeBase.id,
+            )
+            .exists()
+        )
     stmt = stmt.order_by(KnowledgeBase.created_at.desc())
 
     result = await db.execute(stmt)
@@ -351,7 +384,7 @@ async def update_kb(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> KnowledgeBaseResponse:
     kid = _validate_kb_id(kb_id)
-    kb = await _load_visible_kb(db, kid, user.id, include_archived=True)
+    kb = await _load_visible_kb(db, kid, user.id, include_archived=True, need_write=True)
     update_fields = payload.model_dump(exclude_unset=True)
 
     if "name" in update_fields:
@@ -363,7 +396,7 @@ async def update_kb(
     if "project_id" in update_fields:
         new_project_id = update_fields["project_id"]
         if new_project_id is not None:
-            await _load_visible_project_for_kb(db, new_project_id, user.id)
+            await _load_visible_project_for_kb(db, new_project_id, user)
         kb.project_id = new_project_id
 
     if "archived" in update_fields:
@@ -419,7 +452,7 @@ async def delete_kb(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     kid = _validate_kb_id(kb_id)
-    kb = await _load_visible_kb(db, kid, user.id, include_archived=False)
+    kb = await _load_visible_kb(db, kid, user.id, include_archived=False, need_write=True)
     kb.archived_at = datetime.now(tz=UTC)
     await audit_action(
         db,
@@ -465,7 +498,7 @@ async def attach_file(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Response:
     kid = _validate_kb_id(kb_id)
-    kb = await _load_visible_kb(db, kid, user.id)
+    kb = await _load_visible_kb(db, kid, user.id, need_write=True)
     file_row = await _load_visible_file_for_kb(db, payload.file_id, user.id)
 
     if file_row.ingestion_status != "ready":
@@ -671,7 +704,7 @@ async def detach_file(
             details={"file_id": file_id},
         ) from exc
 
-    kb = await _load_visible_kb(db, kid, user.id)
+    kb = await _load_visible_kb(db, kid, user.id, need_write=True)
 
     stmt = select(KnowledgeBaseFile).where(
         and_(
@@ -760,6 +793,7 @@ async def query_kb(
     raw_results = await hybrid_search(
         db,
         kb_id=kid,
+        user_id=user.id,
         query=payload.query,
         query_embedding=query_embedding,
         top_k=payload.top_k,

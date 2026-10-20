@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![PRD](https://img.shields.io/badge/PRD-v0.2-green.svg)](docs/PRD.md)
 [![Status](https://img.shields.io/badge/Status-Pre--Release-orange.svg)](#project-status)
-[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](https://slsa.dev) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
+[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](docs/security/releases/README.md#verify-the-slsa-build-provenance) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
 LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers conversational chat with persistent history and matter-scoped projects, character-verifiable citations against source documents (M2's four-stage Citation Engine), a privacy-preserving anonymization layer for cloud inference (M2), reusable workflow skills authored in the open [agentskills.io / Anthropic Claude Skills](https://github.com/anthropics/skills) format, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model (Anthropic, OpenAI, Azure OpenAI, or local Ollama out of the box), with zero license fees.
 
@@ -31,6 +31,8 @@ For more on this philosophy, see [PRD §1.3 Transparency as a Founding Principle
 
 The trust model for a self-hosted, open-source legal AI product is structurally different from the trust model for a closed-source SaaS product. You don't have to take our word for any claim in this document. The verification path for everything we say about LQ.AI runs through code you can read: the inference gateway's routing logic, the audit logger, the skills, the test suite, the build provenance. Compliance attestations and procurement questionnaire responses are useful where they apply; we publish them too ([Compliance Pack](docs/compliance/README.md), [Procurement Pack mini-PRD](docs/contribute/mini-prds/procurement-readiness-pack.md)). But the substantive verification of what LQ.AI does is in the source — including the parts that are not wired yet, which we list directly in [HONEST-STATE.md](docs/HONEST-STATE.md). If the README claims something and the code does not back it up, the code is canonical; please [open an issue](https://github.com/LegalQuants/lq-ai/issues).
 
+This verifiability-first posture is also how we compare ourselves to the rest of the market: see [`docs/comparison.md`](docs/comparison.md) for the evidence-linked comparison (every LQ.AI claim links to its proof artifact), or the condensed in-app version at **Learn → Compare** (`/lq-ai/learn/compare`).
+
 ---
 
 ## What it does
@@ -52,13 +54,13 @@ The chat UI renders citations as four visual states: green (exact / tolerant mat
 
 **Projects (matter-scoped containers).** A user-curated container that scopes a set of chats, files, skills, playbooks, and a free-form context document around a single matter — a deal, a counterparty, a regulatory question, a policy refresh. Chats inside a Project automatically inherit the Project's attached files, skills, and context. Projects carry an optional `privileged: true` flag that forces minimum inference tier and marks every chat and audit-log entry as privileged.
 
-**Organization Profile.** A singleton skill at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context. Without it, every skill has to relearn the org from scratch every time. Like every other skill, it is open source and inspectable.
+**Organization Profile.** A singleton skill at the deployment level capturing your team's voice, jurisdiction, industry, standard positions, and escalation thresholds. Skills draw on it as context. Without it, every skill has to relearn the org from scratch every time. Like every other skill, it is open source and inspectable. See [`api/app/api/organization_profile.py`](api/app/api/organization_profile.py).
 
 **Inference Tier Awareness.** A persistent badge in the chat UI shows which Inference Tier (1–5) your current chat is running on — from local-only inference (Tier 1) through enterprise managed inference with ZDR (Tier 3) to consumer/free endpoints (Tier 5). Click the badge for what the tier implies: where the data is going, what the provider's retention policy is, whether anonymization is on. **Tier-floor enforcement** is a first-class gateway feature: skills declare a `minimum_inference_tier` in their frontmatter, projects declare one in their database row, callers can override per-request, and the gateway refuses any routing weaker than the effective floor with HTTP 403 `tier_below_minimum`. A privileged project paired with `minimum_inference_tier=1` produces fully sealed local inference — no outbound network, no anonymization rewriting, audit trail captures the local routing.
 
 **Audit log.** Append-only `audit_log` table records every state-changing action with first-class columns for `privilege_marked`, `privilege_basis`, `routed_inference_tier`, `routed_provider`, plus a JSONB `details` field for action-specific context. Admin-gated `GET /admin/audit-log` endpoint supports filtering by user, resource, action, privilege, tier, and timestamp range; paginated for large windows. Privileged-matter compliance evidence is one query: `?privilege_marked=true&from_timestamp=...&to_timestamp=...`. Cross-references to the gateway's `inference_routing_log` (which records `anonymization_applied`, latency, cost estimate, and request correlation id) via `request_id` for end-to-end pipeline audit. See [`docs/procurement/sig-lite.md`](docs/procurement/sig-lite.md) for the procurement-team-facing audit posture.
 
-**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses Docling for layout-aware parsing of complex PDFs (multi-column, tables, footnotes) with PyMuPDF as the fast path for simpler documents. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
+**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses PyMuPDF to parse text-bearing PDFs into a character stream. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
 
 **Enhance Prompt.** A prompt-rewriting skill that runs as an optional pre-step. You type a short, natural-language question; Enhance Prompt expands it into a structured legal prompt (role, jurisdiction, audience, scope, output format, constraints, citation expectations) and shows you the expanded version before submission. The skill itself is inspectable — you can read the SKILL.md driving the enhancement at any time.
 
@@ -68,7 +70,7 @@ The chat UI renders citations as four visual states: green (exact / tolerant mat
 
 **Tabular / Multi-Document Review (M3, shipped).** Structured grid output across N documents — a row per document, a column per question — with per-cell grounding chunks and XLSX/CSV export. "Show me the term length, survival period, carveouts, and governing law for each of these 30 NDAs." Per-cell citations are navigable: the read-side resolves each cell's grounding chunk to its source file, page, and text so the UI can jump to the source. (Executor-minted Citation-Engine provenance remains deferred — [DE-309](docs/PRD.md#9-deferred-enhancements-and-identified-future-work).) Per-column ensemble verification is now honored at execution. See [`docs/tabular-review.md`](docs/tabular-review.md).
 
-**Slack / Teams Light Intake Bridge (M3, plumbing shipped).** Standalone `slack-bridge` + `teams-bridge` services (opt-in Compose profiles) with OAuth install + identity binding + an admin management surface. The webhook handlers are signature-verified but the `/lq` slash-command quick-skill surface is inert/deferred ([DE-288](docs/PRD.md#9-deferred-enhancements-and-identified-future-work), community-friendly); a real OAuth round-trip against a public tunnel has not yet been exercised end-to-end ([DE-312](docs/PRD.md#9-deferred-enhancements-and-identified-future-work)). Light intake, deliberately not full triage/SLA/approvals — that is Streamline AI's category. See [`docs/intake-bridges.md`](docs/intake-bridges.md).
+**Slack / Teams Light Intake Bridge (M3, plumbing shipped).** Standalone `slack-bridge` + `teams-bridge` services (opt-in Compose profiles) with OAuth install + identity binding + an admin management surface. The webhook handlers are signature-verified but the `/lq` slash-command quick-skill surface is inert/deferred ([DE-288](docs/PRD.md#9-deferred-enhancements-and-identified-future-work), community-friendly); a real OAuth round-trip against a public tunnel has not yet been exercised end-to-end ([DE-312](docs/PRD.md#9-deferred-enhancements-and-identified-future-work)). Light intake, deliberately not full triage/SLA/approvals — that is the dedicated legal-intake/triage-platform category. See [`docs/intake-bridges.md`](docs/intake-bridges.md).
 
 **Anonymization Layer (M2).** Pre-processing step in the Inference Gateway that pseudonymizes sensitive entities (names, organizations, addresses, email addresses, phone numbers, case numbers, matter numbers) before requests leave for the model provider; rehydrates pseudonyms back to originals on the response path. Built on [Presidio](https://github.com/microsoft/presidio) + spaCy + two custom legal recognizers (`CaseNumberRecognizer`, `MatterNumberRecognizer`) that catch legal-specific identifiers the default Presidio config misses. Per-request `PseudonymMapper` is in-memory only — never persisted, never logged, dropped on function exit.
 
@@ -78,15 +80,27 @@ The privacy fallback for Tier 3+ inference when local (Tier 1) is impractical bu
 
 **Honest validation posture.** The custom recognizers, middleware integration, round-trip correctness, and edge cases are exercised by ~24 unit + integration tests. The Presidio default-recognizer recall and precision **on legal-document corpus specifically** is empirically unmeasured — Presidio's published metrics target general English (news, social media), not legal prose. A recognizer miss is a silent confidentiality incident (unlike citation misses, which surface in the UI as "unverified"). Operators with high-confidentiality requirements should read [`docs/security/anonymization.md` §"What's validated vs what's unvalidated"](docs/security/anonymization.md#whats-validated-vs-whats-unvalidated) and consider Tier 1 (Ollama local) routing for matters where the unvalidated risk is unacceptable. Empirical validation on a curated legal-document corpus is welcomed as a community contribution — the bounded scope is documented at [PRD §9 / DE-282](docs/PRD.md#de-282--anonymization-layer-empirical-validation-on-legal-document-corpus). We win by being honest about where to trust and where to be careful, not by overclaiming.
 
-**Autonomous Layer (M4, shipped).** Opt-in (off by default) background per-user agents that do real in-loop work under hard brakes. A five-phase executor (intake → analysis → drafting → ethics_review → delivery) routes every external action through a single `guarded_tool_call` chokepoint enforcing three brakes: R4 (per-session and per-trigger cost cap), R5 (external halt + idle watchdog), and R6 (phase-gated tool grants). Four primitives ship: watches that trigger on KB changes, in-repo cron schedules, a per-user memory store with a curation UI, and a precedent board. Each session produces an honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt), surfaced in a web dashboard. Sessions persist their findings for later review, and opted-in runs (default off) can emit markdown documents directly into the target knowledge base. The ethics-review phase is a light v1. See [`docs/autonomous-layer.md`](docs/autonomous-layer.md).
+**Autonomous Layer (M4, shipped).** Opt-in (off by default) background per-user agents that do real in-loop work under hard brakes. A five-phase executor (intake → analysis → drafting → ethics_review → delivery) routes every external action through a single `guarded_tool_call` chokepoint enforcing three brakes: R4 (per-session and per-trigger cost cap), R5 (external halt + idle watchdog), and R6 (phase-gated tool grants). Four primitives ship: watches that trigger on KB changes, in-repo cron schedules, a per-user memory store with a curation UI, and a precedent board. Each session produces an honest per-session receipt (`terminal_reason`: completed / cost_cap_reached / external_halt), surfaced in a web dashboard. Sessions persist their findings for later review, and opted-in runs (default off) can emit markdown documents directly into the target knowledge base. The ethics-review phase is a light v1. The analysis phase is no longer a single scripted call — the fiduciary-grade milestone below replaced it with a governed plan → act → observe → replan loop under the same brakes. See [`docs/autonomous-layer.md`](docs/autonomous-layer.md).
 
-**Legal research + connectors (MCP), gateway-brokered.** The assistant can look up case law (CourtListener) and call operator-approved connectors (MCP servers) — always through the Inference Gateway, the single audited egress and the only component that speaks the MCP protocol; the backend never reaches a third party directly. The operator chooses which connectors exist; every call is tier-gated and recorded (counts and types only, never the raw arguments or results); per-user connector tokens travel in a request header and are never logged (encrypted at rest); and destructive tools pause for explicit human approval. Step through it in the governed-tool-boundary explorer (`web/static/learn/playgrounds/governed-tool-flow.html`, surfaced in **Learn → How it works**), and read [ADR 0014](docs/adr/0014-gateway-egress-boundary-for-tool-providers.md) (the egress boundary) and [ADR 0015](docs/adr/0015-governed-tool-calling-model.md) (the governed tool-calling model). *Available today: the governed backend tool-loop, egress boundary, per-user OAuth, audit, confirmation-gate protocol, the in-chat confirmation/connect prompts that render this gate inside the chat, rich case-law provenance — source-kinded citations with provenance pills for the external sources a tool call pulled in — and the procedural case-law research skill.*
+**Legal research + connectors (MCP), gateway-brokered.** The assistant can look up case law (CourtListener) and call operator-approved connectors (MCP servers) — always through the Inference Gateway, the single audited egress and the only component that speaks the MCP protocol; the backend never reaches a third party directly. The operator chooses which connectors exist; every call is tier-gated and recorded (counts and types only, never the raw arguments or results); per-user connector tokens travel in a request header and are never logged (encrypted at rest); and destructive tools pause for explicit human approval. CourtListener was the first entry in what is now a content-source registry (below) that has since grown to include free statutory, regulatory, and cross-border authority sources. Step through it in the governed-tool-boundary explorer (`web/static/learn/playgrounds/governed-tool-flow.html`, surfaced in **Learn → How it works**), and read [ADR 0014](docs/adr/0014-gateway-egress-boundary-for-tool-providers.md) (the egress boundary) and [ADR 0015](docs/adr/0015-governed-tool-calling-model.md) (the governed tool-calling model). *Available today: the governed backend tool-loop, egress boundary, per-user OAuth, audit, confirmation-gate protocol, the in-chat confirmation/connect prompts that render this gate inside the chat, rich case-law provenance — source-kinded citations with provenance pills for the external sources a tool call pulled in — and the procedural case-law research skill.*
+
+**Fiduciary-grade agentic legal work (shipped).** Building on the governed tool-loop above, a fiduciary-grade milestone ([ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[ADR 0021](docs/adr/0021-content-source-registry-and-free-source-expansion.md)) shipped next, adding a per-turn record of every source actually read, a pass/fail gate over every tool-retrieved citation, governed plain-language matter sessions, three more free authority sources, and a derived case-law treatment signal. Each piece below ships with its own caveat.
+
+**Citation Ledger.** Every message and autonomous-session turn keeps a per-turn ledger of every source and passage the assistant actually read — not just what it cited — with one-click trace from a claim to its ledger entry (`GET /api/v1/chats/{chat_id}/ledger` and the autonomous-session equivalent). The ledger references content by id and character offset only; per the ADR 0016 P3 no-raw-payload guarantee, it never stores raw passages or tool payloads in the audit layer. See [ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md) and [`api/app/citation/ledger.py`](api/app/citation/ledger.py).
+
+**Fiduciary-grade gate.** A derive-don't-assert gate runs over every tool-retrieved citation, computing one PASS/FAIL verdict per assistant message from the ledger's own verification statuses, and flags failed messages rather than shipping them silently. The chat path also FAILs a quote attributed (via a nearby statute/regulation/CELEX citation) to an authority fetched that turn when the quote cannot be verified against the fetched text (DE-370). Chat and autonomous paths do not yet have full verdict-tier parity: an autonomous-path authority SUPPORTED tier (DE-371) is still open. See [ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md) and [`api/app/citation/gate.py`](api/app/citation/gate.py).
+
+**Governed agentic matter sessions.** On the Autonomous Layer, a plain-language "describe your matter" query can drive a governed plan → act → observe → replan loop confined to the analysis phase, under the same R4/R5/R6 brakes described above, instead of one scripted call. There is no dedicated matter-intake UI yet — the plain-language entry point is a backend seam on session state today. See [ADR 0020](docs/adr/0020-governed-agentic-legal-matter-sessions.md) and [`api/app/autonomous/planner.py`](api/app/autonomous/planner.py).
+
+**Free authority sources (GovInfo, SEC EDGAR, EUR-Lex).** Beyond CourtListener case law, the same governed tool-loop and gateway egress boundary can reach three more free, public authority sources through a content-source registry: GovInfo (US Code and CFR statutes/regulations), SEC EDGAR (public company filings), and EUR-Lex (EU legislation and CJEU case law by CELEX number). Each is off by default and requires an operator-configured `tool_providers` entry — an unconfigured registry entry is reported unavailable, never fabricated. The EUR-Lex adapter supports get-by-CELEX only today; full-text search (DE-374) and treaty/corrigendum CELEX support (DE-375) are open. See [ADR 0021](docs/adr/0021-content-source-registry-and-free-source-expansion.md) and [`api/app/research/registry.py`](api/app/research/registry.py).
+
+**Validity / treatment layer.** For case-law citations, a judge-backed layer derives a plain-language treatment signal (e.g. followed, distinguished, criticized) from the citing opinions that actually reference a case, with one-click trace from the signal back to each citing case it read. It never emits a definitive "good law / bad law" verdict — every signal is labeled "derived, not editorial" — and the per-case judge pass runs under a bounded cost budget rather than reading every citing opinion exhaustively. See [ADR 0019](docs/adr/0019-transparent-validity-treatment-layer.md) and [`api/app/citation/treatment.py`](api/app/citation/treatment.py).
 
 **Contract Repository — Auto-Relationship Detection (roadmap).** A planned pipeline that produces a relationship graph over a Knowledge Base of contracts (amendments, restatements, references, master/sub) to determine the operative document chain. **Not yet built** — there is no `contract_relationships` table in source today; tracked as M4-roadmap / community work.
 
 **Forward-looking (M5–M7, community-driven).** Building on the now-shipped, gateway-brokered [MCP (Model Context Protocol)](https://modelcontextprotocol.io) connector mechanism (above), a broader workflow-aware context layer that integrates email, calendar, task systems, and document stores; a Workspace Concierge that produces ranked Today views with rationales; agent dispatch with human-in-the-loop guardrails. See [PRD §8.5](docs/PRD.md#m5m7--forward-looking-workflow-intelligence-community-driven-not-committed) for the trajectory.
 
-The full capability specification is in [PRD §3](docs/PRD.md#3-capability-specifications). M3 shipped Playbooks and Tabular Review end-to-end, with the Word Add-In and Slack/Teams bridges as plumbing/scaffold (richer surfaces deferred — see each capability doc + the linked DEs). M4 shipped the Autonomous Layer end-to-end; the Contract Repository relationship graph remains roadmap. A gateway-brokered legal-research + connectors (MCP) milestone shipped after M4 (case-law retrieval, MCP client subsystem with per-user OAuth, governed chat tool-loop with a confirmation gate — see [HONEST-STATE.md §5.5](docs/HONEST-STATE.md)). See [HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog with verification paths for every row.
+The full capability specification is in [PRD §3](docs/PRD.md#3-capability-specifications). M3 shipped Playbooks and Tabular Review end-to-end, with the Word Add-In and Slack/Teams bridges as plumbing/scaffold (richer surfaces deferred — see each capability doc + the linked DEs). M4 shipped the Autonomous Layer end-to-end; the Contract Repository relationship graph remains roadmap. A gateway-brokered legal-research + connectors (MCP) milestone shipped after M4 (case-law retrieval, MCP client subsystem with per-user OAuth, governed chat tool-loop with a confirmation gate — see [HONEST-STATE.md §5.5](docs/HONEST-STATE.md)). After that, a fiduciary-grade milestone shipped (Citation Ledger, fiduciary gate, governed agentic matter sessions, free authority sources, treatment layer — ADRs [0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](docs/adr/0021-content-source-registry-and-free-source-expansion.md)), which is the current shipped state. See [HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog with verification paths for every row.
 
 ---
 
@@ -109,13 +123,15 @@ Ten starter skills ship with the M1 release, calibrated to the everyday work law
 
 Each starter skill is **open source**, **inspectable in the application**, and **forkable**. If a skill produces output you disagree with, you can read the `SKILL.md`, change it, save your fork, and use the version that reflects your team's actual practice.
 
+Five additional built-in skills also ship in `skills/` beyond the ten above: `case-law-research` (legal research, part of the legal-research + connectors milestone below) and four table-mode/internal reference skills — `contract-snapshot`, `msa-snapshot`, `nda-snapshot` (M3 tabular-review column skills), and `playbook-easy-extract` (internal, feeds the Easy Playbook pipeline). See [`skills/*/SKILL.md`](skills/) for the full set.
+
 The next layer of skills is on the deferred-enhancement list and welcomes community contribution. See [PRD §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) for the backlog.
 
 ---
 
 ## Community skills
 
-In addition to the 10 built-in starter skills in `skills/`, LQ.AI ships with a community skill catalog via the [LegalQuants/lq-skills](https://github.com/LegalQuants/lq-skills) git submodule, mounted at `skills/community/`.
+In addition to the 10 built-in starter skills in `skills/`, LQ.AI ships with a community skill catalog via the [LegalQuants/lq-skills](https://github.com/LegalQuants/lq-skills) git submodule, mounted at `skills/community/` (pointer in [`.gitmodules`](.gitmodules)).
 
 - **30+ additional skills** authored by lawyer-builders across 17+ jurisdictions — covering areas like UK litigation, US state privacy law, corporate governance, statutory analysis, and more.
 - **Same open format.** Every community skill is a `SKILL.md` in the same `agentskills.io` format as the built-ins — readable, debuggable, and forkable in the application.
@@ -159,17 +175,21 @@ cp .env.example .env
 Open `.env` and set the four required secrets (the file explains each one):
 
 - `POSTGRES_PASSWORD` — any long random string
-- `MINIO_ROOT_PASSWORD` — any long random string
+- `OBJECT_STORE_SECRET_KEY` — any long random string
 - `LQ_AI_GATEWAY_KEY` — any long random string
 - `JWT_SECRET` — any long random string
 
 Generate all four at once, labelled and ready to paste into `.env`:
 
 ```bash
-python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","MINIO_ROOT_PASSWORD","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
+python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","OBJECT_STORE_SECRET_KEY","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
 ```
 
 Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this step. The stack starts without any; inference calls return "no provider configured" until you add at least one. Two paths add a key: set it in `.env` and restart the gateway, or — once `LQ_AI_GATEWAY_MASTER_KEY` is configured — add it at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway with no restart.
+
+Upgrading an installation that used the bundled MinIO service? Follow the
+[MinIO to RustFS migration runbook](docs/runbooks/minio-to-rustfs.md) before
+starting the new stack.
 
 ### Step 2 — Start the stack
 
@@ -177,7 +197,7 @@ Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this s
 docker compose up -d
 ```
 
-Eight services start: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
+Eight services start: postgres, redis, rustfs, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
 
 ```bash
 docker compose ps   # all 8 services should show "healthy" or "running"
@@ -226,7 +246,7 @@ After login you land on the LQ.AI home. Three good starting points:
 
 ### Providers and air-gapped deployments
 
-LQ.AI ships with four provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), and **Ollama** (local). Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. Google Vertex AI and AWS Bedrock adapters are on the deferred-enhancement list (DE-034 / DE-035) and welcome community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
+LQ.AI ships with four provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), and **Ollama** (local). Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. The AWS Bedrock compatible-API implementation supports explicit Messages, Chat Completions and stateless Responses transports; [live AWS verification is deferred beyond 0.9.1](docs/bedrock-verification.md). Google Vertex AI remains on the deferred-enhancement list (DE-034) and welcomes community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
 
 Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `vertex-anthropic/claude-opus-4-7@anthropic` on failure; the routing log captures which target actually handled the request. Provider keys are encrypted at rest in the gateway (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`); the api/ service never sees them — defense-in-depth around the highest-value secret in the deployment.
 
@@ -268,13 +288,13 @@ WEB_HOST_PORT=3000         # change if another web app (Next.js dev, etc.) holds
 API_HOST_PORT=8000         # change if a host service (Django, FastAPI) holds :8000
 GATEWAY_HOST_PORT=8001     # change if another service holds :8001
 REDIS_HOST_PORT=6379       # change if a host redis holds :6379
-MINIO_API_HOST_PORT=9000   # change if another service holds :9000
-MINIO_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
+OBJECT_STORE_API_HOST_PORT=9000   # change if another service holds :9000
+OBJECT_STORE_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
 ```
 
 The most common Mac collision is `POSTGRES_HOST_PORT=5432` against a Homebrew Postgres. Either set `POSTGRES_HOST_PORT=15432` in your `.env` (the compose stack's internal traffic still uses 5432; services talk to each other unchanged — only the host-side mapping shifts), or stop the host postgres first (`brew services stop postgresql@<version>` on macOS).
 
-**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and MinIO objects — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
+**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and object-store data — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
 
 ---
 
@@ -302,7 +322,7 @@ The trust model for a self-hosted, open-source project is that every claim termi
 
 ## Architecture
 
-LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [Docling](https://github.com/DS4SD/docling) + [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
+LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -320,10 +340,10 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
 ┌─────────────┐ ┌─────────────┐ ┌───────────┐ ┌────────────┐
 │ Inference   │ │   Skill     │ │  Document │ │ Knowledge  │
 │  Gateway    │ │  Service    │ │  Pipeline │ │  Service   │
-│ (multi-     │ │  (skills,   │ │ (Docling+ │ │  (pgvector │
-│  provider,  │ │  Org Profile│ │  PyMuPDF, │ │  + FTS)    │
-│  tier-aware,│ │  singleton) │ │  Citation │ │            │
-│  anonym.    │ │             │ │  Engine)  │ │            │
+│ (multi-     │ │  (skills,   │ │ (PyMuPDF, │ │  (pgvector │
+│  provider,  │ │  Org Profile│ │  Citation │ │  + FTS)    │
+│  tier-aware,│ │  singleton) │ │  Engine)  │ │            │
+│  anonym.    │ │             │ │           │ │            │
 │  middleware)│ │             │ │           │ │            │
 └──────┬──────┘ └──────┬──────┘ └─────┬─────┘ └────┬───────┘
        │               │              │            │
@@ -332,7 +352,7 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
        ┌──────────────────────┼─────────────────────┐
        ▼                      ▼                     ▼
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│ PostgreSQL   │      │    Redis     │      │   MinIO /    │
+│ PostgreSQL   │      │    Redis     │      │   RustFS /   │
 │ + pgvector   │      │  (sessions,  │      │   S3-compat  │
 │              │      │   queues)    │      │   (files)    │
 └──────────────┘      └──────────────┘      └──────────────┘
@@ -353,9 +373,11 @@ For more, see [PRD §1.5 Deployment Modes and the Inference Choice Spectrum](doc
 
 ## Security
 
-LQ.AI ships with SLSA Level 3 build provenance, sigstore-signed
-container images, and a Software Bill of Materials (SBOM) with every
-release. See [`docs/security/`](docs/security/) for the threat model,
+LQ.AI ships with SLSA build provenance, sigstore-signed container
+images, and a Software Bill of Materials (SBOM) with every release. The
+provenance is SLSA Build Level 3 (produced by an isolated reusable
+workflow) from the first release after v0.7.1; earlier releases carry
+Build Level 2 provenance. See [`docs/security/`](docs/security/) for the threat model,
 cryptography reference, audit-logging policy, and dependency-management
 posture. Verify a release: [`docs/security/releases/README.md`](docs/security/releases/README.md).
 
@@ -367,7 +389,7 @@ LQ.AI's security posture is structurally different from closed-source commercial
 
 - **The operator chooses the deployment's posture.** LQ.AI does not run a SaaS that holds your data on our infrastructure; you run it on yours. The most consequential security decisions — where the deployment lives, what inference provider it routes to, how the audit log is retained, who has access — are yours, and the application makes the implications of each decision explicit.
 - **The Inference Choice Spectrum is the central security trade-off.** Inference is where customer data leaves the deployment, if it does. The five-tier spectrum maps the choice across local-only inference (Tier 1), customer-hosted cloud inference (Tier 2), enterprise managed inference with ZDR / no-training commitments (Tier 3), standard cloud API (Tier 4), and consumer or free tier (Tier 5). Tier 3 is recommended for most pragmatic enterprise deployments. Tier 1 is recommended for the most sensitive privileged work.
-- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA-3 build provenance attestations, a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
+- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA build provenance attestations (Build Level 3 from the first release after v0.7.1), a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
 
 For procurement reviews, see:
 
@@ -396,7 +418,7 @@ Accessibility findings are treated as defects, not nice-to-haves. If you find on
 
 ## Project status
 
-**M1 through M4 shipped.** The PRD is at v0.2; ten starter skills are authored and shipping; the Citation Engine's four-stage verification cascade is operational (exact → tolerant → paraphrase judge → ensemble); the Anonymization Layer is wired end-to-end with custom legal recognizers, streaming-aware rehydration, privileged-project carve-out, and a retrieval-context skip for direct citation grounding; the Azure OpenAI adapter rounds out the provider set. M3 shipped Playbooks and Tabular Review end-to-end, plus the Word add-in (installable scaffold) and Slack/Teams intake bridge (plumbing). M4 shipped the opt-in Autonomous Layer end-to-end — a five-phase executor under hard cost/halt/phase-gate brakes. After M4, a gateway-brokered **legal-research + connectors (MCP)** milestone shipped: case-law retrieval (CourtListener), an MCP client subsystem with per-user OAuth, and a governed chat tool-loop with a persist-and-resume human confirmation gate — every external tool call routed through the Inference Gateway as the sole audited egress (ADR [0014](docs/adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](docs/adr/0015-governed-tool-calling-model.md)). The remaining roadmap items (in-Word feature surfaces, live-verified chat-platform intake, and the Contract Repository relationship graph) are listed with verification paths in [HONEST-STATE.md](docs/HONEST-STATE.md).
+**M1 through M4 shipped, followed by two further milestones — the current shipped state is the fiduciary-grade milestone below.** The PRD is at v0.2; ten starter skills are authored and shipping; the Citation Engine's four-stage verification cascade is operational (exact → tolerant → paraphrase judge → ensemble); the Anonymization Layer is wired end-to-end with custom legal recognizers, streaming-aware rehydration, privileged-project carve-out, and a retrieval-context skip for direct citation grounding; the Azure OpenAI adapter rounds out the provider set. M3 shipped Playbooks and Tabular Review end-to-end, plus the Word add-in (installable scaffold) and Slack/Teams intake bridge (plumbing). M4 shipped the opt-in Autonomous Layer end-to-end — a five-phase executor under hard cost/halt/phase-gate brakes. After M4, a gateway-brokered **legal-research + connectors (MCP)** milestone shipped: case-law retrieval (CourtListener), an MCP client subsystem with per-user OAuth, and a governed chat tool-loop with a persist-and-resume human confirmation gate — every external tool call routed through the Inference Gateway as the sole audited egress (ADR [0014](docs/adr/0014-gateway-egress-boundary-for-tool-providers.md)/[0015](docs/adr/0015-governed-tool-calling-model.md)). After that, a **fiduciary-grade agentic legal work** milestone shipped (ADRs [0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](docs/adr/0021-content-source-registry-and-free-source-expansion.md)): the Citation Ledger and its pass/fail fiduciary gate, governed plain-language matter sessions on the Autonomous Layer, three more free authority sources (GovInfo, SEC EDGAR, EUR-Lex) behind a content-source registry with per-call cost governance (a configured rate per provider, fails open — never blocking egress — on a gateway-config read failure), and a "derived, not editorial" case-law treatment layer. The remaining roadmap items (in-Word feature surfaces, live-verified chat-platform intake, the Contract Repository relationship graph, a dedicated matter-intake UI, chat/autonomous fiduciary-gate verdict-tier parity, and EUR-Lex search/treaty coverage) are listed with verification paths in [HONEST-STATE.md](docs/HONEST-STATE.md).
 
 **Roadmap:**
 
@@ -407,6 +429,7 @@ Accessibility findings are treated as defects, not nice-to-haves. If you find on
 | **M3 — Playbooks, Tabular Review, Word Add-In, Slack/Teams** | Codified legal positions for automated contract review (shipped end-to-end); structured grid output across N documents with citation-grounded cells (shipped); Microsoft Office.js add-in shipped as an installable/authenticated scaffold, with in-Word feature surfaces (run skills, Word tracked changes/comments) deferred; Slack/Teams bridges shipped as plumbing/OAuth, with the `/lq` slash-command surface inert and live OAuth round-trip unverified | ✓ **Shipped** (with caveats) |
 | **M4 — Autonomous Layer** | Opt-in background per-user agents (off by default): five-phase executor through a single guarded chokepoint under cost/halt/phase-gate brakes; watches, schedules, per-user memory, precedent board; honest per-session receipts; web dashboard. The Contract Repository relationship graph remains roadmap (not built) | ✓ **Shipped** (autonomous layer; contract graph deferred) |
 | **Legal research + connectors (MCP)** | Gateway-brokered tool egress (ADR 0014/0015): CourtListener case-law retrieval + research API, MCP client subsystem with per-user OAuth + `/admin/mcp`, governed chat tool-loop with a persist-and-resume human confirmation gate, external-source "Sources consulted" provenance, and a case-law-research skill | ✓ **Shipped** (after M4) |
+| **Fiduciary-grade agentic legal work** | Citation Ledger (matter/turn record of every source + passage read, one-click trace); derive-don't-assert fiduciary gate over every tool-retrieved citation (PASS/FAIL → flagged); governed plain-language matter sessions on the autonomous layer under R5→R6→R4 brakes; free authority sources (GovInfo, SEC EDGAR, EUR-Lex) via a content-source registry with retrieve-and-verify; a "derived, not editorial" validity/treatment layer with one-click trace to citing cases | ✓ **Shipped** (matter-intake UI + some chat/autonomous verify-parity items roadmap) |
 | M5–M7 — Forward-Looking Workflow Intelligence | Community-driven; not committed. Builds on the now-shipped MCP connector mechanism: a broader workflow-aware context layer (email/calendar/tasks/docs); Signal Aggregation Service; Today view with prioritization; agent execution framework with human-in-the-loop guardrails. | TBD |
 
 For the full ordered punch list of unshipped work — across the active milestone, PRD-committed deferrals, contributor-ready mini-PRDs, engineering discipline, compliance, and forward-looking M5+ — see **[`docs/ROADMAP.md`](docs/ROADMAP.md)**. The underlying sources of truth are [PRD §8 Roadmap](docs/PRD.md#8-roadmap) and [§9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work); the roadmap doc threads ~150 entries into one prioritized view.
@@ -462,7 +485,6 @@ Path to broader governance is documented but not implemented in v1: as the proje
 
 - **GitHub Issues** for bugs and feature requests.
 - **GitHub Discussions** for community Q&A.
-- **Discord** (LegalQuants-hosted) for synchronous community.
 - **Blog** at [legalquants.com/blog](https://legalquants.com/blog) for releases and roadmap updates.
 
 For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure process includes safe-harbor language for good-faith security researchers, response-time commitments (acknowledge within 72h, fix critical issues within 30d), and credit attribution for reporters.
@@ -476,8 +498,9 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 - [`docs/observability.md`](docs/observability.md) — OpenTelemetry traces/metrics, deployment recipes, operator guide.
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
-- [`docs/playbook-authoring-guide.md`](docs/playbook-authoring-guide.md) — how to write a Playbook.
-- [`docs/deployment-cookbook.md`](docs/deployment-cookbook.md) — recipes for production deployments.
+- [OSS skill capability research](docs/research/issue-662-oss-skill-capabilities.md) — the v0.8.0 baseline, evidence and adoption buckets supporting #662.
+- [`docs/playbooks.md`](docs/playbooks.md) — how Playbooks work and how to write one.
+- [`deploy/`](deploy/) — deployment recipes (Helm chart, [reverse-proxy + TLS recipes](deploy/reverse-proxy/) for Caddy/Traefik/nginx, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
 - [`docs/compliance/`](docs/compliance/) — Compliance Alignment Pack.
 - [`docs/security/`](docs/security/) — security artifacts (SBOM, threat model, supply-chain transparency).
 - [`docs/procurement/`](docs/procurement/) — procurement-readiness templates (SIG Lite, CAIQ).
@@ -490,7 +513,7 @@ LQ.AI builds on substantial open-source work. The most consequential dependencie
 
 - [OpenWebUI](https://github.com/open-webui/open-webui) — chat UI shell.
 - [LangGraph](https://github.com/langchain-ai/langgraph) — agent runtime.
-- [Docling](https://github.com/DS4SD/docling) and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
 - [pgvector](https://github.com/pgvector/pgvector) — vector storage in PostgreSQL.
 - [Anthropic Claude Skills](https://github.com/anthropics/skills) — the agentskills.io format the project adopts as its skill substrate.
 - [OpenTelemetry](https://opentelemetry.io/) — observability.

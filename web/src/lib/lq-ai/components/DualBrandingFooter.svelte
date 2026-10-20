@@ -12,7 +12,7 @@
 </script>
 
 <footer
-	class="text-xs text-gray-500 dark:text-gray-400 px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2"
+	class="text-xs text-gray-600 dark:text-gray-400 px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-2"
 	data-testid="lq-ai-dual-branding-footer"
 >
 	<span>
@@ -28,6 +28,6 @@
 		>
 			Open WebUI
 		</a>
-		(forked at v0.9.2; see ADR&nbsp;0001).
+		(forked at v0.11.0; see ADR&nbsp;0001).
 	</span>
 </footer>

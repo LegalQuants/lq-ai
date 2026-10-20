@@ -42,6 +42,14 @@ class FileMetadata(BaseModel):
         ),
     )
     ingestion_status: IngestionStatus
+    ingestion_error: str | None = Field(
+        default=None,
+        description=(
+            "Why ingestion failed, e.g. ``unsupported_type``, ``decode_error`` "
+            "or ``parse_failed``. Set only when ``ingestion_status`` is "
+            "``failed``; otherwise null."
+        ),
+    )
     page_count: int | None = None
     character_count: int | None = None
     # M3-A6 Phase 6: the parsed-content ``documents`` row's UUID,

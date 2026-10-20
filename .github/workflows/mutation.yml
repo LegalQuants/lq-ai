@@ -1,0 +1,87 @@
+name: Mutation testing (nightly)
+
+# DE-229 first wave: scoped Python measurements, never a PR merge gate.
+# Surviving/no-test mutants lower the score; incomplete runs publish no score.
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutmut:
+    name: mutmut (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [api, gateway]
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ matrix.package }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv==0.12.0
+
+      - name: Check lock freshness
+        run: uv lock --check
+
+      - name: Install frozen application, dev and opt-in mutation dependencies
+        run: |
+          uv sync --frozen --extra dev --group mutation
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run mutation testing over the allowlist
+        id: mutation
+        run: |
+          trap 'echo "duration_seconds=$SECONDS" >> "$GITHUB_OUTPUT"' EXIT
+          mutmut run 2>&1 | tee mutation-run.log
+
+      - name: Export machine-readable stats
+        id: export
+        run: mutmut export-cicd-stats
+
+      - name: List mutation outcomes
+        id: results
+        run: mutmut results | tee mutation-survivors.txt
+
+      - name: Validate and report the measurement
+        if: always()
+        env:
+          MUTATION_OUTCOME: ${{ steps.mutation.outcome == 'success' && steps.export.outcome == 'success' && steps.results.outcome == 'success' && 'success' || 'failure' }}
+          MUTATION_DURATION: ${{ steps.mutation.outputs.duration_seconds }}
+        run: |
+          python ../scripts/mutation_report.py \
+            --package "${{ matrix.package }}" \
+            --run-outcome "$MUTATION_OUTCOME" \
+            --duration-seconds "$MUTATION_DURATION"
+
+      - name: Upload results or failure diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mutation-${{ matrix.package }}-${{ github.run_id }}
+          path: |
+            ${{ matrix.package }}/mutation-score.json
+            ${{ matrix.package }}/mutation-run.log
+            ${{ matrix.package }}/mutation-survivors.txt
+            ${{ matrix.package }}/mutants/mutmut-cicd-stats.json
+            ${{ matrix.package }}/mutants/mutmut-stats.json
+          if-no-files-found: error
+          retention-days: 90

@@ -2,17 +2,19 @@
 	import type { LqVariant, LqTone, LqSize } from './types';
 
 	export let variant: LqVariant = 'filled';
-	export let tone: LqTone = 'sage';
+	export let tone: LqTone = 'accent';
 	export let size: LqSize = 'md';
 	export let disabled = false;
 	export let type: 'button' | 'submit' | 'reset' = 'button';
+	let klass = '';
+	export { klass as class };
 </script>
 
 <button
 	{type}
 	{disabled}
 	{...$$restProps}
-	class="lq-btn lq-btn-{variant} lq-btn-{size} lq-tone-{tone}"
+	class="lq-btn lq-btn-{variant} lq-btn-{size} lq-tone-{tone} {klass}"
 	on:click
 >
 	<slot />
@@ -60,78 +62,78 @@
 		padding: var(--lq-space-3, 12px) var(--lq-space-6, 24px);
 	}
 
-	/* tone: sage */
-	.lq-tone-sage.lq-btn-filled {
+	/* tone: accent */
+	.lq-tone-accent.lq-btn-filled {
 		background: var(--lq-accent, #1f7a6b);
 		color: white;
 	}
-	.lq-tone-sage.lq-btn-outline {
+	.lq-tone-accent.lq-btn-outline {
 		border-color: var(--lq-accent, #1f7a6b);
 		color: var(--lq-accent, #1f7a6b);
 		background: transparent;
 	}
-	.lq-tone-sage.lq-btn-subtle {
+	.lq-tone-accent.lq-btn-subtle {
 		background: var(--lq-accent-soft, #e8f4ec);
 		color: var(--lq-accent, #1f7a6b);
 	}
-	.lq-tone-sage.lq-btn-ghost {
+	.lq-tone-accent.lq-btn-ghost {
 		background: transparent;
 		color: var(--lq-accent, #1f7a6b);
 	}
 
-	/* tone: slate */
-	.lq-tone-slate.lq-btn-filled {
+	/* tone: info */
+	.lq-tone-info.lq-btn-filled {
 		background: var(--lq-tier, #355a82);
 		color: white;
 	}
-	.lq-tone-slate.lq-btn-outline {
+	.lq-tone-info.lq-btn-outline {
 		border-color: var(--lq-tier, #355a82);
 		color: var(--lq-tier, #355a82);
 		background: transparent;
 	}
-	.lq-tone-slate.lq-btn-subtle {
+	.lq-tone-info.lq-btn-subtle {
 		background: var(--lq-tier-soft, #e8eff7);
 		color: var(--lq-tier, #355a82);
 	}
-	.lq-tone-slate.lq-btn-ghost {
+	.lq-tone-info.lq-btn-ghost {
 		background: transparent;
 		color: var(--lq-tier, #355a82);
 	}
 
-	/* tone: amber */
-	.lq-tone-amber.lq-btn-filled {
+	/* tone: warning */
+	.lq-tone-warning.lq-btn-filled {
 		background: var(--lq-warn, #a16e1f);
 		color: white;
 	}
-	.lq-tone-amber.lq-btn-outline {
+	.lq-tone-warning.lq-btn-outline {
 		border-color: var(--lq-warn, #a16e1f);
 		color: var(--lq-warn, #a16e1f);
 		background: transparent;
 	}
-	.lq-tone-amber.lq-btn-subtle {
+	.lq-tone-warning.lq-btn-subtle {
 		background: var(--lq-warn-soft, #fdf3e2);
 		color: var(--lq-warn, #a16e1f);
 	}
-	.lq-tone-amber.lq-btn-ghost {
+	.lq-tone-warning.lq-btn-ghost {
 		background: transparent;
 		color: var(--lq-warn, #a16e1f);
 	}
 
-	/* tone: red */
-	.lq-tone-red.lq-btn-filled {
+	/* tone: danger */
+	.lq-tone-danger.lq-btn-filled {
 		background: var(--lq-error, #b54848);
 		color: white;
 	}
-	.lq-tone-red.lq-btn-outline {
+	.lq-tone-danger.lq-btn-outline {
 		border-color: var(--lq-error, #b54848);
 		color: var(--lq-error, #b54848);
 		background: transparent;
 	}
-	.lq-tone-red.lq-btn-subtle {
+	.lq-tone-danger.lq-btn-subtle {
 		background: var(--lq-error-soft, #fbeaea);
 		color: var(--lq-error, #b54848);
 	}
-	.lq-tone-red.lq-btn-ghost {
+	.lq-tone-danger.lq-btn-ghost {
 		background: transparent;
 		color: var(--lq-error, #b54848);
 	}

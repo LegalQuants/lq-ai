@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Citation Ledger</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --fid: #f5b544;
+    --ok: #34d399;
+    --fail: #f87171;
+    --neutral: #6b7280;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header h1::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fid); margin-right: 8px; vertical-align: middle;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--fid); margin: 18px 0 8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .hint { font-size: 11.5px; color: var(--text-faint); margin: 0 0 10px; line-height: 1.4; }
+
+  .entry-row {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 8px 9px; border-radius: 5px; margin-bottom: 5px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg-elev-2);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .entry-row:hover { border-color: var(--border-hover); }
+  .entry-row.selected { border-color: var(--fid); box-shadow: 0 0 0 1px rgba(245,181,68,0.25); }
+  .entry-top { display: flex; align-items: center; gap: 6px; }
+  .entry-kind { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-dim); }
+  .entry-claim { font-size: 11.5px; color: var(--text); line-height: 1.4; }
+  .entry-claim.prov { color: var(--text-faint); font-style: italic; }
+
+  .status-badge {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 2px 6px; border-radius: 3px; white-space: nowrap; font-family: ui-monospace, Menlo, monospace;
+    border: 1px solid transparent;
+  }
+  .st-exact_match, .st-tolerant_match { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .st-paraphrase_judge, .st-ensemble_strict, .st-ensemble_majority { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .st-unverified, .st-failed { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
+  .st-provenance { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
+
+  .legend-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 7px; font-size: 11.5px; }
+  .legend-row .status-badge { flex-shrink: 0; }
+  .legend-row span.desc { color: var(--text-dim); line-height: 1.4; }
+
+  .caveat {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--fid); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .caveat .lab {
+    display: block; font-weight: 700; color: var(--fid); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .caveat code { color: var(--text); font-size: 11px; }
+
+  .content-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 15%, rgba(245,181,68,0.05), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(125,211,252,0.03), transparent 55%), var(--bg);
+  }
+  .trace { max-width: 760px; margin: 0 auto; }
+
+  .trace-header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .trace-header .id {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--text-dim);
+  }
+  .chip {
+    background: var(--bg-elev-2); border: 1px solid var(--border); color: var(--text-dim);
+    font-size: 10.5px; padding: 2px 8px; border-radius: 10px; font-family: ui-monospace, Menlo, monospace;
+  }
+
+  .block { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .block-lab {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--text-faint); margin: 0 0 8px;
+  }
+  .claim-text { font-size: 14px; line-height: 1.55; color: var(--text); }
+  .trace-line {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--fid);
+    background: rgba(245,181,68,0.08); border: 1px solid rgba(245,181,68,0.25);
+    border-radius: 4px; padding: 7px 10px; margin-top: 4px;
+  }
+
+  .doc-title { font-size: 12.5px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .doc-meta { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; color: var(--text-faint); margin-bottom: 10px; }
+  .doc-body { font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+  .doc-body mark {
+    background: rgba(245,181,68,0.32); color: var(--text); border-bottom: 2px solid var(--fid);
+    padding: 1px 2px; border-radius: 2px;
+  }
+
+  .prov-badge {
+    display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--neutral); border: 1px solid rgba(107,114,128,0.4);
+    background: rgba(107,114,128,0.10); border-radius: 4px; padding: 5px 10px; margin-bottom: 10px;
+  }
+  .prov-explain { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px; }
+  .prov-meta-row { display: flex; gap: 8px; font-size: 12px; margin-bottom: 5px; }
+  .prov-meta-row .k { color: var(--text-faint); min-width: 92px; flex-shrink: 0; }
+  .prov-meta-row .v { color: var(--text); }
+
+  .not-stored {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.55; margin-top: 4px;
+    background: var(--bg-elev-2); border-left: 2px solid var(--fid); border-radius: 0 4px 4px 0;
+    padding: 6px 9px;
+  }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 190px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--fid); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Citation Ledger</h1>
+    <span class="subtitle">A turn's ledger entries — click a quote-bearing claim to trace it to its source id + character offset.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>This turn — ledger entries (read-trail)</h2>
+      <p class="hint">One row per source the turn brought into context (ADR 0018 D1). Click an entry to trace it.</p>
+      <div id="entry-list"></div>
+
+      <h2>Honest caveat</h2>
+      <div class="caveat">
+        <span class="lab">No raw payloads in the ledger (P3)</span>
+        The ledger references content <code>by id + character offset only</code> — no raw payloads live in the audit layer. A trace resolves an id + offset; the quoted text itself is not stored in the ledger row.
+      </div>
+
+      <h2>Verification status</h2>
+      <div class="legend-row"><span class="status-badge st-exact_match">exact_match / tolerant_match</span><span class="desc">verbatim quote match against the source (byte-for-byte or normalized).</span></div>
+      <div class="legend-row"><span class="status-badge st-paraphrase_judge">paraphrase_judge / ensemble_*</span><span class="desc">supported by the source, not a verbatim quote — labeled distinctly (ADR 0018 D3).</span></div>
+      <div class="legend-row"><span class="status-badge st-unverified">unverified / failed</span><span class="desc">the cascade could not confirm the citation — flagged, never silently emitted.</span></div>
+      <div class="legend-row"><span class="status-badge st-provenance">provenance</span><span class="desc">a source the tool call returned this turn — not an assertion, no quote to trace.</span></div>
+    </aside>
+
+    <div class="content-wrap">
+      <div class="trace" id="trace"></div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// Synthetic "materialized source" text (ADR 0018 D2: external sources are
+// materialized as normalized text + char offsets so the same cascade that
+// verifies KB documents also verifies them). Illustrative only — not fetched.
+const SOURCE_DOCS = {
+  kb1: {
+    title: "MSA_Vendor_Redline_v3.docx (KB upload)",
+    meta: "source_file_id: f2b7c1a4-9e3d-4a1b-8c5f-6d2a9b1e4f70",
+    text: "Section 4.2 (License Grant). Subject to the terms of this Agreement and timely payment of all Fees, Vendor hereby grants to Customer a non-exclusive, non-transferable right to use the Software solely for Customer's internal business purposes during the Term. Customer shall not sublicense, resell, or make the Software available to any third party without Vendor's prior written consent."
+  },
+  case1: {
+    title: "Hickman v. Taylor, 329 U.S. 495 (1947) — materialized opinion text (ADR 0018 D2)",
+    meta: "opinion_id: 9821345 · cluster_id: 445210 · provider: courtlistener",
+    text: "We agree, however, that the trial court and Court of Appeals were correct in holding that petitioner is not entitled to require respondent's counsel to produce the memoranda in question, notwithstanding the request for production. Historically, a lawyer is an officer of the court and is bound to work for the advancement of justice while faithfully protecting the rightful interests of his client. In performing his various duties, however, it is essential that a lawyer work with a certain degree of privacy, free from unnecessary intrusion by opposing parties and their counsel. Proper preparation of a client's case demands that he assemble information, sift what he considers to be the relevant from the irrelevant facts, prepare his legal theories and plan his strategy without undue and needless interference."
+  },
+  stat1: {
+    title: "42 U.S.C. § 1983 — materialized (ADR 0018 D2)",
+    meta: "external_ref: 42 U.S.C. § 1983 · provider: govinfo",
+    text: "Every person who, under color of any statute, ordinance, regulation, custom, or usage, of any State or Territory or the District of Columbia, subjects, or causes to be subjected, any citizen of the United States or other person within the jurisdiction thereof to the deprivation of any rights, privileges, or immunities secured by the Constitution and laws, shall be liable to the party injured in an action at law, suit in equity, or other proper proceeding for redress."
+  },
+  reg1: {
+    title: "29 C.F.R. § 1630.2(o) — materialized (ADR 0018 D2)",
+    meta: "external_ref: 29 C.F.R. § 1630.2(o) · provider: govinfo",
+    text: "Reasonable accommodation means modifications or adjustments to a job, the work environment, or the manner in which a position is customarily performed that enable a qualified individual with a disability to perform the essential functions of the position, unless the employer can demonstrate that the accommodation would impose an undue hardship on the operation of its business."
+  },
+  eu1: {
+    title: "Regulation (EU) 2016/679 (GDPR), Art. 17 — materialized (ADR 0018 D2)",
+    meta: "external_ref: 32016R0679 · provider: eurlex",
+    text: "The data subject shall have the right to obtain from the controller the erasure of personal data concerning him or her without undue delay and the controller shall have the obligation to erase personal data without undue delay where one of a number of grounds applies, including where the personal data are no longer necessary in relation to the purposes for which they were collected."
+  }
+};
+
+// One synthetic turn's ledger entries (mirrors resolve_ledger_entries()'s
+// resolved shape: id, source_kind, verification_status, confidence, provider,
+// retrieved_at + a resolved source). Quote-bearing entries carry `doc` + `quote`
+// (the illustrative claim's cited passage); provenance-only entries carry tool
+// metadata and no quote — matching _resolve_source's message_tool_source branch,
+// which returns label/subtitle/url/external_ref/tool but no passage text.
+const ENTRIES = [
+  {
+    id: "3f9a2e10-8b41-4c77-9a02-1d7e5f6b8c31", source_kind: "kb_document",
+    verification_status: "exact_match", confidence: 1.0, provider: null, retrieved_at: null,
+    claim: "The License grants a non-exclusive right to use the Software for internal business purposes only.",
+    doc: "kb1", quote: "a non-exclusive, non-transferable right to use the Software solely for Customer's internal business purposes"
+  },
+  {
+    id: "7c1d4e88-2a6f-4b09-9d3e-8f5c1a2b9e44", source_kind: "caselaw",
+    verification_status: "tolerant_match", confidence: 0.91, provider: "courtlistener", retrieved_at: "2026-06-30T14:02:11Z",
+    claim: "Work-product protection lets an attorney prepare a case with a degree of privacy, free from unnecessary intrusion by opposing counsel.",
+    doc: "case1", quote: "it is essential that a lawyer work with a certain degree of privacy, free from unnecessary intrusion by opposing parties and their counsel"
+  },
+  {
+    id: "a15b6f22-4c8d-4e11-9f2a-3b7d8c5e1a90", source_kind: "statute",
+    verification_status: "paraphrase_judge", confidence: 0.70, provider: "govinfo", retrieved_at: "2026-06-30T14:02:37Z",
+    claim: "Under 42 U.S.C. § 1983, a person acting under color of state law who deprives another of a federally protected right may be held liable in a civil action.",
+    doc: "stat1", quote: "subjects, or causes to be subjected, any citizen of the United States or other person within the jurisdiction thereof to the deprivation of any rights, privileges, or immunities secured by the Constitution and laws"
+  },
+  {
+    id: "e29d3c17-6f0a-4b88-8e5c-2a4f7b9d3c61", source_kind: "regulation",
+    verification_status: "unverified", confidence: null, provider: "govinfo", retrieved_at: "2026-06-30T14:03:02Z",
+    claim: "An employer must grant any accommodation an employee requests under 29 C.F.R. § 1630.2(o), with no exceptions.",
+    doc: "reg1", quote: "unless the employer can demonstrate that the accommodation would impose an undue hardship on the operation of its business"
+  },
+  {
+    id: "5b8e1a44-9c2d-4f76-a103-7e6b2c9d4f85", source_kind: "eu_regulation",
+    verification_status: "ensemble_majority", confidence: 0.82, provider: "eurlex", retrieved_at: "2026-06-30T14:03:29Z",
+    claim: "Article 17 GDPR grants a data subject the right to obtain erasure of personal data without undue delay in specified circumstances.",
+    doc: "eu1", quote: "the right to obtain from the controller the erasure of personal data concerning him or her without undue delay"
+  },
+  {
+    id: "c04f7d29-1e5a-4b93-8c6f-9a2d3e7b5f10", source_kind: "caselaw",
+    verification_status: "provenance", confidence: null, provider: "courtlistener", retrieved_at: "2026-06-30T14:01:48Z",
+    tool: "search_case_law", label: "CourtListener search: “work-product doctrine appellate”",
+    subtitle: "12 candidate opinions returned to the model as context", external_ref: "courtlistener:search:9c41f0"
+  },
+  {
+    id: "91a4c8d3-3b7e-4f52-9d1a-6c8f2e5b7a34", source_kind: "caselaw",
+    verification_status: "provenance", confidence: null, provider: "courtlistener", retrieved_at: "2026-06-30T14:03:55Z",
+    tool: "get_citing_opinions", label: "CourtListener citing-opinions lookup: Hickman v. Taylor",
+    subtitle: "34 citing opinions returned for treatment context (WS-G)", external_ref: "courtlistener:opinion:9821345:citing"
+  }
+];
+
+const STATUS_LABEL = {
+  exact_match: "exact_match", tolerant_match: "tolerant_match",
+  paraphrase_judge: "paraphrase_judge", ensemble_strict: "ensemble_strict", ensemble_majority: "ensemble_majority",
+  unverified: "unverified", failed: "failed", provenance: "provenance"
+};
+
+const state = { selected: ENTRIES[0].id };
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Resolves an entry's id + quote to an [offset_start:offset_end] span by
+// locating the illustrative claim's cited passage inside its synthetic
+// materialized source text. Stands in for the real read path (_resolve_source
+// + stored source_offset_start/end) without needing a live database.
+function resolveOffsets(entry) {
+  if (!entry.doc) return null;
+  const doc = SOURCE_DOCS[entry.doc];
+  const start = doc.text.indexOf(entry.quote);
+  const end = start + entry.quote.length;
+  return { doc, start, end };
+}
+
+function fmtTime(iso) {
+  return iso ? iso.replace("T", " ").replace("Z", " UTC") : "—";
+}
+
+function renderEntryList() {
+  const wrap = document.getElementById("entry-list");
+  wrap.innerHTML = "";
+  ENTRIES.forEach(e => {
+    const isProv = e.verification_status === "provenance";
+    const row = document.createElement("div");
+    row.className = "entry-row" + (e.id === state.selected ? " selected" : "");
+    const claimHtml = isProv
+      ? `<span class="entry-claim prov">provenance — no claim; a source consulted, not an assertion</span>`
+      : `<span class="entry-claim">${escapeHtml(e.claim)}</span>`;
+    row.innerHTML = `
+      <div class="entry-top">
+        <span class="status-badge st-${e.verification_status}">${STATUS_LABEL[e.verification_status]}</span>
+        <span class="entry-kind">${escapeHtml(e.source_kind)}</span>
+      </div>
+      ${claimHtml}
+    `;
+    row.addEventListener("click", () => { state.selected = e.id; renderAll(); });
+    wrap.appendChild(row);
+  });
+}
+
+function renderTrace() {
+  const entry = ENTRIES.find(e => e.id === state.selected);
+  const wrap = document.getElementById("trace");
+  const isProv = entry.verification_status === "provenance";
+
+  const headerHtml = `
+    <div class="trace-header">
+      <span class="status-badge st-${entry.verification_status}">${STATUS_LABEL[entry.verification_status]}</span>
+      <span class="chip">${escapeHtml(entry.source_kind)}</span>
+      ${entry.provider ? `<span class="chip">provider: ${escapeHtml(entry.provider)}</span>` : ""}
+      ${entry.confidence !== null ? `<span class="chip">confidence: ${entry.confidence.toFixed(2)}</span>` : ""}
+      <span class="chip">retrieved_at: ${fmtTime(entry.retrieved_at)}</span>
+      <span class="id">id: ${entry.id}</span>
+    </div>
+  `;
+
+  if (!isProv) {
+    const off = resolveOffsets(entry);
+    const before = escapeHtml(off.doc.text.slice(0, off.start));
+    const mid = escapeHtml(off.doc.text.slice(off.start, off.end));
+    const after = escapeHtml(off.doc.text.slice(off.end));
+    wrap.innerHTML = headerHtml + `
+      <div class="block">
+        <p class="block-lab">Claim in this turn</p>
+        <p class="claim-text">${escapeHtml(entry.claim)}</p>
+      </div>
+      <div class="block">
+        <p class="block-lab">Resolved trace</p>
+        <div class="trace-line">id: ${entry.id} &rarr; offset [${off.start}:${off.end}]</div>
+        <p class="not-stored">This trace resolved an id + offset into the content layer. The highlighted passage below lives in the content layer (<code>MessageCitation.source_text</code> / the materialized source, ADR 0018 D2) — the ledger row itself never stored this text (D5).</p>
+      </div>
+      <div class="block">
+        <p class="block-lab">Source panel — resolved id + offset, highlighted</p>
+        <div class="doc-title">${escapeHtml(off.doc.title)}</div>
+        <div class="doc-meta">${escapeHtml(off.doc.meta)}</div>
+        <div class="doc-body">${before}<mark>${mid}</mark>${after}</div>
+      </div>
+    `;
+  } else {
+    wrap.innerHTML = headerHtml + `
+      <div class="block">
+        <span class="prov-badge">Provenance — not an assertion</span>
+        <p class="prov-explain">This entry records a source the tool call returned during this turn — not a claim citing a quoted passage. It carries no <code>message_citation_id</code> / <code>message_caselaw_citation_id</code> / <code>message_authority_citation_id</code>, so the read path's source resolution returns retrieval metadata only (label / subtitle / tool / provider) — never passage text or an offset. There is nothing here to trace to a quote.</p>
+        <div class="prov-meta-row"><span class="k">label</span><span class="v">${escapeHtml(entry.label)}</span></div>
+        <div class="prov-meta-row"><span class="k">subtitle</span><span class="v">${escapeHtml(entry.subtitle)}</span></div>
+        <div class="prov-meta-row"><span class="k">tool</span><span class="v">${escapeHtml(entry.tool)}</span></div>
+        <div class="prov-meta-row"><span class="k">provider</span><span class="v">${escapeHtml(entry.provider)}</span></div>
+        <div class="prov-meta-row"><span class="k">external_ref</span><span class="v">${escapeHtml(entry.external_ref)}</span></div>
+      </div>
+    `;
+  }
+}
+
+function renderOutput() {
+  document.getElementById("pane-verify").innerHTML = `
+    <p class="src-label">Verify these claims in source</p>
+    <a class="file" href="${REPO}api/app/citation/ledger.py" target="_blank" rel="noopener">api/app/citation/ledger.py</a>
+    <span style="color:var(--text-faint)">assemble_ledger_entries, resolve_ledger_entries, _resolve_source</span><br>
+    <a class="file" href="${REPO}docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md" target="_blank" rel="noopener">docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md</a>
+    <span style="color:var(--text-faint)">D1 thin referencing table, D3 gate classification, D4 one-click trace, D5 no-raw-payload guarantee</span>
+  `;
+  document.getElementById("pane-why").innerHTML = `
+    <p style="margin:0 0 6px"><strong>Why a referencing index, not a snapshot?</strong></p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6"><code>citation_ledger_entry</code> holds ids, offsets, status labels, confidence numbers, provenance metadata, and timestamps &mdash; never raw passages or tool payloads (ADR 0018 D5 / ADR 0016 P3). Quoted and source text live only in the content layer: <code>MessageCitation.source_text</code> for KB documents, and a materialized source for external citations (D2), which lets the <em>same</em> verification cascade run over both instead of forking a second verification path (D1, P6).</p>
+    <p style="color:var(--text-dim);margin:0;line-height:1.6">Provenance-only entries (tool sources, D1) reference a retrieval-provenance row instead of a verified quote &mdash; a source the model consulted, not an assertion it made. They are written with <code>verification_status="provenance"</code> and never carry an offset, so they honestly cannot be traced to a quote (conservative posture, P3).</p>
+  `;
+}
+
+function renderAll() {
+  renderEntryList();
+  renderTrace();
+}
+
+document.querySelectorAll(".output-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".output-tab").forEach(t => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".output-body .pane").forEach(p => p.classList.toggle("active", p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+renderAll();
+renderOutput();
+</script>
+</body>
+</html>

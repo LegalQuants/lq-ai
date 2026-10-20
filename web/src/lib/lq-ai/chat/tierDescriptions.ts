@@ -11,7 +11,8 @@ export interface TierDescription {
 /**
  * Single source of truth for "what does Tier N mean" — was previously
  * duplicated (with drifting wording) across TierBadge's hover title,
- * TierDetailsPanel's modal body, and MessageBubble's tier hover-popover.
+ * TierDetailsPanel's modal body. The tone here adapts the existing
+ * TrustPill vocabulary; shared primitives use the semantic LqTone roles.
  */
 export const TIER_DESCRIPTIONS: Record<Tier, TierDescription> = {
 	1: {

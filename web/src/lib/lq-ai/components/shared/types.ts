@@ -10,10 +10,10 @@
 export const LQ_VARIANTS = ['filled', 'outline', 'subtle', 'ghost'] as const;
 export type LqVariant = (typeof LQ_VARIANTS)[number];
 
-export const LQ_TONES = ['sage', 'slate', 'amber', 'red', 'neutral'] as const;
+export const LQ_TONES = ['accent', 'info', 'warning', 'danger', 'neutral'] as const;
 export type LqTone = (typeof LQ_TONES)[number];
 
-export const LQ_SIZES = ["xs", "sm", "md", "lg"] as const;
+export const LQ_SIZES = ['sm', 'md', 'lg'] as const;
 export type LqSize = (typeof LQ_SIZES)[number];
 
 // justify-content / align-items vocabularies for LqGroup/LqStack. These were
@@ -41,11 +41,11 @@ export const LQ_GAPS = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
 export type LqGap = (typeof LQ_GAPS)[number];
 
 export const LQ_GAP_VAR: Record<LqGap, string> = {
-	xs: 'var(--lq-space-1, 2px)',
-	sm: 'var(--lq-space-2, 4px)',
-	md: 'var(--lq-space-4, 8px)',
-	lg: 'var(--lq-space-6, 16px)',
-	xl: 'var(--lq-space-8, 24px)'
+	xs: 'var(--lq-space-1, 4px)',
+	sm: 'var(--lq-space-2, 8px)',
+	md: 'var(--lq-space-4, 16px)',
+	lg: 'var(--lq-space-6, 24px)',
+	xl: 'var(--lq-space-8, 32px)'
 };
 
 // Mantine-style elevation scale. Not backed by a practice.css token today
@@ -98,17 +98,17 @@ export const LQ_TEXT_TONE_VAR: Record<LqTextTone, string> = {
 	primary: 'var(--lq-text, #1a1a1a)',
 	secondary: 'var(--lq-text-secondary, #4b5563)',
 	tertiary: 'var(--lq-text-tertiary, #9ca3af)',
-	sage: 'var(--lq-accent, #1f7a6b)',
-	slate: 'var(--lq-tier, #355a82)',
-	amber: 'var(--lq-warn, #a16e1f)',
-	red: 'var(--lq-error, #b54848)',
+	accent: 'var(--lq-accent, #1f7a6b)',
+	info: 'var(--lq-tier, #355a82)',
+	warning: 'var(--lq-warn, #a16e1f)',
+	danger: 'var(--lq-error, #b54848)',
 	neutral: 'var(--lq-text-secondary, #4b5563)'
 };
 
 // --- Color + shade ---------------------------------------------------------
 //
 // `tone` (above) is the pre-bundled look every primitive has used so far:
-// pick "sage" and you get its soft background + base text + border all at
+// pick "accent" and you get its soft background + base text + border all at
 // once. `LqColor` + `LqShade` is the lower-level primitive underneath that:
 // one hue (currently the same five as LqTone — there's no hue outside that
 // set yet) at a specific step on a 0–9 ramp, Mantine-style. Most components
@@ -125,10 +125,10 @@ export const LQ_SHADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export type LqShade = (typeof LQ_SHADES)[number];
 
 const LQ_COLOR_BASE_VAR: Record<LqColor, string> = {
-	sage: 'var(--lq-accent, #1f7a6b)',
-	slate: 'var(--lq-tier, #355a82)',
-	amber: 'var(--lq-warn, #a16e1f)',
-	red: 'var(--lq-error, #b54848)',
+	accent: 'var(--lq-accent, #1f7a6b)',
+	info: 'var(--lq-tier, #355a82)',
+	warning: 'var(--lq-warn, #a16e1f)',
+	danger: 'var(--lq-error, #b54848)',
 	neutral: 'var(--lq-text-secondary, #4b5563)'
 };
 

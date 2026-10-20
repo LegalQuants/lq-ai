@@ -60,12 +60,15 @@
 			: typeof padding === 'number'
 				? `${padding}px`
 				: padding;
+	let klass = '';
+	export { klass as class };
 </script>
 
 {#if $opened}
 	<Portal to="body">
 		<div
-			class="lq-hovercard-dropdown"
+			{...$$restProps}
+			class="lq-hovercard-dropdown {klass}"
 			style:top="{top}px"
 			style:left="{left}px"
 			style:width
@@ -74,6 +77,8 @@
 			role="tooltip"
 			on:mouseenter={open}
 			on:mouseleave={scheduleClose}
+			on:focusin={open}
+			on:focusout={scheduleClose}
 		>
 			<slot />
 		</div>

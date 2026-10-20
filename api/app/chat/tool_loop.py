@@ -49,13 +49,18 @@ from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, _args_digest
 from app.chat.tool_schemas import ChatToolAllowlist, ToolSpec
 from app.config import get_settings
-from app.errors import MCPAuthorizationRequired, ToolTierRefused
+from app.errors import MCPAuthorizationRequired, ToolNotGranted, ToolTierRefused
 from app.mcp.oauth import get_valid_token
 from app.mcp.service import list_servers
 from app.models.user import User
 from app.research import service as research_service
+from app.research.registry import SOURCE_REGISTRY, resolve_available_sources
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
-from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+from app.tools.governance import (
+    governed_tool_invocation,
+    resolve_provider_tier,
+    resolve_tool_egress_ceiling,
+)
 
 log = logging.getLogger(__name__)
 
@@ -283,11 +288,36 @@ def extract_mcp_tool_source(spec: ToolSpec, data: Any) -> ToolSourceRecord | Non
 def collect_tool_sources(spec: ToolSpec, data: Any) -> list[ToolSourceRecord]:
     """Route a tool result to its provenance records by ``spec.kind`` (DE-350).
 
-    MCP → one ``mcp`` record; research → the existing case-law extraction.
+    MCP → one ``mcp`` record; authority (DE-369, ADR 0021 D3) → one record for
+    both search and get calls; research → the existing case-law extraction.
     """
+    if spec.kind == "skill":
+        return []
     if spec.kind == "mcp":
         rec = extract_mcp_tool_source(spec, data)
         return [rec] if rec is not None else []
+    if spec.kind == "authority":
+        auth = (data or {}).get("authority") if isinstance(data, dict) else None
+        if not auth or not auth.get("external_ref"):
+            return []
+        return [
+            ToolSourceRecord(
+                source_kind=auth.get("content_kind") or "unknown",
+                label=auth.get("label") or auth.get("external_ref"),
+                subtitle=auth.get("subtitle"),
+                url=auth.get("url") or None,
+                external_ref=auth.get("external_ref"),
+                # Registry-driven (WS-E PR2a Task 3): a single ToolSpec now
+                # covers every enabled authority source, so `spec.provider`
+                # no longer identifies which source answered this call.
+                # `_dispatch_authority` always threads the resolved source
+                # type into data["authority"]["source"]; prefer that, and
+                # fall back to spec.provider only for pre-generalization
+                # callers that construct a single-source ToolSpec directly.
+                provider=auth.get("source") or spec.provider,
+                tool=spec.tool,
+            )
+        ]
     return extract_tool_sources(spec.tool, data)
 
 
@@ -302,26 +332,38 @@ async def _dispatch_research(
     args: dict[str, Any],
     cluster_cache: dict[Any, Any],
     request_id: str | None,
+    max_allowed_tier: int | None = None,
 ) -> ToolResult:
     """Dispatch a research (CourtListener) tool call.
 
     Checks/fills ``cluster_cache`` for ``get_cluster`` and ``read_opinion``
     to avoid redundant gateway round-trips within a single turn.
 
+    ``max_allowed_tier`` is the resolved egress ceiling (issue #593),
+    forwarded to the research service so the gateway enforces the same
+    number the API applied. ``None`` means unconstrained.
+
     Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
     """
     op = spec.tool
     data: Any
     if op == "verify_citations":
-        data = await research_service.verify_citations(args["text"], request_id=request_id)
+        data = await research_service.verify_citations(
+            args["text"], request_id=request_id, max_allowed_tier=max_allowed_tier
+        )
     elif op == "search_case_law":
-        data = await research_service.search_case_law(args, request_id=request_id)
+        data = await research_service.search_case_law(
+            args, request_id=request_id, max_allowed_tier=max_allowed_tier
+        )
     elif op == "get_cluster":
         key = ("cluster", int(args["cluster_id"]))
         cached = cluster_cache.get(key)
         if cached is None:
             data = await research_service.get_cluster(
-                db, cluster_id=int(args["cluster_id"]), request_id=request_id
+                db,
+                cluster_id=int(args["cluster_id"]),
+                request_id=request_id,
+                max_allowed_tier=max_allowed_tier,
             )
             cluster_cache[key] = data
         else:
@@ -353,6 +395,168 @@ async def _dispatch_research(
 
 
 # ---------------------------------------------------------------------------
+# Authority dispatch (WS-E PR1c; registry-driven WS-E PR2a Task 3)
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_authority_provider_name(
+    gateway: Any, source_type: str, *, request_id: str | None = None
+) -> str:
+    """Best-effort resolve the gateway provider name for an authority ``source_type``.
+
+    Joins ``SOURCE_REGISTRY`` against the live gateway config via
+    :func:`~app.research.registry.resolve_available_sources` — the same
+    mapping :func:`app.autonomous.guard._resolve_external_call` uses for its
+    ``retrieve_authority`` branch.
+
+    Falls back to ``source_type`` itself when the gateway double doesn't
+    implement ``list_tool_providers`` (unit-test doubles that only stub
+    ``call_tool``) or no enabled match is found. This preserves the
+    pre-generalization behavior — the registry type WAS the hardcoded
+    provider name (``"govinfo"``) — for the common case where they coincide,
+    and never raises (a resolution miss must not break the chat turn).
+    """
+    try:
+        sources = await resolve_available_sources(gateway)
+    except Exception:
+        return source_type
+    match = next((s for s in sources if s.type == source_type and s.enabled and s.name), None)
+    return str(match.name) if match is not None else source_type
+
+
+async def _dispatch_authority(
+    db: AsyncSession,
+    spec: ToolSpec,
+    args: dict[str, Any],
+    gateway: Any,
+    request_id: str | None,
+    max_allowed_tier: int | None = None,
+) -> ToolResult:
+    """Dispatch an authority op (search_authority/get_authority) via the gateway.
+
+    Registry-driven (WS-E PR2a Task 3): the adapter is resolved from
+    ``SOURCE_REGISTRY`` keyed on the call's ``source`` argument — NOT a
+    hardcoded ``GovInfoAdapter()``. ``source`` defaults to ``spec.provider``
+    when absent from ``args`` (pre-generalization callers that build a
+    single-source ``ToolSpec`` directly; keeps the pre-existing GovInfo unit
+    and integration tests green unmodified).
+
+    On get_authority, persist the fetched body to the durable authority cache
+    so the finalize verify hook can char-verify quotes against it.  The cache
+    write is savepoint-isolated + non-fatal (never poison the session — mirrors
+    app/autonomous/guard.py).  Only get_authority yields a quotable body.
+
+    Empty-results resilience (WS-E PR2a Task 3 review): ``search_authority``
+    with zero hits raises ``ValueError`` inside the adapter (pre-existing
+    behavior shared with the autonomous path, which is guarded by a
+    catch-all in ``nodes.py``). The chat path has no such catch-all around
+    tool dispatch — ``execute_tool``/``governed_tool_invocation`` only catch
+    ``MCPAuthorizationRequired``/``ToolTierRefused``, so an uncaught
+    ``ValueError`` here would propagate out of ``run_chat_tool_loop`` and
+    break the whole chat turn. Degrade to a normal empty-results observation
+    instead of raising.
+    """
+    source_type = str(args.get("source") or spec.provider or "")
+    spec_entry = SOURCE_REGISTRY.get(source_type)
+    if spec_entry is None or spec_entry.adapter is None:
+        log.warning(
+            "chat authority dispatch: unknown or unsupported source %r",
+            source_type,
+            extra={"event": "chat_authority_unknown_source", "source": source_type},
+        )
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            data={
+                "authority": {
+                    "source": source_type,
+                    "op": spec.tool,
+                    "error": "source not available",
+                }
+            },
+            outcome="success",
+        )
+    adapter = spec_entry.adapter
+
+    provider_name = await _resolve_authority_provider_name(
+        gateway, source_type, request_id=request_id
+    )
+    call_args = {k: v for k, v in args.items() if k != "source"}
+    result = await gateway.call_tool(
+        provider_name, spec.tool, call_args, max_allowed_tier=max_allowed_tier
+    )
+    payload = result.get("payload") if isinstance(result, dict) else None
+
+    try:
+        authority = adapter.from_response(spec.tool, payload or {})
+    except ValueError:
+        # search_authority with zero results (or any other adapter-detected
+        # empty/malformed response) — non-fatal: feed the model a normal
+        # no-results observation instead of propagating out of the loop.
+        log.info(
+            "chat authority dispatch: no-results for %r/%r — returning empty observation",
+            source_type,
+            spec.tool,
+            extra={
+                "event": "chat_authority_no_results",
+                "source": source_type,
+                "op": spec.tool,
+            },
+        )
+        return ToolResult(
+            cost_usd=Decimal("0"),
+            data={
+                "authority": {
+                    "source": source_type,
+                    "op": spec.tool,
+                    "results": [],
+                    "count": 0,
+                }
+            },
+            outcome="success",
+        )
+
+    if spec.tool == "get_authority" and authority.citable_text:
+        # Function-local import breaks the tool_loop <-> citation.authority
+        # module cycle (mirrors guard.py:874).
+        from app.citation.authority import store_authority_text
+
+        try:
+            async with db.begin_nested():
+                await store_authority_text(
+                    db,
+                    source_type=source_type,
+                    external_ref=authority.external_ref,
+                    text=authority.citable_text,
+                )
+        except Exception:
+            log.warning(
+                "chat authority dispatch: cache write failed — non-fatal",
+                extra={
+                    "event": "chat_authority_cache_write_failed",
+                    "external_ref": authority.external_ref,
+                },
+                exc_info=True,
+            )
+
+    return ToolResult(
+        cost_usd=Decimal("0"),
+        data={
+            "authority": {
+                "source": source_type,
+                "op": spec.tool,
+                "content_kind": authority.content_kind,
+                "external_ref": authority.external_ref,
+                "label": authority.label,
+                "subtitle": authority.subtitle,
+                "url": authority.url,
+                "citable_text": authority.citable_text,
+            }
+        },
+        outcome="success",
+    )
+
+
+# ---------------------------------------------------------------------------
 # MCP dispatch
 # ---------------------------------------------------------------------------
 
@@ -365,6 +569,7 @@ async def _dispatch_mcp(
     args: dict[str, Any],
     server_auth_map: dict[str, str],
     request_id: str | None,
+    max_allowed_tier: int | None = None,
 ) -> ToolResult:
     """Dispatch an MCP tool call through the gateway.
 
@@ -374,6 +579,10 @@ async def _dispatch_mcp(
 
     For ``none``/``bearer`` servers, ``user_token=None`` is passed to the
     gateway call.
+
+    ``max_allowed_tier`` is the resolved egress ceiling (issue #593) — the
+    gateway enforces the same number the API applied. ``None`` means
+    unconstrained.
 
     Cost is ``Decimal("0")`` in v1 — DE-344 defers per-provider tool cost.
     """
@@ -397,7 +606,7 @@ async def _dispatch_mcp(
         spec.provider,
         spec.tool,
         args,
-        max_allowed_tier=None,
+        max_allowed_tier=max_allowed_tier,
         user_token=user_token,
         request_id=request_id,
     )
@@ -422,6 +631,7 @@ async def execute_tool(
     chat_id: UUID | None = None,
     request_id: str | None = None,
     confirmation_state: str = "not_required",
+    egress_ceiling: tuple[int | None, str | None] | None = None,
 ) -> ToolResult:
     """Execute a single approved read_only tool call through the governance substrate.
 
@@ -448,36 +658,114 @@ async def execute_tool(
             the EXECUTING audit row is stamped ``approved``/``executed``
             (separate from the gate row, which is the confirmation-request
             lifecycle record).
+        egress_ceiling: Pre-resolved ``(ceiling, source)`` pair, as returned
+            by :func:`app.tools.governance.resolve_tool_egress_ceiling`.
+            The approve (resume) path passes
+            ``min(original_proposal_ceiling, current_policy_ceiling)``.
+            When ``None`` (normal chat path), the ceiling is resolved from
+            the chat's current ``project_id`` at call time.
 
     Returns:
         :class:`~app.autonomous.guard.ToolResult` on success.
 
     Raises:
         :class:`~app.errors.ToolTierRefused`: When the provider's tier exceeds
-            ``max_allowed_tier`` (``None`` in the chat path, so this only fires
-            when the governance config explicitly blocks the call).
+            the resolved ``max_allowed_tier`` (``None`` only when no ceiling
+            is set anywhere — no project, no operator default — in which
+            case calls are unconstrained), or when the ceiling policy itself
+            cannot be resolved (fail-closed, ``ceiling_source="unresolved"``).
         :class:`~app.errors.MCPAuthorizationRequired`: When the MCP server
             requires OAuth and no valid token is stored.
     """
-    intent = ToolIntent.retrieve_caselaw if spec.kind == "research" else ToolIntent.call_mcp_tool
+    if spec.kind == "skill":
+        intent = ToolIntent(spec.tool)
+    elif spec.kind == "research":
+        intent = ToolIntent.retrieve_caselaw
+    elif spec.kind == "authority":
+        intent = ToolIntent.retrieve_authority
+    else:
+        intent = ToolIntent.call_mcp_tool
 
     estimated_cost = await estimate_tool_cost(intent, args, db)
-    provider_tier = await resolve_provider_tier(spec.provider, request_id=request_id)
+
+    # Authority tools (WS-E PR2a Task 3) are registry-driven: one shared
+    # ToolSpec covers every enabled source, so `spec.provider` carries no
+    # single source for it (see assemble_allowlist). Resolve the real
+    # provider name per-call from the model-supplied `source` argument —
+    # this is the value used for the tier check AND the tool_call_log audit
+    # row. Non-authority kinds are unaffected (spec.provider as before).
+    if spec.kind == "authority":
+        source_type = str(args.get("source") or spec.provider or "")
+        provider = await _resolve_authority_provider_name(
+            gateway, source_type, request_id=request_id
+        )
+    else:
+        provider = spec.provider
+
+    provider_tier = (
+        0 if spec.kind == "skill" else await resolve_provider_tier(provider, request_id=request_id)
+    )
+
+    # DE-358 item 6 / AG-03 (issue #593): resolve the matter-scoped egress
+    # ceiling once per call. The same value reaches
+    # ``governed_tool_invocation`` (tier check + audit row) and every
+    # governed gateway ``call_tool`` below, so API and gateway can never
+    # disagree. Skills execute locally and bypass the gateway, so the
+    # ceiling is irrelevant to them (provider_tier=0 always passes).
+    if egress_ceiling is not None:
+        ceiling, ceiling_source = egress_ceiling
+    else:
+        ceiling, ceiling_source = await resolve_tool_egress_ceiling(
+            db, project_id=None, chat_id=chat_id
+        )
 
     async def _dispatch() -> ToolResult:
-        if spec.kind == "research":
-            return await _dispatch_research(db, spec, args, cluster_cache, request_id)
+        if spec.kind == "skill":
+            from sqlalchemy import select
+
+            from app.models.chat import Chat
+            from app.skills.tools import SkillTools, current_registry
+
+            chat = await db.scalar(select(Chat).where(Chat.id == chat_id, Chat.owner_id == user.id))
+            if chat is None or chat.archived_at is not None or spec.skill_binding is None:
+                raise ToolNotGranted("Skill invocation is unavailable")
+            return await SkillTools(current_registry()).execute(
+                db,
+                binding=spec.skill_binding,
+                owner_id=user.id,
+                project_id=chat.project_id,
+                intent=intent,
+                params=args,
+            )
+        elif spec.kind == "research":
+            return await _dispatch_research(
+                db, spec, args, cluster_cache, request_id, max_allowed_tier=ceiling
+            )
+        elif spec.kind == "authority":
+            return await _dispatch_authority(
+                db, spec, args, gateway, request_id, max_allowed_tier=ceiling
+            )
         else:
-            return await _dispatch_mcp(db, user, gateway, spec, args, server_auth_map, request_id)
+            return await _dispatch_mcp(
+                db,
+                user,
+                gateway,
+                spec,
+                args,
+                server_auth_map,
+                request_id,
+                max_allowed_tier=ceiling,
+            )
 
     return await governed_tool_invocation(
         db,
         origin="chat",
-        provider=spec.provider,
+        provider=provider,
         tool=spec.tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=None,  # chat path: no per-session tier ceiling in v1
+        max_allowed_tier=ceiling,
+        ceiling_source=ceiling_source,
         estimated_cost=estimated_cost,
         dispatch=_dispatch,
         span=None,  # OTel for chat tool-path is a follow-on DE
@@ -563,7 +851,11 @@ async def run_chat_tool_loop(
     # Build the server-auth map once per turn from list_servers.  Only
     # ``auth == "oauth"`` servers need per-user token resolution; for
     # ``none``/``bearer`` we pass user_token=None to the gateway.
-    raw_servers = await list_servers(request_id=request_id)
+    raw_servers = (
+        await list_servers(request_id=request_id)
+        if any(spec.kind == "mcp" for spec in allowlist.specs.values())
+        else []
+    )
     server_auth_map: dict[str, str] = {s["name"]: s.get("auth", "none") for s in raw_servers}
 
     # Working message list — grows as tool results are appended.
@@ -674,6 +966,8 @@ async def run_chat_tool_loop(
                         if rec.external_ref is not None:
                             _seen_source_refs.add(rec.external_ref)
                         collected_sources.append(rec)
+            except ToolNotGranted:
+                tool_result_msgs.append(_tool_error_message(tc_id, "skill tool refused"))
             except MCPAuthorizationRequired:
                 return LoopMcpAuth(
                     server=spec.provider,

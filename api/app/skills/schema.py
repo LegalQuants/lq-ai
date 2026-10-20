@@ -27,6 +27,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.skills.capabilities import ReferenceReadResult, SkillCapabilities
+
 # All built-in M1 skills are filesystem-canonical; user/team-scope forks
 # land later and gain ``user`` / ``team`` values for ``scope``. C1 only
 # delivers the ``builtin`` scope.
@@ -90,6 +92,8 @@ class LQAIFrontmatter(BaseModel):
     """
 
     model_config = ConfigDict(extra="allow")
+
+    capabilities: SkillCapabilities = Field(default_factory=SkillCapabilities)
 
     title: str | None = None
     """Human-readable display name for the UI. Defaults to ``name``
@@ -236,6 +240,15 @@ class SkillFile(BaseModel):
     content: str
 
 
+class SkillFileRef(BaseModel):
+    """A file the skill ships that is read on request, not sent with the prompt."""
+
+    path: str
+    """Path relative to the skill folder, e.g. ``references/checklist.md``."""
+
+    size_bytes: int
+
+
 class Skill(SkillSummary):
     """The shape ``GET /api/v1/skills/{name}`` returns.
 
@@ -264,6 +277,18 @@ class Skill(SkillSummary):
     content_md: str
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
+    script_files: list[SkillFile] = Field(default_factory=list)
+    on_demand_files: list[SkillFileRef] = Field(default_factory=list)
+    """The skill's ``references/`` files. Listed, never inlined: the model
+    reads one with ``skill_reference_read`` when the task calls for it."""
+    reference_read_enabled: bool = True
+    """Effective host runtime-read policy; independent of human inspection."""
+
+
+class SkillInspection(Skill):
+    """Human-only inspection response; never used by the gateway resolver."""
+
+    on_demand_contents: list[ReferenceReadResult] = Field(default_factory=list)
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------
@@ -451,6 +476,7 @@ __all__ = [
     "LQAIFrontmatter",
     "Skill",
     "SkillFile",
+    "SkillFileRef",
     "SkillFrontmatter",
     "SkillInputDef",
     "SkillInputs",

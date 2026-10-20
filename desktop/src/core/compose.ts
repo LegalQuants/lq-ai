@@ -6,10 +6,47 @@ export function composeBaseArgs(composeFile: string, projectName: string): strin
 }
 
 export const psArgs = (base: string[]): string[] => [...base, 'ps', '--format', 'json']
+/**
+ * `pull` — refresh the images for the configured tag before `up`. Run as a
+ * best-effort step so a released update is actually fetched: `up -d` alone
+ * reuses whatever `:latest` (or pinned tag) is already cached locally and
+ * never picks up a new release. A failed pull (offline / registry hiccup) is
+ * non-fatal — the caller proceeds to `up` with the cached images.
+ */
+export const pullArgs = (base: string[]): string[] => [...base, 'pull']
 export const upArgs = (base: string[]): string[] => [...base, 'up', '-d']
-export const downArgs = (base: string[]): string[] => [...base, 'down']
+export const upServicesWaitArgs = (base: string[], services: string[]): string[] => [
+	...base,
+	'up',
+	'-d',
+	'--wait',
+	...services
+]
+export const migrationArgs = (
+	base: string[],
+	command: string[],
+	options: { noDeps?: boolean } = {}
+): string[] => [
+	...base,
+	'--profile',
+	'ops',
+	'run',
+	'--rm',
+	'-T',
+	...(options.noDeps ? ['--no-deps'] : []),
+	'migrate',
+	...command
+]
+// Remove containers for services renamed by a launcher update (for example,
+// MinIO → RustFS). Named volumes remain intact because this deliberately omits -v.
+export const downArgs = (base: string[]): string[] => [...base, 'down', '--remove-orphans']
 /** `down -v` — also removes volumes. Used by Reset to wipe all data for a fresh setup. */
-export const downVArgs = (base: string[]): string[] => [...base, 'down', '-v']
+export const downVArgs = (base: string[]): string[] => [
+	...base,
+	'down',
+	'-v',
+	'--remove-orphans'
+]
 export const logsArgs = (base: string[], service: string): string[] => [
 	...base,
 	'logs',

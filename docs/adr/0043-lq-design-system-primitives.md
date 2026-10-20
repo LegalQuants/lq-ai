@@ -1,14 +1,9 @@
 # ADR 0043 — `lq` design-system primitives for the LQ.AI shell
 
-DRAFT — drafted by lq-maintainer-agent v0.7.0 for human
-ratification. Not canon: this document anchors nothing
-(rules/anchoring.md A-12) and decides nothing until a human
-maintainer adopts, numbers, and merges it. Ratify, amend, or reject.
-
-**Status:** Proposed (maintainer revision, 2026-10-17)
-**Decision-maker for this revision:** @houfu (maintainer)
+**Status:** Accepted (2026-10-18)
+**Decision-maker for the maintainer revision:** @houfu (2026-10-17)
 **Original proposal and reference implementation:** Simon Booth (@sgbooth), PR #282
-**Decision record:** The scope and API choices below were directed by @houfu on 2026-10-17. The ADR remains Proposed pending repository adoption; this revision does not assert Simon's endorsement or a completed code review.
+**Approval record:** The LQ.AI weekly committee call on 2026-10-18 approved adoption of ADR 0043 with an “adopt first, refine later” approach. No objection was recorded; this is not a claim of a counted formal vote or a completed code review. The October 17 maintainer revision defines the bounded scope below. [Joel's October 20 meeting follow-up](https://legalquants.slack.com/archives/C0BDS8RR7JM/p1792441109058609) records the adoption and action O18-04 to update the canonical decision records. The public minutes remain a draft under review until October 26; their publication is separate from this approval record.
 **Affected components:** `web/src/lib/lq-ai/**`
 **Supersedes:** none. **Refers to:** [ADR 0009](0009-web-lq-ai-shell-coexistence.md), [ADR 0001](0001-openwebui-fork-pin.md), [CONTRIBUTING.md](../../CONTRIBUTING.md), [CLAUDE.md](../../CLAUDE.md).
 
@@ -118,4 +113,4 @@ These are separate possible ADRs or PRs, not prerequisites, assignments or commi
 - Additional `LqPopover` or `LqSimpleGrid` primitives when separately scoped.
 - Any reassessment of the application framework or the OpenWebUI fork.
 
-The maintainer coordinates ADR numbering, integration conflicts and any extraction needed to keep review manageable. Simon will be invited to apply the agreed contract to his reference components; taking on that follow-up is his choice. Attribution for the original primitive design and implementation remains with Simon Booth.
+The maintainer coordinates ADR numbering, integration conflicts and any extraction needed to keep review manageable. Following the invitation to Simon, @houfu is applying the agreed contract and resolving integration conflicts on the maintainer’s behalf. Existing routing, prompt-comparison and citation-ledger dialogs retain deliberate click, keyboard and touch access; adopting a hover-only replacement is deferred. Attribution for the original primitive design and implementation remains with Simon Booth.

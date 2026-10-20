@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import make_require_gateway_key
+from app.config_revision import REVISION_HEADER, ConfigRevisionMismatch
 from app.providers.tool.base import (
     ToolProviderAuthError,
     ToolProviderError,
@@ -35,6 +36,7 @@ class ToolCallRequest(BaseModel):
 
     args: dict[str, Any] = Field(default_factory=dict)
     max_allowed_tier: int | None = Field(default=None, ge=1, le=5)
+    require_anonymization: bool = Field(default=False, strict=True)
 
 
 def _router(request: Request) -> Router:
@@ -112,6 +114,20 @@ async def call_tool(
     provider: str, tool: str, body: ToolCallRequest, request: Request
 ) -> JSONResponse:
     gw_router = _router(request)
+    revision = request.headers.get(REVISION_HEADER)
+    if body.require_anonymization and revision is None:
+        return _error(
+            412, "configuration_revision_mismatch", "Checked anonymization requires a revision"
+        )
+    if revision is not None:
+        try:
+            gw_router = gw_router.pin(revision, provider, tool=True)
+        except ConfigRevisionMismatch:
+            return _error(
+                412,
+                "configuration_revision_mismatch",
+                "Gateway configuration or adapter changed before dispatch",
+            )
     request_id = _request_id(request)
     user_token = _user_token(request)
     try:
@@ -122,6 +138,8 @@ async def call_tool(
             request_id=request_id,
             max_allowed_tier=body.max_allowed_tier,
             user_token=user_token,
+            require_anonymization=body.require_anonymization,
+            anonymizer=getattr(request.app.state, "anonymizer", None),
         )
     except ToolEgressRefused as exc:
         return _error(403, "egress_refused", exc.reason)
@@ -144,5 +162,7 @@ async def call_tool(
             "tool": result.tool,
             "payload": result.payload,
             "tier": result.tier,
-        }
+            "anonymization_applied": result.anonymization_applied,
+        },
+        headers={REVISION_HEADER: revision} if revision is not None else None,
     )

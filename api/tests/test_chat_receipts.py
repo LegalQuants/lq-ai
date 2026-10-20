@@ -10,12 +10,13 @@ gates on owner-or-admin.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -23,13 +24,14 @@ from app.main import app
 from app.models.audit import AuditLog
 from app.models.chat import Chat, Message
 from app.models.inference import InferenceRoutingLog
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
 pytestmark = pytest.mark.integration
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -86,6 +88,22 @@ async def admin_user(db_session: AsyncSession) -> User:
         hashed_password=hash_password("correct-horse-battery-staple"),
         is_admin=True,
         role="admin",
+        mfa_enabled=False,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest_asyncio.fixture
+async def auditor_user(db_session: AsyncSession) -> User:
+    user = User(
+        email=f"auditor-receipts-{uuid.uuid4().hex[:8]}@example.com",
+        display_name="Receipts Auditor",
+        hashed_password=hash_password("correct-horse-battery-staple"),
+        is_admin=False,
+        role="auditor",
         mfa_enabled=False,
         must_change_password=False,
     )
@@ -170,6 +188,58 @@ async def test_receipts_merges_all_sources(
     assert "skill" in kinds
 
 
+async def test_reference_read_receipt_is_scoped_metadata_not_citation_evidence(
+    client: AsyncClient, owner_user: User, populated_chat: Chat, db_session: AsyncSession
+) -> None:
+    message = await db_session.scalar(
+        select(Message).where(Message.chat_id == populated_chat.id, Message.role == "assistant")
+    )
+    assert message is not None
+    for chat_id, tool, provider in (
+        (populated_chat.id, "skill_reference_read", "built-in:fixture-skill"),
+        (uuid.uuid4(), "skill_reference_read", "other-chat-provider"),
+        (populated_chat.id, "skill_workspace_read", "other-capability"),
+    ):
+        db_session.add(
+            ToolCallLog(
+                user_id=owner_user.id,
+                origin="chat",
+                chat_id=chat_id,
+                message_id=message.id,
+                provider=provider,
+                tool=tool,
+                tier=0,
+                outcome="executed",
+                cost_usd=0,
+                args_digest="private-reference-arguments-must-not-be-projected",
+            )
+        )
+    await db_session.flush()
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts?event_kinds=audit", headers=_h(owner_user)
+    )
+    assert response.status_code == 200
+    reads = [e for e in response.json() if e["detail"].get("action") == "skill.reference_read"]
+    assert len(reads) == 1
+    assert reads[0]["kind"] == "audit"
+    assert reads[0]["detail"] == {
+        "action": "skill.reference_read",
+        "provider": "built-in:fixture-skill",
+        "tool": "skill_reference_read",
+        "outcome": "executed",
+        "tier": 0,
+        "cost_usd": "0.000000",
+        "message_id": str(message.id),
+    }
+    assert "private-reference-arguments" not in response.text
+    assert "other-chat-provider" not in response.text
+    assert "other-capability" not in response.text
+    filtered = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts?event_kinds=inference", headers=_h(owner_user)
+    )
+    assert "skill.reference_read" not in filtered.text
+
+
 async def test_receipts_chronological_ascending(
     client: AsyncClient, owner_user: User, populated_chat: Chat
 ) -> None:
@@ -228,6 +298,84 @@ async def test_receipts_admin_can_view_any_chat(
         headers=_h(admin_user),
     )
     assert response.status_code == 200, response.text
+
+
+# ----------------------------------------------------------------
+# Cross-user auditor role — auditor joins admin bypass on receipts
+# read + export; ordinary non-owner still 403, unaudited; owner reads
+# write no audit row.
+# ----------------------------------------------------------------
+
+
+async def test_receipts_auditor_can_view_any_chat_and_is_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    auditor_user: User,
+    owner_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts",
+        headers=_h(auditor_user),
+    )
+    assert response.status_code == 200, response.text
+
+    row = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "auditor.receipts_viewed")
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert row.user_id == auditor_user.id
+    assert row.details is not None
+    assert row.details["viewed_user_id"] == str(owner_user.id)
+
+
+async def test_receipts_member_non_owner_still_403_and_not_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    other_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts",
+        headers=_h(other_user),
+    )
+    assert response.status_code == 403
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.receipts_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+async def test_receipts_owner_read_not_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts",
+        headers=_h(owner_user),
+    )
+    assert response.status_code == 200, response.text
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.receipts_viewed")
+        )
+    ).scalar_one()
+    assert count == 0
 
 
 async def test_receipts_inference_refused_renders_as_error(
@@ -364,3 +512,74 @@ async def test_receipts_export_jsonl_non_owner_returns_403_or_404(
         headers=_h(other_user),
     )
     assert response.status_code in (403, 404)
+
+
+async def test_receipts_export_auditor_can_view_any_chat_and_is_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    auditor_user: User,
+    owner_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts/export.jsonl",
+        headers=_h(auditor_user),
+    )
+    assert response.status_code == 200, response.text
+
+    row = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(AuditLog.action == "auditor.receipts_exported")
+            )
+        )
+        .scalars()
+        .one()
+    )
+    assert row.user_id == auditor_user.id
+    assert row.details is not None
+    assert row.details["viewed_user_id"] == str(owner_user.id)
+
+
+async def test_receipts_export_member_non_owner_still_403_and_not_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    other_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts/export.jsonl",
+        headers=_h(other_user),
+    )
+    assert response.status_code == 403
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.receipts_exported")
+        )
+    ).scalar_one()
+    assert count == 0
+
+
+async def test_receipts_export_owner_read_not_audited(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    owner_user: User,
+    populated_chat: Chat,
+) -> None:
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts/export.jsonl",
+        headers=_h(owner_user),
+    )
+    assert response.status_code == 200, response.text
+
+    count = (
+        await db_session.execute(
+            select(func.count())
+            .select_from(AuditLog)
+            .where(AuditLog.action == "auditor.receipts_exported")
+        )
+    ).scalar_one()
+    assert count == 0

@@ -14,14 +14,16 @@ Task 1.2 NEEDS_CONTEXT resolution.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
 from app.api.user_skills import UserSkillCreate, UserSkillUpdate
 
 
-def _base_payload(**overrides: object) -> dict[str, object]:
-    base: dict[str, object] = {
+def _base_payload(**overrides: object) -> dict[str, Any]:
+    base: dict[str, Any] = {
         "slug": "personal-nda",
         "display_name": "Personal NDA",
         "description": "My NDA workflow",

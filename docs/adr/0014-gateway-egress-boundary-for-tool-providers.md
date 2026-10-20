@@ -78,3 +78,26 @@ Outbound tool-call arguments are anonymized by default through the existing M2 a
 - [`docs/security/boundary-registers.md`](../security/boundary-registers.md) (the egress boundary is a new register entry).
 - Mini-PRD: [`docs/proposals/legal-research-and-mcp.md`](../proposals/legal-research-and-mcp.md) (WS1 discharges this ADR).
 - Reference (shapes, not implementation): [MikeOSS](https://github.com/willchen96/mike) `validateRemoteMcpUrl` / `guardedFetch`.
+
+---
+
+## Amendment — 2026-10-01: API-side matter-scoped tool-egress ceiling (DE-358 item 6 / AG-03)
+
+**Status:** Accepted addendum.
+**Trigger:** [LegalQuants/lq-ai#593](https://github.com/LegalQuants/lq-ai/issues/593).
+
+### What changed in D4's tiering model
+
+D4 fixed the *mechanism* (declared tier + gateway refusal + audit row) but left the *ceiling policy* entirely to gateway configuration. This amendment adds an API-side, matter-scoped ceiling that the backend resolves once per call and hands to the gateway as `max_allowed_tier`. Both boundaries apply that supplied ceiling; the gateway also retains its independent controls:
+
+- **Operator default:** `LQ_AI_TOOL_MAX_EGRESS_TIER` (integer 1–5, unset by default).
+- **Per-matter:** `projects.max_egress_tier` (nullable `SMALLINT`, 1–5; DB CHECK `chk_projects_max_egress_tier_range`).
+- **Orchestration scope:** the existing `ExecutionScope.maximum_egress_tier`.
+- **Effective ceiling:** the numeric `min()` over the values that are set. A project can only tighten the operator default, never loosen it. The policy is independent of `minimum_inference_tier` and of `privileged`.
+- **Fail-closed:** if a recoverable policy lookup fails, its savepoint is rolled back and the call is refused before dispatch. The refusal audit row records `ceiling_source="unresolved"`. A scope ceiling of `0` refuses in the API and is never sent to the gateway.
+- **Audit:** `tool_call_log` gains `max_allowed_tier` (the ceiling actually applied) and `ceiling_source` (`operator` | `project` | `execution_scope` | `pending_original` | `unresolved`, or NULL when unconstrained).
+- **Confirmation gate:** the pending row stores the proposal-time ceiling (`chat_pending_tool_call.max_egress_tier`); approval re-resolves the current policy and executes under `min(original, current)`.
+
+No gateway changes: the gateway already accepts and enforces `max_allowed_tier` — it now receives a value the API computed instead of `None`.
+
+Policy reads include the chat's current Project lookup and are savepoint-isolated so a recoverable SQL error cannot poison refusal auditing. Error diagnostics contain metadata only. A storage outage still prevents dispatch but cannot guarantee persistence while the database is unavailable. New pending proposals are not created when their original policy cannot be resolved.

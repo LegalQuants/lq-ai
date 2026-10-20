@@ -15,6 +15,7 @@ import uuid
 
 import pytest
 import pytest_asyncio
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.api.chats as chats_mod
@@ -28,8 +29,17 @@ from app.models.user import User
 pytestmark = pytest.mark.integration
 
 
+def _fake_request() -> Request:
+    """Minimal ASGI-scope Request for direct handler invocation (no HTTP client)."""
+    return Request(
+        scope={"type": "http", "headers": [], "client": None, "method": "GET", "path": "/"}
+    )
+
+
 @pytest_asyncio.fixture
-async def seeded_caselaw_null_treatment(db_session: AsyncSession):
+async def seeded_caselaw_null_treatment(
+    db_session: AsyncSession,
+) -> tuple[User, uuid.UUID, uuid.UUID]:
     """Seed: user + chat + assistant message + caselaw citation + ledger entry
     with null treatment_id. Yields (user, chat_id, message_id)."""
     user = User(
@@ -79,9 +89,9 @@ async def seeded_caselaw_null_treatment(db_session: AsyncSession):
 @pytest.mark.asyncio
 async def test_ledger_read_enqueues_for_null_treatment(
     db_session: AsyncSession,
-    seeded_caselaw_null_treatment,
-    monkeypatch,
-):
+    seeded_caselaw_null_treatment: tuple[User, uuid.UUID, uuid.UUID],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """GET /ledger best-effort enqueues derivation for a caselaw turn whose
     treatment is not yet derived; the response shape is unchanged."""
     user, chat_id, message_id = seeded_caselaw_null_treatment
@@ -98,6 +108,7 @@ async def test_ledger_read_enqueues_for_null_treatment(
         chat_id=str(chat_id),
         user=user,
         db=db_session,
+        request=_fake_request(),
         message_id=None,
     )
 
@@ -108,8 +119,8 @@ async def test_ledger_read_enqueues_for_null_treatment(
 @pytest.mark.asyncio
 async def test_ledger_read_skips_enqueue_for_fresh_treatment(
     db_session: AsyncSession,
-    monkeypatch,
-):
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """GET /ledger does NOT enqueue for a caselaw turn with a fresh treatment
     (as_of within the TTL window)."""
     user = User(
@@ -176,6 +187,7 @@ async def test_ledger_read_skips_enqueue_for_fresh_treatment(
         chat_id=str(chat.id),
         user=user,
         db=db_session,
+        request=_fake_request(),
         message_id=None,
     )
 

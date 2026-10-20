@@ -80,7 +80,7 @@ deploy/
 
 ## Where to start
 
-1. Read the existing [`docker-compose.yml`](../../../docker-compose.yml) in full — note the service names (`web`, `api`, `gateway`, `postgres`, `redis`, `minio`), the port mappings (`web` at 3000:8080 per the dev convention, `api` at 8000:8000), and the compose-network topology. The reverse-proxy overlays change the host-published ports; the inter-service traffic stays on the compose network.
+1. Read the existing [`docker-compose.yml`](../../../docker-compose.yml) in full — note the service names (`web`, `api`, `gateway`, `postgres`, `redis`, `rustfs`), the port mappings (`web` at 3000:8080 per the dev convention, `api` at 8000:8000), and the compose-network topology. The reverse-proxy overlays change the host-published ports; the inter-service traffic stays on the compose network.
 2. Note the existing [`deploy/`](../../../deploy/) directory — currently contains only the (deferred) `helm/` subdirectory. The new `reverse-proxy/` subdirectory sits beside it.
 3. Read the [PRD §6 Deployment](../../PRD.md#6-deployment) section for the deployment-topology context.
 4. Pick one proxy to implement first and iterate against a real domain. Caddy is the easiest first target — the Caddyfile is short and the Let's Encrypt automation is built in. Get Caddy working end to end, then port the same routing rules to Traefik and nginx.

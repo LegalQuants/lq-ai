@@ -10,15 +10,20 @@ Covers:
   Slack ``oauth.v2.access`` exchange → POST workspace record to the
   api over an internal bridge token → success page.
 * ``GET /slack/oauth/callback`` — bad state → 400.
-* ``GET /slack/oauth/callback`` — ``error=...`` query param renders the
-  cancellation page without contacting Slack or the api.
+* ``GET /slack/oauth/callback`` — ``error=...`` query param (with a valid
+  state) renders the static cancellation page without contacting Slack
+  or the api.
+* Output encoding + CSP regression suite (reflected XSS in the callback,
+  reported 2026-08): the state check precedes every page-rendering
+  branch; attacker- or provider-controlled strings are never reflected;
+  every HTML page carries ``Content-Security-Policy: default-src 'none'``.
 """
 
 from __future__ import annotations
 
 import json
 import time
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -221,11 +226,15 @@ def test_callback_with_bad_state_returns_400(client: TestClient) -> None:
 def test_callback_with_error_query_param_renders_cancellation_page(
     client: TestClient,
 ) -> None:
-    """``?error=access_denied`` short-circuits without touching Slack/api."""
-    res = client.get("/slack/oauth/callback?code=ignored&state=ignored&error=access_denied")
+    """``?error=access_denied`` with a valid state short-circuits without
+    touching Slack/api. The provider's error string is logged, not echoed."""
+    state = _seed_state("stateDenied")
+    res = client.get(f"/slack/oauth/callback?state={state}&error=access_denied")
     assert res.status_code == 400
     assert "Install cancelled" in res.text
-    assert "access_denied" in res.text
+    assert "access_denied" not in res.text
+    # The token was consumed — a cancelled flow cannot be replayed.
+    assert state not in oauth_module._STATE_STORE
 
 
 def test_callback_with_slack_returning_not_ok_returns_502(
@@ -272,3 +281,176 @@ def test_callback_with_api_persist_failure_returns_502(
     res = client.get(f"/slack/oauth/callback?code=auth-code&state={state}")
     assert res.status_code == 502
     assert "Backend rejected with HTTP 500" in res.text
+
+
+# ---------------------------------------------------------------------------
+# Output encoding + CSP (reflected-XSS regression, 2026-08 advisory)
+# ---------------------------------------------------------------------------
+#
+# The pre-fix tests above exercised the vulnerable branch with the
+# payload-free token ``access_denied``, which escaping leaves byte-identical
+# — they passed before and after the fix. These tests carry live payloads
+# and assert on absence of the raw markup, presence of the escaped form,
+# and the security headers, so removing the escaping fails the suite.
+
+_SCRIPT_PAYLOAD = "<script>document.title='pwned'</script>"
+_IMG_PAYLOAD = '<img src=x onerror="alert(1)">'
+
+
+def _assert_hardened_html(res: object) -> None:
+    """Every HTML page the bridge serves: no live markup, CSP + nosniff set."""
+    headers = res.headers  # type: ignore[attr-defined]
+    text = res.text  # type: ignore[attr-defined]
+    assert headers["content-type"].startswith("text/html")
+    assert headers["content-security-policy"] == oauth_module._CONTENT_SECURITY_POLICY
+    assert headers["content-security-policy"].startswith("default-src 'none'")
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["referrer-policy"] == "no-referrer"
+    assert headers["cache-control"] == "no-store"
+    # No live tag or attribute survives: only the entity-encoded form may.
+    assert "<script" not in text.lower()
+    assert "<img" not in text.lower()
+    assert 'onerror="' not in text.lower()
+    assert "Correlation:" in text
+
+
+def test_error_branch_is_unreachable_without_valid_state(client: TestClient) -> None:
+    """The reported pre-auth reach: a bare crafted link never renders a page.
+
+    The state check now runs before the user-declined branch, so an
+    unauthenticated caller gets the JSON 400 — no HTML, no reflection.
+    """
+    res = client.get(f"/slack/oauth/callback?error={quote(_SCRIPT_PAYLOAD)}&state=forged&code=x")
+    assert res.status_code == 400
+    assert "invalid or expired state" in res.text.lower()
+    assert "<script" not in res.text
+    assert res.headers["content-type"].startswith("application/json")
+
+
+def test_error_param_payload_is_not_reflected(client: TestClient) -> None:
+    """Even with a valid state, ``error`` is never rendered — logged only."""
+    state = _seed_state("stateXss")
+    res = client.get(f"/slack/oauth/callback?error={quote(_SCRIPT_PAYLOAD)}&state={state}&code=x")
+    assert res.status_code == 400
+    assert "Install cancelled" in res.text
+    assert "pwned" not in res.text
+    _assert_hardened_html(res)
+
+
+def test_cancellation_without_code_is_not_a_422(client: TestClient) -> None:
+    """Slack's user-declined redirect carries ``error`` and ``state`` but no
+    ``code``; ``code`` must therefore be optional or a real cancellation
+    would surface as a validation error instead of the cancel page."""
+    state = _seed_state("stateNoCode")
+    res = client.get(f"/slack/oauth/callback?error=access_denied&state={state}")
+    assert res.status_code == 400
+    assert "Install cancelled" in res.text
+
+
+def test_missing_code_without_error_returns_400_after_state_check(
+    client: TestClient,
+) -> None:
+    state = _seed_state("stateOnlyState")
+    res = client.get(f"/slack/oauth/callback?state={state}")
+    assert res.status_code == 400
+    assert "missing authorization code" in res.text.lower()
+
+
+def test_slack_error_code_rendered_only_when_token_shaped(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``oauth.v2.access``'s ``error`` field is shown only if it looks like an
+    RFC 6749 error code; markup falls back to ``unknown``."""
+    state = _seed_state("stateMarkupError")
+
+    class _MarkupErrorClient(_StubAsyncWebClient):
+        def __init__(self) -> None:
+            super().__init__(payload={"ok": False, "error": _IMG_PAYLOAD})
+
+    monkeypatch.setattr(
+        "slack_sdk.web.async_client.AsyncWebClient", _MarkupErrorClient, raising=True
+    )
+    res = client.get(f"/slack/oauth/callback?code=bad&state={state}")
+    assert res.status_code == 502
+    assert "error code: unknown" in res.text
+    _assert_hardened_html(res)
+
+
+def test_exchange_exception_detail_is_not_reflected(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exception repr (which can carry upstream text) goes to the log, not the page."""
+    state = _seed_state("stateExc")
+
+    class _RaisingClient(_StubAsyncWebClient):
+        async def oauth_v2_access(self, **kwargs: object) -> _StubSlackResponse:
+            raise RuntimeError(_SCRIPT_PAYLOAD)
+
+    monkeypatch.setattr("slack_sdk.web.async_client.AsyncWebClient", _RaisingClient, raising=True)
+    res = client.get(f"/slack/oauth/callback?code=x&state={state}")
+    assert res.status_code == 502
+    assert "Install failed" in res.text
+    assert "pwned" not in res.text
+    _assert_hardened_html(res)
+
+
+def test_success_page_escapes_workspace_name(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The consenting party's own workspace name is still output-encoded."""
+    state = _seed_state("stateName")
+
+    class _MarkupNameClient(_StubAsyncWebClient):
+        def __init__(self) -> None:
+            super().__init__(
+                payload={
+                    "ok": True,
+                    "access_token": "xoxb-fake-bot-token",
+                    "bot_user_id": "U99BOT",
+                    "scope": "commands,chat:write",
+                    "team": {"id": "T0123456", "name": _IMG_PAYLOAD},
+                    "authed_user": {"id": "U11INSTALLER"},
+                }
+            )
+
+    monkeypatch.setattr(
+        "slack_sdk.web.async_client.AsyncWebClient", _MarkupNameClient, raising=True
+    )
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/slack/workspaces",
+        method="POST",
+        status_code=201,
+        json={},
+    )
+    res = client.get(f"/slack/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 200, res.text
+    assert "Install complete" in res.text
+    assert "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;" in res.text
+    _assert_hardened_html(res)
+
+
+def test_api_persist_rejection_body_is_not_reflected(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _seed_state("stateApiBody")
+    monkeypatch.setattr(
+        "slack_sdk.web.async_client.AsyncWebClient", _StubAsyncWebClient, raising=True
+    )
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/slack/workspaces",
+        method="POST",
+        status_code=500,
+        text=_SCRIPT_PAYLOAD,
+    )
+    res = client.get(f"/slack/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 502
+    assert "Backend rejected with HTTP 500" in res.text
+    _assert_hardened_html(res)

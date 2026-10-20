@@ -14,8 +14,7 @@
 	 * callers using `on:open` don't need to change.
 	 *
 	 * Tone + description per tier come from `chat/tierDescriptions.ts` — the
-	 * single source of truth also consumed by TierDetailsPanel and
-	 * MessageBubble's tier hover-popover, so the three don't drift.
+	 * single source of truth also consumed by TierDetailsPanel, so the three don't drift.
 	 */
 	import { createEventDispatcher } from 'svelte';
 	import TrustPill from './TrustPill.svelte';

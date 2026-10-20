@@ -11,7 +11,10 @@ import type {
 	UsageQuery,
 	AdminUserListResponse,
 	AdminUserListQuery,
-	AdminUserRow
+	AdminUserRow,
+	AdminUserCreateRequest,
+	AdminUserCreatedResponse,
+	AdminPasswordResetResponse
 } from '../types';
 
 export interface AliasFallback {
@@ -80,6 +83,13 @@ export async function deleteAlias(name: string): Promise<void> {
  * full ``GatewayConfig.model_dump`` so unknown fields ride along
  * unmodeled.
  */
+export interface SkillResourcePolicy {
+	reference_read_enabled: boolean;
+	max_files: number;
+	max_read_bytes: number;
+	scope: string;
+}
+
 export interface AdminConfigSnapshot {
 	providers: Array<{
 		name: string;
@@ -89,6 +99,7 @@ export interface AdminConfigSnapshot {
 		models?: string[];
 	}>;
 	model_aliases: Record<string, unknown>;
+	skill_resource_policy?: SkillResourcePolicy;
 	[k: string]: unknown;
 }
 
@@ -141,6 +152,60 @@ export async function revokeProviderKey(provider: string): Promise<void> {
 }
 
 /**
+ * Research-source (authority provider) management — the four fiduciary-grade
+ * authority sources (CourtListener, GovInfo, EDGAR, EUR-Lex) the gateway can
+ * cite from. Proxied by the backend at /api/v1/admin/tool-providers
+ * (admin-gated). Secrets are write-only: no key is ever returned, only
+ * `has_key` (a bool). EDGAR/EUR-Lex are keyless (`key_required: false`) and
+ * just need an enable/disable toggle; CourtListener/GovInfo need a key.
+ *
+ * Set returns 400 ``failed_precondition`` when the gateway has no runtime key
+ * storage (no master key), 404 for an unregistered source type, 409 when the
+ * source is configured via the environment (gateway.yaml), not the runtime
+ * store.
+ */
+export interface ToolProviderStatus {
+	type: string;
+	enabled: boolean;
+	name: string | null;
+	/** Whether a runtime/env key is present. Never the key itself. */
+	has_key: boolean;
+	/** Whether this source needs an API key (CourtListener/GovInfo) or is keyless (EDGAR/EUR-Lex). */
+	key_required: boolean;
+	egress_tier: number | null;
+}
+
+export interface ToolProviderListResponse {
+	tool_providers: ToolProviderStatus[];
+}
+
+export async function listToolProviders(): Promise<ToolProviderListResponse> {
+	return apiRequest<ToolProviderListResponse>('/admin/tool-providers');
+}
+
+/** Enable a source, optionally with a key. */
+export async function setToolProvider(type: string, apiKey?: string): Promise<ToolProviderStatus> {
+	const body: Record<string, unknown> = { type };
+	if (apiKey) body.api_key = apiKey;
+	return apiRequest<ToolProviderStatus>('/admin/tool-providers', { method: 'POST', body });
+}
+
+/** Rotate a source's key. */
+export async function patchToolProvider(type: string, apiKey: string): Promise<ToolProviderStatus> {
+	return apiRequest<ToolProviderStatus>(`/admin/tool-providers/${encodeURIComponent(type)}`, {
+		method: 'PATCH',
+		body: { api_key: apiKey }
+	});
+}
+
+/** Disable a source (removes the entry + retires the live adapter). 204 on success. */
+export async function deleteToolProvider(type: string): Promise<void> {
+	return apiRequest<void>(`/admin/tool-providers/${encodeURIComponent(type)}`, {
+		method: 'DELETE'
+	});
+}
+
+/**
  * GET /api/v1/admin/usage — aggregated turn counts for trust + cost visibility.
  *
  * Admin-only; callers must handle `LQAIApiError` with status 403 (non-admin
@@ -167,6 +232,19 @@ export async function listUsers(query: AdminUserListQuery = {}): Promise<AdminUs
 	}
 	const qs = params.toString();
 	return apiRequest<AdminUserListResponse>(`/admin/users${qs ? '?' + qs : ''}`);
+}
+
+/** Create a local account; the generated password is returned in this response only. */
+export async function createUser(body: AdminUserCreateRequest): Promise<AdminUserCreatedResponse> {
+	return apiRequest<AdminUserCreatedResponse>('/admin/users', { method: 'POST', body });
+}
+
+/** Reset credentials and revoke prior sessions without changing MFA enrollment. */
+export async function resetUserPassword(userId: string): Promise<AdminPasswordResetResponse> {
+	return apiRequest<AdminPasswordResetResponse>(
+		`/admin/users/${encodeURIComponent(userId)}/reset-password`,
+		{ method: 'POST' }
+	);
 }
 
 /**

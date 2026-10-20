@@ -21,17 +21,33 @@ Object storage follows the same pattern as
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation.authority_attribution import (
+    attribute_authority_passages,
+    reference_matches_external_ref,
+)
 from app.models.authority_text_cache import AuthorityTextCache
+from app.models.message_authority_citation import MessageAuthorityCitation
 from app.storage import stream_download, upload_bytes
+
+if TYPE_CHECKING:
+    from app.chat.tool_loop import ToolSourceRecord
+
+log = logging.getLogger(__name__)
+
+_LoadAuthorityText = Callable[..., Awaitable[str | None]]
 
 # Stable namespace for authority verify targets.
 # MUST be distinct from caselaw's _OPINION_NS ("6f9619ff-8b86-d011-b42d-00cf4fc964ff").
@@ -227,3 +243,341 @@ async def load_authority_text(
         async for chunk in stream:
             chunks.append(chunk)
     return b"".join(chunks).decode("utf-8")
+
+
+async def verify_and_persist_authority_citations(
+    db: AsyncSession,
+    *,
+    message_id: uuid.UUID,
+    assistant_text: str,
+    tool_sources: Sequence[ToolSourceRecord],
+    load_authority_text: _LoadAuthorityText = load_authority_text,
+    gateway: Any = None,
+    judge_model: str = "fast",
+) -> int:
+    """Char-verify verbatim/paraphrase quotes of fetched authority in a chat
+    turn's answer, persisting MessageAuthorityCitation rows.
+
+    Three passes (WS-E PR1c + DE-370):
+
+    * **Pass A** — verbatim ``locate_passage`` against each fetched body
+      (PASS: exact/tolerant match).
+    * **Pass B** — budget-bounded whole-body paraphrase judge (SUPPORTED).
+    * **Pass C (DE-370)** — attributed-authority FAIL: a passage that the
+      deterministic attribution parser binds to an authority *fetched this
+      turn* (nearby statute/reg/CELEX citation matching a loaded target's
+      external_ref) but that was neither verbatim-matched nor judge-supported
+      against THAT authority's body persists an unverified FAIL row against that
+      authority, so the fiduciary gate flags the turn.  Fail-closed: this
+      also applies when Pass B was skipped (``gateway=None`` or budget) —
+      "couldn't check" never becomes "passed".
+
+    A passage with no nearby citation, or whose citations match no authority
+    fetched this turn, keeps drop-on-miss (no row) — the false-positive guard
+    for uploaded-document and caselaw blockquotes.  Best-effort:
+    per-ref/per-passage exceptions are logged and skipped.
+
+    Verification is scoped to the ATTRIBUTED authority: Pass C exempts a
+    passage only when it was verified against the very authority its nearby
+    citation binds it to, so a quote misattributed to a different fetched
+    authority still FAILs.  A fetched authority whose body could not be
+    loaded (storage error or cache miss) stays bindable in Pass C — an
+    attributed passage FAILs against it rather than vanishing.
+    """
+    # Only get_authority-sourced refs carry a cached body; filter to authority
+    # content kinds with an external_ref.  EDGAR's "sec_filing" is covered as
+    # of WS-E PR2a (DE-371); EUR-Lex's eu_* kinds are covered as of WS-E PR2b
+    # (DE-374) — treaty/corrigendum CELEX handling is still pending (DE-375).
+    # A content kind outside this set is silently not verified (a
+    # conservative drop, never a false claim, but it means no ledger row).
+    _VERIFIABLE_CONTENT_KINDS = {
+        "statute",
+        "regulation",
+        "sec_filing",
+        "eu_regulation",
+        "eu_directive",
+        "eu_decision",
+        "eu_caselaw",
+        "eu_legislation",
+    }
+    refs = [
+        r for r in tool_sources if r.source_kind in _VERIFIABLE_CONTENT_KINDS and r.external_ref
+    ]
+    if not refs:
+        return 0
+
+    # Function-local imports break the authority <-> caselaw <-> tool_loop cycle.
+    from app.citation.caselaw import extract_blockquote_passages, locate_passage
+    from app.citation.verification import verify
+
+    passages = extract_blockquote_passages(assistant_text)
+    if not passages:
+        return 0
+
+    # Load each distinct authority body once. Carry external_ref alongside
+    # source_type/content_kind so a persisted row records the exact package
+    # its quote matched (rather than re-deriving it from tool_sources later).
+    targets: list[
+        tuple[str, str, str, Any]
+    ] = []  # (source_type, external_ref, content_kind, target)
+    # Fetched refs whose body could not be loaded (storage error or cache
+    # miss).  These stay bindable in Pass C so an attributed passage FAILs
+    # against them instead of vanishing — "couldn't check" never becomes
+    # "passed".
+    failed_refs: list[tuple[str, str, str]] = []  # (source_type, external_ref, content_kind)
+    seen: set[tuple[str, str]] = set()
+    for r in refs:
+        assert r.external_ref is not None  # guaranteed by the `refs` filter above
+        key = (r.provider, r.external_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            body = await load_authority_text(
+                db, source_type=r.provider, external_ref=r.external_ref
+            )
+        except Exception:
+            log.warning(
+                "authority verify: body load failed, ref stays bindable for FAIL",
+                extra={
+                    "event": "chat_authority_verify_load_failed",
+                    "external_ref": r.external_ref,
+                },
+                exc_info=True,
+            )
+            failed_refs.append((r.provider, r.external_ref, r.source_kind))
+            continue
+        if not body:
+            failed_refs.append((r.provider, r.external_ref, r.source_kind))
+            continue
+        targets.append(
+            (
+                r.provider,
+                r.external_ref,
+                r.source_kind,
+                authority_target(r.provider, r.external_ref, body),
+            )
+        )
+
+    if not targets and not failed_refs:
+        return 0
+
+    # Resolve attribution before either verification pass. Attributed quotes
+    # must be checked against their cited source, even when another fetched
+    # authority contains the same wording or supports the same paraphrase.
+    # Unattributed quotes retain the first-success search across fetched bodies.
+    bindable: list[tuple[str, str, str]] = [
+        (source_type, external_ref, content_kind)
+        for source_type, external_ref, content_kind, _target in targets
+    ] + failed_refs
+    bound_passages: list[tuple[str, tuple[str, str, str] | None]] = []
+    for attributed in attribute_authority_passages(assistant_text):
+        bound: tuple[str, str, str] | None = None
+        for parsed_ref in attributed.references:  # proximity-ordered
+            for source_type, external_ref, content_kind in bindable:
+                if reference_matches_external_ref(parsed_ref, external_ref):
+                    bound = (source_type, external_ref, content_kind)
+                    break
+            if bound is not None:
+                break
+        bound_passages.append((attributed.passage, bound))
+
+    persisted = 0
+    rows: list[MessageAuthorityCitation] = []
+    # Keyed by (passage, external_ref): a match only exempts the passage from
+    # Pass C's FAIL tier for the authority it actually verified against.
+    verbatim_matched: set[tuple[str, str]] = set()
+    for passage, bound in bound_passages:
+        for source_type, external_ref, content_kind, target in targets:
+            if bound is not None and (source_type, external_ref, content_kind) != bound:
+                continue
+            try:
+                off = locate_passage(passage, target.normalized_content)
+            except Exception:
+                continue
+            if off is None:
+                continue
+            start, end = off
+            cand = _AuthorityCandidate(
+                source_offset_start=start,
+                source_offset_end=end,
+                source_text=passage,
+                source_document_id=target.id,
+            )
+            try:
+                # gateway=None: verbatim-only here. locate_passage is a
+                # byte-exact substring finder — verify()'s judge stage is
+                # structurally unreachable in this loop (a miss `continue`s
+                # before a candidate exists), so passing gateway through
+                # would be dishonest. Mirrors caselaw.py's verbatim pass.
+                result = await verify(cand, target, gateway=None, judge_model=judge_model)
+            except Exception:
+                log.warning(
+                    "authority verify: verify() failed, skipping passage",
+                    extra={"event": "chat_authority_verify_failed"},
+                    exc_info=True,
+                )
+                continue
+            if not result.verified:
+                # drop-on-miss: not verified against this body — try the next.
+                continue
+            rows.append(
+                MessageAuthorityCitation(
+                    message_id=message_id,
+                    source_type=source_type,
+                    external_ref=external_ref,
+                    content_kind=content_kind,
+                    source_offset_start=start,
+                    source_offset_end=end,
+                    source_text=passage,
+                    verified=True,
+                    verification_method=result.method,
+                    verification_confidence=result.confidence,
+                    partial=result.partial,
+                )
+            )
+            verbatim_matched.add((passage, external_ref))
+            break  # first matching authority wins
+
+    # Flush Pass A's PASS rows now, so an exception later in Pass B or Pass C
+    # cannot discard already-earned verdicts (the caller swallows the raise
+    # and still computes the gate).
+    if rows:
+        db.add_all(rows)
+        await db.flush()
+        persisted += len(rows)
+        rows = []
+
+    # --- Pass B: whole-body paraphrase judge (SUPPORTED tier) --------------
+    # Attributed passages are judged against their bound body only. For
+    # unattributed passages, retain the all-bodies SUPPORTED-or-drop search.
+    # A match in another body never suppresses the cited authority's check.
+    judge_supported: set[tuple[str, str]] = set()  # (passage, external_ref)
+    if gateway is not None:
+        from app.citation.authority_content_judge import (
+            AUTHORITY_CONTENT_JUDGE_BUDGET_USD,
+            estimate_authority_content_cost_usd,
+            judge_authority_content,
+        )
+
+        spent: Decimal = Decimal("0")
+        for passage, bound in bound_passages:
+            if bound is None:
+                if any(p == passage for p, _ in verbatim_matched):
+                    continue
+            elif (passage, bound[1]) in verbatim_matched:
+                continue
+            for source_type, external_ref, content_kind, target in targets:
+                if bound is not None and (source_type, external_ref, content_kind) != bound:
+                    continue
+                body = target.normalized_content
+                try:
+                    est = await estimate_authority_content_cost_usd(
+                        db, judge_model=judge_model, authority_text=body
+                    )
+                except Exception:
+                    log.warning(
+                        "authority judge cost estimate failed, skipping body",
+                        extra={
+                            "event": "chat_authority_judge_estimate_error",
+                            "external_ref": external_ref,
+                        },
+                        exc_info=True,
+                    )
+                    continue
+                if spent + est > AUTHORITY_CONTENT_JUDGE_BUDGET_USD:
+                    break  # budget reached -> drop remaining judge work
+                spent += est
+                try:
+                    result = await judge_authority_content(
+                        passage=passage,
+                        authority_text=body,
+                        gateway=gateway,
+                        judge_model=judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "authority content judge error, skipping",
+                        extra={
+                            "event": "chat_authority_judge_error",
+                            "external_ref": external_ref,
+                        },
+                        exc_info=True,
+                    )
+                    continue
+                if not result.verified:
+                    continue
+                rows.append(
+                    MessageAuthorityCitation(
+                        message_id=message_id,
+                        source_type=source_type,
+                        external_ref=external_ref,
+                        content_kind=content_kind,
+                        source_offset_start=0,
+                        source_offset_end=len(body),
+                        source_text=passage,
+                        verified=True,
+                        verification_method="paraphrase_judge",
+                        verification_confidence=result.confidence,
+                        partial=True,
+                    )
+                )
+                judge_supported.add((passage, external_ref))
+                break  # first supporting body wins for this passage
+
+    # --- Pass C: attributed-authority FAIL tier (DE-370) -------------------
+    # A passage the attribution parser binds to an authority fetched this
+    # turn (citation matches a loaded or failed-to-load ref's external_ref)
+    # that was not verified AGAINST THAT AUTHORITY persists an unverified
+    # FAIL row (the ledger_bridge FAIL-row shape) so compute_and_record_gate
+    # buckets it FAIL.  Passages with no matching fetched authority keep
+    # drop-on-miss.  Runs unconditionally: a Pass-B skip (gateway=None /
+    # budget) or a body-load failure still fails an attributed, unverified
+    # passage — fail-closed, same row shape, no new statuses.
+    supported = verbatim_matched | judge_supported
+    failed: set[str] = set()
+    for passage, bound in bound_passages:
+        try:
+            if passage in failed:
+                continue
+            if bound is None:
+                continue  # unattributed, or attributed to a non-fetched authority
+            source_type, external_ref, content_kind = bound
+            if (passage, external_ref) in supported:
+                continue  # verified against the very authority it is attributed to
+            log.info(
+                "authority verify: attributed passage unverified — FAIL row",
+                extra={
+                    "event": "chat_authority_attributed_fail",
+                    "external_ref": external_ref,
+                },
+            )
+            failed.add(passage)
+            rows.append(
+                MessageAuthorityCitation(
+                    message_id=message_id,
+                    source_type=source_type,
+                    external_ref=external_ref,
+                    content_kind=content_kind,
+                    source_offset_start=0,
+                    source_offset_end=len(passage),
+                    source_text=passage,
+                    verified=False,
+                    verification_method=None,
+                    verification_confidence=None,
+                    partial=False,
+                )
+            )
+        except Exception:
+            log.warning(
+                "authority verify: attribution pass failed, skipping passage",
+                extra={"event": "chat_authority_attribution_error"},
+                exc_info=True,
+            )
+            continue
+
+    if rows:
+        db.add_all(rows)
+        await db.flush()
+        persisted += len(rows)
+    return persisted

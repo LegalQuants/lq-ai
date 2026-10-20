@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LQ.AI — Treatment Layer</title>
+<style>
+  :root {
+    --bg: #0c0f14;
+    --bg-elev: #151a23;
+    --bg-elev-2: #1d242f;
+    --border: #2a3340;
+    --border-hover: #3a4555;
+    --text: #e6ebf3;
+    --text-dim: #8a96a8;
+    --text-faint: #5a6578;
+    --accent: #7dd3fc;
+    --accent-dim: #38bdf8;
+    --fid: #f5b544;
+    --ok: #34d399;
+    --fail: #f87171;
+    --neutral: #6b7280;
+    --shadow: rgba(0,0,0,0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+  header {
+    padding: 12px 20px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  header h1::before {
+    content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--fid); margin-right: 8px; vertical-align: middle;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a {
+    color: var(--accent); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 4px;
+  }
+  header a:hover { border-color: var(--border-hover); background: var(--bg-elev-2); }
+
+  .main { display: grid; grid-template-columns: 340px 1fr; overflow: hidden; }
+  .controls {
+    background: var(--bg-elev); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .controls h2 {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--fid); margin: 18px 0 8px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .controls h2:first-child { margin-top: 0; }
+  .hint { font-size: 11.5px; color: var(--text-faint); margin: 0 0 10px; line-height: 1.4; }
+
+  .case-row {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 9px 10px; border-radius: 5px; margin-bottom: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg-elev-2);
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .case-row:hover { border-color: var(--border-hover); }
+  .case-row.selected { border-color: var(--fid); box-shadow: 0 0 0 1px rgba(245,181,68,0.25); }
+  .case-title { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.35; }
+  .case-cite { font-size: 10.5px; color: var(--text-dim); font-style: italic; }
+  .case-ids { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: var(--text-faint); }
+  .case-badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+
+  .badge {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 2px 6px; border-radius: 3px; white-space: nowrap; font-family: ui-monospace, Menlo, monospace;
+    border: 1px solid transparent;
+  }
+  .badge.method-graph { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
+  .badge.method-judge { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .badge.neg-none { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .badge.neg-unassessed { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
+  .badge.neg-distinguished { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .badge.neg-criticized { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
+  .badge.cls-followed { background: rgba(52,211,153,0.14); color: var(--ok); border-color: rgba(52,211,153,0.35); }
+  .badge.cls-distinguished { background: rgba(245,181,68,0.14); color: var(--fid); border-color: rgba(245,181,68,0.35); }
+  .badge.cls-criticized { background: rgba(248,113,113,0.14); color: var(--fail); border-color: rgba(248,113,113,0.35); }
+  .badge.cls-unavailable { background: rgba(107,114,128,0.14); color: var(--neutral); border-color: rgba(107,114,128,0.35); }
+
+  .caveat {
+    background: var(--bg-elev-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--fid); border-radius: 4px;
+    padding: 8px 10px; font-size: 11.5px; line-height: 1.5; color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .caveat .lab {
+    display: block; font-weight: 700; color: var(--fid); font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px;
+  }
+  .caveat code { color: var(--text); font-size: 11px; }
+
+  .taxo-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .taxo-chip {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; padding: 2px 7px; border-radius: 10px;
+    border: 1px solid var(--border); color: var(--text-faint); background: var(--bg-elev-2);
+  }
+  .taxo-chip.used { color: var(--text); border-color: var(--border-hover); }
+  .taxo-chip.used.followed { color: var(--ok); border-color: rgba(52,211,153,0.4); }
+  .taxo-chip.used.distinguished { color: var(--fid); border-color: rgba(245,181,68,0.4); }
+  .taxo-chip.used.criticized { color: var(--fail); border-color: rgba(248,113,113,0.4); }
+
+  .bounds-table { font-size: 11px; width: 100%; border-collapse: collapse; }
+  .bounds-table td { padding: 3px 2px; border-bottom: 1px dashed var(--border); vertical-align: middle; }
+  .bounds-table td:first-child { color: var(--text-faint); font-family: ui-monospace, Menlo, monospace; }
+  .bounds-table td:last-child { color: var(--text); text-align: right; font-family: ui-monospace, Menlo, monospace; }
+
+  .content-wrap {
+    overflow-y: auto; padding: 20px 24px;
+    background: radial-gradient(circle at 20% 15%, rgba(245,181,68,0.05), transparent 55%),
+      radial-gradient(circle at 80% 80%, rgba(125,211,252,0.03), transparent 55%), var(--bg);
+  }
+  .panel-wrap { max-width: 780px; margin: 0 auto; }
+
+  .case-header { margin-bottom: 14px; }
+  .case-header .name { font-size: 17px; font-weight: 700; color: var(--text); line-height: 1.3; }
+  .case-header .cite { font-size: 12.5px; color: var(--text-dim); font-style: italic; margin-top: 2px; }
+  .case-header .meta {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--text-faint);
+    margin-top: 6px; display: flex; gap: 14px; flex-wrap: wrap;
+  }
+
+  .rollup-card {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 18px; margin-bottom: 16px;
+  }
+  .rollup-verdict { font-size: 15px; font-weight: 700; color: var(--text); line-height: 1.4; }
+  .rollup-verdict .badge { font-size: 10.5px; margin-right: 8px; vertical-align: middle; }
+  .rollup-detail { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; margin-top: 8px; }
+  .rollup-detail code { color: var(--text); }
+  .derived-callout {
+    display: inline-block; margin-top: 10px; font-size: 11.5px; font-weight: 700;
+    color: var(--fid); background: rgba(245,181,68,0.10); border: 1px solid rgba(245,181,68,0.3);
+    border-radius: 4px; padding: 4px 9px;
+  }
+
+  .stage-flow { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .stage-card {
+    background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .stage-card.pending { opacity: 0.5; border-style: dashed; }
+  .stage-n {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px; font-weight: 700; color: var(--fid);
+    background: rgba(245,181,68,0.12); border-radius: 50%; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+  }
+  .stage-card.pending .stage-n { color: var(--text-faint); background: var(--bg-elev-2); }
+  .stage-body { flex: 1; }
+  .stage-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .stage-desc { font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin-top: 2px; }
+  .stage-desc code { color: var(--fid); }
+  .stage-pending-note { font-size: 11px; color: var(--text-faint); font-style: italic; margin-top: 4px; }
+
+  .signal-block { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
+  .block-lab { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+  .block-sub { font-size: 11.5px; color: var(--text-faint); margin: 0 0 10px; }
+
+  .sig-row {
+    border: 1px solid var(--border); border-radius: 5px; margin-bottom: 6px; cursor: pointer;
+    background: var(--bg-elev-2); overflow: hidden; transition: border-color 0.12s;
+  }
+  .sig-row:hover { border-color: var(--border-hover); }
+  .sig-row.expanded { border-color: var(--fid); }
+  .sig-top { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+  .sig-case { flex: 1; font-size: 12px; color: var(--text); }
+  .sig-court { font-size: 10.5px; color: var(--text-faint); font-family: ui-monospace, Menlo, monospace; }
+  .sig-conf { font-size: 10px; color: var(--text-faint); font-family: ui-monospace, Menlo, monospace; }
+  .sig-trace-toggle { font-size: 10.5px; color: var(--fid); }
+
+  .sig-trace {
+    display: none; padding: 10px 12px 12px; border-top: 1px dashed var(--border);
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.6;
+  }
+  .sig-row.expanded .sig-trace { display: block; }
+  .sig-trace .row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .sig-trace .k { color: var(--text-faint); min-width: 100px; flex-shrink: 0; }
+  .sig-trace .v { color: var(--text); }
+  .sig-snippet {
+    font-style: italic; color: var(--text-dim); background: var(--bg-elev);
+    border-left: 2px solid var(--fid); border-radius: 0 4px 4px 0; padding: 6px 9px; margin: 6px 0;
+  }
+  .sig-not-stored {
+    font-size: 11px; color: var(--text-dim); background: var(--bg-elev);
+    border-left: 2px solid var(--fail); border-radius: 0 4px 4px 0; padding: 6px 9px; margin-top: 6px;
+  }
+  .sig-justification { margin: 6px 0; }
+
+  .graph-only-row {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 5px; margin-bottom: 5px; background: var(--bg-elev-2);
+    font-size: 12px; color: var(--text-dim);
+  }
+  .graph-only-row .case { flex: 1; color: var(--text); }
+
+  .output { background: var(--bg-elev); border-top: 1px solid var(--border); max-height: 200px; display: grid; grid-template-rows: auto 1fr; }
+  .output-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border); gap: 4px; align-items: flex-end; }
+  .output-tab {
+    background: transparent; border: none; color: var(--text-dim);
+    padding: 10px 14px; cursor: pointer; font-size: 12px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .output-tab.active { color: var(--text); border-bottom-color: var(--fid); }
+  .output-tab:hover { color: var(--text); }
+  .output-note { margin-left: auto; font-size: 11px; color: var(--text-faint); padding: 10px 4px; font-style: italic; }
+  .output-body { padding: 12px 16px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: var(--text); }
+  .output-body .pane { display: none; }
+  .output-body .pane.active { display: block; }
+  .output-body .file {
+    font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--accent);
+    text-decoration: none; display: inline-block; padding: 1px 4px; border-radius: 3px;
+    background: rgba(125,211,252,0.08); margin: 2px 6px 2px 0;
+  }
+  .output-body .file:hover { background: rgba(125,211,252,0.16); }
+  .src-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>LQ.AI — Treatment Layer</h1>
+    <span class="subtitle">Pick a cited case — see the derived treatment rollup and the citing-case signals behind it.</span>
+    <span class="spacer"></span>
+    <a href="../../" id="learn-home">↩ Learn</a>
+    <a href="https://github.com/LegalQuants/lq-ai" target="_blank" rel="noopener">View source ↗</a>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <h2>Cited cases (pick one)</h2>
+      <p class="hint">Each row is one <code>citation_treatment</code> record — keyed by the cited case's cluster.</p>
+      <div id="case-list"></div>
+
+      <h2>Honest caveats</h2>
+      <div class="caveat">
+        <span class="lab">Derived, not editorial</span>
+        Computed from the citation graph + a judge pass, <b>not</b> an authoritative citator.
+      </div>
+      <div class="caveat">
+        <span class="lab">Snippets never stored (P3)</span>
+        Judge input snippets are transient — never stored (P3). The stored row is a rollup (<code>derived_method='citation_graph+judge'</code>) with a 30-day TTL and a bounded judge budget.
+      </div>
+
+      <h2>Judge taxonomy (7 classes)</h2>
+      <p class="hint">This synthetic set only exercises 3 of the judge's 7 possible classifications (<code>treatment_judge.py</code> <code>TREATMENT_CLASSES</code>).</p>
+      <div class="taxo-row" id="taxo-row"></div>
+
+      <h2>Bounds (treatment.py)</h2>
+      <table class="bounds-table">
+        <tr><td>TREATMENT_TTL_DAYS</td><td>30</td></tr>
+        <tr><td>N_JUDGED_CAP</td><td>10</td></tr>
+        <tr><td>TREATMENT_JUDGE_BUDGET_USD</td><td>$0.25 / case</td></tr>
+      </table>
+    </aside>
+
+    <div class="content-wrap">
+      <div class="panel-wrap" id="panel"></div>
+    </div>
+  </div>
+
+  <div class="output">
+    <div class="output-tabs">
+      <button class="output-tab active" data-tab="verify">Verify in source</button>
+      <button class="output-tab" data-tab="why">Why it's built this way</button>
+      <span class="output-note">Illustrative walkthrough — this page makes no live network calls.</span>
+    </div>
+    <div class="output-body">
+      <div class="pane active" id="pane-verify"></div>
+      <div class="pane" id="pane-why"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const REPO = 'https://github.com/LegalQuants/lq-ai/blob/main/';
+
+// The 7-class taxonomy the treatment judge classifies each citing PASSAGE into
+// (treatment_judge.py TREATMENT_CLASSES). Severity order for the rollup's
+// "strongest negative" pick (treatment_rollup.py NEGATIVE_SEVERITY) — "followed"
+// and "neutral" are never negative and never win the rollup.
+const TREATMENT_CLASSES = ["followed", "distinguished", "criticized", "questioned", "overruled", "superseded", "neutral"];
+const NEGATIVE_SEVERITY = ["overruled", "superseded", "criticized", "questioned", "distinguished"];
+const CORROBORATION_BUMP = 0.05;
+const CONFIDENCE_CAP = 0.95;
+const CONFIDENCE_MAP = { high: 0.90, medium: 0.70, low: 0.50 };
+
+// Roll per-passage judgments up to a case-level signal — mirrors roll_up()
+// in api/app/citation/treatment_rollup.py exactly (strongest-negative posture).
+function rollUp(signals) {
+  const counts = {};
+  signals.forEach(s => { counts[s.classification] = (counts[s.classification] || 0) + 1; });
+  const strongest = NEGATIVE_SEVERITY.find(c => counts[c]) || null;
+  if (!strongest) return { strongest: null, counts, confidence: null, judgedCount: signals.length };
+  const agreeing = signals.filter(s => s.classification === strongest).map(s => s.confidenceVal);
+  const base = Math.max(...agreeing);
+  const bumped = base + CORROBORATION_BUMP * (agreeing.length - 1);
+  const confidence = Math.min(bumped, CONFIDENCE_CAP);
+  return { strongest, counts, confidence, judgedCount: signals.length };
+}
+
+// Three synthetic citation_treatment records + their (transient-in-reality)
+// judge inputs. Illustrative only — no citing opinion here is real. Confidence
+// values are drawn from the existing _CONFIDENCE_MAP scale (high/medium/low).
+function conf(label) { return { confidenceLabel: label, confidenceVal: CONFIDENCE_MAP[label] }; }
+
+const CASES = [
+  {
+    key: "anderson",
+    caseName: "Anderson v. Meridian Fabricating Co.",
+    citation: "88 F.4th 210 (9th Cir. 2024)",
+    cluster_id: 501234,
+    opinion_id: 812345,
+    cited_by_count: 34,
+    derived_method: "citation_graph+judge",
+    as_of: "2026-06-14",
+    judge_as_of: "2026-06-14",
+    signals: [
+      { opinion_id: 900101, caseName: "Ridgeline Transport Corp. v. Bell", court: "9th Cir.", date: "2025-01-09",
+        classification: "followed", ...conf("high"),
+        justification: "The panel applies Anderson's burden-shifting framework directly to a materially identical wrongful-termination claim.",
+        snippet: "…as in Anderson, the plaintiff first bears the burden of establishing a prima facie case before the burden shifts to the employer…" },
+      { opinion_id: 900142, caseName: "Okafor v. Delacroix Systems", court: "D. Ariz.", date: "2024-11-22",
+        classification: "followed", ...conf("medium"),
+        justification: "The district court adopts Anderson's standard without qualification in a summary-judgment ruling.",
+        snippet: "…this court follows Anderson v. Meridian Fabricating Co. in evaluating the sufficiency of the plaintiff's showing…" },
+      { opinion_id: 900177, caseName: "Pruitt v. Vantage Logistics", court: "9th Cir.", date: "2024-09-03",
+        classification: "followed", ...conf("high"),
+        justification: "The panel treats Anderson as controlling circuit precedent on the same procedural posture.",
+        snippet: "…Anderson controls; we see no basis to depart from its framework on these facts…" },
+      { opinion_id: 900210, caseName: "Summit Ridge Partners v. Cho", court: "C.D. Cal.", date: "2024-08-14",
+        classification: "followed", ...conf("medium"),
+        justification: "The court cites Anderson favorably in support of the same evidentiary standard.",
+        snippet: "…consistent with Anderson, the court finds the proffered evidence sufficient to survive dismissal…" },
+      { opinion_id: 900233, caseName: "Reyes v. Northgate Assembly", court: "9th Cir.", date: "2024-06-27",
+        classification: "followed", ...conf("high"),
+        justification: "The panel relies on Anderson's reasoning to resolve an identical burden-of-proof dispute.",
+        snippet: "…we adopt the reasoning of Anderson v. Meridian Fabricating Co. on this point…" },
+      { opinion_id: 900266, caseName: "Callahan v. Ferro Dynamics", court: "9th Cir.", date: "2024-05-11",
+        classification: "distinguished", ...conf("high"),
+        justification: "The court distinguishes Anderson because the plaintiff here was a supervisory employee outside the class the earlier panel addressed.",
+        snippet: "…Anderson is distinguishable: the plaintiff there held a non-supervisory role, whereas here the plaintiff exercised independent hiring authority…" },
+      { opinion_id: 900301, caseName: "Nakamura v. Brightline Systems", court: "D. Nev.", date: "2024-04-02",
+        classification: "followed", ...conf("medium"),
+        justification: "The district court applies Anderson's framework to a closely analogous retaliation claim.",
+        snippet: "…applying the Anderson framework, the court finds the temporal proximity sufficient to infer causation…" },
+      { opinion_id: 900318, caseName: "Torres v. Meadowbrook Assembly", court: "9th Cir.", date: "2024-02-19",
+        classification: "followed", ...conf("low"),
+        justification: "The opinion cites Anderson in passing in support of a related but not dispositive point.",
+        snippet: "…see also Anderson v. Meridian Fabricating Co. (applying a similar burden-shifting standard)…" },
+      { opinion_id: 900340, caseName: "Deshpande v. Corland Manufacturing", court: "D. Or.", date: "2024-01-08",
+        classification: "followed", ...conf("medium"),
+        justification: "The court follows Anderson's standard in denying the defendant's motion to dismiss.",
+        snippet: "…the complaint states a claim under the standard set out in Anderson…" }
+    ],
+    graphOnlyRefs: []
+  },
+  {
+    key: "whitfield",
+    caseName: "Whitfield Holdings, LLC v. Sarner Industrial Partners",
+    citation: "402 F. Supp. 3d 88 (S.D.N.Y. 2023)",
+    cluster_id: 501890,
+    opinion_id: 823110,
+    cited_by_count: 21,
+    derived_method: "citation_graph+judge",
+    as_of: "2026-06-20",
+    judge_as_of: "2026-06-20",
+    signals: [
+      { opinion_id: 910044, caseName: "Marsh Point Capital v. Whitfield Holdings", court: "2d Cir.", date: "2024-10-02",
+        classification: "criticized", ...conf("high"),
+        justification: "The panel criticizes Whitfield's damages methodology as internally inconsistent and declines to extend it.",
+        snippet: "…Whitfield's approach to computing consequential damages does not withstand scrutiny; we decline to apply it here…" },
+      { opinion_id: 910071, caseName: "Bellweather Trust v. Corrigan Sarner", court: "S.D.N.Y.", date: "2024-07-19",
+        classification: "criticized", ...conf("medium"),
+        justification: "The court questions the reasoning underlying Whitfield's causation standard as insufficiently supported.",
+        snippet: "…Whitfield's causation analysis rests on an assumption this court is not prepared to adopt without further support…" },
+      { opinion_id: 910098, caseName: "Ashgrove Ventures v. Petrillo", court: "S.D.N.Y.", date: "2024-05-30",
+        classification: "distinguished", ...conf("high"),
+        justification: "The court distinguishes Whitfield on the ground that the underlying contract lacked an integration clause.",
+        snippet: "…unlike Whitfield, the agreement here contains no integration clause, so the parol-evidence analysis does not carry over…" },
+      { opinion_id: 910122, caseName: "Okonkwo v. Larkspur Fund Management", court: "E.D.N.Y.", date: "2024-03-11",
+        classification: "distinguished", ...conf("medium"),
+        justification: "The court distinguishes Whitfield because the plaintiff class here included non-accredited investors.",
+        snippet: "…Whitfield involved only accredited investors; the presence of non-accredited investors here changes the applicable disclosure standard…" },
+      { opinion_id: 910150, caseName: "Danforth Equities v. Calloway", court: "S.D.N.Y.", date: "2024-02-08",
+        classification: "followed", ...conf("high"),
+        justification: "The court applies Whitfield's contract-interpretation standard without modification.",
+        snippet: "…as in Whitfield, the plain language of the agreement controls…" },
+      { opinion_id: 910177, caseName: "Prosser v. Aldergate Capital", court: "D. Conn.", date: "2023-12-14",
+        classification: "followed", ...conf("medium"),
+        justification: "The district court adopts Whitfield's approach to ambiguous indemnification clauses.",
+        snippet: "…following Whitfield, ambiguity in the indemnification clause is construed against the drafter…" },
+      { opinion_id: 910201, caseName: "Iversen v. Blackthorn Partners", court: "S.D.N.Y.", date: "2023-11-01",
+        classification: "followed", ...conf("high"),
+        justification: "The court treats Whitfield as controlling on a nearly identical breach-of-fiduciary-duty theory.",
+        snippet: "…Whitfield controls the fiduciary-duty analysis on these facts…" },
+      { opinion_id: 910229, caseName: "Castellano v. Ridgemont Holdings", court: "S.D.N.Y.", date: "2023-09-17",
+        classification: "followed", ...conf("medium"),
+        justification: "The court cites Whitfield favorably in resolving a motion to compel arbitration.",
+        snippet: "…consistent with Whitfield, the arbitration clause is enforced as written…" },
+      { opinion_id: 910254, caseName: "Okwuosa v. Harrowgate Capital Partners", court: "D.N.J.", date: "2023-08-05",
+        classification: "followed", ...conf("low"),
+        justification: "The opinion references Whitfield in a footnote in support of a secondary point.",
+        snippet: "…see Whitfield (applying a similar standard to a comparable indemnification dispute)…" },
+      { opinion_id: 910280, caseName: "Beaumont v. Sarner Industrial Partners", court: "S.D.N.Y.", date: "2023-06-22",
+        classification: "followed", ...conf("medium"),
+        justification: "The court follows Whitfield's framework in granting partial summary judgment.",
+        snippet: "…applying Whitfield, the court finds no triable issue as to the interpretation of Section 4.2…" }
+    ],
+    graphOnlyRefs: []
+  },
+  {
+    key: "ashworth",
+    caseName: "Ashworth v. Calloway Municipal Utility District",
+    citation: "19 F.4th 902 (5th Cir. 2025)",
+    cluster_id: 502210,
+    opinion_id: 830552,
+    cited_by_count: 6,
+    derived_method: "citation_graph",
+    as_of: "2026-06-30",
+    judge_as_of: null,
+    signals: [],
+    // Graph pass only: persisted_citing refs (opinion id + court + date), snippet
+    // already stripped by _strip_snippet before the row was written (P3) — the
+    // judge pass has not run for this case yet, so there is nothing to classify.
+    graphOnlyRefs: [
+      { opinion_id: 920011, caseName: "Petrakis v. Solano County Water Auth.", court: "5th Cir.", date: "2026-05-02" },
+      { opinion_id: 920034, caseName: "Broussard v. Gulf Coast Utility Board", court: "W.D. La.", date: "2026-04-19" },
+      { opinion_id: 920058, caseName: "Ferreira v. Lakeside Municipal District", court: "5th Cir.", date: "2026-03-27" },
+      { opinion_id: 920079, caseName: "Whitcomb v. Calloway Municipal Utility District", court: "E.D. Tex.", date: "2026-03-01" },
+      { opinion_id: 920102, caseName: "Ngo v. Ridgeway Water Reclamation", court: "S.D. Tex.", date: "2026-02-11" },
+      { opinion_id: 920119, caseName: "Delacroix v. Parish Utility Commission", court: "5th Cir.", date: "2026-01-22" }
+    ]
+  }
+];
+
+// Compute + cache the rollup for each case at load, exactly as _run_judge_pass
+// would after the judge phase (only for cases with signals).
+CASES.forEach(c => { c.rollup = c.signals.length ? rollUp(c.signals) : { strongest: null, counts: {}, confidence: null, judgedCount: 0 }; });
+
+const state = { selectedKey: CASES[0].key, expandedSignal: null };
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function negBadgeClass(strongest) {
+  if (strongest === "criticized") return "neg-criticized";
+  if (strongest === "distinguished") return "neg-distinguished";
+  return "neg-none";
+}
+
+// The judge pass hasn't run for a graph-only case (derived_method ===
+// "citation_graph", judged_count === null) — that's a different state from a
+// judged case that found no negative signal, and must read differently
+// ("not yet assessed" vs. "no negative treatment found").
+function negBadgeInfo(c) {
+  const judged = c.derived_method === "citation_graph+judge";
+  if (!judged) return { cls: "neg-unassessed", label: "not yet assessed" };
+  if (!c.rollup.strongest) return { cls: "neg-none", label: "no negative signal" };
+  return { cls: negBadgeClass(c.rollup.strongest), label: c.rollup.strongest };
+}
+
+function renderCaseList() {
+  const wrap = document.getElementById("case-list");
+  wrap.innerHTML = "";
+  CASES.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "case-row" + (c.key === state.selectedKey ? " selected" : "");
+    const methodCls = c.derived_method === "citation_graph+judge" ? "method-judge" : "method-graph";
+    const negInfo = negBadgeInfo(c);
+    row.innerHTML = `
+      <span class="case-title">${escapeHtml(c.caseName)}</span>
+      <span class="case-cite">${escapeHtml(c.citation)}</span>
+      <span class="case-ids">cluster_id: ${c.cluster_id} · cited_by_count: ${c.cited_by_count}</span>
+      <div class="case-badges">
+        <span class="badge ${methodCls}">${escapeHtml(c.derived_method)}</span>
+        <span class="badge ${negInfo.cls}">${escapeHtml(negInfo.label)}</span>
+      </div>
+    `;
+    row.addEventListener("click", () => { state.selectedKey = c.key; state.expandedSignal = null; renderAll(); });
+    wrap.appendChild(row);
+  });
+}
+
+function renderTaxo() {
+  const usedSet = new Set(["followed", "distinguished", "criticized"]);
+  document.getElementById("taxo-row").innerHTML = TREATMENT_CLASSES.map(t => {
+    const used = usedSet.has(t);
+    const cls = used ? `taxo-chip used ${t}` : "taxo-chip";
+    return `<span class="${cls}">${t}</span>`;
+  }).join("");
+}
+
+function rollupSentence(c) {
+  const judged = c.derived_method === "citation_graph+judge";
+  if (!judged) {
+    const n = c.graphOnlyRefs.length;
+    return `Not yet assessed — the judge pass has not run for this case as of ${c.as_of}. The citation graph found ${n} citing opinion${n === 1 ? "" : "s"}, but none has been classified yet.`;
+  }
+  if (!c.rollup.strongest) {
+    return `No negative treatment found as of ${c.as_of}.`;
+  }
+  const parts = [];
+  // Sentence order follows NEGATIVE_SEVERITY, then "followed" last — matches
+  // the ADR 0019 D5 example phrasing ("questioned by 2, distinguished by 5,
+  // otherwise neutral").
+  NEGATIVE_SEVERITY.forEach(cls => {
+    if (c.rollup.counts[cls]) parts.push(`${cls} by ${c.rollup.counts[cls]}`);
+  });
+  const followedCount = c.rollup.counts["followed"] || 0;
+  let sentence = parts.join(", ");
+  if (followedCount) sentence += `, otherwise followed (${followedCount})`;
+  return `${sentence} — derived as of ${c.as_of}.`;
+}
+
+function renderPanel() {
+  const c = CASES.find(x => x.key === state.selectedKey);
+  const wrap = document.getElementById("panel");
+  const judged = c.derived_method === "citation_graph+judge";
+  const negInfo = negBadgeInfo(c);
+
+  let html = `
+    <div class="case-header">
+      <div class="name">${escapeHtml(c.caseName)}</div>
+      <div class="cite">${escapeHtml(c.citation)}</div>
+      <div class="meta">
+        <span>cluster_id: ${c.cluster_id}</span>
+        <span>opinion_id: ${c.opinion_id}</span>
+        <span>cited_by_count: ${c.cited_by_count}</span>
+        <span>derived_method: <b style="color:var(--fid)">${escapeHtml(c.derived_method)}</b></span>
+      </div>
+    </div>
+
+    <div class="rollup-card">
+      <div class="rollup-verdict">
+        <span class="badge ${negInfo.cls}">${escapeHtml(negInfo.label)}</span>
+        Case-level treatment rollup
+      </div>
+      <div class="rollup-detail">${rollupSentence(c)}</div>
+      <div class="rollup-detail">
+        judged_count: <code>${judged ? c.rollup.judgedCount : "null (judge pass not yet run)"}</code>
+        &nbsp;·&nbsp; case_confidence: <code>${c.rollup.confidence !== null ? c.rollup.confidence.toFixed(2) : "null"}</code>
+        &nbsp;·&nbsp; as_of: <code>${c.as_of}</code> (30-day TTL — refreshes on next access after expiry)
+      </div>
+      <span class="derived-callout">Derived, not editorial — computed from the citation graph + a judge pass, not an authoritative citator.</span>
+    </div>
+
+    <div class="stage-flow">
+      <div class="stage-card">
+        <span class="stage-n">1</span>
+        <div class="stage-body">
+          <div class="stage-title">Citation graph (always runs)</div>
+          <div class="stage-desc">
+            <code>get_citing_opinions(${c.opinion_id})</code> fetches <code>${c.cited_by_count}</code> citing opinions. Refs (opinion id, court, date) are persisted to <code>citation_treatment.citing_opinions</code>; any snippet in the payload is stripped immediately (<code>_strip_snippet</code>) before the row is written.
+          </div>
+        </div>
+      </div>
+      <div class="stage-card ${judged ? "" : "pending"}">
+        <span class="stage-n">2</span>
+        <div class="stage-body">
+          <div class="stage-title">Judge pass — bounded (only when a gateway is supplied)</div>
+          <div class="stage-desc">
+            Top <code>N_JUDGED_CAP = 10</code> citing opinions, recency-sorted, judged one call at a time until the <code>$0.25</code> per-case budget is spent. Each call sends the cited case name + a citing snippet to the judge; the snippet is transient input and is discarded once the call returns — it is <b>never</b> persisted.
+          </div>
+          ${judged ? "" : `<div class="stage-pending-note">Not yet run for this case — this row is still graph-only.</div>`}
+        </div>
+      </div>
+      <div class="stage-card ${judged ? "" : "pending"}">
+        <span class="stage-n">3</span>
+        <div class="stage-body">
+          <div class="stage-title">Rollup + store</div>
+          <div class="stage-desc">
+            Per-passage classifications write one <code>citation_treatment_signal</code> row each (classification, confidence, justification — still no snippet). <code>roll_up()</code> picks the strongest negative class present and a corroboration-bumped confidence; the parent row's <code>derived_method</code> flips to <code>citation_graph+judge</code>.
+          </div>
+          ${judged ? "" : `<div class="stage-pending-note">Not yet run — <code>strongest_negative_class</code>, <code>judged_count</code>, and <code>judge_as_of</code> stay null on this row.</div>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="signal-block">
+  `;
+
+  if (judged) {
+    html += `
+      <p class="block-lab">Citing-case signals (${c.signals.length})</p>
+      <p class="block-sub">Each row is one judged citing case. Click a row to trace it — the judge's output that fed this signal.</p>
+      <div id="sig-list"></div>
+    `;
+  } else {
+    html += `
+      <p class="block-lab">Citing opinions — graph pass only (${c.graphOnlyRefs.length} of ${c.cited_by_count})</p>
+      <p class="block-sub">No judge pass has run yet, so there is no classification to show — only the graph-level refs (opinion id, court, date). The <code>snippet</code> field these came with was already stripped before this row was written.</p>
+      <div id="sig-list"></div>
+    `;
+  }
+
+  html += `</div>`;
+  wrap.innerHTML = html;
+
+  if (judged) {
+    renderJudgedSignals(c);
+  } else {
+    renderGraphOnlyRows(c);
+  }
+}
+
+function renderJudgedSignals(c) {
+  const wrap = document.getElementById("sig-list");
+  wrap.innerHTML = "";
+  c.signals.forEach(s => {
+    const row = document.createElement("div");
+    const isExpanded = state.expandedSignal === s.opinion_id;
+    row.className = "sig-row" + (isExpanded ? " expanded" : "");
+    row.innerHTML = `
+      <div class="sig-top">
+        <span class="badge cls-${s.classification}">${s.classification}</span>
+        <span class="sig-case">${escapeHtml(s.caseName)}</span>
+        <span class="sig-court">${escapeHtml(s.court)} · ${escapeHtml(s.date)}</span>
+        <span class="sig-conf">conf: ${s.confidenceLabel} (${s.confidenceVal.toFixed(2)})</span>
+        <span class="sig-trace-toggle">${isExpanded ? "hide trace ▲" : "trace ▼"}</span>
+      </div>
+      <div class="sig-trace">
+        <div class="row"><span class="k">citing_opinion_id</span><span class="v">${s.opinion_id}</span></div>
+        <div class="row"><span class="k">classification</span><span class="v">${escapeHtml(s.classification)}</span></div>
+        <div class="row"><span class="k">confidence</span><span class="v">${s.confidenceLabel} (${s.confidenceVal.toFixed(2)}, <code>_CONFIDENCE_MAP</code>)</span></div>
+        <div class="sig-justification"><span class="k">judge's justification</span><br>${escapeHtml(s.justification)}</div>
+        <p class="src-label" style="margin-top:8px">Judge input snippet (illustrative reconstruction)</p>
+        <div class="sig-snippet">${escapeHtml(s.snippet)}</div>
+        <div class="sig-not-stored">This snippet is shown here only to illustrate what fed the judge call. In the real system it is transient judge input — read from the citing opinion at judge time and discarded immediately after the call returns. It is never written to <code>citation_treatment</code> or <code>citation_treatment_signal</code> (P3). The only durable trace to this citing opinion is its <code>opinion_id</code>, resolved via <code>read_opinion(opinion_id)</code> at trace-open time, exactly as the citation ledger's own trace path does (ADR 0019 D7).</div>
+      </div>
+    `;
+    row.addEventListener("click", () => {
+      state.expandedSignal = isExpanded ? null : s.opinion_id;
+      renderAll();
+    });
+    wrap.appendChild(row);
+  });
+}
+
+function renderGraphOnlyRows(c) {
+  const wrap = document.getElementById("sig-list");
+  wrap.innerHTML = c.graphOnlyRefs.map(r => `
+    <div class="graph-only-row">
+      <span class="badge cls-unavailable">no signal</span>
+      <span class="case">${escapeHtml(r.caseName)}</span>
+      <span class="sig-court">${escapeHtml(r.court)} · ${escapeHtml(r.date)}</span>
+      <span class="sig-conf">opinion_id: ${r.opinion_id}</span>
+    </div>
+  `).join("");
+}
+
+function renderOutput() {
+  document.getElementById("pane-verify").innerHTML = `
+    <p class="src-label">Verify these claims in source</p>
+    <a class="file" href="${REPO}api/app/citation/treatment.py" target="_blank" rel="noopener">api/app/citation/treatment.py</a>
+    <span style="color:var(--text-faint)">derive_treatment_for_message, _strip_snippet, _run_judge_pass, TREATMENT_TTL_DAYS, N_JUDGED_CAP</span><br>
+    <a class="file" href="${REPO}api/app/citation/treatment_judge.py" target="_blank" rel="noopener">api/app/citation/treatment_judge.py</a>
+    <span style="color:var(--text-faint)">TREATMENT_CLASSES, judge_treatment, parse_treatment_response</span><br>
+    <a class="file" href="${REPO}api/app/citation/treatment_rollup.py" target="_blank" rel="noopener">api/app/citation/treatment_rollup.py</a>
+    <span style="color:var(--text-faint)">roll_up, NEGATIVE_SEVERITY, corroboration bump</span><br>
+    <a class="file" href="${REPO}docs/adr/0019-transparent-validity-treatment-layer.md" target="_blank" rel="noopener">docs/adr/0019-transparent-validity-treatment-layer.md</a>
+    <span style="color:var(--text-faint)">D1 derive-don't-assert, D4 phased build, D5 taxonomy + rollup, D7 P3 storage, D8 staleness</span>
+  `;
+  document.getElementById("pane-why").innerHTML = `
+    <p style="margin:0 0 6px"><strong>Why derive instead of asserting a verdict?</strong></p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6">The incumbent citators (Westlaw KeyCite, Lexis Shepard's) answer "is this still good law?" with an editorial judgment the user is asked to trust. LQ.AI's founding transparency principle forecloses that posture (ADR 0019 D1) — every derived signal traces to the exact citing case and passage, the judge's reasoning, and its confidence. Absence of a negative signal is surfaced as "no negative treatment found as of &lt;date&gt;," never as an affirmative "good law."</p>
+    <p style="color:var(--text-dim);margin:0 0 8px;line-height:1.6"><strong>Why two passes, not one?</strong> The citation graph (PR1) is cheap and deterministic — cited-by count and the citing set, no model call. The judge (PR2) is the expensive part: a landmark case can be cited by thousands of later opinions, so judging is capped at 10 per case and budgeted at $0.25, prioritizing recency. A case can sit in the graph-only state indefinitely if the judge pass hasn't reached it yet — the graph signal from PR1 is never lost when the judge pass later runs.</p>
+    <p style="color:var(--text-dim);margin:0;line-height:1.6"><strong>Why never store the snippet?</strong> ADR 0016's P3 no-raw-payload invariant: the citing passage lives in the content layer and is read again at trace time (<code>read_opinion</code>), never duplicated into the derived-signal row. <code>citation_treatment</code> and <code>citation_treatment_signal</code> store classifications, confidence, and references only.</p>
+  `;
+}
+
+function renderAll() {
+  renderCaseList();
+  renderTaxo();
+  renderPanel();
+}
+
+document.querySelectorAll(".output-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".output-tab").forEach(t => t.classList.toggle("active", t === tab));
+    document.querySelectorAll(".output-body .pane").forEach(p => p.classList.toggle("active", p.id === `pane-${tab.dataset.tab}`));
+  });
+});
+
+renderAll();
+renderOutput();
+</script>
+</body>
+</html>

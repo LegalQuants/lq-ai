@@ -82,7 +82,7 @@ Each subsystem (`api/`, `gateway/`, `web/`) is a self-contained service. They ta
 - **Linter:** ESLint per `.eslintrc`.
 - **TypeScript:** required for new files; legacy `.js` files migrate gradually.
 - **Framework:** SvelteKit. The `web/` subdirectory is a fork of OpenWebUI, which is a SvelteKit app — extensions and customizations stay in Svelte. We do **not** mix React into `web/`. The Word add-in (`word-addin/`, M3) uses Office.js with React; the `web/` codebase does not.
-- **Component conventions:** match the OpenWebUI conventions for shared components (`web/src/lib/components/**`, untouched per ADR 0009). For everything under `web/src/lib/lq-ai/**`, use the `lq` design-system primitives (`web/src/lib/lq-ai/components/shared/` — `LqButton`, `LqGroup`, `LqStack`, `LqText`, `LqTitle`, `LqAlert`, `LqPill`, `LqSwitch`, `LqCard`, `LqHoverCard`) and the shared token file (`shared/types.ts`) rather than ad-hoc Tailwind spacing/color/size classes. See [ADR 0043](docs/adr/0043-lq-design-system-primitives.md) for the full rationale and the rules for adding new primitives/tokens.
+- **Component conventions:** match the OpenWebUI conventions for shared components (`web/src/lib/components/**`, untouched per ADR 0009). Within `web/src/lib/lq-ai/**`, prefer the `lq` primitives (`web/src/lib/lq-ai/components/shared/`) and their typed token vocabulary for new or changed components. See [ADR 0043](docs/adr/0043-lq-design-system-primitives.md) for the contract and bounded reference implementation; migration of the remaining shell is separate work.
 
 ### Both
 
@@ -96,15 +96,15 @@ Full conventions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Testing
 
-Coverage target is 80% across `api/` and `gateway/`. CI enforces no-decrease.
+Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enforce a coverage threshold or no-decrease rule.
 
 - **Unit tests** — fast, no external deps. `pytest` in each subsystem's `tests/` folder.
 - **Integration tests** — run against real Postgres in Docker. Provider integration gated behind `pytest -m provider`.
-- **End-to-end tests** — Playwright against a deployed stack. Runs on every PR.
+- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 
-Detailed test strategy in [docs/test-strategy.md](docs/test-strategy.md) (M1 deliverable).
+Detailed test strategy — including the per-surface E2E coverage matrix and the honest statement of what CI runs today — in [docs/test-strategy.md](docs/test-strategy.md).
 
 ---
 
@@ -131,9 +131,10 @@ These paths require security review per [.github/CODEOWNERS](.github/CODEOWNERS)
 - `gateway/**` — the security boundary.
 - `docs/security/**` — security artifacts.
 - `.github/workflows/**` — CI; supply-chain attack surface.
+- `script_runner/**`, `api/app/skills/**`, `deploy/compose.skill-runner.yml` — the skill script runner, its broker, and the skill loading and capability code.
 - Any change touching authentication, authorization, audit logging, or cryptographic implementations.
 
-If you are working in any of these areas, your PR is auto-routed to security reviewers and held until they approve.
+If you are working in any of these areas, your PR is routed by CODEOWNERS to the maintainer team and reviewed against the security-path checklist. Note the honest limit: the project has no separate security team yet, so "security review" here means maintainer review with that checklist applied. A dedicated security team returns to CODEOWNERS when it is staffed (see [ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md)).
 
 **Vulnerabilities** are not contributed via PR. They go through the disclosure process in [SECURITY.md](SECURITY.md).
 
@@ -182,7 +183,9 @@ Run this for every non-trivial change — it is battle-tested across M1–M4 and
 2. **Surface the forks** — if the task hides an architectural / product / authz decision, a scope expansion, or a deferral, stop and put the options (with a recommendation) to the maintainer. Don't decide unilaterally.
 3. **Build in reviewed increments** — independent tasks, each: implement → spec-compliance review → code-quality review → fix → re-review. (The `superpowers:subagent-driven-development` skill encodes this.)
 4. **Run the gates yourself** — evidence before claims (see Testing + the collision guards below).
-5. **Ship** — `git commit -s` + the co-author trailer, push **both** remotes (`origin` + `tucuxi`, kept identical on `main`), open the PR, watch CI, merge per the gating rule, report the squash SHA.
+5. **Ship** — external contributors commit with DCO, push the branch only to their own fork,
+   open a PR, and respond to CI and review; they never self-merge. Authorized maintainers
+   handle merges and any upstream/mirror synchronization.
 
 The full step-by-step, including merge-gating and dev-environment rules, is in the [cold-start guide](docs/contribute/coding-agent-onboarding.md).
 
@@ -268,9 +271,10 @@ When you need to find something quickly:
 | Implementation tasks | [docs/M1-IMPLEMENTATION-ORDER.md](docs/M1-IMPLEMENTATION-ORDER.md) |
 | Code style | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Skill conventions | [docs/skill-authoring-guide.md](docs/skill-authoring-guide.md) |
+| Frontend dev loop (HMR) | [web/docs/frontend-dev.md](web/docs/frontend-dev.md) |
 | What's already implemented | Existing code in `api/`, `gateway/`, `web/` |
 | What's deferred | [docs/PRD.md §9](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) |
-| Contributor-pickup mini-PRDs | [docs/proposals/](docs/proposals/) |
+| Contributor-pickup mini-PRDs | [docs/contribute/mini-prds/](docs/contribute/mini-prds/) |
 | Security policy | [SECURITY.md](SECURITY.md) |
 | Conduct policy | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
 

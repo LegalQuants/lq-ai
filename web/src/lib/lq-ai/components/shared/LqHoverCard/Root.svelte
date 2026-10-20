@@ -17,7 +17,7 @@
 	 * from the target into the dropdown. Focus events (not just hover) keep
 	 * this reachable by keyboard, not just mouse.
 	 */
-	import { setContext } from 'svelte';
+	import { onDestroy, setContext } from 'svelte';
 	import { writable } from 'svelte/store';
 	import { LQ_HOVERCARD_CONTEXT_KEY, type LqHoverCardContext } from './context';
 
@@ -38,14 +38,28 @@
 		closeTimer = setTimeout(() => opened.set(false), closeDelay);
 	}
 
+	function handleKeydown(event: KeyboardEvent): void {
+		if ($opened && event.key === 'Escape') {
+			clearTimeout(closeTimer);
+			opened.set(false);
+		}
+	}
+
+	onDestroy(() => clearTimeout(closeTimer));
+
 	const context: LqHoverCardContext = { opened, anchorEl, open, scheduleClose };
 	setContext(LQ_HOVERCARD_CONTEXT_KEY, context);
 
 	$: anchorEl.set(wrapperEl ?? null);
+	let klass = '';
+	export { klass as class };
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <div
-	class="lq-hovercard-wrapper"
+	{...$$restProps}
+	class="lq-hovercard-wrapper {klass}"
 	role="group"
 	bind:this={wrapperEl}
 	on:mouseenter={open}

@@ -1,7 +1,7 @@
 /**
  * M4-C2 — Autonomous Dashboard E2E.
  *
- * Five scenarios, all intercept-based (deterministic; no real seed data):
+ * Six scenarios, all intercept-based (deterministic; no real seed data):
  *
  *   1. Opt-in gating  — Autonomous tab absent when disabled; direct visit
  *                       to /lq-ai/autonomous redirects to settings.
@@ -14,6 +14,7 @@
  *                          endpoint and surfaces a success banner.
  *   5. Opt-out        — After disabling, the tab disappears and a direct
  *                       visit to /lq-ai/autonomous redirects back to settings.
+ *   6. Run now        — Select a skill, submit, then navigate to its receipt.
  *
  * Auth strategy: set lq_ai_auth in localStorage (token + user) before each
  * visit and intercept GET /api/v1/users/me so the layout gate passes. Also
@@ -27,6 +28,8 @@
 
 /// <reference types="cypress" />
 
+import { rejectUnexpectedApiRequests } from '../support/mocked-api';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -34,6 +37,21 @@
 const SESSION_ID = 'sess-0001-aaaa-bbbb-cccc-dddddddddddd';
 const MEMORY_ID = 'mem-0001-aaaa-bbbb';
 const PRECEDENT_ID = 'prec-0001-aaaa-bbbb';
+
+// The inherited OpenWebUI root needs a config response even on LQ.AI routes.
+// Keep this deterministic spec independent of a running backend.
+beforeEach(() => {
+	rejectUnexpectedApiRequests();
+	cy.intercept('GET', '**/api/version', { body: { version: 'test' } });
+	cy.intercept('GET', '**/api/config', {
+		statusCode: 200,
+		body: {
+			name: 'LQ.AI test',
+			version: 'test',
+			features: { enable_websocket: false }
+		}
+	});
+});
 
 // ---------------------------------------------------------------------------
 // Mock shapes
@@ -98,7 +116,11 @@ const mockReceipt = {
 	terminal_reason: null
 };
 
-const mockHaltedSession = { ...mockSession, status: 'halted' as const, halt_state: 'halted' as const };
+const mockHaltedSession = {
+	...mockSession,
+	status: 'halted' as const,
+	halt_state: 'halted' as const
+};
 
 const mockMemoryEntry = {
 	id: MEMORY_ID,
@@ -113,7 +135,11 @@ const mockMemoryEntry = {
 	updated_at: '2026-05-27T10:00:00Z'
 };
 
-const mockKeptMemoryEntry = { ...mockMemoryEntry, state: 'kept' as const, kept_at: '2026-05-27T10:01:00Z' };
+const mockKeptMemoryEntry = {
+	...mockMemoryEntry,
+	state: 'kept' as const,
+	kept_at: '2026-05-27T10:01:00Z'
+};
 
 const mockPrecedentEntry = {
 	id: PRECEDENT_ID,
@@ -198,10 +224,21 @@ function interceptBaseRequests(autonomousEnabled: boolean): void {
 		statusCode: 200,
 		body: { items: [], next_cursor: null }
 	}).as('listChats');
-	cy.intercept('GET', '**/api/v1/user-skills**', { statusCode: 200, body: [] }).as('listUserSkills');
-	cy.intercept('GET', '**/api/v1/saved-prompts**', { statusCode: 200, body: [] }).as('listSavedPrompts');
+	cy.intercept('GET', '**/api/v1/user-skills**', { statusCode: 200, body: [] }).as(
+		'listUserSkills'
+	);
+	cy.intercept('GET', '**/api/v1/saved-prompts**', { statusCode: 200, body: [] }).as(
+		'listSavedPrompts'
+	);
 	cy.intercept('GET', '**/api/v1/teams**', { statusCode: 200, body: [] }).as('listTeams');
 	cy.intercept('GET', '**/api/v1/skills**', { statusCode: 200, body: [] }).as('listSkills');
+	cy.intercept('GET', '**/api/v1/playbooks**', { body: [] }).as('listPlaybooks');
+	cy.intercept('GET', '**/api/v1/knowledge-bases**', { body: [] }).as('listKbs');
+	// This is an operator-switch read, not a list of runs. It starts on
+	// autonomous page mount, including outside the Run-now scenario.
+	cy.intercept('GET', '**/api/v1/autonomous/orchestration/chat-runs', {
+		body: { enabled: false }
+	}).as('chatCapabilities');
 	// Autonomous sub-pages also hit notifications for the unread badge.
 	cy.intercept('GET', '**/api/v1/autonomous/notifications**', {
 		statusCode: 200,
@@ -367,6 +404,7 @@ describe('M4-C2 — Scenario 2: receipt view and halt', () => {
 		});
 
 		cy.wait('@listSessions');
+		cy.wait('@chatCapabilities').its('response.body.enabled').should('eq', false);
 
 		// The sessions table should render one row with the running session.
 		cy.contains('td', 'running').should('exist');
@@ -392,9 +430,13 @@ describe('M4-C2 — Scenario 2: receipt view and halt', () => {
 			getCount += 1;
 			req.reply({
 				statusCode: 200,
-				body: getCount === 1
-					? { session: mockSession, receipt: mockReceipt }
-					: { session: mockHaltedSession, receipt: { ...mockReceipt, status: 'halted', halt_state: 'halted' } }
+				body:
+					getCount === 1
+						? { session: mockSession, receipt: mockReceipt }
+						: {
+								session: mockHaltedSession,
+								receipt: { ...mockReceipt, status: 'halted', halt_state: 'halted' }
+							}
 			});
 		}).as('getSessionDynamic');
 
@@ -559,6 +601,7 @@ describe('M4-C2 — Scenario 6: Run now', () => {
 		cy.wait('@listSessions');
 
 		// Open the modal via the header button.
+		cy.wait('@chatCapabilities').its('response.body.enabled').should('eq', false);
 		cy.contains('button', 'Run now').click();
 
 		// Modal renders with its title.
@@ -575,4 +618,169 @@ describe('M4-C2 — Scenario 6: Run now', () => {
 		// On success the app navigates to the new session's receipt.
 		cy.url({ timeout: 10000 }).should('include', `/lq-ai/autonomous/sessions/${SESSION_ID}`);
 	});
+});
+
+// DE-324 regression checks share this existing deterministic spec track.
+describe('DE-324 — shell notification bell', () => {
+	const trigger = '[data-testid="lq-ai-notification-bell-trigger"]';
+	const dropdown = '[data-testid="lq-ai-notification-bell-dropdown"]';
+	const prefs = (enabled: boolean) => ({
+		reasoning_visibility: 'disclosure',
+		featured_tools: 'prominent',
+		workspace_layout: 'three_pane',
+		trust_pills: 'labels',
+		provenance_pills: 'always',
+		autonomous_enabled: enabled
+	});
+	const notification = (id: string) => ({
+		id,
+		user_id: mockUser.id,
+		session_id: SESSION_ID,
+		channel: 'in_app',
+		title: `Notice ${id}`,
+		body: 'A background task completed.',
+		payload: null,
+		read_at: null,
+		created_at: '2026-07-01T00:00:00Z',
+		updated_at: '2026-07-01T00:00:00Z'
+	});
+
+	beforeEach(() => {
+		// No request in these tests reaches a live API, provider or existing dev stack.
+		cy.intercept('GET', '**/api/config', {
+			statusCode: 200,
+			body: {
+				name: 'LQ.AI test',
+				version: 'test',
+				features: { enable_websocket: false }
+			}
+		});
+		interceptBaseRequests(true);
+	});
+
+	function visitShell(cachedEnabled = true) {
+		cy.visit('/lq-ai/settings/account', {
+			onBeforeLoad(win) {
+				setAuthStorage(win, { autonomousEnabled: cachedEnabled });
+				win.localStorage.setItem('locale', 'en-US');
+			}
+		});
+	}
+
+	it('never mounts or fetches the bell from stale opt-in while fresh opt-out is pending', () => {
+		let release!: () => void;
+		const ready = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const list = cy.stub().as('bellListCalls');
+		cy.intercept('GET', '**/api/v1/autonomous/notifications**', (req) => {
+			list();
+			req.reply({ notifications: [], total_count: 0, limit: 10, offset: 0 });
+		});
+		cy.intercept('GET', '**/api/v1/users/me/preferences', (req) =>
+			ready.then(() => req.reply(prefs(false)))
+		).as('freshPreferences');
+		visitShell();
+		cy.get('.lq-topbar', { timeout: 30000 }).should('be.visible');
+		cy.get(trigger).should('not.exist');
+		cy.then(() => release());
+		cy.wait('@freshPreferences');
+		cy.get(trigger).should('not.exist');
+		cy.get('@bellListCalls').should('not.have.been.called');
+	});
+
+	it('keeps stale opt-in hidden after a failed preference read', () => {
+		cy.intercept('GET', '**/api/v1/users/me/preferences', {
+			statusCode: 503,
+			body: { detail: 'Offline' }
+		}).as('failedPreferences');
+		visitShell();
+		cy.wait('@failedPreferences');
+		cy.get('.lq-topbar', { timeout: 30000 }).should('be.visible');
+		cy.get(trigger).should('not.exist');
+	});
+
+	it('retries a failed list, refills after an individual read, and restores focus on Escape', () => {
+		let unavailable = true;
+		let ids = Array.from({ length: 11 }, (_, i) => `n${i}`);
+		cy.intercept('GET', '**/api/v1/autonomous/notifications**', (req) => {
+			if (unavailable) req.reply({ statusCode: 503, body: { detail: 'Offline' } });
+			else
+				req.reply({
+					notifications: ids.slice(0, 10).map(notification),
+					total_count: ids.length,
+					limit: 10,
+					offset: 0
+				});
+		});
+		cy.intercept('POST', '**/api/v1/autonomous/notifications/*/read', (req) => {
+			const id = new URL(req.url).pathname.split('/').at(-2)!;
+			ids = ids.filter((item) => item !== id);
+			req.reply(notification(id));
+		}).as('markRead');
+		visitShell();
+		cy.get(trigger, { timeout: 30000 }).click();
+		cy.get(dropdown)
+			.should('contain.text', 'Notifications unavailable.')
+			.and('not.contain.text', 'No unread notifications.');
+		cy.then(() => {
+			unavailable = false;
+		});
+		cy.get(dropdown).contains('button', 'Retry').click();
+		cy.get(dropdown).find('li.item').should('have.length', 10);
+		cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '11');
+		cy.get(dropdown).find('li.item').first().contains('button', 'Mark read').click();
+		cy.wait('@markRead');
+		cy.get(dropdown).find('li.item').should('have.length', 10);
+		cy.get(dropdown).should('contain.text', 'Notice n10').and('not.contain.text', 'Notice n0');
+		cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '10');
+		cy.get(trigger).should('be.focused').type('{esc}');
+		cy.get(dropdown).should('not.exist');
+		cy.get(trigger).should('have.attr', 'aria-expanded', 'false').and('be.focused');
+	});
+
+	for (const width of [1440, 375]) {
+		it(`keeps shown-item scope, partial failures and dropdown bounds correct at ${width}px`, () => {
+			cy.viewport(width, 900);
+			let ids = Array.from({ length: 102 }, (_, i) => `n${i}`);
+			cy.intercept('GET', '**/api/v1/autonomous/notifications**', (req) =>
+				req.reply({
+					notifications: ids.slice(0, 10).map(notification),
+					total_count: ids.length,
+					limit: 10,
+					offset: 0
+				})
+			);
+			cy.intercept('POST', '**/api/v1/autonomous/notifications/*/read', (req) => {
+				const id = new URL(req.url).pathname.split('/').at(-2)!;
+				if (id === 'n1') req.reply({ statusCode: 503, body: { detail: 'Try again' } });
+				else {
+					ids = ids.filter((item) => item !== id);
+					req.reply(notification(id));
+				}
+			});
+			visitShell();
+			cy.get('[data-testid="lq-ai-notification-bell-badge"]', { timeout: 30000 }).should(
+				'have.text',
+				'99+'
+			);
+			cy.get(trigger).focus();
+			cy.get(trigger).type('{enter}');
+			cy.get(dropdown)
+				.should('be.visible')
+				.then(($menu) => {
+					const bounds = $menu[0].getBoundingClientRect();
+					expect(bounds.left).to.be.at.least(0);
+					expect(bounds.right).to.be.at.most(width);
+				});
+			cy.get(dropdown)
+				.contains('button', 'Mark shown read')
+				.should('have.text', 'Mark shown read')
+				.click();
+			cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '93');
+			cy.get(dropdown).find('[role="alert"]').should('contain.text', '1 notification');
+			cy.get(dropdown).should('contain.text', 'Notice n1');
+			cy.screenshot(`de324-bell-${width}`, { capture: 'viewport' });
+		});
+	}
 });

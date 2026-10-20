@@ -39,7 +39,9 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz.matters import readable_autonomous_session_ids
 from app.models.autonomous import AutonomousMemory
+from app.models.user import User
 
 
 async def load_kept_memory(
@@ -62,12 +64,17 @@ async def load_kept_memory(
         with ``state='kept'`` and ``deleted_at IS NULL``, ordered by
         ``kept_at DESC`` (most-recently kept first).
     """
+    user = await db.get(User, user_id)
+    if user is None:
+        return []
     stmt = (
         select(AutonomousMemory)
         .where(
             AutonomousMemory.user_id == user_id,
             AutonomousMemory.state == "kept",
             AutonomousMemory.deleted_at.is_(None),
+            AutonomousMemory.source_session_id.is_(None)
+            | AutonomousMemory.source_session_id.in_(readable_autonomous_session_ids(user)),
         )
         .order_by(AutonomousMemory.kept_at.desc())
     )

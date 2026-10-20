@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import get_db
 from app.errors import InternalError, PasswordChangeRequired, Unauthorized
-from app.models.user import User
+from app.models.user import MUTATING_ROLES, User
 from app.security.jwt import decode_access_token
 
 log = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ async def get_current_user(
     - bad signature, expired, or wrong-type JWT
     - user id in JWT does not exist in the DB
     - user has been soft-deleted (`deleted_at IS NOT NULL`)
+    - token credential version predates a password change or reset
     """
     claims = decode_access_token(token)
     if claims is None:
@@ -66,7 +67,11 @@ async def get_current_user(
 
     result = await db.execute(select(User).where(User.id == claims.user_id))
     user = result.scalar_one_or_none()
-    if user is None or user.deleted_at is not None:
+    if (
+        user is None
+        or user.deleted_at is not None
+        or claims.credential_version != user.credential_version
+    ):
         raise _unauthorized()
 
     return user
@@ -188,7 +193,17 @@ opt-out split."""
 # both mutate. Backed by ``users.role`` (migration 0017) with a
 # server-default of ``member`` so existing rows + new signups
 # inherit mutating access without explicit promotion.
-_MUTATING_ROLES = frozenset({"admin", "member"})
+_MUTATING_ROLES = MUTATING_ROLES
+
+
+def is_privileged_reader(user: User) -> bool:
+    """True for callers allowed to read ANY user's ledger/gate/receipts.
+
+    The "privileged reader" set is {admin, auditor}: operator-admins
+    (``is_admin``) and the read-only cross-user ``auditor`` role. Ordinary
+    ``member``/``viewer`` users are owner-scoped and never privileged here.
+    """
+    return user.is_admin or getattr(user, "role", "member") == "auditor"
 
 
 async def get_mutating_user(user: ActiveUser) -> User:
@@ -223,6 +238,32 @@ this in place of ``ActiveUser`` so the role gate fires before any
 business logic runs. Admin-only endpoints continue to use
 ``AdminUser``; pure-read endpoints stay on ``ActiveUser``.
 """
+
+
+async def get_run_actor(user: AutonomousEnabledUser) -> User:
+    """`AutonomousEnabledUser` plus the role check that excludes a read-only role.
+
+    For the routes that start a governed run, approve its plan or reject it
+    (ADR 0038, ruling 10). A ``viewer`` reads their own runs, and an
+    ``auditor`` reads across owners; neither may change what runs. Halting
+    and closing a run stay on `ActiveUser`: they only narrow authority, and
+    an owner whose role was changed must still be able to stop their run.
+    """
+
+    if getattr(user, "role", "member") not in MUTATING_ROLES:
+        from app.errors import Forbidden
+
+        raise Forbidden(
+            message=(
+                "Starting, approving and rejecting a run requires a member or admin "
+                "role; your role has read-only access."
+            ),
+            details={"role": user.role, "required_roles": sorted(MUTATING_ROLES)},
+        )
+    return user
+
+
+RunActor = Annotated[User, Depends(get_run_actor)]
 
 
 # ---------------------------------------------------------------------------

@@ -13,15 +13,18 @@
 
 	export let checked = false;
 	export let disabled = false;
-	export let tone: LqTone = 'sage';
+	export let tone: LqTone = 'accent';
 	export let onCheckedChange: ((checked: boolean) => void) | undefined = undefined;
+	let klass = '';
+	export { klass as class };
 </script>
 
 <Switch.Root
+	{...$$restProps}
 	bind:checked
 	{disabled}
 	{onCheckedChange}
-	class="lq-switch lq-switch-tone-{tone}"
+	class="lq-switch lq-switch-tone-{tone} {klass}"
 >
 	<Switch.Thumb class="lq-switch-thumb" />
 </Switch.Root>
@@ -49,16 +52,16 @@
 		outline-offset: 2px;
 	}
 
-	:global(.lq-switch-tone-sage[data-state='checked']) {
+	:global(.lq-switch-tone-accent[data-state='checked']) {
 		background: var(--lq-accent, #1f7a6b);
 	}
-	:global(.lq-switch-tone-slate[data-state='checked']) {
+	:global(.lq-switch-tone-info[data-state='checked']) {
 		background: var(--lq-tier, #355a82);
 	}
-	:global(.lq-switch-tone-amber[data-state='checked']) {
+	:global(.lq-switch-tone-warning[data-state='checked']) {
 		background: var(--lq-warn, #a16e1f);
 	}
-	:global(.lq-switch-tone-red[data-state='checked']) {
+	:global(.lq-switch-tone-danger[data-state='checked']) {
 		background: var(--lq-error, #b54848);
 	}
 	:global(.lq-switch-tone-neutral[data-state='checked']) {

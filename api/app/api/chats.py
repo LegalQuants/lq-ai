@@ -70,10 +70,19 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import ActiveUser
+from app.api.dependencies import ActiveUser, is_privileged_reader
 from app.api.skills import _resolve_skill_for_user
 from app.audit import audit_action
+from app.auditor_audit import auditor_audit
+from app.authz.matters import (
+    denied_file_ids,
+    matter_access,
+    matter_scope_filter,
+    require_chat_run_access,
+    require_matter,
+)
 from app.autonomous.guard import _args_digest
+from app.autonomous.orchestration.reading import NO_FLOOR, MatterTerms, thread_for_turn
 from app.chat.tool_loop import (
     LoopConfirmation,
     LoopFinal,
@@ -83,6 +92,7 @@ from app.chat.tool_loop import (
 )
 from app.chat.tool_schemas import ChatToolAllowlist, assemble_allowlist
 from app.citation import extract_citations, verify
+from app.citation.authority import verify_and_persist_authority_citations
 from app.citation.caselaw import verify_and_persist_caselaw_citations
 from app.citation.cost import estimate_judge_call_cost_usd
 from app.citation.gate import compute_and_record_gate, resolve_gates
@@ -94,7 +104,15 @@ from app.citation.ledger import (
 from app.clients.gateway import EnsembleConfig, GatewayClient, get_gateway_client
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import Conflict, InternalError, LQAIError, NotFound, ValidationError
+from app.errors import (
+    CODE_PROVIDER_UNAVAILABLE,
+    Conflict,
+    InternalError,
+    LQAIError,
+    NotFound,
+    ProviderUnavailable,
+    ValidationError,
+)
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vector
 from app.knowledge.retrieval import HybridSearchResult, hybrid_search
 from app.models.chat import Chat, Message, MessageCitation
@@ -104,6 +122,7 @@ from app.models.file import File
 from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.message_tool_source import MessageToolSource
+from app.models.orchestration import OrchestrationRoot
 from app.models.project import Project
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
@@ -131,7 +150,14 @@ from app.schemas.gateway import (
     ChatCompletionRequest,
     InlineSkillRef,
 )
+from app.security.encryption import (
+    MCPEncryptionError,
+    MCPMasterKeyMissing,
+    decrypt_payload_envelope,
+    encrypt_payload_envelope,
+)
 from app.skills.registry import MutableSkillRegistry, SkillRegistry
+from app.tools.governance import resolve_resumed_ceiling, resolve_tool_egress_ceiling
 from app.workers.queue import enqueue_treatment_derivation_job
 
 router = APIRouter(prefix="/chats", tags=["chats"])
@@ -218,6 +244,7 @@ async def _load_history_messages(
     exclude_message_id: uuid.UUID,
     token_budget: int,
     max_messages: int,
+    terms: MatterTerms | None = None,
 ) -> list[ChatCompletionMessage]:
     """Load prior conversation turns for ``chat_id`` as gateway messages.
 
@@ -229,11 +256,30 @@ async def _load_history_messages(
     ``lq_ai_skip_anonymization`` flag, so the gateway pseudonymizes them
     with the same per-request map as the current turn (consistent entity
     mapping across the conversation).
+
+    ``terms`` are the data terms of the turn being sent: its matter's
+    inference-tier floor and privilege flag, or none for a chat in no matter.
+    A governed run's answer that was written under stricter terms is replaced
+    by a note, as it is for a later run's planning call (ADR 0038 D5): the
+    answer may hold what a matter's file said, and this turn goes out on its
+    own terms. The answer's terms are those of the matters behind it
+    (:func:`~app.autonomous.orchestration.reading.answer_terms`). With no
+    ``terms`` nothing is withheld.
     """
     if token_budget <= 0 or max_messages <= 0:
         return []
     stmt = (
-        select(Message.role, Message.content)
+        select(
+            Message.role,
+            Message.content,
+            Message.autonomous_session_id,
+            OrchestrationRoot.project_id,
+            OrchestrationRoot.planning_snapshot,
+        )
+        .outerjoin(
+            OrchestrationRoot,
+            OrchestrationRoot.session_id == Message.autonomous_session_id,
+        )
         .where(
             Message.chat_id == chat_id,
             Message.id != exclude_message_id,
@@ -242,8 +288,12 @@ async def _load_history_messages(
         )
         .order_by(Message.created_at.asc(), Message.id.asc())
     )
-    rows = (await db.execute(stmt)).all()
-    history: list[tuple[str, str]] = [(row[0], row[1]) for row in rows if row[1]]
+    rows = [
+        (role, content, session_id, project_id, snapshot)
+        for role, content, session_id, project_id, snapshot in (await db.execute(stmt)).all()
+        if content
+    ]
+    history = await thread_for_turn(db, rows, terms)
     selected = _select_history_within_budget(
         history, token_budget=token_budget, max_messages=max_messages
     )
@@ -261,6 +311,25 @@ async def _load_history_messages(
 # than aliases — the check that follows is by-value, not by-length, so
 # being a touch permissive here is fine), followed by whitespace.
 _LEADING_SLASH_RE = re.compile(r"^/([a-z0-9-]{1,64})\s")
+
+# ``applied_skills`` provenance marker (ADR 0007 denormalization). The UI
+# appends ``"enhance-prompt"`` to a user message's ``skills[]`` when the
+# composer text came from the Enhance Prompt preview, so
+# ``MessageResponse.is_enhanced`` can be derived from the persisted row.
+# It is a marker, not a skill to assemble: the enhance-prompt skill body is
+# the *expansion* prompt (it asks the model for a YAML expansion of
+# ``raw_input``) and only ever runs through ``POST /api/v1/enhance-prompt``.
+# Forwarding it as ``lq_ai_skills`` prepended that body to every enhanced
+# chat turn and, now that the gateway enforces the corpus's declared
+# required inputs (ADR 0007 §2), would 400 every enhanced send for a
+# missing ``raw_input``. Persist it; never forward it.
+ENHANCE_PROMPT_MARKER = "enhance-prompt"
+
+
+def _gateway_skills(skills: list[str]) -> list[str]:
+    """Skills to forward to the gateway: everything except the provenance marker."""
+
+    return [s for s in skills if s != ENHANCE_PROMPT_MARKER]
 
 
 async def _maybe_resolve_leading_slash(
@@ -348,7 +417,128 @@ async def _load_visible_chat(
             f"Chat {chat_id} not found.",
             details={"chat_id": str(chat_id)},
         )
+    user = await db.get(User, owner_id)
+    if user is None:
+        raise NotFound("Chat not found.")
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, need="write", include_archived=True)
+    await require_chat_run_access(db, row.id, user)
     return row
+
+
+async def _resolve_proposal_ceiling(db: AsyncSession, *, chat_id: uuid.UUID) -> int | None:
+    """Resolve the egress ceiling to stamp on a pending tool-call row.
+
+    Issue #593: a proposed call records the policy in force at proposal
+    time; the approve path re-resolves and executes under
+    ``min(original, current)``. Returns ``None`` only when unconstrained.
+    An unreadable policy refuses proposal creation: a new NULL must never
+    erase the distinction between an unset policy and a failed lookup.
+    """
+    ceiling, source = await resolve_tool_egress_ceiling(db, project_id=None, chat_id=chat_id)
+    if source == "unresolved":
+        raise Conflict("Tool confirmation could not resolve egress policy; please retry.")
+    return ceiling
+
+
+async def _load_visible_project_for_chat(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    user: User,
+) -> Project:
+    """Validate the caller may contribute to ``project_id`` before accepting it
+    as a chat's matter association; 404 on miss / no access / archived.
+
+    Without this guard a caller can bind a chat to a matter they cannot
+    reach and, on ``send_message``, pull that matter's attached
+    knowledge-base content into the response and out to the LLM provider.
+
+    ``write`` rather than ``read`` deliberately: a firm-wide-readable matter
+    lets a colleague *see* the work, but starting a new thread against it is
+    contributing, and contributing is what the roster is supposed to record.
+    """
+
+    return await require_matter(db, project_id, user, need="write")
+
+
+async def _load_readable_chat(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = False,
+) -> Chat:
+    """Load a chat the caller may *read*; 404 otherwise.
+
+    Wider than :func:`_load_visible_chat` by exactly one rule: a chat
+    pinned to a matter is readable by anyone who can read that matter.
+    That is the point of sharing a matter — colleagues can see the work
+    already done on it instead of duplicating it.
+
+    Writing stays owner-only (:func:`_load_visible_chat`). Two lawyers
+    interleaving turns in one thread would make
+    ``work_product_attribution`` ambiguous about who directed which
+    output, which is precisely the record that has to stay unambiguous.
+    A colleague who wants to act on a shared matter starts their own
+    thread in it.
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, include_archived=True)
+    await require_chat_run_access(db, row.id, user)
+    if row.owner_id == user.id:
+        return row
+
+    if row.project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == row.project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            if access != "none":
+                return row
+
+    # Existence-safe: a caller with no path to the chat cannot tell
+    # "exists, not yours" from "does not exist".
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+
+
+async def _load_chat_for_reader(
+    db: AsyncSession,
+    chat_id: uuid.UUID,
+    user: User,
+    *,
+    include_archived: bool = True,
+) -> tuple[Chat, bool]:
+    """Load a chat for a *reader*; return ``(chat, was_privileged_cross_user)``.
+
+    Owner → ``(chat, False)``. A privileged reader (admin/auditor) reading a
+    chat they do not own → ``(chat, True)``. Everyone else — and a missing
+    chat — → 404, indistinguishably (existence-safe): a non-privileged
+    non-owner cannot tell "exists, not yours" from "doesn't exist".
+    """
+    stmt = select(Chat).where(Chat.id == chat_id)
+    if not include_archived:
+        stmt = stmt.where(Chat.archived_at.is_(None))
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
+    if row.project_id is not None:
+        await require_matter(db, row.project_id, user, include_archived=True)
+    await require_chat_run_access(db, row.id, user)
+    if row.owner_id == user.id:
+        return row, False
+    if row.project_id is not None:
+        return row, row.owner_id != user.id and is_privileged_reader(user)
+    if is_privileged_reader(user):
+        return row, True
+    raise NotFound(f"Chat {chat_id} not found.", details={"chat_id": str(chat_id)})
 
 
 async def _validate_owned_file_ids(
@@ -398,6 +588,7 @@ async def _validate_owned_file_ids(
     stmt = select(File.id).where(
         File.id.in_(parsed),
         File.owner_id == owner_id,
+        File.id.not_in(denied_file_ids(owner_id)),
         File.deleted_at.is_(None),
     )
     found = set((await db.execute(stmt)).scalars().all())
@@ -458,6 +649,7 @@ async def _load_attached_file_contexts(
         .where(
             File.id.in_(parsed),
             File.owner_id == owner_id,
+            File.id.not_in(denied_file_ids(owner_id)),
             File.deleted_at.is_(None),
         )
     )
@@ -558,6 +750,9 @@ async def create_chat(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
+    if payload.project_id is not None:
+        await _load_visible_project_for_chat(db, payload.project_id, user)
+
     chat = Chat(
         owner_id=user.id,
         project_id=payload.project_id,
@@ -742,10 +937,30 @@ async def list_chats(
         Query(ge=1, le=LIST_LIMIT_MAX, description="Page size; capped at 100."),
     ] = LIST_LIMIT_DEFAULT,
 ) -> ChatListResponse:
+    # Scoping rule: the unfiltered sidebar stays strictly personal, so a
+    # firm-wide-readable matter never floods a colleague's chat list. Ask
+    # for a specific matter you can read, and you get that matter's threads
+    # — every author's, not just your own. That is the whole point of
+    # sharing a matter: see the work already done rather than repeat it.
+    scope_to_owner = True
+    if project_id is not None:
+        project = (
+            await db.execute(select(Project).where(Project.id == project_id))
+        ).scalar_one_or_none()
+        if project is not None:
+            access, _basis = await matter_access(db, project, user)
+            scope_to_owner = access == "none"
+
     stmt = select(Chat).where(
-        Chat.owner_id == user.id,
         Chat.autonomous_session_id.is_(None),
+        (
+            Chat.project_id.is_(None)
+            | Chat.project_id.in_(select(Project.id).where(matter_scope_filter(user)))
+        ),
     )
+    if scope_to_owner:
+        stmt = stmt.where(Chat.owner_id == user.id)
+
     if archived is True:
         stmt = stmt.where(Chat.archived_at.is_not(None))
     else:
@@ -798,7 +1013,7 @@ async def get_chat(
     cid = _validate_chat_id(chat_id)
     # Archived chats are visible via direct GET (so a client can render
     # the archived-detail page); list excludes them by default.
-    chat = await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat = await _load_readable_chat(db, cid, user, include_archived=True)
     return await _serialize_chat(db, chat)
 
 
@@ -905,7 +1120,7 @@ async def list_messages(
     # The chat must be visible to the caller (404 cross-user). We
     # accept archived chats so a user can read history of an archived
     # conversation.
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    await _load_readable_chat(db, cid, user, include_archived=True)
 
     stmt = select(Message).where(Message.chat_id == cid)
 
@@ -1006,7 +1221,13 @@ async def _retrieve_kb_context_for_chat(
         return [], []
 
     # Load KB rows (for hybrid_alpha per KB). One SELECT for the set.
-    kb_stmt = select(KnowledgeBase).where(KnowledgeBase.id.in_(kb_ids))
+    # Defense-in-depth: scope to the chat owner so a stale or foreign
+    # ``project_id`` (see _load_visible_project_for_chat) can never surface
+    # another user's KB content, even if one slipped past chat creation.
+    kb_stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id.in_(kb_ids),
+        KnowledgeBase.owner_id == chat.owner_id,
+    )
     kb_rows = (await db.execute(kb_stmt)).scalars().all()
 
     # Embed the query once (reused across every KB). Mirrors the
@@ -1045,6 +1266,7 @@ async def _retrieve_kb_context_for_chat(
             results = await hybrid_search(
                 db,
                 kb_id=kb.id,
+                user_id=chat.owner_id,
                 query=query,
                 query_embedding=query_embedding,
                 top_k=RAG_TOP_K_PER_KB,
@@ -1361,6 +1583,7 @@ async def send_message(
     ]
     user_message = Message(
         chat_id=cid,
+        directed_by_user_id=user.id,
         role="user",
         content=effective_content,
         applied_skills=user_applied_skills,
@@ -1544,6 +1767,12 @@ async def send_message(
         exclude_message_id=user_message.id,
         token_budget=settings.lq_ai_chat_history_token_budget,
         max_messages=settings.lq_ai_chat_history_max_messages,
+        # A run's answer written under a stricter matter's terms is not replayed
+        # to a turn that goes out on this chat's own (ADR 0038 D5).
+        terms=MatterTerms(
+            minimum_inference_tier=project_floor if project_floor is not None else NO_FLOOR,
+            privileged=project_privileged,
+        ),
     )
     gw_messages.extend(history_messages)
 
@@ -1558,7 +1787,10 @@ async def send_message(
     # attachments. The gateway assembles them alongside ``lq_ai_skills``
     # without a backend round-trip; ``effective_skill_inputs`` is the
     # merged-and-flattened map keyed by both slug AND synthesized
-    # inline-skill name.
+    # inline-skill name. ``gateway_skills`` drops the enhance-prompt
+    # provenance marker (see ``ENHANCE_PROMPT_MARKER``); the persisted
+    # user row above keeps it.
+    gateway_skills = _gateway_skills(list(effective_skills))
     gw_request = ChatCompletionRequest(
         model=payload.model,
         messages=gw_messages,
@@ -1567,7 +1799,7 @@ async def send_message(
         lq_ai_chat_id=str(cid),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(effective_skills),
+        lq_ai_skills=gateway_skills,
         lq_ai_skill_inputs=dict(effective_skill_inputs),
         lq_ai_inline_skills=list(inline_skill_refs),
         lq_ai_file_ids=list(effective_file_ids),
@@ -1586,7 +1818,7 @@ async def send_message(
     # logged and swallowed rather than propagated into the user's request.
     try:
         _emit_skill_spans(
-            list(effective_skills),
+            list(gateway_skills),
             registry=_skill_registry_from_request(request),
             project_id=chat.project_id,
             project_privileged=project_privileged,
@@ -1615,13 +1847,19 @@ async def send_message(
     # deployment or in environments without research/MCP), return an empty
     # allowlist so the existing single-shot path runs unchanged.
     try:
-        allowlist = await assemble_allowlist(db, request_id=request_id)
+        allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
     except Exception:
         log.warning(
             "chat send_message: assemble_allowlist failed — falling back to empty allowlist",
             exc_info=True,
         )
         allowlist = ChatToolAllowlist(specs={})
+
+    from app.skills.chat_tools import extend_chat_tools
+
+    await extend_chat_tools(
+        db, allowlist, owner_id=user.id, chat_id=cid, skill_names=list(effective_skills)
+    )
 
     if payload.stream:
         return await _stream_response(
@@ -1667,6 +1905,7 @@ async def get_citations(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return citations persisted for a message.
 
@@ -1684,9 +1923,12 @@ async def get_citations(
     column. The column itself remains for backward compatibility with
     older clients and is slated for retirement by M2-C2.
 
-    Chat ownership is enforced so a cross-user request can't enumerate
-    message ids — the visibility check uses the same path as message
-    list reads.
+    Owner-of-the-chat, admin, or the read-only cross-user ``auditor`` role
+    can read (``_load_chat_for_reader``); everyone else — and a missing
+    chat — gets an identical 404 (existence-safe), matching
+    :func:`get_chat_ledger` / :func:`get_message_sources`. A privileged
+    reader viewing another user's chat writes one ``auditor_audit`` row
+    (``citations_viewed``).
     """
 
     cid = _validate_chat_id(chat_id)
@@ -1698,7 +1940,18 @@ async def get_citations(
             details={"message_id": message_id},
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="citations_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     # Confirm the message exists (and belongs to the chat) before
     # returning an empty list — distinguishes "no citations" from
@@ -1746,6 +1999,7 @@ async def get_message_sources(
     message_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
 ) -> list[dict[str, Any]]:
     """Return the external sources (case-law clusters) a message's turn consulted.
 
@@ -1762,7 +2016,18 @@ async def get_message_sources(
             "message_id must be a UUID", details={"message_id": message_id}
         ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="sources_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
     if (await db.execute(msg_stmt)).scalar_one_or_none() is None:
@@ -1799,6 +2064,7 @@ async def get_chat_ledger(
     chat_id: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request,
     message_id: str | None = None,
 ) -> dict[str, Any]:
     """Return the Citation Ledger for a chat, each entry resolved to its source
@@ -1818,7 +2084,18 @@ async def get_chat_ledger(
                 "message_id must be a UUID", details={"message_id": message_id}
             ) from exc
 
-    await _load_visible_chat(db, cid, user.id, include_archived=True)
+    chat, was_privileged = await _load_chat_for_reader(db, cid, user, include_archived=True)
+    if was_privileged:
+        await auditor_audit(
+            db,
+            user=user,
+            event="ledger_viewed",
+            resource_type="chat",
+            resource_id=str(cid),
+            viewed_user_id=chat.owner_id,
+            request=request,
+        )
+        await db.commit()  # GET read-path: persist the audit row explicitly
 
     if mid is not None:
         msg_stmt = select(Message.id).where(Message.id == mid, Message.chat_id == cid)
@@ -1957,11 +2234,26 @@ async def resume_tool_call(
         await db.execute(select(ChatPendingToolCall).where(ChatPendingToolCall.id == claimed_id))
     ).scalar_one()
 
-    # Extract resume state.
-    resume_state: dict = pending.resume_state
+    # Decrypt the envelope-encrypted payload columns (DE-358 item 5).  Fail
+    # closed on a tampered / wrong-key ciphertext: the claim above is already
+    # committed (status="resolved"), so the row can never be replayed, and the
+    # structured 409 never carries ciphertext or payload contents.  Rows
+    # without the envelope marker are legacy plaintext rows and pass through
+    # unchanged (TTL-bounded transition fallback — removable after one
+    # release).
+    try:
+        resume_state: dict = decrypt_payload_envelope(pending.resume_state)
+        tool_call_args: dict = decrypt_payload_envelope(pending.tool_call_args)
+    except (MCPEncryptionError, MCPMasterKeyMissing) as exc:
+        raise Conflict(
+            "pending tool-call payload could not be decrypted; resume denied",
+            details={"pending_call_id": pending_call_id},
+        ) from exc
+
     messages: list[dict] = list(resume_state.get("messages", []))
     calls_used: int = int(resume_state.get("calls_used", 0))
     model: str = str(resume_state.get("model", "smart"))
+    resumed_skills: list[str] = list(resume_state.get("skill_names", []))
 
     request_id = (
         request.headers.get("x-request-id")
@@ -1998,7 +2290,7 @@ async def resume_tool_call(
                     "type": "function",
                     "function": {
                         "name": pending.function_name,
-                        "arguments": _json.dumps(dict(pending.tool_call_args)),
+                        "arguments": _json.dumps(dict(tool_call_args)),
                     },
                 }
             ],
@@ -2010,7 +2302,9 @@ async def resume_tool_call(
             # Re-assemble the allowlist to resolve the spec (tool may have been
             # removed since the gate; treat that as denial-style).
             try:
-                current_allowlist = await assemble_allowlist(db, request_id=request_id)
+                current_allowlist = await assemble_allowlist(
+                    db, gateway=gateway, request_id=request_id
+                )
             except Exception:
                 current_allowlist = ChatToolAllowlist(specs={})
 
@@ -2047,19 +2341,32 @@ async def resume_tool_call(
                 #   the actual approved execution, stamped confirmation_state=
                 #   "approved" / outcome="executed".  This is the authoritative
                 #   record that the tool ran with user approval.
+                #
+                # Issue #593: re-resolve the CURRENT egress policy and execute
+                # under min(proposal-time ceiling, current ceiling).  An
+                # unreadable current policy fail-closes inside
+                # governed_tool_invocation (ceiling_source="unresolved":
+                # no dispatch, refused audit row).
+                current_ceiling, current_source = await resolve_tool_egress_ceiling(
+                    db, project_id=None, chat_id=cid
+                )
+                egress_ceiling = resolve_resumed_ceiling(
+                    pending.max_egress_tier, current_ceiling, current_source
+                )
                 try:
                     result = await execute_tool(
                         db,
                         user=user,
                         gateway=gateway,
                         spec=spec,
-                        args=dict(pending.tool_call_args),
+                        args=dict(tool_call_args),
                         cluster_cache={},
                         server_auth_map=server_auth_map,
                         assistant_message_id=assistant_message_id,
                         chat_id=cid,
                         request_id=request_id,
                         confirmation_state="approved",
+                        egress_ceiling=egress_ceiling,
                     )
                     # Update the gate row's confirmation_state to "approved"
                     # (the confirmation-REQUEST lifecycle: pending_confirmation →
@@ -2116,9 +2423,15 @@ async def resume_tool_call(
 
         # Re-assemble allowlist for the resumed loop.
         try:
-            resume_allowlist = await assemble_allowlist(db, request_id=request_id)
+            resume_allowlist = await assemble_allowlist(db, gateway=gateway, request_id=request_id)
         except Exception:
             resume_allowlist = ChatToolAllowlist(specs={})
+
+        from app.skills.chat_tools import extend_chat_tools
+
+        await extend_chat_tools(
+            db, resume_allowlist, owner_id=user.id, chat_id=cid, skill_names=resumed_skills
+        )
 
         # Run the tool loop with remaining budget.
         loop_outcome: LoopFinal | LoopConfirmation | LoopMcpAuth | None = None
@@ -2188,14 +2501,22 @@ async def resume_tool_call(
                     tool=spec2.tool,
                     destructive=spec2.destructive,
                     tier=tier_val2,
-                    tool_call_args=loop_outcome.args,
-                    resume_state={
-                        "messages": loop_outcome.messages,
-                        "calls_used": loop_outcome.calls_used,
-                        "model": model,
-                    },
+                    # DE-358 item 5: payload columns are envelope-encrypted
+                    # at rest under LQ_AI_MCP_MASTER_KEY (fails closed when
+                    # the key is unset — never a plaintext write).
+                    tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                    resume_state=encrypt_payload_envelope(
+                        {
+                            "messages": loop_outcome.messages,
+                            "calls_used": loop_outcome.calls_used,
+                            "model": model,
+                            "skill_names": resumed_skills,
+                        }
+                    ),
                     status="pending",
                     expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                    # Issue #593: proposal-time egress ceiling (see above).
+                    max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=cid),
                 )
                 db.add(pending_row2)
                 await db.flush()
@@ -2254,6 +2575,20 @@ async def resume_tool_call(
             yield b"data: [DONE]\n\n"
             return
 
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row and the wire agree (see
+        # ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat resume_tool_call produced no content",
+                extra={
+                    "event": "resume_tool_call_empty_completion",
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Persist the assistant message (LoopFinal or error path).
         try:
             await _load_visible_chat(db, cid, user.id, include_archived=False)
@@ -2265,6 +2600,7 @@ async def resume_tool_call(
         try:
             await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=cid,
                 content="".join(accumulated),
@@ -2727,6 +3063,32 @@ async def _persist_message_tool_sources(
     await db.flush()
 
 
+def _empty_turn_error(request_id: str) -> tuple[str, dict[str, Any]]:
+    """Issue #503 — an empty turn is an upstream failure, not an answer.
+
+    A stream that ended with no content and raised nothing used to fall
+    through to the success tail. The client could not tell "the system
+    broke" from "the model had little to say", and for a legal tool that
+    ambiguity is the defect: the operator blames the model. The gateway now
+    emits its own error frame for a contentless stream; this is the
+    belt-and-braces layer for any path that still yields nothing without
+    raising. Both SSE generators call it *before* persisting the assistant
+    row, so the stored ``error_code``, the wire frame, and the history
+    replay exclusion (errored rows are never replayed) all agree.
+
+    Returns ``(error_code, error_envelope)`` for the generator's final
+    frames.
+    """
+
+    envelope = ProviderUnavailable(
+        "The turn completed without producing any content. This is an "
+        "upstream failure, not an empty answer — check the gateway logs "
+        "for this request id.",
+        details={"request_id": request_id},
+    ).to_envelope()
+    return CODE_PROVIDER_UNAVAILABLE, envelope
+
+
 async def _persist_assistant_message(
     db: AsyncSession,
     *,
@@ -2743,6 +3105,7 @@ async def _persist_assistant_message(
     applied_skills: list[str],
     error_code: str | None,
     kind: str = "ai",
+    directed_by_user_id: uuid.UUID | None = None,
 ) -> Message:
     """Insert one assistant message row in its own transaction.
 
@@ -2767,6 +3130,7 @@ async def _persist_assistant_message(
     row = Message(
         id=message_id,
         chat_id=chat_id,
+        directed_by_user_id=directed_by_user_id,
         role="assistant",
         kind=kind,
         content=content,
@@ -2835,7 +3199,7 @@ async def _write_work_product_attribution(
 
     attribution = WorkProductAttribution(
         message_id=message.id,
-        user_id=chat_row.owner_id,
+        user_id=message.directed_by_user_id,
         chat_id=message.chat_id,
         project_id=chat_row.project_id,
         routed_inference_tier=routed_inference_tier,
@@ -2915,6 +3279,7 @@ async def _non_streaming_response(
             applied_skills = list(outcome.applied_skills or [])
             persisted = await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=chat.id,
                 content=outcome.text,
@@ -2955,6 +3320,21 @@ async def _non_streaming_response(
                 )
             except Exception as caselaw_exc:  # never block the turn
                 log.warning("caselaw citation verification failed: %r", caselaw_exc)
+            try:
+                await verify_and_persist_authority_citations(
+                    db,
+                    message_id=assistant_message_id,
+                    assistant_text=outcome.text,
+                    tool_sources=outcome.tool_sources,
+                    gateway=gateway,
+                    judge_model=_caselaw_judge_model,
+                )
+            except Exception:
+                log.warning(
+                    "chat finalize: authority citation verify failed — non-fatal",
+                    extra={"event": "chat_authority_verify_finalize_failed"},
+                    exc_info=True,
+                )
             try:
                 await assemble_ledger_entries(db, message_id=assistant_message_id)
             except Exception as ledger_exc:  # never block the turn
@@ -3016,14 +3396,24 @@ async def _non_streaming_response(
                 tool=spec.tool,
                 destructive=spec.destructive,
                 tier=tier_val,
-                tool_call_args=outcome.args,
-                resume_state={
-                    "messages": outcome.messages,
-                    "calls_used": outcome.calls_used,
-                    "model": request.model,
-                },
+                # DE-358 item 5: payload columns are envelope-encrypted at
+                # rest under LQ_AI_MCP_MASTER_KEY (fails closed when the key
+                # is unset — never a plaintext write).
+                tool_call_args=encrypt_payload_envelope(outcome.args),
+                resume_state=encrypt_payload_envelope(
+                    {
+                        "messages": outcome.messages,
+                        "calls_used": outcome.calls_used,
+                        "model": request.model,
+                        "skill_names": list(request.lq_ai_skills or []),
+                    }
+                ),
                 status="pending",
                 expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                # Issue #593: proposal-time egress ceiling; the approve path
+                # re-resolves current policy and executes under
+                # min(original, current).
+                max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
             )
             db.add(pending_row)
             await db.flush()
@@ -3147,6 +3537,7 @@ async def _non_streaming_response(
 
     persisted = await _persist_assistant_message(
         db,
+        directed_by_user_id=user.id,
         message_id=assistant_message_id,
         chat_id=chat.id,
         content=assistant_text,
@@ -3339,14 +3730,23 @@ async def _stream_response(
                         tool=spec.tool,
                         destructive=spec.destructive,
                         tier=tier_val,
-                        tool_call_args=loop_outcome.args,
-                        resume_state={
-                            "messages": loop_outcome.messages,
-                            "calls_used": loop_outcome.calls_used,
-                            "model": request.model,
-                        },
+                        # DE-358 item 5: payload columns are envelope-
+                        # encrypted at rest under LQ_AI_MCP_MASTER_KEY
+                        # (fails closed when the key is unset — never a
+                        # plaintext write).
+                        tool_call_args=encrypt_payload_envelope(loop_outcome.args),
+                        resume_state=encrypt_payload_envelope(
+                            {
+                                "messages": loop_outcome.messages,
+                                "calls_used": loop_outcome.calls_used,
+                                "model": request.model,
+                                "skill_names": list(request.lq_ai_skills or []),
+                            }
+                        ),
                         status="pending",
                         expires_at=datetime.now(UTC) + CONFIRM_TTL,
+                        # Issue #593: proposal-time egress ceiling (see above).
+                        max_egress_tier=await _resolve_proposal_ceiling(db, chat_id=chat.id),
                     )
                     db.add(pending_row)
                     await db.flush()
@@ -3478,6 +3878,22 @@ async def _stream_response(
                     },
                 )
 
+        # Issue #503 — never present an empty turn as a success. Runs BEFORE
+        # persistence so the stored row, the audit row and the wire agree
+        # (see ``_empty_turn_error``).
+        if error_envelope is None and not "".join(accumulated).strip():
+            error_code, error_envelope = _empty_turn_error(request_id)
+            log.warning(
+                "chat send_message produced no content",
+                extra={
+                    "event": "chat_send_message_empty_completion",
+                    "user_id": str(user.id),
+                    "chat_id": str(chat.id),
+                    "assistant_message_id": str(assistant_message_id),
+                    "request_id": request_id,
+                },
+            )
+
         # Persist the assistant row exactly once. Even if everything
         # failed, we record what we got so operators see the full
         # exchange. ``content`` may be empty if the failure happened
@@ -3485,6 +3901,7 @@ async def _stream_response(
         try:
             await _persist_assistant_message(
                 db,
+                directed_by_user_id=user.id,
                 message_id=assistant_message_id,
                 chat_id=chat.id,
                 content="".join(accumulated),
@@ -3553,6 +3970,23 @@ async def _stream_response(
                     )
                 except Exception as caselaw_exc:  # never block the turn
                     log.warning("caselaw citation verification failed: %r", caselaw_exc)
+                try:
+                    await verify_and_persist_authority_citations(
+                        db,
+                        message_id=assistant_message_id,
+                        assistant_text="".join(accumulated),
+                        tool_sources=loop_outcome.tool_sources
+                        if isinstance(loop_outcome, LoopFinal)
+                        else [],
+                        gateway=gateway,
+                        judge_model=_caselaw_judge_model,
+                    )
+                except Exception:
+                    log.warning(
+                        "chat finalize (stream): authority citation verify failed — non-fatal",
+                        extra={"event": "chat_authority_verify_finalize_failed"},
+                        exc_info=True,
+                    )
                 try:
                     await assemble_ledger_entries(db, message_id=assistant_message_id)
                 except Exception as ledger_exc:  # never block the turn
@@ -3685,6 +4119,9 @@ async def run_inference_override(
     handler so the handler's transaction boundary is explicit).
     """
 
+    if chat.project_id is not None:
+        await require_matter(db, chat.project_id, user, need="write", include_archived=True)
+
     assistant_message_id = uuid.uuid4()
     request_id = (
         (request.headers.get("x-request-id") if request else None)
@@ -3703,7 +4140,11 @@ async def run_inference_override(
         lq_ai_chat_id=str(chat.id),
         lq_ai_message_id=str(assistant_message_id),
         lq_ai_user_id=str(user.id),
-        lq_ai_skills=list(user_msg.applied_skills or []),
+        # The re-run replays the persisted skill *names*; the message row
+        # stores no skill inputs (DE-390), so a skill whose frontmatter
+        # declares required inputs is refused by the gateway with
+        # ``skill_input_missing`` rather than run without its inputs.
+        lq_ai_skills=_gateway_skills(list(user_msg.applied_skills or [])),
         minimum_inference_tier=None,
         lq_ai_project_minimum_inference_tier=None,
     )
@@ -3738,6 +4179,7 @@ async def run_inference_override(
     # disagree about what kind of row this is (T1 + T4).
     persisted = await _persist_assistant_message(
         db,
+        directed_by_user_id=user.id,
         message_id=assistant_message_id,
         chat_id=chat.id,
         content=assistant_text,

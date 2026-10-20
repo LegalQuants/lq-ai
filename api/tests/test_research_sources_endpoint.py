@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from unittest.mock import AsyncMock
 
 import pytest
@@ -89,7 +89,7 @@ def fake_gateway_with_govinfo() -> AsyncMock:
 
 
 @pytest.fixture(autouse=True)
-def _reset_tier_cache() -> None:
+def _reset_tier_cache() -> Iterator[None]:
     """Reset the process-level governance tier cache around every test.
 
     resolve_available_sources now calls resolve_provider_tier (from
@@ -98,7 +98,7 @@ def _reset_tier_cache() -> None:
     tests.
     """
     _reset_provider_tier_cache_for_tests()
-    yield  # type: ignore[misc]
+    yield
     _reset_provider_tier_cache_for_tests()
 
 
@@ -128,7 +128,7 @@ async def test_sources_returns_200_with_govinfo_present(
 
     monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _FakeAdminGW())
 
-    set_gateway_client(fake_gateway_with_govinfo)  # type: ignore[arg-type]
+    set_gateway_client(fake_gateway_with_govinfo)
     try:
         resp = await client.get("/api/v1/research/sources", headers=_h(db_user))
     finally:
@@ -164,7 +164,7 @@ async def test_sources_response_never_contains_secrets(
 
     monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _FakeAdminGW())
 
-    set_gateway_client(fake_gateway_with_govinfo)  # type: ignore[arg-type]
+    set_gateway_client(fake_gateway_with_govinfo)
     try:
         resp = await client.get("/api/v1/research/sources", headers=_h(db_user))
     finally:
@@ -208,7 +208,7 @@ async def test_sources_egress_tier_resolved_from_admin_config(
 
     monkeypatch.setattr("app.tools.governance.get_gateway_client", lambda: _FakeAdminGW())
 
-    set_gateway_client(fake_gateway_with_govinfo)  # type: ignore[arg-type]
+    set_gateway_client(fake_gateway_with_govinfo)
     try:
         resp = await client.get("/api/v1/research/sources", headers=_h(db_user))
     finally:

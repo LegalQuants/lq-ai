@@ -40,6 +40,70 @@
 			slashIndex
 		};
 	}
+
+	/**
+	 * Per-chat model-selection persistence (bugfix: model-selection-persist-
+	 * refresh). `modelByChat` was a component-local `Record` with no
+	 * persistence, so a full page refresh remounted the component, reset
+	 * modelByChat to `{}`, and currentModelId's reactive fallback silently
+	 * picked the picker's default — discarding the user's choice. Mirrors
+	 * ReceiptsDrawer.svelte's storageKeyForChat/readPersistedOpen/
+	 * writePersistedOpen convention (same file also uses a per-chat
+	 * localStorage key prefix, same optional injectable Storage param for
+	 * testability).
+	 *
+	 * All three helpers treat persistence as best-effort: a `Storage`
+	 * that throws (Safari private mode, a disabled-storage policy, a
+	 * quota-exceeded write) must never break chat selection, so the
+	 * read/write helpers swallow the exception and fall through to the
+	 * existing default-selection behaviour.
+	 */
+	const MODEL_STORAGE_KEY_PREFIX = 'lq_ai_chat_model_';
+
+	export function modelStorageKeyForChat(chatId: string): string {
+		return `${MODEL_STORAGE_KEY_PREFIX}${chatId}`;
+	}
+
+	export function readPersistedModel(chatId: string, storage?: Storage): string | null {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return null;
+		try {
+			return store.getItem(modelStorageKeyForChat(chatId));
+		} catch {
+			return null;
+		}
+	}
+
+	export function writePersistedModel(chatId: string, modelId: string, storage?: Storage): void {
+		const store = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+		if (!store) return;
+		try {
+			store.setItem(modelStorageKeyForChat(chatId), modelId);
+		} catch {
+			/* best-effort: private-mode / quota / disabled storage — skip */
+		}
+	}
+
+	/**
+	 * Pure resolver for a chat's remembered model choice: return the
+	 * persisted id only when it is still in the supplied catalog.
+	 *
+	 * A model the operator has since removed from the gateway must not be
+	 * shown by the picker — `selectModel()` never ran for this session, so
+	 * `currentModelId` would surface the stale id while the send path
+	 * (`MessageCreate.model`) falls back to the default alias. The picker
+	 * would then display one model and the request would use another.
+	 * Gating on `availableIds` keeps the two in lockstep.
+	 */
+	export function readAvailablePersistedModel(
+		chatId: string,
+		availableIds: readonly string[],
+		storage?: Storage
+	): string | null {
+		const persisted = readPersistedModel(chatId, storage);
+		if (persisted === null) return null;
+		return availableIds.includes(persisted) ? persisted : null;
+	}
 </script>
 
 <script lang="ts">
@@ -61,7 +125,7 @@
 	 * surfaced per-message.
 	 */
 	import { get } from 'svelte/store';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
 	import {
@@ -84,6 +148,51 @@
 	} from '$lib/lq-ai/stores';
 	import { consumeMessageStream } from '$lib/lq-ai/sse/parser';
 	import { buildAuthorizeUrl, type PendingGate } from '$lib/lq-ai/chat/toolGate';
+	import {
+		canAttachChatFile,
+		createProcessingFileWarningHandler,
+		processingFileNames,
+		readyFileNames,
+		selectFileIdsForSend
+	} from '$lib/lq-ai/chat/attachedFiles';
+	import {
+		firstUnloadedSkillInputs,
+		flattenSkillInputs,
+		missingInputsMessage,
+		resolveSkillInputsForSend,
+		skillInputsUnavailableMessage
+	} from '$lib/lq-ai/chat/skillInputs';
+	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
+	import type {
+		OrchestrationChatRun,
+		RunDocumentsRead,
+		RunProfilesRead
+	} from '$lib/lq-ai/api/orchestration';
+	import {
+		ACTIVE_RUN_POLL_MS,
+		NEW_HARNESS_ID,
+		NEW_HARNESS_LABEL,
+		RESEND_NEEDS_MODEL,
+		answersDirectly,
+		buildStartBody,
+		candidateFileIds,
+		composerMode,
+		defaultDocumentSelection,
+		documentsReadSignature,
+		harnessOption,
+		minDocuments,
+		newRequestId,
+		proposeBlocker,
+		requestFor,
+		requestSignature,
+		sendWording,
+		syncActiveRun,
+		takesDocuments,
+		toggleDocument,
+		type PendingRequest
+	} from '$lib/lq-ai/run/composer';
+	import { chatHref } from '$lib/lq-ai/run/links';
+	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
@@ -100,19 +209,22 @@
 	import ReceiptsDrawer, {
 		readPersistedOpen as readReceiptsDrawerOpen
 	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
-	import { IconPaperclip, IconSparkles, IconReceipt, IconSparkleHighlight, IconBabyCarriage } from '@tabler/icons-svelte';
-	import LqButton from '$lib/lq-ai/components/shared/LqButton.svelte';
-	import LqGroup from '$lib/lq-ai/components/shared/LqGroup.svelte';
-	import LqStack from '$lib/lq-ai/components/shared/LqStack.svelte';
-	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
-	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
-	import LqAlert from '$lib/lq-ai/components/shared/LqAlert.svelte';
-	import LqSwitch from '$lib/lq-ai/components/shared/LqSwitch.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
+	import RunActiveNotice from '$lib/lq-ai/components/run/RunActiveNotice.svelte';
+	import RunDocumentPicker from '$lib/lq-ai/components/run/RunDocumentPicker.svelte';
+	import RunKnowledgeBases from '$lib/lq-ai/components/run/RunKnowledgeBases.svelte';
+	import RunModePanel from '$lib/lq-ai/components/run/RunModePanel.svelte';
 	import type { SkillAutocompleteItem } from '$lib/lq-ai/types';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
-	import { space } from 'postcss/lib/list';
+	import CompactPanel from './CompactPanel.svelte';
+	import LqButton from './shared/LqButton.svelte';
+	import LqSwitch from './shared/LqSwitch.svelte';
+	import LqGroup from './shared/LqGroup.svelte';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
+	import LqAlert from './shared/LqAlert.svelte';
+	import { IconPaperclip, IconSparkles, IconListDetails } from '@tabler/icons-svelte';
 
 	// ---- component props ----
 	export let projectIdFilter: string | undefined = undefined;
@@ -174,9 +286,46 @@
 	let projectFiles: FileMeta[] = [];
 	let uploading = false;
 
+	// In-flight ingestion-status polls, keyed by file id, so detach, chat
+	// switch, and teardown can stop them (files attached in chat A must not
+	// keep polling — or get sent — after switching to chat B).
+	let filePollAborts: Record<string, AbortController> = {};
+
+	function abortFilePolls(): void {
+		for (const controller of Object.values(filePollAborts)) controller.abort();
+		filePollAborts = {};
+	}
+
+	onDestroy(abortFilePolls);
+
+	$: attachLimitReached = !canAttachChatFile(chatFiles.length);
+
 	let streamingMessageId: string | null = null;
 	let streamAbort: AbortController | null = null;
 	let sendError: string | null = null;
+	let attachmentWarning: string | null = null;
+	// Why the composer refused to send (a skill's inputs are missing or not
+	// loaded). Kept apart from `sendError` because it describes the form's
+	// current state: it is dropped as soon as the skills, their inputs or the
+	// attached files change, where a server error stays until the next send.
+	let inputsError: string | null = null;
+	$: attachedReadyNames = readyFileNames(chatFiles);
+	$: attachedProcessingNames = processingFileNames(chatFiles);
+	// Keyed on values, not array identity: the ingestion poll replaces
+	// `chatFiles` on every tick, which must not wipe a notice that says a
+	// file is still processing.
+	$: inputStateKey = JSON.stringify([
+		attachedSkillNames,
+		skillInputs,
+		attachedReadyNames,
+		attachedProcessingNames
+	]);
+	$: {
+		void inputStateKey;
+		inputsError = null;
+	}
+	// Attached skills whose detail or input schema failed to load.
+	let failedSkillNames: string[] = [];
 
 	// PR6b — governed tool-loop gate. When the stream pauses on a
 	// `tool_confirmation_required` or `mcp_authorization_required` terminal
@@ -200,7 +349,7 @@
 	const dispatch = createEventDispatcher<{ kbsAttached: { kbIds: string[] } }>();
 
 	// Wave D.1 T19 — Receipts drawer state. The composer's receipts button
-	// (IconReceipt) toggles the right-side receipts drawer (T18). Open
+	// (IconListDetails) toggles the right-side receipts drawer (T18). Open
 	// state is restored from localStorage when the active chat changes, so
 	// it survives reloads and chat switches.
 	let receiptsDrawerOpen = false;
@@ -259,6 +408,12 @@
 		// composer path keeps streaming + applied-skills + model selection
 		// consistent with a normal turn. Future: surface a "re-running…"
 		// indicator on the refusal row while the stream is in flight.
+		// This sends an ordinary message again. Beside New harness, Send starts a
+		// run, which is not what was asked for.
+		if (harnessChosen) {
+			sendError = RESEND_NEEDS_MODEL;
+			return;
+		}
 		const list = get(messagesStore);
 		const idx = list.findIndex((m) => m.id === msg.id);
 		if (idx <= 0) return;
@@ -267,7 +422,7 @@
 			const isUser = candidate.kind === 'user' || candidate.role === 'user';
 			if (isUser && candidate.content) {
 				composerText = candidate.content;
-				void sendMessage();
+				void sendChatMessage();
 				return;
 			}
 		}
@@ -292,6 +447,294 @@
 			messagesStore.update(($m) => $m.map((m) => (m.id === replacing.id ? newAiMessage : m)));
 		}
 		closeOverrideModal();
+	}
+
+	// ---- governed runs (ADR 0038 D1) ----
+	// A run is a governed task: a model proposes a plan, the owner approves that exact
+	// plan, and tasks run under it. The thread shows it as a message (RunMessage); the
+	// composer starts it when New harness is the chat's model. With an ordinary model
+	// chosen, nothing below changes how a message
+	// is sent.
+	let runProfiles: RunProfilesRead | null = null;
+	let runProfilesChatId: string | null = null;
+	let runProfilesLoading = false;
+	// Whether a read for the active chat has finished, with or without a result.
+	// Until it has, a chat whose model is New harness waits instead of sending.
+	let runProfilesChecked = false;
+	let runProfilesError: string | null = null;
+	let runDocuments: RunDocumentsRead | null = null;
+	let runDocumentsLoading = false;
+	let runDocumentsError: string | null = null;
+	// What the document list was last read for; null until it is read (and again after
+	// New harness is chosen or the chat changes). A change in the chat's attached files makes it stale.
+	let runDocumentsSignature: string | null = null;
+	let runDocumentsTicket = 0;
+	let selectedDocumentIds: string[] = [];
+	// Whether the person has ticked or unticked a document in this draft. Until they have,
+	// the selection is the default one (`defaultDocumentSelection`); after, it is theirs.
+	let selectionTouched = false;
+	// Counts the drafts, so the document picker is drawn afresh (and decides again whether it
+	// starts open) for each one.
+	let draftNumber = 0;
+	// The request being proposed. Kept until it succeeds, so a retry after a lost
+	// response returns the same run instead of starting a second one.
+	let runRequest: PendingRequest | null = null;
+	// The chats whose request is on its way. Kept per chat: a request in flight in one chat
+	// neither labels nor blocks Send in another.
+	let proposingChats: ReadonlySet<string> = new Set();
+	$: proposing = activeChat ? proposingChats.has(activeChat.id) : false;
+	let closingActiveRun = false;
+	let activeRunError: string | null = null;
+
+	/**
+	 * Read which profiles this chat can start, and which run holds the owner's
+	 * allowance. A quiet read is the background refresh while a run is active: it
+	 * shows no loading state, and a failure leaves what is shown as it is.
+	 */
+	async function loadRunProfiles(chatId: string, options: { quiet?: boolean } = {}): Promise<void> {
+		const quiet = options.quiet === true;
+		if (!quiet) runProfilesLoading = true;
+		try {
+			const value = await orchestrationChatApi.runProfiles(chatId);
+			if (chatId !== runProfilesChatId) return;
+			runProfiles = value;
+			runProfilesError = null;
+			runProfilesChecked = true;
+		} catch (e) {
+			if (chatId !== runProfilesChatId || quiet) return;
+			if ((e as { status?: number } | null)?.status === 404) {
+				// An API without the route has no runs to offer: no control, not a dead one.
+				runProfiles = null;
+				runProfilesError = null;
+			} else {
+				runProfilesError = e instanceof Error ? e.message : String(e);
+			}
+			runProfilesChecked = true;
+		} finally {
+			if (!quiet && chatId === runProfilesChatId) runProfilesLoading = false;
+		}
+	}
+
+	// While a run holds the owner's allowance, the notice about it is kept current:
+	// at once from the run's own message when that is in this thread, and by a slow
+	// read otherwise, so a run in another chat is seen to move on and to end.
+	let activeRunTimer: ReturnType<typeof setInterval> | undefined;
+
+	function stopActiveRunPoll(): void {
+		clearInterval(activeRunTimer);
+		activeRunTimer = undefined;
+	}
+
+	function startActiveRunPoll(): void {
+		if (activeRunTimer !== undefined) return;
+		activeRunTimer = setInterval(() => {
+			if (typeof document !== 'undefined' && document.hidden) return;
+			if (runProfilesChatId && !runProfilesLoading) {
+				void loadRunProfiles(runProfilesChatId, { quiet: true });
+			}
+		}, ACTIVE_RUN_POLL_MS);
+	}
+
+	onDestroy(stopActiveRunPoll);
+
+	/** Every read of a run shown in this thread: keep the composer's notice in step. */
+	function handleRunUpdate(_message: Message, run: OrchestrationChatRun): void {
+		if (runProfiles) runProfiles = syncActiveRun(runProfiles, run);
+	}
+
+	/** Forget the document list and selection: they belong to one chat's draft. */
+	function resetRunDraft(): void {
+		selectedDocumentIds = [];
+		selectionTouched = false;
+		draftNumber += 1;
+		runDocuments = null;
+		runDocumentsError = null;
+		runDocumentsSignature = null;
+		runDocumentsTicket += 1;
+		runDocumentsLoading = false;
+	}
+
+	/**
+	 * The draft ends when its request is sent. The next one starts from the default
+	 * selection again, and the list is read again so that the run just started, now the
+	 * last in this chat, is the one it is suggested from.
+	 */
+	function endRunDraft(): void {
+		selectedDocumentIds = [];
+		selectionTouched = false;
+		draftNumber += 1;
+		runDocumentsSignature = null;
+	}
+
+	async function loadRunDocuments(): Promise<void> {
+		const chat = $activeChatStore;
+		if (!chat) return;
+		// Recorded before the read, so a failed read is not retried in a loop; the
+		// picker's refresh button reads again on demand.
+		runDocumentsSignature = documentsReadSignature(chatFiles, composerAttachedKbIds);
+		// The chat's own files as they were when the read was asked for.
+		const attached = candidateFileIds(chatFiles);
+		const ticket = ++runDocumentsTicket;
+		runDocumentsLoading = true;
+		runDocumentsError = null;
+		try {
+			const value = await orchestrationChatApi.runDocuments(chat.id, attached);
+			if (ticket !== runDocumentsTicket) return;
+			runDocuments = value;
+			// Until the person changes the selection, it is the default one; after, it is
+			// theirs, and only loses what is no longer listed or readable.
+			selectedDocumentIds = defaultDocumentSelection({
+				read: value,
+				attachedFileIds: attached,
+				selected: selectedDocumentIds,
+				touched: selectionTouched
+			});
+		} catch (e) {
+			if (ticket !== runDocumentsTicket) return;
+			runDocumentsError = e instanceof Error ? e.message : String(e);
+		} finally {
+			if (ticket === runDocumentsTicket) runDocumentsLoading = false;
+		}
+	}
+
+	function toggleRunDocument(fileId: string): void {
+		selectionTouched = true;
+		selectedDocumentIds = toggleDocument(
+			selectedDocumentIds,
+			fileId,
+			runDocuments?.max_documents ?? selectedRunProfile?.max_documents ?? 8
+		);
+	}
+
+	/** Read the chat's thread again, so the user's request and the run's message appear. */
+	async function reloadThread(chatId: string): Promise<boolean> {
+		try {
+			const items = await fetchMessages((cursor) =>
+				messagesApi.listMessages(chatId, { limit: 100, cursor })
+			);
+			if ($activeChatStore?.id === chatId && !streamingMessageId) messagesStore.set(items);
+			return true;
+		} catch (e) {
+			console.error('lq-ai: failed to reload messages', e);
+			return false;
+		}
+	}
+
+	async function proposeRun(): Promise<void> {
+		const chat = $activeChatStore;
+		const profile = selectedRunProfile;
+		if (!chat || proposingChats.has(chat.id)) return;
+		if (!profile) {
+			// New harness is the chat's model but cannot be used right now. Say why;
+			// never send the request to some other model instead.
+			sendError = harnessBlock ?? proposeBlocker({ profile: null, goal: '', selectedCount: 0 });
+			return;
+		}
+		const goal = composerText.trim();
+		const blocked = proposeBlocker({
+			profile,
+			goal,
+			selectedCount: selectedDocumentIds.length
+		});
+		if (blocked) {
+			sendError = blocked;
+			return;
+		}
+		const fileIds = takesDocuments(profile) ? [...selectedDocumentIds] : [];
+		// The same request keeps its id; a changed one gets a new id (the server refuses
+		// an id reused with different input).
+		const request = requestFor(
+			runRequest,
+			requestSignature({ chatId: chat.id, profile: profile.profile, goal, fileIds }),
+			newRequestId
+		);
+		runRequest = request;
+		sendError = null;
+		proposingChats = new Set([...proposingChats, chat.id]);
+		try {
+			await orchestrationChatApi.startRun(
+				chat.id,
+				buildStartBody({ requestId: request.id, profile, goal, fileIds })
+			);
+			runRequest = null;
+			// New harness stays the chat's model, as any model does after Send. The draft
+			// is over: the next one starts from the default selection.
+			if ($activeChatStore?.id === chat.id) {
+				// Only what was sent is cleared: text typed while the request was on its way stays.
+				if (composerText.trim() === goal) composerText = '';
+				endRunDraft();
+			}
+			const refreshed = await reloadThread(chat.id);
+			if (!refreshed && $activeChatStore?.id === chat.id) {
+				sendError =
+					'The run was started, but this thread could not be refreshed. Reload the chat to see it.';
+			}
+			await loadRunProfiles(chat.id);
+		} catch (e) {
+			// The request id is kept, so pressing Send again is a retry of this request.
+			// The error belongs to the chat it was sent from, not to one opened since.
+			if ($activeChatStore?.id === chat.id) {
+				sendError = e instanceof Error ? e.message : sendWording(answersDirectly(profile)).failure;
+			}
+			void loadRunProfiles(chat.id);
+		} finally {
+			const rest = new Set(proposingChats);
+			rest.delete(chat.id);
+			proposingChats = rest;
+		}
+	}
+
+	/** A run in this thread reached a finished state: read its row again, then the profiles. */
+	async function handleRunSettled(message: Message, _run: OrchestrationChatRun): Promise<void> {
+		const chatId = message.chat_id;
+		try {
+			const items = await fetchMessages(
+				(cursor) => messagesApi.listMessages(chatId, { limit: 100, cursor }),
+				{ stopAtId: message.id }
+			);
+			const fresh = items.find((m) => m.id === message.id);
+			if (fresh && $activeChatStore?.id === chatId) {
+				messagesStore.update(($m) => replaceMessage($m, fresh));
+			}
+		} catch (e) {
+			console.error('lq-ai: failed to refresh a run message', e);
+		}
+		if ($activeChatStore?.id === chatId) await loadRunProfiles(chatId);
+	}
+
+	async function closeActiveRun(): Promise<void> {
+		const active = runProfiles?.active_run;
+		const chat = $activeChatStore;
+		if (!active || !chat || closingActiveRun) return;
+		closingActiveRun = true;
+		activeRunError = null;
+		try {
+			await orchestrationChatApi.close(active.root_id);
+		} catch (e) {
+			activeRunError = e instanceof Error ? e.message : 'Could not close the run.';
+		} finally {
+			closingActiveRun = false;
+		}
+		await loadRunProfiles(chat.id);
+	}
+
+	async function openActiveRunChat(): Promise<void> {
+		const chatId = runProfiles?.active_run?.chat_id;
+		if (!chatId) return;
+		const known = get(chatsStore).find((c) => c.id === chatId);
+		if (known && (!projectIdFilter || known.project_id === projectIdFilter)) {
+			await selectChat(known);
+			return;
+		}
+		if (!projectIdFilter) {
+			try {
+				await selectChat(await chatsApi.getChat(chatId));
+				return;
+			} catch (e) {
+				console.error('lq-ai: failed to open the chat holding the active run', e);
+			}
+		}
+		await goto(chatHref(chatId));
 	}
 
 	// ---- bootstrap ----
@@ -322,18 +765,55 @@
 	function selectModel(id: string): void {
 		const chat = $activeChatStore;
 		if (!chat) return;
+		const wasHarness = modelByChat[chat.id] === NEW_HARNESS_ID;
 		modelByChat = { ...modelByChat, [chat.id]: id };
+		writePersistedModel(chat.id, id);
+		if (wasHarness !== (id === NEW_HARNESS_ID)) {
+			// Entering or leaving New harness: neither draft carries over. Skills,
+			// "Keep skills on" and the enhancer are not shown beside New harness.
+			resetRunDraft();
+			runRequest = null;
+			sendError = null;
+			inputsError = null;
+			pendingEnhancement = null;
+			onSlashDismiss();
+		}
 	}
 
 	async function selectChat(chat: Chat) {
 		activeChatStore.set(chat);
 		streamingMessageId = null;
 		sendError = null;
+		attachmentWarning = null;
+		// An open slash popover listens on the window; it must not outlive its chat.
+		onSlashDismiss();
 		// Reset draft state.
 		composerText = '';
 		attachedSkillNames = [];
+		failedSkillNames = [];
 		attachmentSources = {};
 		skillInputs = {};
+		// Attached files are per-chat draft state too — reset them (and stop
+		// their status polls) so chat A's files are never sent from chat B.
+		abortFilePolls();
+		chatFiles = [];
+		// Hydrate this chat's remembered model choice from localStorage if we
+		// don't already have one in-memory (survives a page refresh; a
+		// same-session choice already in modelByChat always wins). Only accept
+		// a persisted id the current catalog still offers, so the picker can
+		// never show a model the send path would silently drop.
+		if (!(chat.id in modelByChat)) {
+			// New harness is offered by the run-profiles read, not the gateway's
+			// catalog; whether it can be used in this chat is decided when that
+			// read returns (see `mode`).
+			const persisted = readAvailablePersistedModel(chat.id, [
+				...availableModels.data.map((m) => m.id),
+				NEW_HARNESS_ID
+			]);
+			if (persisted) {
+				modelByChat = { ...modelByChat, [chat.id]: persisted };
+			}
+		}
 		// Load messages.
 		try {
 			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
@@ -413,16 +893,38 @@
 			attachmentSources = { ...attachmentSources, [name]: 'picker' };
 		}
 		attachedSkillNames = [...attachedSkillNames, name];
+		await loadSkillDetail(name);
+	}
+
+	// Also the picker's Retry handler. Send is blocked until this has
+	// succeeded for every attached skill: without the schema the composer
+	// cannot tell which inputs the gateway will insist on.
+	async function loadSkillDetail(name: string) {
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		try {
-			const detail = await skillsApi.getSkill(name);
-			skillDetails = { ...skillDetails, [name]: detail };
+			// The form schema comes from the api's own resolver (user > team >
+			// built-in, both frontmatter shapes) so the form and the gateway's
+			// required-input check read the same declaration.
+			const [detail, inputs] = await Promise.all([
+				skillsApi.getSkill(name),
+				skillsApi.getInputs(name)
+			]);
+			skillDetails = {
+				...skillDetails,
+				[name]: { ...detail, inputs: flattenSkillInputs(inputs) }
+			};
 		} catch (e) {
 			console.error('lq-ai: failed to load skill detail', e);
+			// Detached (or the chat changed) while loading: nothing to flag.
+			if (attachedSkillNames.includes(name) && !failedSkillNames.includes(name)) {
+				failedSkillNames = [...failedSkillNames, name];
+			}
 		}
 	}
 
 	function detachSkill(name: string) {
 		attachedSkillNames = attachedSkillNames.filter((n) => n !== name);
+		failedSkillNames = failedSkillNames.filter((n) => n !== name);
 		const next = { ...skillInputs };
 		delete next[name];
 		skillInputs = next;
@@ -440,12 +942,26 @@
 
 	// ---- file panel handlers ----
 	async function uploadAttached(file: File) {
+		// The backend 422s the whole send when file_ids exceeds the cap
+		// (MESSAGE_FILE_IDS_MAX_LEN), so block the attach up front; the panel
+		// shows the limit notice + disables the upload button in parallel.
+		if (!canAttachChatFile(chatFiles.length)) return;
+		// The active chat can change while the upload is in flight; capture the
+		// target so chat A's file is never appended to (or sent from) chat B.
+		const targetChatId = $activeChatStore?.id ?? null;
 		uploading = true;
 		try {
 			const uploaded = await filesApi.uploadFile(file, {
 				project_id: $activeChatStore?.project_id ?? undefined
 			});
+			// Re-check after the await: the chat may have changed, and a
+			// parallel upload may have taken the last slot under the cap.
+			if (($activeChatStore?.id ?? null) !== targetChatId) return;
+			if (!canAttachChatFile(chatFiles.length)) return;
 			chatFiles = [...chatFiles, uploaded];
+			// Ingestion is async; poll so the chip flips pending -> ready (or
+			// failed) instead of showing a stale "pending" forever.
+			void pollAttachedStatus(uploaded.id);
 		} catch (e) {
 			console.error('lq-ai: upload failed', e);
 		} finally {
@@ -453,9 +969,37 @@
 		}
 	}
 
+	// Poll a chat-attached file's ingestion status until it reaches a terminal
+	// state, patching the matching chatFiles entry so the panel chip updates.
+	// The per-file AbortController stops the loop on detach, chat switch, and
+	// component teardown (abortFilePolls / onDestroy).
+	async function pollAttachedStatus(id: string): Promise<void> {
+		const controller = new AbortController();
+		filePollAborts[id]?.abort();
+		filePollAborts = { ...filePollAborts, [id]: controller };
+		const result = await filesApi.pollFileStatus(id, {
+			signal: controller.signal,
+			onStatus: (latest) => {
+				chatFiles = chatFiles.map((f) =>
+					f.id === id ? { ...f, ingestion_status: latest.ingestion_status } : f
+				);
+			}
+		});
+		if (filePollAborts[id] === controller) {
+			const next = { ...filePollAborts };
+			delete next[id];
+			filePollAborts = next;
+		}
+		if (result.outcome === 'timeout') {
+			// Leave the last known status in place — don't fabricate 'failed'.
+			console.warn('lq-ai: file ingestion status poll timed out', id);
+		}
+	}
+
 	async function detachFile(file: FileMeta) {
 		// Per the spec the M1 attached-files panel manages chat-local state;
 		// the full file-row is left in place and can be re-attached later.
+		filePollAborts[file.id]?.abort();
 		chatFiles = chatFiles.filter((f) => f.id !== file.id);
 	}
 
@@ -471,9 +1015,17 @@
 	 */
 	async function consumeIntoMessage(
 		body: ReadableStream<Uint8Array>,
-		assistantId0: string
+		assistantId0: string,
+		processingFileIds: string[] = []
 	): Promise<void> {
 		let assistantId = assistantId0;
+		const warnForProcessingFile = createProcessingFileWarningHandler(
+			processingFileIds,
+			() => $activeChatStore?.id,
+			(warning) => {
+				attachmentWarning = warning;
+			}
+		);
 		await consumeMessageStream(body, {
 			onStart: (frame) => {
 				// Reconcile the optimistic draft id with the persisted id on the
@@ -505,6 +1057,7 @@
 			},
 			onComplete: (frame) => {
 				streamingMessageId = null;
+				warnForProcessingFile(frame);
 				messagesStore.update(($m) =>
 					$m.map((m) =>
 						m.id === assistantId
@@ -539,30 +1092,60 @@
 		});
 	}
 
+	/** Send, from the button. With New harness as the chat's model it asks for a plan. */
 	async function sendMessage() {
+		if (harnessChosen) {
+			await proposeRun();
+			return;
+		}
+		await sendChatMessage();
+	}
+
+	/**
+	 * One ordinary chat turn to the chat's provider model. It refuses beside New
+	 * harness, so the harness id is never sent as a model and a request made to New
+	 * harness is never answered by another model.
+	 */
+	async function sendChatMessage() {
 		const chat = $activeChatStore;
-		if (!chat) return;
+		if (!chat || harnessChosen) return;
 		if (!composerText.trim()) return;
 
-		// Validate required skill inputs.
-		for (const name of attachedSkillNames) {
-			const detail = skillDetails[name];
-			if (!detail || !detail.inputs) continue;
-			const missing = detail.inputs
-				.filter((i) => i.required)
-				.filter((i) => {
-					const v = skillInputs[name]?.[i.name];
-					return v === undefined || v === null || v === '';
-				});
-			if (missing.length > 0) {
-				sendError = `Skill "${name}" is missing required inputs: ${missing
-					.map((m) => m.name)
-					.join(', ')}.`;
-				return;
-			}
+		// Hold the send until every attached skill's input schema is on hand.
+		const inputDefs = Object.fromEntries(
+			attachedSkillNames.map((n) => [n, skillDetails[n]?.inputs])
+		);
+		const unloaded = firstUnloadedSkillInputs(attachedSkillNames, inputDefs, failedSkillNames);
+		if (unloaded) {
+			sendError = null;
+			inputsError = skillInputsUnavailableMessage(
+				skillDetails[unloaded.skill]?.title ?? unloaded.skill,
+				unloaded.loadFailed
+			);
+			return;
+		}
+
+		// Validate required skill inputs and build the payload. A required
+		// document input left empty is bound to the ready attached files' names.
+		const resolvedInputs = resolveSkillInputsForSend(
+			attachedSkillNames,
+			inputDefs,
+			skillInputs,
+			attachedReadyNames
+		);
+		if (resolvedInputs.missing.length > 0) {
+			const first = resolvedInputs.missing[0];
+			sendError = null;
+			inputsError = missingInputsMessage(
+				first,
+				skillDetails[first.skill]?.title,
+				attachedProcessingNames
+			);
+			return;
 		}
 
 		sendError = null;
+		attachmentWarning = null;
 		// Clear any prior gate card up front: a new turn supersedes a stranded
 		// gate even if this send throws before the stream's `onStart` fires.
 		pendingGate = null;
@@ -630,6 +1213,9 @@
 			slug,
 			source: attachmentSources[slug] ?? 'picker'
 		}));
+		const processingFileIds = chatFiles
+			.filter((file) => file.ingestion_status !== 'ready' && file.ingestion_status !== 'failed')
+			.map((file) => file.id);
 
 		try {
 			const res = await messagesApi.sendMessageStream(
@@ -638,13 +1224,15 @@
 					content: composerText,
 					model: currentModelId ?? undefined,
 					attached_skills: attachedSkillsPayload.length > 0 ? attachedSkillsPayload : undefined,
-					skill_inputs:
-						Object.keys(skillInputs).length > 0
-							? (skillInputs as Record<string, Record<string, unknown>>)
-							: undefined,
+					skill_inputs: resolvedInputs.skillInputs,
 					// Issue #207 finding 4 — only send set_sticky on a real toggle
 					// change; otherwise leave the chat's sticky set unchanged.
 					set_sticky: stickyDirty ? stickyEnabled : undefined,
+					// Chat-scoped attached files — the backend injects each ready
+					// file's canonical text as a system block (chats.py). Ownership
+					// is validated server-side; files with no text are skipped.
+					// selectFileIdsForSend drops 'failed' files and caps at 16.
+					file_ids: selectFileIdsForSend(chatFiles),
 					stream: true
 				},
 				streamAbort.signal
@@ -662,7 +1250,7 @@
 				throw new Error('Empty stream body');
 			}
 
-			await consumeIntoMessage(res.body, draftAssistantId);
+			await consumeIntoMessage(res.body, draftAssistantId, processingFileIds);
 		} catch (e: unknown) {
 			streamingMessageId = null;
 			console.error('lq-ai: stream failed', e);
@@ -719,13 +1307,17 @@
 	// the "Continue" button after an OAuth return (`?mcp_connected`). Reuses the
 	// normal send path so streaming + skills + model selection stay consistent.
 	export function resendLastUserMessage(): void {
+		if (harnessChosen) {
+			sendError = RESEND_NEEDS_MODEL;
+			return;
+		}
 		const list = get(messagesStore);
 		for (let i = list.length - 1; i >= 0; i--) {
 			const candidate = list[i];
 			const isUser = candidate.kind === 'user' || candidate.role === 'user';
 			if (isUser && candidate.content) {
 				composerText = candidate.content;
-				void sendMessage();
+				void sendChatMessage();
 				return;
 			}
 		}
@@ -780,6 +1372,8 @@
 		// popover is open so the operator can finish skill selection
 		// without accidentally launching Enhance Prompt.
 		if (slashOpen) return;
+		// The prompt enhancer is not offered beside New harness.
+		if (harnessChosen) return;
 		if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
 			e.preventDefault();
 			expansionPanel?.open();
@@ -808,7 +1402,9 @@
 		// handler fires; we read from the textarea directly anyway so the
 		// caret position and value are guaranteed consistent.
 		const detection = detectSlashAt(ta.value, ta.selectionStart);
-		if (detection.open) {
+		// A run does not use the chat's attached skills, so the slash popover stays
+		// closed beside New harness rather than attach one out of sight.
+		if (detection.open && !harnessChosen) {
 			slashOpen = true;
 			slashQuery = detection.query;
 			slashStartIndex = detection.slashIndex;
@@ -905,11 +1501,88 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
+	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
+	// active chat changes (and again after a run ends or a run is proposed). New
+	// harness is one of the chat's models: the choice is remembered per chat like any
+	// other, and applies only while the server offers it here. The selected documents
+	// and the request id belong to one chat's draft.
+	$: storedModelId = activeChat ? (modelByChat[activeChat.id] ?? null) : null;
+	$: harness = harnessOption(runProfiles);
+	// `mode` is the one place that decides where Send goes. `harnessChosen` is true
+	// whenever New harness is the chat's model, usable or not: the ordinary send
+	// path is then closed. `runMode` is true only while it can be used here.
+	$: mode = composerMode({
+		storedModelId,
+		read: runProfiles,
+		checked: runProfilesChecked,
+		error: runProfilesError
+	});
+	$: harnessChosen = mode.kind === 'harness';
+	$: runMode = mode.kind === 'harness' && mode.state === 'ready';
+	$: selectedRunProfile =
+		mode.kind === 'harness' && mode.state === 'ready' ? mode.option.profile : null;
+	$: harnessBlock = mode.kind === 'harness' && mode.state !== 'ready' ? mode.reason : null;
+	$: harnessRecheck = mode.kind === 'harness' && mode.state === 'unavailable' && !mode.option;
+	// Whether New harness answers by itself is what the server says of its profile. Where the read
+	// has not come back (or fails) there is no profile, so the picker says what it always said.
+	$: pickerHarness = harness
+		? {
+				id: NEW_HARNESS_ID,
+				label: NEW_HARNESS_LABEL,
+				resolves: harness.resolves,
+				disabledReason: harness.disabledReason,
+				answersDirectly: answersDirectly(harness.profile)
+			}
+		: harnessChosen
+			? {
+					id: NEW_HARNESS_ID,
+					label: NEW_HARNESS_LABEL,
+					resolves: null,
+					disabledReason: harnessBlock,
+					answersDirectly: false
+				}
+			: null;
+	// The slash popover attaches skills, which New harness does not use.
+	$: if (harnessChosen && slashOpen) onSlashDismiss();
+	$: activeRun = runProfiles?.active_run ?? null;
+	$: if (activeRun) startActiveRunPoll();
+	else stopActiveRunPoll();
+	$: proposeBlock = proposeBlocker({
+		profile: selectedRunProfile,
+		goal: composerText,
+		selectedCount: selectedDocumentIds.length
+	});
+	// Why Send waits beside New harness, or null when it can go.
+	$: sendBlock = harnessBlock ?? (runMode ? proposeBlock : null);
+	$: if ((activeChat?.id ?? null) !== runProfilesChatId) {
+		runProfilesChatId = activeChat?.id ?? null;
+		runProfiles = null;
+		runProfilesError = null;
+		runProfilesChecked = false;
+		activeRunError = null;
+		runRequest = null;
+		resetRunDraft();
+		if (runProfilesChatId) void loadRunProfiles(runProfilesChatId);
+	}
+	// A profile that reads documents the owner selects, or may: read the list when New
+	// harness is chosen, and again when the chat's attached files change.
+	$: if (
+		runMode &&
+		takesDocuments(selectedRunProfile) &&
+		documentsReadSignature(chatFiles, composerAttachedKbIds) !== runDocumentsSignature
+	) {
+		void loadRunDocuments();
+	}
+
 	// D0 — current selection for the active chat. Falls back to the
 	// picker's default (``smart`` if available, else the first row) when
-	// the user hasn't picked yet for this chat.
+	// the user hasn't picked yet for this chat. New harness is not a provider model,
+	// so it is never this value. While New harness is the chat's model this value
+	// is not sent anywhere: `sendChatMessage` refuses.
 	$: currentModelId = activeChat
-		? (modelByChat[activeChat.id] ?? defaultSelection(groupModels(availableModels))?.id ?? null)
+		? ((storedModelId !== NEW_HARNESS_ID ? storedModelId : null) ??
+			defaultSelection(groupModels(availableModels))?.id ??
+			null)
 		: null;
 
 	// Wave D.1 T15 — role for the refusal-bubble override-button gate.
@@ -953,48 +1626,58 @@
 	$: enhanceButtonAriaLabel = enhanceIsRefine ? 'Refine prompt' : 'Enhance prompt';
 </script>
 
-<div class="flex flex-1 h-full min-h-0 overflow-hidden" data-testid="lq-ai-chat-shell">
-	<ChatSidebar
-		groups={filteredGroups}
-		activeChatId={activeChat?.id ?? null}
-		activeProjectId={activeProject?.id ?? null}
-		{archivedToggle}
-		hideProjectFilter={!!projectIdFilter}
-		onSelectChat={selectChat}
-		onNewChat={createNewChat}
-		onSelectProject={selectProject}
-		onToggleArchived={toggleArchived}
-	/>
+<div
+	class="flex flex-1 h-full min-h-0 overflow-hidden"
+	class:compact-matter={!!projectIdFilter}
+	data-testid="lq-ai-chat-shell"
+>
+	<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
+		<ChatSidebar
+			groups={filteredGroups}
+			activeChatId={activeChat?.id ?? null}
+			activeProjectId={activeProject?.id ?? null}
+			{archivedToggle}
+			hideProjectFilter={!!projectIdFilter}
+			onSelectChat={selectChat}
+			onNewChat={createNewChat}
+			onSelectProject={selectProject}
+			onToggleArchived={toggleArchived}
+		/>
+	</CompactPanel>
 
-	<section class="flex-1 flex flex-col overflow-hidden">
-		<LqGroup justify="space-between" padding="xs" class="border-b border-gray-200" data-testid="lq-ai-chat-header">
+	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
+		<div
+			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
+			data-testid="lq-ai-chat-header"
+		>
 			{#if activeChat}
-				<LqGroup justify="space-between">
-					<LqTitle order={5} weight="semibold">
+				<div>
+					<LqTitle order={5}>
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
-						<LqText size="xs" tone="secondary">
+						<p class="text-xs text-gray-500">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
 								activeChat.project_id}
-						</LqText>
+						</p>
 					{/if}
-					</LqGroup>
-				<LqGroup gap="sm">
+				</div>
+				<div class="flex items-center gap-2">
 					{#if messages[messages.length - 1]?.role === 'assistant' && messages[messages.length - 1]?.routed_inference_tier}
 						<TierBadge
 							tier={messages[messages.length - 1].routed_inference_tier ?? null}
 							provider={messages[messages.length - 1].routed_provider ?? null}
 						/>
 					{/if}
-				</LqGroup>
+				</div>
 			{:else}
 				<LqText size="sm" tone="secondary">Pick or create a chat to start.</LqText>
 			{/if}
-		</LqGroup>
+		</div>
 
 		<MessageList
 			{messages}
+			newHarness={harnessChosen}
 			{streamingMessageId}
 			onAppliedSkillClicked={handleAppliedSkillClicked}
 			{currentUserRole}
@@ -1007,70 +1690,147 @@
 			onGateApprove={() => decideToolCall('approve')}
 			onGateDeny={() => decideToolCall('deny')}
 			onGateConnect={connectMcp}
+			onRunSettled={handleRunSettled}
+			onRunUpdate={handleRunUpdate}
 		/>
 
 		{#if activeChat}
-			<LqStack gap="sm" class="border-t border-gray-200" data-testid="lq-ai-composer">
-				<LqGroup justify="space-between">
-					<ModelPicker
-						models={availableModels}
-						selectedId={currentModelId}
-						onSelect={selectModel}
-					/>
-					<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
+			<div
+				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
+				class:lq-composer-fit={selectedRunProfile !== null}
+				data-testid="lq-ai-composer"
+			>
+				<CompactPanel
+					id="matter-chat-options"
+					title="Chat options"
+					enabled={!!projectIdFilter}
+					spaced
+				>
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2 flex-wrap">
+							<!-- ADR 0038 D1 — New harness is an experimental entry in this picker. -->
+							<ModelPicker
+								models={availableModels}
+								selectedId={harnessChosen ? NEW_HARNESS_ID : currentModelId}
+								harness={pickerHarness}
+								onSelect={selectModel}
+							/>
+							{#if runProfilesError && !harnessChosen}
+								<span class="text-xs lq-run-hint" data-testid="lq-ai-run-profiles-error">
+									New harness could not be checked: {runProfilesError}
+								</span>
+							{/if}
+						</div>
+						{#if !harnessChosen}
+							<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
-					<LqGroup
-						gap="xs"
-						data-testid="lq-ai-sticky-toggle"
-						title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
-					>
-						<LqSwitch
-							checked={stickyEnabled}
-							onCheckedChange={(value) => {
-								stickyEnabled = value;
-								stickyDirty = true;
-							}}
+							<LqGroup gap="sm">
+								<LqSwitch
+									checked={stickyEnabled}
+									onCheckedChange={(checked) => {
+										stickyEnabled = checked;
+										stickyDirty = true;
+									}}
+									aria-label="Keep skills on"
+									title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+									data-testid="lq-ai-sticky-toggle"
+								/>
+								<LqText size="xs" tone="secondary">Keep skills on</LqText>
+							</LqGroup>
+						{/if}
+					</div>
+
+					<!-- ADR 0038 D1 — names the run that is blocking a new one, in any chat. -->
+					{#if activeRun}
+						<RunActiveNotice
+							active={activeRun}
+							currentChatId={activeChat.id}
+							busy={closingActiveRun}
+							error={activeRunError}
+							onOpen={openActiveRunChat}
+							onClose={closeActiveRun}
 						/>
-						<LqText size="xs" tone="secondary">Keep skills on</LqText>
-					</LqGroup>
-				</LqGroup>
+					{/if}
 
-				<SkillPicker
-					availableSkills={$skillsStore}
-					selectedSkillNames={attachedSkillNames}
-					{projectAttachedSkills}
-					{skillDetails}
-					{skillInputs}
-					onAttach={attachSkill}
-					onDetach={detachSkill}
-					onUpdateInputs={updateSkillInputs}
-				/>
+					{#if selectedRunProfile}
+						<!-- The one part of the composer that gives way: see `.lq-composer-fit`. -->
+						<div class="lq-harness-strip" data-testid="lq-ai-harness-strip">
+							<RunModePanel
+								profile={selectedRunProfile}
+								documentsRead={runDocuments}
+								selectedDocuments={selectedDocumentIds.length}
+							>
+								{#if takesDocuments(selectedRunProfile)}
+									<!-- One picker per draft: whether it starts open is decided when it is drawn. -->
+									{#key draftNumber}
+										<RunDocumentPicker
+											documents={runDocuments?.documents ?? []}
+											selected={selectedDocumentIds}
+											max={runDocuments?.max_documents ?? selectedRunProfile.max_documents ?? 8}
+											min={minDocuments(selectedRunProfile)}
+											inMatter={runDocuments
+												? runDocuments.project_id !== null
+												: composerProjectId !== null}
+											loading={runDocumentsLoading}
+											error={runDocumentsError}
+											onToggle={toggleRunDocument}
+											onRefresh={() => void loadRunDocuments()}
+										/>
+									{/key}
+									<!-- Not picked: a run lists every knowledge base attached to the matter. -->
+									<RunKnowledgeBases read={runDocuments} />
+								{/if}
+							</RunModePanel>
+						</div>
+					{:else if !harnessChosen}
+						<!-- Not beside New harness, usable or not: a run does not use the chat's skills. -->
+						<SkillPicker
+							availableSkills={$skillsStore}
+							selectedSkillNames={attachedSkillNames}
+							{projectAttachedSkills}
+							{skillDetails}
+							{skillInputs}
+							readyFileNames={attachedReadyNames}
+							processingFileNames={attachedProcessingNames}
+							{failedSkillNames}
+							onAttach={attachSkill}
+							onDetach={detachSkill}
+							onRetry={loadSkillDetail}
+							onUpdateInputs={updateSkillInputs}
+						/>
+					{/if}
 
-				<SavedPromptsPanel
-					onInsert={(text) => {
-						composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
-					}}
-				/>
+					<SavedPromptsPanel
+						onInsert={(text) => {
+							composerText = composerText.trim() ? `${composerText.trimEnd()}\n\n${text}` : text;
+						}}
+					/>
+				</CompactPanel>
 
-				{#if sendError}
-					<LqAlert tone="red" data-testid="lq-ai-send-error">
-						{sendError}
+				{#if sendError ?? inputsError}
+					<LqAlert tone="danger" data-testid="lq-ai-send-error">
+						{sendError ?? inputsError}
+					</LqAlert>
+				{/if}
+				{#if attachmentWarning}
+					<LqAlert tone="warning" role="status" data-testid="lq-ai-attachment-warning">
+						{attachmentWarning}
 					</LqAlert>
 				{/if}
 
-				<LqGroup align="flex-end" gap="sm">
+				<div class="composer-row flex items-end gap-2">
 					<div class="lq-composer-wrap flex-1">
 						<textarea
 							class="lq-composer w-full text-sm resize-none"
 							rows="3"
-							placeholder="Type a message…"
+							placeholder={harnessChosen ? 'Ask New harness…' : 'Type a message…'}
 							bind:value={composerText}
 							data-testid="lq-ai-composer-input"
 							on:keydown={handleComposerKeydown}
 							on:input={onComposerInput}
-						/>
-						{#if slashOpen}
+						></textarea>
+						{#if slashOpen && !harnessChosen}
 							<div class="lq-composer-popover" data-testid="lq-ai-slash-popover-anchor">
 								<SlashPopover
 									query={slashQuery}
@@ -1083,84 +1843,122 @@
 					{#if streamingMessageId}
 						<LqButton
 							variant="filled"
-							tone="red"
+							tone="danger"
+							size="sm"
+							type="button"
 							on:click={abortStream}
 							data-testid="lq-ai-abort-btn"
 						>
 							Stop
 						</LqButton>
 					{:else}
-						{#if composerProjectId}
+						{#if composerProjectId && !harnessChosen}
 							<LqButton
 								variant="outline"
-								tone="sage"
+								tone="accent"
 								size="sm"
+								type="button"
 								aria-label="Attach knowledge base"
 								title="Attach a knowledge base to this matter"
-								disabled={true}
 								on:click={openAttachKbModal}
 								data-testid="lq-ai-attach-kb-btn"
 							>
-								<IconPaperclip size={16} />
+								<IconPaperclip size={14} aria-hidden="true" />
 							</LqButton>
 						{/if}
-						<LqGroup gap="xs">
+						{#if !harnessChosen}
+							<LqButton
+								variant="outline"
+								tone="accent"
+								size="sm"
+								type="button"
+								aria-label={enhanceButtonAriaLabel}
+								title={enhanceButtonTitle}
+								on:click={() => expansionPanel?.open()}
+								disabled={!composerText.trim() || !!streamingMessageId}
+								data-testid="lq-ai-enhance-btn"
+								data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
+							>
+								<IconSparkles size={14} aria-hidden="true" />
+							</LqButton>
+						{/if}
 						<LqButton
+							variant="outline"
+							tone="accent"
 							size="sm"
-							variant={enhanceIsRefine ? 'filled' : 'outline'}
-							aria-label={enhanceButtonAriaLabel}
-							title={enhanceButtonTitle}
-							onclick={() => expansionPanel?.open()}
-							disabled={!composerText.trim() || !!streamingMessageId}
-							data-testid="lq-ai-enhance-btn"
-							data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
-						>
-							<IconSparkles size={16} />
-						</LqButton>
-						<LqButton
-							size="sm"
-							variant={receiptsDrawerOpen ? 'filled' : 'outline'}
+							type="button"
 							aria-label="Toggle receipts drawer"
 							title="Toggle receipts"
 							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
 							data-testid="lq-ai-receipts-toggle"
 						>
-							<IconReceipt size={16} />
+							<IconListDetails size={14} aria-hidden="true" />
 						</LqButton>
+						<!-- One Send. With New harness chosen it starts a run: one model call, and no task before a plan is approved (ADR 0038 D1). -->
 						<LqButton
+							variant="filled"
+							tone="accent"
 							size="sm"
+							type="button"
 							on:click={sendMessage}
-							disabled={!composerText.trim()}
+							disabled={harnessChosen ? sendBlock !== null || proposing : !composerText.trim()}
+							title={harnessChosen
+								? (sendBlock ?? sendWording(answersDirectly(selectedRunProfile)).sendTitle)
+								: undefined}
 							data-testid="lq-ai-send-btn"
+							data-run-mode={harnessChosen ? 'true' : undefined}
 						>
-							Send
+							{proposing ? 'Sending…' : 'Send'}
 						</LqButton>
-						</LqGroup>
 					{/if}
-				</LqGroup>
+				</div>
+				{#if harnessBlock}
+					<!-- New harness is this chat's model but cannot be used now. Send waits. -->
+					<p class="text-xs lq-run-hint" role="status" data-testid="lq-ai-harness-block">
+						{harnessBlock}
+						{#if harnessRecheck && activeChat}
+							<button
+								type="button"
+								class="lq-run-recheck"
+								data-testid="lq-ai-harness-recheck"
+								on:click={() => activeChat && void loadRunProfiles(activeChat.id)}
+							>
+								Check again
+							</button>
+						{/if}
+					</p>
+				{:else if runMode && proposeBlock && composerText.trim()}
+					<p class="text-xs lq-run-hint" data-testid="lq-ai-run-propose-hint">{proposeBlock}</p>
+				{/if}
 
-				<EnhancePromptExpansion
-					bind:this={expansionPanel}
-					originalText={composerText}
-					chatId={activeChat?.id ?? null}
-					onUseEnhanced={handleUseEnhanced}
-					onEditEnhanced={handleEditEnhanced}
-					onKeepOriginal={handleKeepOriginal}
-					onDismiss={handleEnhanceDismiss}
-				/>
-			</LqStack>
+				{#if !harnessChosen}
+					<EnhancePromptExpansion
+						bind:this={expansionPanel}
+						originalText={composerText}
+						chatId={activeChat?.id ?? null}
+						onUseEnhanced={handleUseEnhanced}
+						onEditEnhanced={handleEditEnhanced}
+						onKeepOriginal={handleKeepOriginal}
+						onDismiss={handleEnhanceDismiss}
+					/>
+				{/if}
+			</div>
 		{/if}
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
 
 	{#if activeChat}
-		<AttachedFilesPanel
-			{chatFiles}
-			{projectFiles}
-			{uploading}
-			onUpload={uploadAttached}
-			onDetach={detachFile}
-		/>
+		<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
+			<AttachedFilesPanel
+				{chatFiles}
+				newHarness={harnessChosen}
+				{projectFiles}
+				{uploading}
+				{attachLimitReached}
+				onUpload={uploadAttached}
+				onDetach={detachFile}
+			/>
+		</CompactPanel>
 	{/if}
 
 	{#if activeChat && receiptsDrawerOpen}
@@ -1197,6 +1995,31 @@
 <style>
 	@import '$lib/lq-ai/styles/practice.css';
 
+	.chat-conversation,
+	.lq-composer-wrap {
+		min-width: 0;
+		min-height: 0;
+	}
+
+	@media (max-width: 1279px) {
+		.compact-matter {
+			flex-direction: column;
+			min-width: 0;
+		}
+
+		.compact-matter .chat-conversation {
+			min-height: 0;
+		}
+
+		.compact-matter .composer-row {
+			flex-wrap: wrap;
+		}
+
+		.compact-matter .lq-composer-wrap {
+			flex: 1 0 100%;
+		}
+	}
+
 	.lq-composer-wrap {
 		/* Anchor for the slash-invocation popover (Wave D.2 Task 7.1).
 		   The popover renders absolutely-positioned just above the
@@ -1209,6 +2032,41 @@
 		bottom: calc(100% + 4px);
 		left: 0;
 		z-index: 50;
+	}
+
+	/* ADR 0038 D1 — beside New harness the composer is never taller than the room the
+	   chat column has. The column does not scroll, so anything taller would push the
+	   message box and Send out of the window with no way to reach them. The strip is
+	   the one part that gives way: what is opened in it scrolls inside it. The
+	   composer itself keeps `overflow: visible`, because the model list and the slash
+	   popover open out of it. */
+	.lq-composer-fit {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.lq-composer-fit > :global(*) {
+		flex-shrink: 0;
+	}
+	.lq-composer-fit .lq-harness-strip {
+		flex-shrink: 1;
+		min-height: 6rem;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	/* ADR 0038 D1 — why Send waits beside New harness, shown under the composer. */
+	.lq-run-hint {
+		color: var(--lq-text-secondary);
+	}
+	.lq-run-recheck {
+		margin-left: 0.25rem;
+		color: var(--lq-accent);
+		text-decoration: underline;
+		background: none;
+		border: 0;
+		padding: 0;
+		cursor: pointer;
 	}
 
 	.lq-composer {
@@ -1225,5 +2083,4 @@
 	.lq-composer::placeholder {
 		color: var(--lq-text-tertiary);
 	}
-
 </style>
