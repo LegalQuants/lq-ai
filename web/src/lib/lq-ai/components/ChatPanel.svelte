@@ -218,6 +218,13 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
+	import LqButton from './shared/LqButton.svelte';
+	import LqSwitch from './shared/LqSwitch.svelte';
+	import LqGroup from './shared/LqGroup.svelte';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
+	import LqAlert from './shared/LqAlert.svelte';
+	import { IconPaperclip, IconSparkles, IconListDetails } from '@tabler/icons-svelte';
 
 	// ---- component props ----
 	export let projectIdFilter: string | undefined = undefined;
@@ -252,11 +259,6 @@
 	let stickyEnabled = false;
 	let stickyDirty = false;
 	let stickyInitChatId: string | null = null;
-
-	function toggleSticky(): void {
-		stickyEnabled = !stickyEnabled;
-		stickyDirty = true;
-	}
 
 	// Wave D.1 T20 follow-on (deferral A + B) — Enhance Prompt tracking.
 	// `pendingEnhancement` holds the most recent "Use enhanced" outcome
@@ -337,19 +339,19 @@
 	// T6 — Enhance Prompt panel reference. Parent calls expansionPanel.open().
 	let expansionPanel: EnhancePromptExpansion | null = null;
 
-	// T12 — Attach-KB modal state. The composer 📎 button mounts the shared
-	// AttachKBModal scoped to the active chat's project. Successful attaches
-	// bubble up to the matter workspace via the `kbsAttached` event so the
-	// matter rail can refresh its KB list. The modal is only meaningful when
-	// the active chat lives inside a project (legal matter); for project-less
-	// chats the 📎 button is hidden.
+	// T12 — Attach-KB modal state. The composer's attach-KB button (IconPaperclip)
+	// mounts the shared AttachKBModal scoped to the active chat's project.
+	// Successful attaches bubble up to the matter workspace via the
+	// `kbsAttached` event so the matter rail can refresh its KB list. The
+	// modal is only meaningful when the active chat lives inside a project
+	// (legal matter); for project-less chats the button is hidden.
 	let attachKbModalOpen = false;
 	const dispatch = createEventDispatcher<{ kbsAttached: { kbIds: string[] } }>();
 
-	// Wave D.1 T19 — Receipts drawer state. The composer 📜 button toggles
-	// the right-side receipts drawer (T18). Open state is restored from
-	// localStorage when the active chat changes, so it survives reloads and
-	// chat switches.
+	// Wave D.1 T19 — Receipts drawer state. The composer's receipts button
+	// (IconListDetails) toggles the right-side receipts drawer (T18). Open
+	// state is restored from localStorage when the active chat changes, so
+	// it survives reloads and chat switches.
 	let receiptsDrawerOpen = false;
 
 	function openAttachKbModal(): void {
@@ -1650,9 +1652,9 @@
 		>
 			{#if activeChat}
 				<div>
-					<h2 class="lq-text-panel-h">
+					<LqTitle order={5}>
 						{activeChat.title || 'Untitled chat'}
-					</h2>
+					</LqTitle>
 					{#if activeChat.project_id}
 						<p class="text-xs text-gray-500">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
@@ -1669,7 +1671,7 @@
 					{/if}
 				</div>
 			{:else}
-				<h2 class="text-sm text-gray-500">Pick or create a chat to start.</h2>
+				<LqText size="sm" tone="secondary">Pick or create a chat to start.</LqText>
 			{/if}
 		</div>
 
@@ -1723,24 +1725,19 @@
 							<!-- Issue #207 finding 4 — opt-in "sticky skills" toggle. Off by
 					     default; when on, the skills applied here stay applied to
 					     follow-up messages in this chat (resets for a new chat). -->
-							<button
-								type="button"
-								role="switch"
-								aria-checked={stickyEnabled}
-								on:click={toggleSticky}
-								data-testid="lq-ai-sticky-toggle"
-								title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
-								class="flex items-center gap-2 text-xs font-medium px-2 py-1 rounded-md border transition-colors {stickyEnabled
-									? 'border-emerald-500 text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40'
-									: 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'}"
-							>
-								<span
-									class="inline-block w-2 h-2 rounded-full {stickyEnabled
-										? 'bg-emerald-500'
-										: 'bg-gray-300 dark:bg-gray-600'}"
-								></span>
-								Keep skills on
-							</button>
+							<LqGroup gap="sm">
+								<LqSwitch
+									checked={stickyEnabled}
+									onCheckedChange={(checked) => {
+										stickyEnabled = checked;
+										stickyDirty = true;
+									}}
+									aria-label="Keep skills on"
+									title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
+									data-testid="lq-ai-sticky-toggle"
+								/>
+								<LqText size="xs" tone="secondary">Keep skills on</LqText>
+							</LqGroup>
 						{/if}
 					</div>
 
@@ -1812,22 +1809,14 @@
 				</CompactPanel>
 
 				{#if sendError ?? inputsError}
-					<div
-						class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
-						role="alert"
-						data-testid="lq-ai-send-error"
-					>
+					<LqAlert tone="danger" data-testid="lq-ai-send-error">
 						{sendError ?? inputsError}
-					</div>
+					</LqAlert>
 				{/if}
 				{#if attachmentWarning}
-					<div
-						class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1"
-						role="status"
-						data-testid="lq-ai-attachment-warning"
-					>
+					<LqAlert tone="warning" role="status" data-testid="lq-ai-attachment-warning">
 						{attachmentWarning}
-					</div>
+					</LqAlert>
 				{/if}
 
 				<div class="composer-row flex items-end gap-2">
@@ -1852,31 +1841,37 @@
 						{/if}
 					</div>
 					{#if streamingMessageId}
-						<button
+						<LqButton
+							variant="filled"
+							tone="danger"
+							size="sm"
 							type="button"
-							class="lq-btn-abort text-sm font-medium"
 							on:click={abortStream}
 							data-testid="lq-ai-abort-btn"
 						>
 							Stop
-						</button>
+						</LqButton>
 					{:else}
 						{#if composerProjectId && !harnessChosen}
-							<button
+							<LqButton
+								variant="outline"
+								tone="accent"
+								size="sm"
 								type="button"
-								class="lq-btn-secondary text-sm"
 								aria-label="Attach knowledge base"
 								title="Attach a knowledge base to this matter"
 								on:click={openAttachKbModal}
 								data-testid="lq-ai-attach-kb-btn"
 							>
-								📎
-							</button>
+								<IconPaperclip size={14} aria-hidden="true" />
+							</LqButton>
 						{/if}
 						{#if !harnessChosen}
-							<button
+							<LqButton
+								variant="outline"
+								tone="accent"
+								size="sm"
 								type="button"
-								class="lq-btn-secondary text-sm"
 								aria-label={enhanceButtonAriaLabel}
 								title={enhanceButtonTitle}
 								on:click={() => expansionPanel?.open()}
@@ -1884,23 +1879,27 @@
 								data-testid="lq-ai-enhance-btn"
 								data-enhance-mode={enhanceIsRefine ? 'refine' : 'enhance'}
 							>
-								✨
-							</button>
+								<IconSparkles size={14} aria-hidden="true" />
+							</LqButton>
 						{/if}
-						<button
+						<LqButton
+							variant="outline"
+							tone="accent"
+							size="sm"
 							type="button"
-							class="lq-btn-secondary text-sm"
 							aria-label="Toggle receipts drawer"
 							title="Toggle receipts"
 							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
 							data-testid="lq-ai-receipts-toggle"
 						>
-							📜
-						</button>
+							<IconListDetails size={14} aria-hidden="true" />
+						</LqButton>
 						<!-- One Send. With New harness chosen it starts a run: one model call, and no task before a plan is approved (ADR 0038 D1). -->
-						<button
+						<LqButton
+							variant="filled"
+							tone="accent"
+							size="sm"
 							type="button"
-							class="lq-btn-send text-sm font-medium disabled:opacity-50"
 							on:click={sendMessage}
 							disabled={harnessChosen ? sendBlock !== null || proposing : !composerText.trim()}
 							title={harnessChosen
@@ -1910,7 +1909,7 @@
 							data-run-mode={harnessChosen ? 'true' : undefined}
 						>
 							{proposing ? 'Sending…' : 'Send'}
-						</button>
+						</LqButton>
 					{/if}
 				</div>
 				{#if harnessBlock}
@@ -2083,54 +2082,5 @@
 	}
 	.lq-composer::placeholder {
 		color: var(--lq-text-tertiary);
-	}
-
-	.lq-btn-send {
-		background: var(--lq-accent);
-		color: white;
-		border: 0;
-		border-radius: var(--lq-radius);
-		padding: 8px 16px;
-		cursor: pointer;
-	}
-	.lq-btn-send:hover {
-		filter: brightness(0.95);
-	}
-	.lq-btn-send:focus-visible {
-		outline: 2px solid var(--lq-accent);
-		outline-offset: 2px;
-	}
-
-	.lq-btn-abort {
-		background: #dc2626;
-		color: white;
-		border: 0;
-		border-radius: var(--lq-radius);
-		padding: 8px 16px;
-		cursor: pointer;
-	}
-	.lq-btn-abort:hover {
-		filter: brightness(0.95);
-	}
-
-	.lq-btn-secondary {
-		background: white;
-		color: var(--lq-accent);
-		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
-		padding: 8px 12px;
-		font-size: 14px;
-		cursor: pointer;
-	}
-	.lq-btn-secondary:hover {
-		background: var(--lq-accent-soft);
-	}
-	.lq-btn-secondary:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-	.lq-btn-secondary:focus-visible {
-		outline: 2px solid var(--lq-accent);
-		outline-offset: 2px;
 	}
 </style>

@@ -82,7 +82,7 @@ Each subsystem (`api/`, `gateway/`, `web/`) is a self-contained service. They ta
 - **Linter:** ESLint per `.eslintrc`.
 - **TypeScript:** required for new files; legacy `.js` files migrate gradually.
 - **Framework:** SvelteKit. The `web/` subdirectory is a fork of OpenWebUI, which is a SvelteKit app — extensions and customizations stay in Svelte. We do **not** mix React into `web/`. The Word add-in (`word-addin/`, M3) uses Office.js with React; the `web/` codebase does not.
-- **Component conventions:** match the OpenWebUI conventions for shared components; use the project's design system primitives rather than ad-hoc Tailwind.
+- **Component conventions:** match the OpenWebUI conventions for shared components (`web/src/lib/components/**`, untouched per ADR 0009). Within `web/src/lib/lq-ai/**`, prefer the `lq` primitives (`web/src/lib/lq-ai/components/shared/`) and their typed token vocabulary for new or changed components. See [ADR 0043](docs/adr/0043-lq-design-system-primitives.md) for the contract and bounded reference implementation; migration of the remaining shell is separate work.
 
 ### Both
 

@@ -46,6 +46,7 @@
 	import CitationLedgerPanel from './CitationLedgerPanel.svelte';
 	import RunMessage from './run/RunMessage.svelte';
 	import TrustPill from './TrustPill.svelte';
+	import LqStack from './shared/LqStack.svelte';
 	import type { PendingGate } from '../chat/toolGate';
 
 	export let message: Message;
@@ -247,7 +248,7 @@
 </script>
 
 {#if message.kind === 'refusal'}
-	<div class="flex flex-col max-w-3xl items-start mb-3" data-testid={`lq-ai-message-${message.id}`}>
+	<LqStack gap={0} align="flex-start" maxWidth="48rem" data-testid={`lq-ai-message-${message.id}`}>
 		<RefusalMessageBubble
 			{message}
 			{currentUserRole}
@@ -255,10 +256,12 @@
 			onOverrideRequested={() => onRefusalOverrideRequested(message)}
 			onExplainerRequested={() => onRefusalExplainerRequested(message)}
 		/>
-	</div>
+	</LqStack>
 {:else}
-	<div
-		class="flex flex-col max-w-3xl {message.role === 'user' ? 'items-end' : 'items-start'} mb-3"
+	<LqStack
+		gap={0}
+		align={message.role === 'user' ? 'flex-end' : 'flex-start'}
+		maxWidth="48rem"
 		data-testid={`lq-ai-message-${message.id}`}
 	>
 		{#if isRun}
@@ -434,5 +437,5 @@
 				{/if}
 			{/if}
 		{/if}
-	</div>
+	</LqStack>
 {/if}

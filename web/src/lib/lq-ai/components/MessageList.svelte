@@ -5,6 +5,7 @@
 	import type { Message } from '../types';
 	import type { PendingGate } from '../chat/toolGate';
 	import MessageBubble from './MessageBubble.svelte';
+	import LqStack from './shared/LqStack.svelte';
 
 	export let messages: Message[] = [];
 	/**
@@ -65,25 +66,27 @@
 	style:min-height={newHarness ? '4rem' : null}
 	data-testid="lq-ai-message-list"
 >
-	{#each messages as msg (msg.id)}
-		<MessageBubble
-			message={msg}
-			isStreaming={streamingMessageId === msg.id}
-			{onAppliedSkillClicked}
-			{currentUserRole}
-			{onRefusalRerun}
-			{onRefusalOverrideRequested}
-			{onRefusalExplainerRequested}
-			originalEnhancedPrompt={enhancementOriginals[msg.content]}
-			gateForMessage={pendingGate && pendingGate.assistantId === msg.id ? pendingGate : null}
-			{gateBusy}
-			{onGateApprove}
-			{onGateDeny}
-			{onGateConnect}
-			{onRunSettled}
-			{onRunUpdate}
-		/>
-	{/each}
+	<LqStack gap={12}>
+		{#each messages as msg (msg.id)}
+			<MessageBubble
+				message={msg}
+				isStreaming={streamingMessageId === msg.id}
+				{onAppliedSkillClicked}
+				{currentUserRole}
+				{onRefusalRerun}
+				{onRefusalOverrideRequested}
+				{onRefusalExplainerRequested}
+				originalEnhancedPrompt={enhancementOriginals[msg.content]}
+				gateForMessage={pendingGate && pendingGate.assistantId === msg.id ? pendingGate : null}
+				{gateBusy}
+				{onGateApprove}
+				{onGateDeny}
+				{onGateConnect}
+				{onRunSettled}
+				{onRunUpdate}
+			/>
+		{/each}
+	</LqStack>
 
 	{#if messages.length === 0}
 		<div class="flex-1 flex items-center justify-center text-gray-400 text-sm italic">
