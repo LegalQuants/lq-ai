@@ -1,11 +1,13 @@
-# ADR 0042 — Workspace events, Today View, and read-only email triage
+# ADR 0044 — Workspace events, Today View, and read-only email triage
 
-- **Status:** Proposed — draft for contributor review, then maintainer review.
+- **Status:** Accepted (2026-10-18) — committee adoption of the ADR text and staged scope.
 - **Draft date:** 2026-10-08.
+- **Acceptance record:** [2026-10-18 committee minutes](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-10-18-weekly/notes.md#decisions-and-agreed-follow-ups),
+  “Decisions and Agreed Follow-Ups” and action O18-04. Adoption does not authorize implementation.
 - **Scope:** Internal workspace signals first; governed, read-only email signals later.
 - **Related roadmap:** PRD DE-201, DE-202, DE-208 and DE-209; existing DE-200 MCP foundation.
 - **Tracks:** [Issue #256](https://github.com/LegalQuants/lq-ai/issues/256).
-- **ADR number:** 0042 (provisional; maintainers may renumber before merge).
+- **ADR number:** 0044 (renumbered from provisional 0042, now assigned to matter-scoped access control).
 
 ## 1. Summary
 
@@ -20,11 +22,14 @@ before the next dependent stage proceeds.
 
 ## 2. Meeting agreement and review process
 
-The contributor reports that the ADR meeting agreed to proceed slowly through small commits and
-incremental, maintainer-reviewed PRs, rather than deliver the work in one large chunk.
+The 2026-10-18 committee meeting adopted this ADR's text and staged scope on an “adopt first,
+refine later” basis, with no objection recorded. The published minutes identify this work as
+PR #677 under its provisional ADR number 0042 and call for the final number and acceptance status
+to be recorded on merge.
 
-This document records that delivery approach. It does **not** claim that every technical detail
-below was approved at the meeting, or invent meeting minutes, attendees or an approval date.
+Acceptance records the event-first boundary, backend Today projection and incremental delivery
+approach. It does not authorize implementation automatically: each stage retains the maintainer,
+security, privacy, lifecycle and skill-review gates below.
 
 The working cycle is:
 
@@ -220,14 +225,14 @@ mutation into this scope.
 
 ## 9. Prerequisites to record during review
 
-Before implementation, record maintainer acceptance or amendment of the event-first boundary and
-backend Today projection. Before real email ingestion, record the approved read-only tools/scopes,
+Acceptance of the event-first boundary and backend Today projection is recorded in the committee
+minutes linked above. Before real email ingestion, record the approved read-only tools/scopes,
 ownership model, permitted retained fields, retention/deletion/export behavior and security-review
 requirements. Before triage, record approved inputs, inference policy and skill-review requirements.
 
-These are implementation gates, not claims of decisions already made. Capture the outcomes in this
-ADR or linked implementation specifications without reopening the agreed incremental delivery
-process.
+The remaining prerequisites are implementation gates. Capture their outcomes in this ADR or linked
+implementation specifications without reopening the accepted architectural boundary or the agreed
+incremental delivery process.
 
 ## 10. Repository references and submission
 
@@ -245,8 +250,6 @@ boundary:
   operator-configured MCP foundation.
 - `docs/contribute/coding-agent-onboarding.md` — contribution and verification workflow.
 
-**Submission order:** Contributor reads this attached draft first. After explicit approval to
-publish, recheck upstream numbering and contribution requirements, place the single ADR in
-`docs/adr/`, and commit/push it to the contributor's fork for a docs-only maintainer-review PR. Do
-not bundle implementation changes, self-merge or mark this proposal accepted on the maintainers'
-behalf.
+**Implementation handoff:** This ADR was adopted on 2026-10-18; PR #677 records the documentation-only
+acceptance closeout. Subsequent implementation proceeds through the bounded PRs and review gates
+in §6. This acceptance record does not claim any stage is shipped or close issue #256.
