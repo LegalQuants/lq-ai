@@ -100,10 +100,24 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
     else if (details.available && !item.hasAttribute('data-selected')) select(item);
   });
 
-  const render = (query: string, index: GuideIndex, data: SearchData[]) => {
-    const section = document.createElement('section'); section.className = 'lq-search-turn';
+  // One turn of the conversation: the question as the reader's bubble, then
+  // LQ's answer beside its mark (the same markup as the introduction's turns).
+  const turn = (query: string) => {
+    const section = document.createElement('section'); section.className = 'lq-answer lq-search-turn';
     section.dataset.turn = String(queries.length);
-    const heading = document.createElement('h3'); heading.textContent = `Search: ${query}`; section.append(heading);
+    const heading = document.createElement('h2'); heading.className = 'lq-ask';
+    heading.id = `lq-search-${history.children.length}`; section.setAttribute('aria-labelledby', heading.id);
+    heading.append(Object.assign(document.createElement('span'), { className: 'sr-only', textContent: 'You searched: ' }), query);
+    const reply = document.createElement('div'); reply.className = 'lq-answer-reply';
+    const avatar = document.createElement('span'); avatar.className = 'lq-docs-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = 'LQ';
+    const body = document.createElement('div'); body.className = 'lq-answer-body';
+    reply.append(avatar, body); section.append(heading, reply);
+    return { section, body };
+  };
+  const say = (body: HTMLElement, text: string) => { const p = document.createElement('p'); p.textContent = text; body.append(p); };
+
+  const render = (query: string, index: GuideIndex, data: SearchData[]) => {
+    const { section, body } = turn(query);
     const list = document.createElement('ul'); list.className = 'lq-search-matches';
     for (const match of data) {
       const url = new URL(match.url, location.origin);
@@ -139,8 +153,9 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       toggle.textContent = 'Details'; toggle.append(Object.assign(document.createElement('span'), { className: 'sr-only', textContent: ` for ${entry.title}` }));
       links.append(text, badge, toggle); item.append(links); list.append(item);
     }
-    if (list.children.length) section.append(list);
-    else { const empty = document.createElement('p'); empty.textContent = 'No matching guides. Try a topic such as Docker, citations, or privacy.'; section.append(empty); }
+    const count = list.children.length;
+    if (count) { say(body, count === 1 ? 'One guide matches.' : `${count} guides match.`); body.append(list); }
+    else say(body, 'No guide matches that. Try a topic such as Docker, citations, or privacy.');
     history.append(section);
     return { section, list };
   };
@@ -156,7 +171,7 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       guides = index;
       const { section, list } = render(query, index, data);
       queries.push(query); input.value = '';
-      status.textContent = `${list.children.length} matching guides for ${query}.`;
+      status.textContent = `${list.children.length} guides match ${query}.`;
       section.scrollIntoView({ block: 'start' });
       const first = list.querySelector<HTMLElement>('li[data-route]');
       if (first && details.available) select(first);
@@ -164,7 +179,12 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       input.focus({ preventScroll: true });
     } catch {
       engine = undefined;
-      status.textContent = 'Search is unavailable in this preview. Browse all documentation or choose a pathway.';
+      // The question still joins the conversation, answered with what to do instead.
+      const message = 'Search is unavailable in this preview. Browse all documentation or choose a pathway above.';
+      const { section, body } = turn(query);
+      delete section.dataset.turn; // not a remembered search, so no turn number
+      say(body, message); history.append(section); section.scrollIntoView({ block: 'start' });
+      status.textContent = message;
     } finally { running = false; button.disabled = false; }
   });
 

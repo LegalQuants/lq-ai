@@ -2,14 +2,29 @@
    typography, diagrams, callouts, tables, and screenshot presentation.
    Explore scrolls the window like every other page: no inner scroll box. */
 /* The composer itself is styled with every page's, in theme-pathways.css. */
-/* A search result is a hairline card on the page, like the redesign's lists:
-   raised ground, 16px rounding, no fill of its own. */
-.lq-search-turn { margin:1.5rem 0; padding:1rem 1.25rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-2xl); background:var(--lq-color-surface-raised); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
-.lq-search-turn h3 { margin:0 0 1rem; font-size:1.125rem; overflow-wrap:anywhere; }
-.sl-markdown-content .lq-search-matches { list-style:none; margin:0; padding:0; }
+/*
+ * Explore is one conversation: the introduction's questions, "Where do I go
+ * from here?", then each search the reader makes, appended in order. Every
+ * turn is drawn the same way, as in the redesign's chat (Main.dc.html): the
+ * question is the reader's bubble on the right — the selected-row grey with a
+ * hairline, ink text, 20px rounding — and the answer is plain text beside the
+ * LQ.AI mark, with no bubble of its own.
+ */
+.lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+.sl-markdown-content .lq-explore :is(h2, h3).lq-ask { margin:0 0 1.25rem auto; padding:0.65rem 1.1rem; width:fit-content; max-width:min(100%, 36rem); font-size:1.125rem; font-weight:600; line-height:1.45; overflow-wrap:anywhere; border:1px solid var(--sl-color-hairline); border-radius:1.25rem; background:var(--lq-color-hover); color:var(--sl-color-white); }
+.lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.875rem; }
+.lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:var(--lq-radius-pill); font-size:0.75rem; font-weight:650; background:var(--lq-accent); color:var(--lq-on-accent); }
+.lq-answer-body { max-width:54rem; min-width:0; padding:0.15rem 0 0; }
+.lq-explore .lq-answer-body p { font-size:1.125rem; line-height:1.65; }
+.lq-explore .lq-answer-body p:not(.lq-diagram-description) { max-width:44rem; }
+.lq-read-next .lq-landing-next { margin:1rem 0 1.25rem; }
+@media (max-width:40rem) { .lq-answer-reply { grid-template-columns:1fr; } .lq-docs-avatar { display:none; } }
+
+/* A search's answer: how many guides matched, then the guides as rows. */
+.sl-markdown-content .lq-search-matches { list-style:none; margin:0.75rem 0 0; padding:0; }
 .lq-search-matches li { margin:0; padding:1rem 0; border-top:1px solid var(--sl-color-hairline); }
 .lq-match-title { font-weight:650; }
-.lq-search-matches p { font-size:1rem; line-height:1.6; }
+.lq-explore .lq-search-matches p { font-size:1rem; line-height:1.6; }
 .lq-match-links { display:flex; align-items:center; flex-wrap:wrap; gap:0.75rem 1rem; font-size:0.9rem; }
 
 /* Selecting a result needs the sidebar, which needs a third column. */

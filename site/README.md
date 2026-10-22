@@ -542,9 +542,12 @@ mobile popover and focus behavior. Explore renders every introductory answer,
 diagram, screenshot, status badge, and source link as ordinary static HTML.
 
 `DocsSearch.astro` and `scripts/docs-search.ts` adapt Iris's composer to the
-existing Pagefind index. Search runs on this origin, loads the engine on demand,
-and presents matching excerpts with section, Markdown and status links; a
-result's title opens the guide's own page. No model request or additional
+existing Pagefind index. Explore is one conversation: the three introductory
+questions, then "Where do I go from here?" (answered with the next steps and
+the pathways), then each search the reader makes, appended in order as their
+question bubble and LQ's answer — how many guides match, then the guides with
+section, Markdown and status links. Search runs on this origin and loads the
+engine on demand; a result's title opens the guide's own page. No model request or additional
 ranking engine is used. The conversation outlives a visit to a guide: this
 tab's questions and the result last selected or opened are kept in
 `sessionStorage` (never sent anywhere; `rememberSearches`/`recallSearches` in

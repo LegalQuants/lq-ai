@@ -1,6 +1,9 @@
 ---
 /**
- * Iris's pathways with a source-backed three-question introduction.
+ * Iris's pathways with a source-backed three-question introduction, told as a
+ * conversation: three questions and answers, then "Where do I go from here?",
+ * answered with the next steps and the pathways. The reader's own searches are
+ * appended after that as further turns (DocsSearch.astro).
  * Guide content is selected at sync time; this component only renders navigation.
  *
  * Drawn in the interface redesign: the next steps are pills (C4), and the
@@ -21,16 +24,19 @@ const base = import.meta.env.BASE_URL;
 
 <div data-lq-explore class="lq-explore">
 <GuidedIntro />
-<DocsSearch />
-<GuideDetails />
+
+<!-- The introduction's last turn: what to read next. The reader's own
+     searches join the conversation after it (DocsSearch.astro). -->
+<section class="lq-answer lq-read-next" aria-labelledby="question-next">
+<h2 id="question-next" class="lq-ask">Where do I go from here?</h2>
+<div class="lq-answer-reply"><span class="lq-docs-avatar" aria-hidden="true">LQ</span><div class="lq-answer-body">
+<p>Pick the path that fits what you're doing, or ask your own question below.</p>
 
 <div class="lq-landing-next">
   <a href={withBase(base, 'start/quickstart')}>Try a fictional document</a>
   <a href={withBase(base, 'start/is-it-for-you')}>Decide whether it fits</a>
   <a href={`${base}llms.txt`}>Docs for agents</a>
 </div>
-
-<h2>Find the guide you need</h2>
 
 <nav class="lq-landing-grid" aria-label="Documentation pathways">
   {
@@ -44,6 +50,11 @@ const base = import.meta.env.BASE_URL;
     ))
   }
 </nav>
+</div></div>
+</section>
+
+<DocsSearch />
+<GuideDetails />
 </div>
 <script>
   import '../../scripts/explore';
