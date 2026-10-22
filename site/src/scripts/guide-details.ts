@@ -54,15 +54,18 @@ export class GuideDetails {
 
     const chips = make('p', undefined, 'lq-details-chips');
     if (entry.kindLabel) chips.append(make('span', entry.kindLabel, 'lq-chip lq-chip--kind'));
-    // The page title's StatusBadge: the word, with its label for screen readers.
-    const badge = make('span', undefined, /^[a-z]+$/.test(entry.status) ? `lq-status lq-status--${entry.status}` : 'lq-status');
-    badge.append(make('span', 'Page status: ', 'sr-only'), entry.status);
-    chips.append(badge);
-    nodes.push(chips);
+    // The page title's StatusBadge, shown like it only for a reviewed page.
+    if (entry.status === 'reviewed') {
+      const badge = make('span', undefined, 'lq-status lq-status--reviewed');
+      badge.append(make('span', 'Page status: ', 'sr-only'), entry.status);
+      chips.append(badge);
+    }
+    if (chips.childNodes.length) nodes.push(chips);
 
     const title = make('h2'); title.id = 'lq-details-title'; title.tabIndex = -1;
     title.append(link(entry.url, entry.title, entry.governance ? 'lq-mark' : undefined));
     nodes.push(title);
+    if (entry.checkedAgainst?.release) nodes.push(make('p', entry.checkedAgainst.release, 'lq-details-release'));
     if (entry.description) nodes.push(make('p', entry.description, 'lq-details-summary'));
 
     const actions = make('p', undefined, 'lq-details-actions');

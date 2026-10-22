@@ -30,7 +30,7 @@ export const collections = {
     loader: glob({ pattern: '**/*.md', base: './src/content/explore' }),
     schema: z.object({ title: z.string(), order: z.number(), route: z.string(), url: z.string(),
       status: z.enum(STATUSES), sources: z.array(z.string()),
-      checkedAgainst: z.object({ sha: z.string(), date: z.string() }),
+      checkedAgainst: z.object({ sha: z.string(), date: z.string(), release: z.string().optional(), released: z.boolean().optional() }),
     }),
   }),
   docs: defineCollection({
@@ -56,11 +56,16 @@ export const collections = {
         sources: z.array(z.string()).default([]),
 
         // --- injected by `npm run sync`, never hand-written -----------------
-        /** The commit the page was checked against, and its date. */
+        /**
+         * The commit the page was checked against, its date, and the release
+         * that commit is in (`released`), or the last release before it.
+         */
         checkedAgainst: z
           .object({
             sha: z.string(),
             date: z.string(),
+            release: z.string().optional(),
+            released: z.boolean().optional(),
           })
           .optional(),
         /**

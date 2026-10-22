@@ -52,6 +52,31 @@ export function head() {
   return headCache;
 }
 
+const releaseCache = new Map();
+
+/**
+ * Which release a page describes: the first `v*` tag (on this branch's
+ * history) that contains the commit it was checked against. If no release
+ * contains it yet, the newest release on this branch, marked unreleased: the
+ * page will first ship after that one. (Not the newest release before the
+ * commit, which for a commit from a long-lived branch is an older release
+ * than the one readers have.) Undefined
+ * for an `uncommitted` stamp or a clone without tags.
+ *
+ * @param {string} sha
+ * @returns {{ release: string, released: boolean } | undefined}
+ */
+export function releaseOf(sha) {
+  if (!sha || sha === UNCOMMITTED) return undefined;
+  if (!releaseCache.has(sha)) {
+    const containing = git(['tag', '--list', 'v*', '--merged', 'HEAD', '--contains', sha, '--sort=version:refname']).split('\n')[0];
+    const newest = containing ? '' : git(['tag', '--list', 'v*', '--merged', 'HEAD', '--sort=-version:refname']).split('\n')[0];
+    releaseCache.set(sha, containing ? { release: containing, released: true }
+      : newest ? { release: newest, released: false } : undefined);
+  }
+  return releaseCache.get(sha);
+}
+
 function lastCommitTouching(paths) {
   if (paths.length === 0) return undefined;
   const line = git(['log', '-1', '--format=%h%x09%cs', '--', ...paths]);

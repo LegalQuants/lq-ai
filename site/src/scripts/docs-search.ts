@@ -141,17 +141,19 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       if (sections.children.length) item.append(sections);
       const links = document.createElement('div'); links.className = 'lq-match-links';
       const text = document.createElement('a'); text.href = entry.markdown; text.textContent = 'Markdown';
-      // The same chip as the page title's StatusBadge: the word, with its
-      // label for screen readers only (the chip capitalises what it shows).
+      // The same chip as the page title's StatusBadge, and like it shown only
+      // for a reviewed page: the word, with its label for screen readers.
       const badge = document.createElement('span');
-      badge.className = /^[a-z]+$/.test(entry.status) ? `lq-status lq-status--${entry.status}` : 'lq-status';
-      const label = document.createElement('span'); label.className = 'sr-only'; label.textContent = 'Page status: ';
-      badge.append(label, entry.status);
+      if (entry.status === 'reviewed') {
+        badge.className = 'lq-status lq-status--reviewed';
+        const label = document.createElement('span'); label.className = 'sr-only'; label.textContent = 'Page status: ';
+        badge.append(label, entry.status);
+      }
       const toggle = document.createElement('button');
       toggle.type = 'button'; toggle.className = 'lq-match-details'; toggle.dataset.lqDetailsToggle = '';
       toggle.setAttribute('aria-controls', details.panel.id); toggle.setAttribute('aria-expanded', 'false');
       toggle.textContent = 'Details'; toggle.append(Object.assign(document.createElement('span'), { className: 'sr-only', textContent: ` for ${entry.title}` }));
-      links.append(text, badge, toggle); item.append(links); list.append(item);
+      links.append(text, ...(badge.childNodes.length ? [badge] : []), toggle); item.append(links); list.append(item);
     }
     const count = list.children.length;
     if (count) { say(body, `${count === 1 ? 'One guide matches' : `${count} guides match`} “${query}”.`); body.append(list); }

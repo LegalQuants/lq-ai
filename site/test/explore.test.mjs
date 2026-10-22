@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { detailsPage, guideDetails } from '../scripts/lib/guide-details.mjs';
 import { exploreSearchHref, recallSearches, rememberSearches, searchFromHash, TourState } from '../src/lib/explore-state.mjs';
+import { releaseLabel } from '../src/lib/release-label.mjs';
+
+describe('the release a page describes', () => {
+  it('names the first release containing the checked commit, or says it is not released yet', () => {
+    assert.equal(releaseLabel({sha:'abc',release:'v0.9.0',released:true}),'Applies to v0.9.0 and later');
+    assert.equal(releaseLabel({sha:'abc',release:'v0.9.0',released:false}),'Newer than v0.9.0 (not yet released)');
+    assert.equal(releaseLabel({sha:'abc'}),undefined,'no tags in the clone: say nothing rather than guess');
+    assert.equal(releaseLabel(undefined),undefined);
+  });
+});
 
 const page = { route:'start/example', url:'/start/example/', title:'A source example', status:'draft',
   contentKind:'how-to', description:'Try it on a fictional NDA.', audience:['operator'],
@@ -20,6 +30,8 @@ describe('guide details for Explore’s sidebar', () => {
     assert.equal(details.description,'Try it on a fictional NDA.');
     assert.deepEqual(details.audience,['operator']);
     assert.equal(details.checkedAgainst.href,'https://github.com/LegalQuants/lq-ai/commit/abc123');
+    assert.equal(details.checkedAgainst.release,null);
+    assert.equal(guideDetails(html,{...page,release:'v0.9.0',released:true}).checkedAgainst.release,'Applies to v0.9.0 and later');
     assert.deepEqual(details.sources,[{path:'docs/example.md',href:'https://github.com/LegalQuants/lq-ai/blob/abc123/docs/example.md'}]);
     assert.ok(!JSON.stringify(details).includes('<'),'no markup reaches the page');
   });

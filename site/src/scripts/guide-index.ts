@@ -2,7 +2,7 @@
 export interface GuideEntry {
   title: string; url: string; status: string; kind: string; kindLabel: string | null;
   description: string; audience: string[]; sections: { id: string; title: string }[];
-  checkedAgainst: { sha: string; date: string; href: string } | null;
+  checkedAgainst: { sha: string; date: string; href: string; release: string | null } | null;
   sources: { path: string; href: string }[];
   pathway: string | null; governance: boolean; markdown: string;
 }

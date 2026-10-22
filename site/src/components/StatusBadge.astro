@@ -20,6 +20,13 @@ const EXPLANATION: Record<Props['status'], string> = {
 };
 ---
 
-<span class:list={['lq-status', `lq-status--${status}`]} title={EXPLANATION[status]}>
-  <span class="sr-only">Page status:</span>{status}
-</span>
+{/* Until 1.0 every page is a draft, so a "draft" chip on every page says
+    nothing and reads as weak. Only a reviewed page carries a chip; the stamp
+    (its release and the commit it was checked against) says how current any
+    page is. `status` stays in the frontmatter, Markdown twins and llms.txt as
+    the list of pages still to review for 1.0. Houfu, 2026-10-23. */}
+{status === 'reviewed' && (
+  <span class:list={['lq-status', `lq-status--${status}`]} title={EXPLANATION[status]}>
+    <span class="sr-only">Page status:</span>{status}
+  </span>
+)}

@@ -7,6 +7,7 @@
 import { load } from 'cheerio';
 import { KIND_LABELS } from './routes.mjs';
 import { blobUrl, REPO_URL } from '../../src/repo.mjs';
+import { releaseLabel } from '../../src/lib/release-label.mjs';
 
 /**
  * Navigation pages (pathway hubs, All documentation) carry no `url` in the
@@ -30,7 +31,8 @@ export function guideDetails(html, page) {
     kind, kindLabel: KIND_LABELS[kind] ?? null,
     description: page.description ?? '', audience: page.audience ?? [],
     sections,
-    checkedAgainst: page.sha ? { sha: page.sha, date: page.date, href: `${REPO_URL}/commit/${page.sha}` } : null,
+    checkedAgainst: page.sha ? { sha: page.sha, date: page.date, href: `${REPO_URL}/commit/${page.sha}`,
+      release: releaseLabel({ release: page.release, released: page.released }) ?? null } : null,
     sources: page.sha ? (page.sources ?? []).map((path) => ({ path, href: blobUrl(page.sha, path) })) : [],
   };
 }

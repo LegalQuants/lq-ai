@@ -61,7 +61,7 @@ import {
 import { OVERVIEW_ROUTE, PATHWAYS, expandPathways } from '../src/pathways.mjs';
 import { resolveViews } from './lib/views.mjs';
 import { addProductScreenshots, productScreenshots, renderScreenshots, SCREENSHOTS_CONFIG, validateScreenshots } from './lib/product-screenshots.mjs';
-import { head, stampFor } from './lib/git.mjs';
+import { head, releaseOf, stampFor } from './lib/git.mjs';
 import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
 import {
@@ -637,7 +637,7 @@ async function main() {
 
     // 4g. Frontmatter the build owns.
     const data = { ...page.data };
-    data.checkedAgainst = { sha: stamp.sha, date: stamp.date };
+    data.checkedAgainst = { sha: stamp.sha, date: stamp.date, ...releaseOf(stamp.sha) };
     data.sourceFiles = stamp.sourceFiles.filter(Boolean);
 
     const target = path.join(CONTENT_DIR, page.outPath ?? page.relPath);
@@ -688,7 +688,7 @@ async function main() {
     await writeFile(path.join(exploreDir, `${question.id}.md`), serializePage({
       title: question.label, order, route: question.route, url: question.url,
       status: question.status, sources: question.sources,
-      checkedAgainst: { sha: question.sha, date: question.date },
+      checkedAgainst: { sha: question.sha, date: question.date, ...releaseOf(question.sha) },
     }, addProductScreenshots(question.markdown, { route: question.route, sources: question.sources, heading: question.heading, html: true })));
   }
 

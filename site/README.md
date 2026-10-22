@@ -250,7 +250,7 @@ each one is the kind of thing a later edit would quietly undo:
 | `PageTitle.astro` | Namespace eyebrow, the H1, the status badge, audience chips. |
 | `Footer.astro` | The stamp, "Edit this page", previous/next, and the project line. |
 | `Stamp.astro` | "Checked against `<sha>` · date" plus every source file linked at that commit. Renders nothing when the sync has not stamped the page. |
-| `StatusBadge.astro` | `draft` / `reviewed`, as a word in a chip whose outline repeats it, never colour alone. |
+| `StatusBadge.astro` | `reviewed`, as a word in a chip whose outline repeats it, never colour alone. A `draft` page shows no chip: until 1.0 every page is one, and `status` is the list of pages still to review. The stamp names the release the page describes (`releaseOf` in `scripts/lib/git.mjs`): the first release containing its checked commit, or "not yet released" after the newest. |
 | `Eyebrow.astro` | The small caption primitive (the classic layout's section label). |
 
 Each override keeps Starlight's landmarks, skip link and focus order: the H1

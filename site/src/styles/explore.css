@@ -64,6 +64,7 @@
 .lq-explore .lq-details h2:focus-visible { outline:2px solid var(--sl-color-text-accent); outline-offset:3px; border-radius:var(--lq-radius-md); }
 .lq-explore .lq-details h2 a { color:var(--sl-color-white); text-decoration:none; }
 .lq-explore .lq-details h2 a:hover { text-decoration:underline; text-underline-offset:0.2em; }
+.lq-explore .lq-details-release { margin-top:0.5rem; font-size:var(--sl-text-sm); font-weight:600; color:var(--sl-color-white); }
 .lq-explore .lq-details-summary { margin-top:0.5rem; font-size:var(--sl-text-sm); line-height:1.55; color:var(--sl-color-gray-2); }
 .lq-explore .lq-details-actions { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem 1rem; margin-top:1rem; font-size:var(--sl-text-sm); }
 .lq-explore .lq-details-actions a { color:var(--sl-color-white); }

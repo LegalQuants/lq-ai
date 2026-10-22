@@ -22,6 +22,7 @@ import { blobUrl, REPO_URL } from '../../repo.mjs';
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES, relatedRoutes } from '../../pathways.mjs';
 import { KIND_LABELS } from '../../../scripts/lib/routes.mjs';
+import { releaseLabel } from '../../lib/release-label.mjs';
 
 interface Props { part: 'about' | 'more' }
 const { part } = Astro.props;
@@ -54,6 +55,7 @@ if (!isNavPage && part === 'more') {
         {audience.map((who) => <li class="lq-chip">{who}</li>)}
       </ul>
     )}
+    {releaseLabel(checkedAgainst) && <p class="lq-facts-release">{releaseLabel(checkedAgainst)}</p>}
     {sha && (
       <p class="lq-facts-checked">
         Checked against <a href={`${REPO_URL}/commit/${sha}`} rel="nofollow"><code>{sha}</code></a>
@@ -102,6 +104,7 @@ if (!isNavPage && part === 'more') {
   .lq-facts :is(p, ul) { margin: 0; }
   .lq-facts ul { list-style: none; padding: 0; display: grid; gap: 0.35rem; }
   .lq-facts-chips, .lq-facts ul.lq-facts-audience { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+  .lq-facts-release { font-size: var(--sl-text-sm); font-weight: 600; color: var(--sl-color-white); }
   .lq-facts-checked { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
   .right-sidebar-panel .lq-facts-checked a { display: inline; }
   .right-sidebar-panel .lq-facts-sources a { font-family: var(--sl-font-mono); }

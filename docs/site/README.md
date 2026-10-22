@@ -101,7 +101,7 @@ it is not mapped from anywhere else:
 title: Is LQ.AI for you?
 description: One sentence that a search result or llms.txt can show.   # required
 audience: [operator, evaluator]   # operator | evaluator | author | contributor | partner | agent
-status: draft                     # draft | reviewed — rendered as a badge
+status: draft                     # draft | reviewed — only "reviewed" shows a badge (1.0 review list)
 sources:                          # repo-relative files this page curates or checks its claims against
   - docs/quickstart.md
   - README.md
@@ -258,7 +258,7 @@ color alone must not communicate a privacy boundary or prerequisite.
 - The **stamp**: "Checked against `<sha>` · <date>" and the list of sources,
   in the footer. For a mapped page this is `stampFor(source, sources)` — the
   newest commit touching the `source:` file or any entry in `sources:`.
-- The **status badge** from `status`.
+- The **status badge** from `status`, on reviewed pages only, and the **release** the page describes beside the stamp.
 - A **`.md` twin** of every page at the page's URL plus `.md`, and the
   site-wide `/llms.txt` and `/llms-full.txt`.
 - **Sidebar** placement from the namespace (the first path segment of

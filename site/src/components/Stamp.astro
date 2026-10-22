@@ -13,21 +13,24 @@
  * renders nothing rather than an empty or invented stamp.
  */
 import { blobUrl, REPO_URL } from '../repo.mjs';
+import { releaseLabel } from '../lib/release-label.mjs';
 
 interface Props {
-  checkedAgainst?: { sha: string; date: string };
+  checkedAgainst?: { sha: string; date: string; release?: string; released?: boolean };
   sourceFiles?: string[];
 }
 
 const { checkedAgainst, sourceFiles = [] } = Astro.props;
 const sha = checkedAgainst?.sha;
 const date = checkedAgainst?.date;
+const release = releaseLabel(checkedAgainst);
 ---
 
 {
   sha && (
     <div class="lq-stamp">
       <p class="lq-stamp__line">
+        {release && <span class="lq-stamp__release">{release}</span>}
         <span>
           Checked against{' '}
           <a href={`${REPO_URL}/commit/${sha}`} rel="nofollow">

@@ -787,6 +787,18 @@
   margin: 0;
 }
 
+/* The release comes first: most readers know their version, not a commit. */
+.lq-stamp__release {
+  font-weight: 600;
+  color: var(--sl-color-white);
+}
+
+.lq-stamp__release::after {
+  content: ' ·';
+  font-weight: 400;
+  color: var(--sl-color-gray-3);
+}
+
 .lq-stamp code {
   font-size: 0.95em;
   background-color: var(--sl-color-bg-inline-code);
