@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.tool_loop import ToolSourceRecord
@@ -25,9 +25,10 @@ from app.citation.authority import (
     store_authority_text,
     verify_and_persist_authority_citations,
 )
+from app.citation.cost import invalidate_cache
 from app.citation.gate import compute_and_record_gate
 from app.citation.ledger import assemble_ledger_entries, resolve_ledger_entries
-from app.citation.verification import VerificationResult
+from app.citation.verification import _MISS, VerificationResult
 from app.models.chat import Chat, Message
 from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.message_authority_citation import (
@@ -519,3 +520,101 @@ async def test_attributed_paraphrase_is_order_invariant(
     assert gate.gate_status == "supported_only"
     assert gate.supported_count == 1
     assert gate.fail_count == 0
+
+
+def _fail_calibration_query_once(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, bool]:
+    """Make the cost-calibration SELECT (the only one using avg()) raise a REAL
+    PostgreSQL statement error (division_by_zero) once; everything else runs
+    normally on the same session."""
+
+    real_execute = db.execute
+    state = {"failed": False}
+
+    async def flaky(stmt, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if not state["failed"] and "avg(" in str(stmt).lower():
+            state["failed"] = True
+            return await real_execute(text("SELECT 1/0"))
+        return await real_execute(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db, "execute", flaky)
+    return state
+
+
+@pytest.mark.parametrize(
+    ("judge_supports", "expected_gate"),
+    [(True, "supported_only"), (False, "flagged")],
+    ids=["judge-supports", "judge-rejects-fail-closed"],
+)
+@pytest.mark.asyncio
+async def test_calibration_sql_failure_does_not_break_citation_ledger_gate_writes(
+    db_session: AsyncSession,
+    fake_storage: dict[str, bytes],
+    monkeypatch: pytest.MonkeyPatch,
+    judge_supports: bool,
+    expected_gate: str,
+) -> None:
+    """A recoverable SQL error in the optional cost calibration read must leave the
+    message transaction usable: citation, ledger and gate writes still complete and
+    commit, earlier writes survive, and FAIL/flagged outcomes stay correct."""
+
+    invalidate_cache()
+    mid, _cid = await _message_and_chat(db_session)  # valid writes BEFORE the lookup
+    await _seed_body(db_session)
+    paraphrase = "Fair use permits reproduction of a protected work without infringement."
+    assert paraphrase not in _BODY
+
+    # Real estimate_authority_content_cost_usd runs; only its SQL read is forced to fail.
+    failure = _fail_calibration_query_once(db_session, monkeypatch)
+    judged: list[str] = []
+
+    async def _judge(
+        *, passage: str, authority_text: str, gateway: object, judge_model: str
+    ) -> VerificationResult:
+        judged.append(passage)
+        if judge_supports:
+            return VerificationResult(
+                verified=True, method="paraphrase_judge", confidence=0.9, partial=True
+            )
+        return _MISS
+
+    monkeypatch.setattr("app.citation.authority_content_judge.judge_authority_content", _judge)
+
+    n = await verify_and_persist_authority_citations(
+        db_session,
+        message_id=mid,
+        assistant_text=f"Under 17 U.S.C. § 107:\n\n> {paraphrase}\n",
+        tool_sources=[_govinfo_rec()],
+        gateway=object(),
+    )
+
+    assert failure["failed"], "calibration failure was never injected"
+    assert judged == [paraphrase], "judge must still run after the recovered failure"
+    assert n == 1
+    rows = await _rows_for(db_session, mid)
+    assert len(rows) == 1
+    assert rows[0].verified is judge_supports
+
+    await assemble_ledger_entries(db_session, message_id=mid)
+    gate = await compute_and_record_gate(db_session, message_id=mid)
+    assert gate is not None
+    assert gate.gate_status == expected_gate
+
+    await db_session.commit()  # the owning transaction is still usable and commits
+
+    # Earlier valid writes survived (message/chat) and the new rows are durable.
+    assert (
+        await db_session.execute(select(Message.id).where(Message.id == mid))
+    ).scalar_one() == mid
+    assert len(await _rows_for(db_session, mid)) == 1
+    ledger = (
+        (
+            await db_session.execute(
+                select(CitationLedgerEntry).where(CitationLedgerEntry.message_id == mid)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert ledger, "ledger entries must be written after the recovered failure"
