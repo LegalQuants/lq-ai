@@ -560,8 +560,9 @@ guide permalinks remain the navigation contract: modified clicks and Open full
 guide use the complete page, and reload at a preview URL opens that same page.
 Back/Forward restores previews; closing restores Explore and its search state.
 Cancelled or superseded guide lookups cannot reopen an old preview.
-Each visited guide retains its scroll and disclosures; All documentation also
-retains its title filter. Preview headings and accessibility references get
+Each visited guide retains its scroll and disclosures. All documentation has no
+title filter of its own — the composer is the one way to type and find — so the
+reader's view of it matches the full page. Preview headings and accessibility references get
 their own IDs, while links retain the original public section anchors.
 
 The reader preserves source/status metadata and direct Markdown links. It uses

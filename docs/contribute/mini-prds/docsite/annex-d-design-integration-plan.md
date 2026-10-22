@@ -425,7 +425,7 @@ Markdown links. It uses no model and retains queries/results in the page session
 complete pages. `GuideReader.astro` and `guide-reader.ts` add adjacent reading on
 wide screens and a native modal elsewhere. They preserve diagrams, images,
 callouts, code, source/status metadata, normal permalinks, section anchors,
-Back/Forward, disclosures, reading position, and the All documentation filter.
+Back/Forward, disclosures and reading position. (The reader's All documentation title filter was removed on 2026-10-22: it read as a second search box, and the composer is the one search.)
 Reloading a preview URL opens the ordinary complete guide.
 
 Playback is optional and uses the existing source-selected answers. Playing,

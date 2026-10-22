@@ -57,15 +57,15 @@ describe('Explore navigation and continuity', () => {
     assert.equal(searchFromHash(new URL(exploreSearchHref('/','x'.repeat(1500)),'https://docs.example').hash).length,1000);
     for(const hash of ['','#','#q=','#q=%20%20','#boundary','#q=%bad','#question=privacy']) assert.equal(searchFromHash(hash),null);
   });
-  it('restores each guide’s own scroll, expanded sections, and list filter', () => {
+  it('restores each guide’s own scroll and expanded sections', () => {
     const state=new ReadingState();
     const expanded=[true,false];
-    state.save('all',{scroll:400,expanded,filter:'NDA'});
-    state.save('start/example',{scroll:100,expanded:[false],filter:''});
+    state.save('all',{scroll:400,expanded});
+    state.save('start/example',{scroll:100,expanded:[false]});
     expanded[0]=false;
-    assert.deepEqual(state.restore('all'),{scroll:400,expanded:[true,false],filter:'NDA'});
-    assert.deepEqual(state.restore('start/example'),{scroll:100,expanded:[false],filter:''});
-    assert.deepEqual(state.restore('unvisited'),{scroll:0,expanded:[],filter:''});
+    assert.deepEqual(state.restore('all'),{scroll:400,expanded:[true,false]});
+    assert.deepEqual(state.restore('start/example'),{scroll:100,expanded:[false]});
+    assert.deepEqual(state.restore('unvisited'),{scroll:0,expanded:[]});
   });
   it('plays only after opt-in, resumes from the paused step, and replays after completion', () => {
     const state=new TourState(3);

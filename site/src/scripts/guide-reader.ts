@@ -25,18 +25,15 @@ export class GuideReader {
   private scroll: HTMLElement;
   private body: HTMLElement;
   private status: HTMLElement;
-  private filter: HTMLInputElement;
 
   constructor(private dialog: HTMLDialogElement, readonly base: string) {
     this.scroll = dialog.querySelector('[data-lq-reader-scroll]')!;
     this.body = dialog.querySelector('[data-lq-reader-body]')!;
     this.status = dialog.querySelector('[data-lq-reader-status]')!;
-    this.filter = dialog.querySelector('[data-lq-reader-filter]')!;
     history.scrollRestoration = 'manual';
     history.replaceState({ ...history.state, lqExplore: true }, '', this.rootUrl);
     dialog.querySelector('[data-lq-reader-close]')!.addEventListener('click', () => this.close());
     dialog.addEventListener('cancel', (event) => { event.preventDefault(); this.close(); });
-    this.filter.addEventListener('input', () => this.filterGuides());
     this.wide.addEventListener('change', () => { if (dialog.open) this.show(); });
     window.addEventListener('resize', () => this.pictures());
     window.addEventListener('popstate', (event) => {
@@ -76,7 +73,7 @@ export class GuideReader {
 
   private save() {
     if (this.current && this.dialog.open) this.states.save(this.current, { scroll: this.scroll.scrollTop,
-      expanded: [...this.body.querySelectorAll('details')].map((details) => details.open), filter: this.filter.value });
+      expanded: [...this.body.querySelectorAll('details')].map((details) => details.open) });
   }
 
   private show() {
@@ -141,10 +138,6 @@ export class GuideReader {
       this.dialog.querySelector('[data-lq-reader-sources]')!.innerHTML = payload.sourceHtml;
       this.status.textContent = '';
       const state = this.states.restore(target.route);
-      this.filter.hidden = target.route !== 'all';
-      this.dialog.querySelector<HTMLElement>('[data-lq-reader-filter-label]')!.hidden = this.filter.hidden;
-      this.filter.value = state.filter;
-      this.filterGuides();
       this.body.querySelectorAll('details').forEach((details, at) => { if (at < state.expanded.length) details.open = state.expanded[at]; });
       this.pictures();
       this.scroll.scrollTop = state.scroll;
@@ -152,7 +145,6 @@ export class GuideReader {
       if (target.anchor && (push || !this.states.visits.has(target.route))) {
         const anchor = this.body.querySelector<HTMLElement>(`[id="${CSS.escape(this.anchors[target.anchor] ?? '')}"]`);
         if (anchor) {
-          if (anchor.closest('[hidden]')) { this.filter.value = ''; this.filterGuides(); }
           for (let parent = anchor.parentElement; parent && parent !== this.body; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
           anchor.scrollIntoView({ block: 'start' });
         }
@@ -186,21 +178,6 @@ export class GuideReader {
       link.removeAttribute('aria-current');
       if (link.dataset.route === route) link.setAttribute('aria-current', 'page');
       else if (link.dataset.pathway === pathway) link.setAttribute('aria-current', route.startsWith('pathways/') ? 'page' : 'true');
-    }
-  }
-
-  private filterGuides() {
-    const term = this.filter.value.trim().toLocaleLowerCase();
-    for (const row of this.body.querySelectorAll<HTMLElement>('[data-lq-filter-entry]')) row.hidden = !row.textContent!.toLocaleLowerCase().includes(term);
-    for (const group of this.body.querySelectorAll<HTMLElement>('.lq-all-group, .lq-all-pathway')) {
-      const rows = [...group.querySelectorAll<HTMLElement>('[data-lq-filter-entry]')];
-      group.hidden = rows.length > 0 && rows.every((row) => row.hidden);
-    }
-    const status = this.dialog.querySelector<HTMLElement>('[data-lq-reader-filter-status]')!;
-    status.hidden = this.filter.hidden;
-    if (!this.filter.hidden) {
-      const count = [...this.body.querySelectorAll<HTMLElement>('[data-lq-filter-entry]')].filter((row) => !row.hidden).length;
-      status.textContent = count ? `${count} matching guide titles.` : 'No guide titles match. Use documentation search to search the guide text.';
     }
   }
 

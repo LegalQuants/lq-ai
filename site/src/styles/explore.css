@@ -41,8 +41,6 @@
 .lq-guide-reader .lq-all-rail { position:static; display:flex; flex-direction:row; flex-wrap:wrap; border:0; }
 .lq-guide-reader .lq-all-group ul, .lq-guide-reader .lq-pathway-links { grid-template-columns:1fr; }
 .lq-guide-reader [id] { scroll-margin-top:1rem; }
-[data-lq-reader-filter] { display:block; width:100%; font:inherit; padding:0.6rem 1rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); background:var(--sl-color-bg); color:var(--sl-color-text); margin:0.5rem 0 1rem; }
-[data-lq-reader-filter][hidden] { display:none; }
 .lq-reader-copy { display:block; margin:1rem 0 0.5rem auto; padding:0.5rem 1rem; min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); font:inherit; font-size:0.9rem; background:var(--sl-color-bg); color:var(--sl-color-text); }
 .lq-guide-reader :is(button,a,input):focus-visible { outline:3px solid var(--sl-color-text-accent); outline-offset:3px; }
 @media (min-width:78rem) {

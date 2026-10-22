@@ -36,10 +36,10 @@ export function searchFromHash(hash) {
 
 export class ReadingState {
   visits = new Map();
-  save(route, { scroll = 0, expanded = [], filter = '' }) {
-    this.visits.set(route, { scroll, expanded: [...expanded], filter });
+  save(route, { scroll = 0, expanded = [] }) {
+    this.visits.set(route, { scroll, expanded: [...expanded] });
   }
-  restore(route) { return this.visits.get(route) ?? { scroll: 0, expanded: [], filter: '' }; }
+  restore(route) { return this.visits.get(route) ?? { scroll: 0, expanded: [] }; }
 }
 
 export class TourState {
