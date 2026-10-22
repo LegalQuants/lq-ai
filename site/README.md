@@ -87,9 +87,11 @@ lazily, reserve their dimensions, scale to the reading column, and link to the
 full-size image. No screenshot gallery runtime or model call runs during a
 site build.
 
-The A/B/C comparison builds share these captures and canonical guides. Build A
-with `SITE_LAYOUT=classic`, B with `SITE_LAYOUT=pathways SITE_EXPERIENCE=cards`,
-and C with `SITE_LAYOUT=pathways SITE_EXPERIENCE=explore` (the experience default).
+The A/B/C comparison builds share these captures and canonical guides. C is the
+site: the committee adopted it on 18 October 2026, so a build with no layout
+variables (`npm run build`, CI, GitHub Pages) is C — `SITE_LAYOUT=pathways` and
+`SITE_EXPERIENCE=explore` are both defaults. A (`SITE_LAYOUT=classic`) and B
+(`SITE_EXPERIENCE=cards`) stay buildable for comparison; the gates run on C.
 B retains Iris's card landing and top pathway tabs; C uses the persistent sidebar,
 search composer and adjacent reader. B's introduction is selected from the same
 canonical overview as C. The classic homepage, both pathway homepages, quickstart,
@@ -101,7 +103,7 @@ tier explanation and table-mode skill section project the relevant captures.
 |---|---|---|
 | `SITE_URL` | `https://legalquants.github.io` | Astro's `site` — the origin in canonical URLs, the sitemap and the machine surface. |
 | `SITE_BASE` | `/lq-ai/` | Astro's `base` — the path the site is served under. |
-| `SITE_LAYOUT` | `classic` | Classic documentation (A) or `pathways` navigation (B/C). |
+| `SITE_LAYOUT` | `pathways` | `pathways` navigation (B/C) or the classic eight-section documentation (A). |
 | `SITE_EXPERIENCE` | `explore` | Within pathways, `cards` preserves B and `explore` selects C. |
 | `DOCS_SITE_DIR` | `../docs/site` | Where page sources are read from. The test suite points it at `test/fixtures/docs-site/`. |
 | `SYNC_OUT_ROOT` | the `site/` root | Where the sync writes `src/content/docs/`, `public/_repo/` and `.sync-manifest.json`. |
@@ -551,7 +553,7 @@ alternatives keep their labels and complete instructions independently of what
 a human has expanded. MDX component examples in code fences are preserved.
 
 Run `npm test` for source-selection, disclosure, export, and route regressions,
-then `SITE_LAYOUT=pathways npm run check` for the complete site gates. Inspect
+then `npm run check` for the complete site gates (C is the default build). Inspect
 the introduction and quickstart in a browser, including opening optional details
 and following the text links. The introduction and quickstart include static diagrams compiled from the
 canonical Markdown. The LiquidUI interaction layer above adds local search,

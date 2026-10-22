@@ -21,10 +21,11 @@ import { rehypeLqTablesSatteri } from './scripts/lib/rehype-lq-tables.mjs';
 import { SITE_BASE, SITE_COMPARE, SITE_EXPERIENCE, SITE_LAYOUT, SITE_URL } from './scripts/lib/paths.mjs';
 
 /**
- * `SITE_LAYOUT=pathways` builds Iris's four-pathway UI from the same pages:
- * its own header and page title, a second stylesheet after theme.css, and
- * route middleware selecting B's tabs or C's sidebar (src/routeData.mjs). The
- * classic layout is untouched unless a compare banner is asked for.
+ * `SITE_LAYOUT=pathways` (the default) builds Iris's four-pathway UI from the
+ * same pages: its own header and page title, a second stylesheet after
+ * theme.css, and route middleware selecting B's tabs or C's sidebar
+ * (src/routeData.mjs). The classic layout (`SITE_LAYOUT=classic`) is untouched
+ * unless a compare banner is asked for.
  */
 const PATHWAYS = SITE_LAYOUT === 'pathways';
 

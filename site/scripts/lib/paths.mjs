@@ -19,7 +19,7 @@
  * | `SYNC_SKIP`     | empty                | page paths to leave out of this run  |
  * | `SITE_BASE`     | `/lq-ai/`            | the deployed base path               |
  * | `SITE_URL`      | `https://legalquants.github.io` | the deployed origin       |
- * | `SITE_LAYOUT`   | `classic`            | `pathways`: Iris's four-pathway UI   |
+ * | `SITE_LAYOUT`   | `pathways`           | `classic`: the eight-section sidebar |
  * | `SITE_EXPERIENCE` | `explore`          | `cards`: B; `explore`: C             |
  * | `SITE_COMPARE`  | empty                | `<label>|<url>`: a compare banner    |
  *
@@ -83,15 +83,16 @@ export const SITE_BASE = (() => {
 export const SITE_URL = (process.env.SITE_URL || 'https://legalquants.github.io').replace(/\/+$/, '');
 
 /**
- * Which navigation the site is built with. `classic` is the eight-section
- * sidebar; `pathways` is the four-pathway layout from Iris's UI review
- * (`src/pathways.mjs`). Both render the same pages from the same sources — the
- * layout is the only thing that differs, which is what lets the two be
- * compared side by side. Anything else is a typo, and a typo that silently
- * built the wrong layout would defeat the comparison.
+ * Which navigation the site is built with. `pathways` — the four-pathway
+ * layout from Iris's UI review (`src/pathways.mjs`) — is the default: with the
+ * default `SITE_EXPERIENCE=explore` it is Version C, which the committee
+ * adopted on 18 October 2026. `classic` is the original eight-section sidebar
+ * (A), kept buildable for comparison. Both render the same pages from the same
+ * sources. Anything else is a typo, and a typo that silently built the wrong
+ * layout would defeat the comparison.
  */
 export const SITE_LAYOUT = (() => {
-  const raw = process.env.SITE_LAYOUT || 'classic';
+  const raw = process.env.SITE_LAYOUT || 'pathways';
   if (raw !== 'classic' && raw !== 'pathways') {
     throw new Error(`SITE_LAYOUT must be "classic" or "pathways", not "${raw}"`);
   }
