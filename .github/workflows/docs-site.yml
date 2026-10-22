@@ -7,6 +7,17 @@ name: Docs site
 #     environment allows `main` only), so a PR build is a check plus a downloadable
 #     artifact until preview hosting is decided — ADR 0028, "Explicitly not decided".
 #   - On a push to main: the same build, then deploy.
+#   - When the Release workflow finishes: rebuild main and deploy. A release's
+#     notes (docs/releases/vX.Y.Z.md) merge to main before its tag is cut
+#     (docs/BUILD-AND-RELEASE.md §3b), so the deploy at that merge runs before
+#     the tag exists, and the changelog index would say "Release notes exist for
+#     vX.Y.Z without a matching tag" until some later docs change reached main.
+#     Pushing the tag starts Release, not this workflow; Release finishing now
+#     brings the docs up to date. `workflow_run` runs in main's context, so the
+#     github-pages rule (main only) is unchanged, and it builds main's own code —
+#     nothing from the Release run is downloaded or trusted.
+#   - On demand (`workflow_dispatch`, repository write access): rebuild and, if
+#     run on main, deploy — e.g. after a tag is added or moved by hand.
 #
 # The site is a curated façade over files that live all over the repository, so
 # the path filter is wide: a change to README.md or to a skill's frontmatter can
@@ -63,6 +74,11 @@ on:
       - "CODE_OF_CONDUCT.md"
       - "NOTICES.md"
       - ".github/workflows/docs-site.yml"
+  # A finished release: its tag now exists, so the changelog index can list it.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -113,10 +129,10 @@ jobs:
 
       - name: Configure Pages
         # Reads the repository's Pages settings so the deploy step has them.
-        # Only on `push`: it calls the Pages API, which a pull_request token
-        # from a fork cannot reach, and nothing in the build depends on its
-        # output — the base path comes from SITE_BASE in astro.config.mjs.
-        if: github.event_name == 'push'
+        # Not on pull_request: it calls the Pages API, which a pull_request
+        # token from a fork cannot reach, and nothing in the build depends on
+        # its output — the base path comes from SITE_BASE in astro.config.mjs.
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Upload the built site
@@ -127,7 +143,10 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A push to main, a finished release (workflow_run runs on main), or a
+    # manual run on main. Never a pull request, and never any other ref — the
+    # github-pages environment would refuse it anyway.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

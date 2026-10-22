@@ -486,6 +486,23 @@ that touches the site or anything it reads, and deploys to GitHub Pages on
 `/reference/configuration/` still described the previous release, and nothing
 would announce it.
 
+It also rebuilds and deploys `main` when the **Release** workflow finishes
+(`workflow_run`), and on demand (`workflow_dispatch`). The release-notes index
+lists the `v*` tags reachable from the commit being built (`git tag --merged
+HEAD`), and a release's notes reach `main` before its tag is cut — so the deploy
+at that merge cannot list the new tag yet, and without the Release trigger the
+index would read "Release notes exist for vX.Y.Z without a matching tag" until
+the next docs change. A release page itself comes from `docs/releases/vX.Y.Z.md`,
+written in the release PR.
+
+**Local builds and tags.** Version tags are read from the clone you build in. A
+clone that also fetches Open WebUI (the `upstream` remote of the `web/` fork)
+can hold Open WebUI's tag of the same name — it used `v0.9.0` and `v0.9.1` before
+LQ.AI did — and git does not overwrite an existing tag on fetch, so a local
+build silently leaves that release out of the index. CI's fresh checkout has
+only LegalQuants' tags. Locally, `git fetch <LegalQuants remote> --tags --force`
+repoints the colliding names at LQ.AI's releases.
+
 ## First draft — known gaps
 
 What is deliberately unfinished in this first draft. None of it fails a gate;
