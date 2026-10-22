@@ -477,6 +477,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
         anonymize=True,
         lq_ai_privileged=True,
         lq_ai_file_ids=["44444444-4444-4444-4444-444444444444"],
+        lq_ai_restore_tool_arguments=True,
     )
     with respx.mock(base_url="https://api.openai.com/v1") as router:
         route = router.post("/chat/completions").mock(
@@ -495,6 +496,7 @@ async def test_chat_completion_strips_lq_ai_extension_keys() -> None:
             await client.aclose()
     sent = json.loads(route.calls.last.request.content)
     for forbidden in (
+        "lq_ai_restore_tool_arguments",
         "minimum_inference_tier",
         "lq_ai_project_minimum_inference_tier",
         "skill_name",

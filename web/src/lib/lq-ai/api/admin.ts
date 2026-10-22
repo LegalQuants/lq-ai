@@ -11,7 +11,10 @@ import type {
 	UsageQuery,
 	AdminUserListResponse,
 	AdminUserListQuery,
-	AdminUserRow
+	AdminUserRow,
+	AdminUserCreateRequest,
+	AdminUserCreatedResponse,
+	AdminPasswordResetResponse
 } from '../types';
 
 export interface AliasFallback {
@@ -80,6 +83,13 @@ export async function deleteAlias(name: string): Promise<void> {
  * full ``GatewayConfig.model_dump`` so unknown fields ride along
  * unmodeled.
  */
+export interface SkillResourcePolicy {
+	reference_read_enabled: boolean;
+	max_files: number;
+	max_read_bytes: number;
+	scope: string;
+}
+
 export interface AdminConfigSnapshot {
 	providers: Array<{
 		name: string;
@@ -89,6 +99,7 @@ export interface AdminConfigSnapshot {
 		models?: string[];
 	}>;
 	model_aliases: Record<string, unknown>;
+	skill_resource_policy?: SkillResourcePolicy;
 	[k: string]: unknown;
 }
 
@@ -221,6 +232,19 @@ export async function listUsers(query: AdminUserListQuery = {}): Promise<AdminUs
 	}
 	const qs = params.toString();
 	return apiRequest<AdminUserListResponse>(`/admin/users${qs ? '?' + qs : ''}`);
+}
+
+/** Create a local account; the generated password is returned in this response only. */
+export async function createUser(body: AdminUserCreateRequest): Promise<AdminUserCreatedResponse> {
+	return apiRequest<AdminUserCreatedResponse>('/admin/users', { method: 'POST', body });
+}
+
+/** Reset credentials and revoke prior sessions without changing MFA enrollment. */
+export async function resetUserPassword(userId: string): Promise<AdminPasswordResetResponse> {
+	return apiRequest<AdminPasswordResetResponse>(
+		`/admin/users/${encodeURIComponent(userId)}/reset-password`,
+		{ method: 'POST' }
+	);
 }
 
 /**

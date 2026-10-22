@@ -25,6 +25,7 @@ from pathlib import Path
 from app.skills.schema import (
     Skill,
     SkillFile,
+    SkillFileRef,
     SkillFrontmatter,
     SkillSource,
     SkillSummary,
@@ -59,6 +60,9 @@ class SkillRecord:
     reference_paths: tuple[Path, ...] = field(default_factory=tuple)
     example_paths: tuple[Path, ...] = field(default_factory=tuple)
     script_paths: tuple[Path, ...] = field(default_factory=tuple)
+    on_demand_paths: tuple[Path, ...] = field(default_factory=tuple)
+    """Files under ``references/``: listed to the model and read one at a
+    time through ``skill_reference_read``, never appended to the prompt."""
 
     def summary(self) -> SkillSummary:
         return derive_summary(self.name, self.frontmatter, source=self.source)
@@ -77,6 +81,7 @@ class SkillRecord:
             reference_files=list(reference_files),
             example_files=list(example_files),
             script_files=list(_read_files(self.folder, self.script_paths)),
+            on_demand_files=_file_refs(self.folder, self.on_demand_paths),
         )
 
 
@@ -92,6 +97,17 @@ def _read_files(folder: Path, paths: tuple[Path, ...]) -> list[SkillFile]:
             continue
         rel = abs_path.relative_to(folder)
         out.append(SkillFile(path=str(rel), content=content))
+    return out
+
+
+def _file_refs(folder: Path, paths: tuple[Path, ...]) -> list[SkillFileRef]:
+    out: list[SkillFileRef] = []
+    for abs_path in paths:
+        try:
+            size = abs_path.stat().st_size
+        except OSError:
+            continue
+        out.append(SkillFileRef(path=abs_path.relative_to(folder).as_posix(), size_bytes=size))
     return out
 
 

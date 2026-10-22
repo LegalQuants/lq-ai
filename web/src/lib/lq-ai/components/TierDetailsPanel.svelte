@@ -16,6 +16,7 @@
 	 */
 	import { createEventDispatcher } from 'svelte';
 	import { onMount } from 'svelte';
+	import { tierDescriptionFor } from '../chat/tierDescriptions';
 
 	export let tier: 1 | 2 | 3 | 4 | 5 | null | undefined = null;
 	export let provider: string | null | undefined = null;
@@ -33,35 +34,7 @@
 
 	const dispatch = createEventDispatcher<{ close: void }>();
 
-	const tierDescriptions: Record<number, { label: string; blurb: string }> = {
-		1: {
-			label: 'Tier 1 — On-prem / air-gapped',
-			blurb:
-				'Inference ran fully inside your environment. No data left the deployment. Local Ollama or self-hosted LLM.'
-		},
-		2: {
-			label: 'Tier 2 — Private cloud (no provider data retention)',
-			blurb:
-				'Inference ran in your private cloud account; the provider has contractual zero-data-retention. Bedrock / Vertex with appropriate agreements.'
-		},
-		3: {
-			label: 'Tier 3 — Commercial enterprise (ZDR addendum)',
-			blurb:
-				'Commercial provider account with a zero-data-retention enterprise agreement. Anthropic / OpenAI enterprise tier with ZDR.'
-		},
-		4: {
-			label: 'Tier 4 — Standard commercial API',
-			blurb:
-				'Standard commercial API account. The provider may retain prompts for abuse review per their published policy.'
-		},
-		5: {
-			label: 'Tier 5 — Consumer / free-tier API',
-			blurb:
-				'Consumer or free-tier API. The provider likely retains prompts and may use them to train future models. Avoid for privileged content.'
-		}
-	};
-
-	$: tierInfo = tier ? tierDescriptions[tier] : null;
+	$: tierInfo = tierDescriptionFor(tier);
 	$: routedPair = provider && model ? `${provider}/${model}` : null;
 	$: providerModelLine =
 		provider && model
@@ -134,8 +107,8 @@
 			<p class="text-xs text-gray-600 dark:text-gray-300">{tierInfo.blurb}</p>
 		{:else}
 			<p class="text-xs text-gray-600 dark:text-gray-300">
-				This message did not record a routed inference tier. Older messages
-				and messages from before D1 / B5 do not carry this metadata.
+				This message did not record a routed inference tier. Older messages and messages from before
+				D1 / B5 do not carry this metadata.
 			</p>
 		{/if}
 
@@ -193,9 +166,8 @@
 
 		<div class="border-t border-gray-200 dark:border-gray-800 pt-2">
 			<p class="text-[11px] text-gray-500 italic">
-				Per the transparency principle (PRD §1.3): every artifact that shapes
-				your output is visible. The router decision behind this message is one
-				of those artifacts.
+				Per the transparency principle (PRD §1.3): every artifact that shapes your output is
+				visible. The router decision behind this message is one of those artifacts.
 			</p>
 		</div>
 	</div>

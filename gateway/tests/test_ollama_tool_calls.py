@@ -280,6 +280,88 @@ def test_tool_result_message_gets_tool_name() -> None:
 
 
 @pytest.mark.unit
+def test_tool_results_without_a_name_take_it_from_the_call_they_answer() -> None:
+    """Two calls in one turn: each result is matched to its own call.
+
+    An OpenAI-shaped caller sends a result with the call's id and no name.
+    Ollama matches by name, so the adapter reads it from the earlier call.
+    """
+    req = _request(
+        messages=[
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_a",
+                        "type": "function",
+                        "function": {"name": "read_document", "arguments": '{"document": 1}'},
+                    },
+                    {
+                        "id": "call_b",
+                        "type": "function",
+                        "function": {"name": "save_note", "arguments": '{"name": "note-a.md"}'},
+                    },
+                ],
+            },
+            {"role": "tool", "content": "text of document 1", "tool_call_id": "call_a"},
+            {"role": "tool", "content": "saved", "tool_call_id": "call_b"},
+            {"role": "tool", "content": "orphan", "tool_call_id": "call_unknown"},
+        ]
+    )
+    _, first, second, orphan = _to_ollama_request(req, model=MODEL, stream=False)["messages"]
+    assert first["tool_name"] == "read_document" and first["tool_call_id"] == "call_a"
+    assert second["tool_name"] == "save_note" and second["tool_call_id"] == "call_b"
+    # A result that answers no call in this request is sent as it came.
+    assert "tool_name" not in orphan and "name" not in orphan
+
+
+@pytest.mark.unit
+def test_tool_call_arguments_keep_their_characters() -> None:
+    """A section mark or a curly quote is sent as itself, not as an escape."""
+    quoted = "“thirty days\u2019 notice”"
+    arguments = {"reason": f"Clause §5 says {quoted}", "name": "note-é.md"}
+    payload = {
+        "model": MODEL,
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"function": {"name": "save_note", "arguments": arguments}}],
+        },
+        "done": True,
+        "done_reason": "stop",
+    }
+    calls = _from_ollama_response(payload, requested_model=MODEL).choices[0].message.tool_calls
+    assert calls is not None
+    raw = calls[0]["function"]["arguments"]
+    assert "§5" in raw and quoted in raw and "\\u" not in raw
+    assert json.loads(raw) == arguments
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("effort", "think"),
+    [("none", False), ("minimal", "low"), ("low", "low"), ("medium", "medium"), ("high", "high")],
+)
+def test_reasoning_effort_becomes_ollama_think(effort: str, think: Any) -> None:
+    req = _request(messages=[{"role": "user", "content": "hi"}], reasoning_effort=effort)
+    assert _to_ollama_request(req, model=MODEL, stream=False)["think"] == think
+
+
+@pytest.mark.unit
+def test_no_reasoning_effort_sends_no_think() -> None:
+    """Unset leaves the model's own default, and the wire shape as it was."""
+    req = _request(messages=[{"role": "user", "content": "hi"}])
+    assert "think" not in _to_ollama_request(req, model=MODEL, stream=False)
+
+
+@pytest.mark.unit
+def test_an_unknown_reasoning_effort_is_refused() -> None:
+    with pytest.raises(ValueError):
+        _request(messages=[{"role": "user", "content": "hi"}], reasoning_effort="maximum")
+
+
+@pytest.mark.unit
 def test_plain_messages_get_no_tool_keys() -> None:
     req = _request(
         messages=[

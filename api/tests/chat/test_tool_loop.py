@@ -836,8 +836,12 @@ async def test_loop_threads_chat_id_into_tool_call_audit(db: AsyncSession, user:
     chat-scoped audit queries miss the rows.
     """
     from app.chat.tool_loop import LoopFinal, run_chat_tool_loop
+    from app.models.chat import Chat
 
-    chat_id = uuid.uuid4()
+    chat = Chat(owner_id=user.id, title="Governed test chat")
+    db.add(chat)
+    await db.flush()
+    chat_id = chat.id
     gateway = AsyncMock()
     gateway.chat_completion.side_effect = [
         _resp_tool_call("search_case_law", {"q": "Brown"}, call_id="c1"),
@@ -900,7 +904,14 @@ class _FakeGateway:
         self._payload = payload
         self.calls: list[tuple[str, str, dict[str, Any]]] = []
 
-    async def call_tool(self, provider: str, op: str, args: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(
+        self,
+        provider: str,
+        op: str,
+        args: dict[str, Any],
+        *,
+        max_allowed_tier: int | None = None,
+    ) -> dict[str, Any]:
         self.calls.append((provider, op, args))
         return {"payload": self._payload}
 

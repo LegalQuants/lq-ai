@@ -43,16 +43,57 @@ Logged events (verified against `action=` literals emitted by `api/app/`; the li
 - **Saved prompts:** `saved_prompt.create`, `saved_prompt.update`, `saved_prompt.delete`.
 - **Teams:** `team.created`, `team.updated`, `team.deleted`, `team.member_added`, `team.member_removed`, `team.member_role_changed`.
 - **Admin / organization:** `organization_profile.updated`, `tier_policy.updated`.
-- **Privileged cross-user reads ("audit the auditor"):** `auditor.ledger_viewed`, `auditor.sources_viewed`, `auditor.citations_viewed`, `auditor.session_ledger_viewed`, `auditor.receipts_viewed`, `auditor.receipts_exported` — written when an admin/auditor reads another user's data; `details.viewed_user_id` records whose data was read.
+- **Autonomous sessions and governed runs:** `autonomous_session.<event>` rows written by the tool chokepoint, and, for a governed run (ADR 0038, proposed), `orchestration.<event>` rows written by the run engine (planning, plan saved, approved, rejected, children admitted, effects, tasks and the answer delivered, halted, closed). A row is marked from the matter its session or run is in, including the two rows a halt request writes and the `run-now` row, which the API routes write themselves. A run in no matter is marked from the terms it took on when it was accepted: it is privileged exactly when a matter that holds one of its selected files (by upload, attachment or an attached knowledge base) is, and the row's `privilege_basis` is `run terms: a selected file is held by a privileged matter`. Rows written before this marking existed carry none, for a session in a privileged matter as well, and are not backfilled.
+- **Cross-owner reads:** `auditor.<event>`, written when an admin or the `auditor` role reads another owner's resource, before anything is returned: `ledger_viewed`, `sources_viewed`, `citations_viewed`, `session_ledger_viewed`, `receipts_viewed`, `receipts_exported`, and, for a governed run, `run_viewed` and `run_trace_viewed`. `details` holds `viewed_user_id` only. These rows are not privilege-marked, for any resource.
 
 All writes go through one helper — `app.audit.audit_action()` in [api/app/audit.py](../../api/app/audit.py) — so every row populates `privilege_marked` / `privilege_basis` consistently and captures `ip_address` / `user_agent` / `request_id` uniformly when a `Request` is available. The `auditor.*` rows go through the closed-enum wrapper `app.auditor_audit.auditor_audit()`, which calls the same helper.
+
+Autonomous `retrieve_chunks` ownership refusals write
+`action='autonomous_session.tool_call'` with
+`details={"tool": "retrieve_chunks", "outcome": "ownership_denied"}` (#494).
+The existing predicates reject foreign, unknown, archived KBs and deleted files
+without distinguishing their existence to the agent. Invalid arguments and
+other tool failures do not receive this outcome. It is a refusal signal for
+investigation, not proof of prompt injection. No query, document text, raw
+arguments, results, or exception message is added to the row.
+
+Each ownership refusal has one closing `ownership_denied` row after the initial
+`started` row. The analysis loop recognizes the already-audited refusal and
+continues with its existing `ValueError` observation without adding a generic
+`error` row (#656). Ordinary validation and dispatch errors retain their generic
+failure audit. Rows use the caller's transaction: they persist on its commit
+and disappear on rollback. An audit-write failure remains an
+error and cannot grant access. These rows are not an independent durable
+incident log, and #494 does not add alerts or alter orchestration-scope refusals.
+
+ADR 0038 adds two ways to call `retrieve_chunks` (D4 and D5): a bounded read
+of one file's text, and a keyword search of the knowledge bases an approved
+plan lists. Both are refused outside a governed run, before any ownership
+predicate is reached, and the chokepoint writes no audit row of its own for
+that refusal. The whole-file read is unchanged: a session that is not a
+governed run still reaches it on the file predicate.
+
+In a governed run, the orchestration boundary checks the file of a bounded
+read against the run's selection first, and its refusal is a scope refusal.
+The read then sits behind the same file predicate as the whole-file read,
+and a refusal there writes the same `ownership_denied` row.
+
+The keyword search does not refuse a knowledge base that has lapsed. One
+that the owner archived, or that is no longer attached to the run's matter, is
+left out of the search by the owner's own act; no row is written for it. One
+that has become another owner's, or no longer exists, is also left out, and the
+call writes one `ownership_denied` row (the same row the other retrieval modes
+write: no identifier, no query) and goes on with the rest. The step's result
+gives how many were listed and how many were searched. The model does not name
+the knowledge bases in that call: they come from the approved plan.
 
 ## What is NOT logged
 
 - **Plaintext message content.** `chat.message_sent` records the chat and message ids in `details`, not the message body. Inference-routing has its own table (`inference_routing_log`) with provider, model, token counts and latency — also without message content, per PRD §4.
 - **Provider API responses.** Same reasoning; the gateway records routing metadata only.
 - **Cryptographic material.** `JWT_SECRET`, master keys, the field-level encryption keys, and provider API keys are never logged — see [encrypted-keys.md](encrypted-keys.md) for the key-handling contract.
-- **Ordinary read traffic.** M1 audits state-changing actions (PRD §5.3); a user reading their own data is not audited. The exception is privileged cross-user reads: when an admin/auditor reads another user's ledger, sources, citations, session ledger or receipts, the handler writes an `auditor.*` row (listed above) and commits it explicitly. Inference routing decisions land in `inference_routing_log` regardless.
+- **Read traffic.** M1 audits state-changing actions (PRD §5.3). Read endpoints are not audited unless they touch privileged data via the inference path, in which case the routing decision lands in `inference_routing_log`. The exception is a cross-owner read by an admin or the `auditor` role, which writes an `auditor.<event>` row before anything is returned (for governed runs, `auditor.run_viewed` and `auditor.run_trace_viewed`).
+- **What a cross-owner read returns differs by resource.** The chat ledger, message sources, citations, the autonomous-session ledger and the chat receipts give a privileged reader the evidence layer: cited passages and their checks, sources, routing and audit events, and message ids, roles and token counts, never a message's text (the auditor-role design, 2026-07-02). A governed run's read (ADR 0038 ruling 10) returns the run as its owner sees it: the request and the thread excerpt the plan was made from, the plan, each task's findings and notes, the answer and, on the trace, each call's prompt and arguments and what each model wrote (not the document text a read returned). That is wider than the other reads. It is built as ruled, it is not yet in the auditor-role definition, and ADR 0038 is not ratified.
 
 ## Retention
 

@@ -88,6 +88,7 @@ before(() => {
 		spec.startsWith('wave-') ||
 		spec.startsWith('lq-ai-') ||
 		spec.startsWith('matter-intake') ||
+		spec.startsWith('de263-') ||
 		/^m\d+-/.test(spec);
 	if (!isLqAiSpec) {
 		cy.registerAdmin();

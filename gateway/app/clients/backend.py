@@ -7,9 +7,9 @@ This module owns:
 * :class:`BackendClient` — long-lived ``httpx.AsyncClient`` pool wired
   to the ``LQ_AI_API_URL`` base; stamps the shared
   ``X-LQ-AI-Gateway-Key`` header on every outbound call.
-* :class:`SkillCache` — process-local TTL cache keyed by skill name.
-  Default TTL is 60s. Invalidation is implicit (TTL expiry); the
-  human-attestation pipeline tolerates seconds-to-minutes of staleness.
+* :class:`SkillCache` — process-local TTL cache for registry-only reads.
+  Default TTL is 60s. User-resolved skills are fetched on each invocation
+  so replacements and access changes agree with the backend's current binding.
 * :func:`get_backend_client` / :func:`set_backend_client` —
   dependency-injection seam for tests; the lifespan in
   ``app/main.py`` constructs the singleton at startup.
@@ -125,6 +125,15 @@ class SkillFile(BaseModel):
     content: str
 
 
+class SkillFileRef(BaseModel):
+    """A skill file that is listed in the prompt and read on request."""
+
+    model_config = ConfigDict(extra="allow")
+
+    path: str
+    size_bytes: int = 0
+
+
 class Skill(BaseModel):
     """Cached skill content, mirroring ``api/`` 's ``Skill`` shape.
 
@@ -149,6 +158,7 @@ class Skill(BaseModel):
     output_format: str | None = None
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
+    on_demand_files: list[SkillFileRef] = Field(default_factory=list)
 
 
 # --- Cache -------------------------------------------------------------------
@@ -299,13 +309,15 @@ class BackendClient:
         HTTP and populates the cache before returning. Failures raise
         the appropriate typed exception; nothing is cached on failure.
 
-        When ``user_id`` is set, the backend resolves a user-scope
-        shadow before the filesystem-canonical registry (ADR 0012).
-        The cache keys on ``(name, user_id)`` so user A's shadow
-        doesn't bleed into user B's chats — and the
-        registry-only view (when ``user_id`` is omitted) gets its
-        own cache slot too.
+        When ``user_id`` is set, bypass the TTL cache: the backend resolves
+        current user/team replacements and membership on every invocation.
+        Otherwise a newly selected replacement could receive an older skill's
+        instructions while its tools are bound to the replacement. Registry-only
+        callers retain their cache slot and TTL.
         """
+
+        if user_id is not None:
+            return await self._fetch_skill(name, request_id=request_id, user_id=user_id)
 
         key = _skill_cache_key(name, user_id)
         cached = await self._cache.get(key)

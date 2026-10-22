@@ -21,6 +21,8 @@ backbone:
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import dataclass
 
 import pytest
@@ -303,6 +305,45 @@ def test_pseudonymize_into_resolves_overlapping_spans() -> None:
     # substituted into the middle of "PERSON_0001".
     assert out == "PERSON_0001 signed the agreement."
     assert mapper.reverse() == {"PERSON_0001": "John Smith"}
+
+
+@pytest.mark.unit
+def test_two_threads_never_run_the_analyzer_at_once() -> None:
+    """One analyzer is shared by the whole process, and no two analyses overlap.
+
+    The request pre-pass runs on a worker thread so a long document does not stop the
+    event loop, while the bound-tool path still analyses on the loop's thread. The lock
+    in the engine is what keeps the two apart; without it the analyzer is entered by
+    several threads at once.
+    """
+
+    class _Watching:
+        def __init__(self) -> None:
+            self.inside = 0
+            self.most = 0
+            self._guard = threading.Lock()
+
+        def analyze(self, *, text: str, language: str = "en", **_kwargs: object) -> list[_Span]:
+            with self._guard:
+                self.inside += 1
+                self.most = max(self.most, self.inside)
+            time.sleep(0.05)
+            with self._guard:
+                self.inside -= 1
+            return []
+
+    watching = _Watching()
+    anonymizer = Anonymizer(analyzer=watching)
+    threads = [
+        threading.Thread(target=anonymizer.pseudonymize_into, args=("Some text", PseudonymMapper()))
+        for _ in range(8)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert watching.most == 1
 
 
 # ---------------------------------------------------------------------------

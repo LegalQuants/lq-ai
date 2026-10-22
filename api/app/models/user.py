@@ -6,11 +6,16 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.dialects.postgresql import ARRAY, CITEXT, INET, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+# PRD §5.2: the roles that may change things. ``viewer`` reads what it owns
+# and ``auditor`` reads across owners; neither may act. One definition, so
+# that a route's gate and a service's own check cannot drift apart.
+MUTATING_ROLES: frozenset[str] = frozenset({"admin", "member"})
 
 
 class User(Base):
@@ -45,6 +50,10 @@ class User(Base):
     # Task B2 and migration 0002.
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
+    )
+    # Incremented atomically with password changes to invalidate issued JWTs.
+    credential_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )
     totp_secret: Mapped[str | None] = mapped_column(String, nullable=True)
     recovery_codes: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)

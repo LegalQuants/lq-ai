@@ -13,7 +13,7 @@ ADR-first workflow rather than letting a PRD sentence stand in for it.
 review), ADR [0023](0023-uv-lockfiles-gateway-api.md) (lockfiles and supply-chain
 posture, extended here to a new npm tree), ADR
 [0025](0025-release-versioning-and-pipeline-ordering.md) (release versions; the site is
-latest-only until 1.0), ADR 0031 (headless / API-only use, proposed in PR #564: the site
+latest-only until 1.0), ADR 0031 (headless / API-only use, accepted 2026-10-04: the site
 does not document building against LQ.AI), PR #511 (the mini-PRD whose requirements this
 ADR tests against).
 

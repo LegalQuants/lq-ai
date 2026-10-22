@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>PR 282 — reference components</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+	</head>
+	<body class="lq-shell" style="padding: 32px">
+		<h1>PR 282 · reference components</h1>
+		<p>Local review fixture. No account or backend connection.</p>
+		<div id="app"></div>
+		<script type="module">
+			import { mount } from 'svelte';
+			import Fixture from '/src/lib/lq-ai/__tests__/fixtures/DesignPrimitives.svelte';
+			import '/src/tailwind.css';
+			import '/src/app.css';
+			import '/src/lib/lq-ai/styles/practice.css';
+			import '/src/lib/lq-ai/styles/typography.css';
+			mount(Fixture, { target: document.getElementById('app') });
+		</script>
+	</body>
+</html>

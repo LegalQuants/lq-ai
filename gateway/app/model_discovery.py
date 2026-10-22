@@ -108,8 +108,8 @@ class DiscoveredModel:
     configured provider name (``"anthropic-prod"``, ``"ollama-local"``)."""
 
     lq_ai_kind: str
-    """``"alias"`` for configured aliases; ``"provider_native"`` for live
-    discoveries."""
+    """``"alias"`` for aliases; ``"provider_native"`` for provider model IDs
+    from live discovery or the operator's explicit Bedrock catalogue."""
 
     routed_inference_tier: int | None = None
     """Derived tier the request would land at if dispatched. ``None`` for
@@ -584,7 +584,7 @@ class ModelDiscoverer:
     # --- Aggregator -----------------------------------------------------------
 
     async def list_all(self, config: GatewayConfig) -> list[DiscoveredModel]:
-        """Return aliases + every reachable provider-native model.
+        """Return aliases, live discoveries and explicitly configured Bedrock models.
 
         Called by ``GET /v1/models``. Discovery RPCs run concurrently
         (one per provider per source) so the slowest upstream only gates
@@ -644,11 +644,39 @@ class ModelDiscoverer:
                 )
             )
 
-        # 2. Live discovery — one task per (provider, source) pair.
+        # 2. Configured Bedrock catalogue and live discovery tasks for other providers.
         tasks: list[asyncio.Task[list[DiscoveredModel]]] = []
         annotators: list[ProviderConfig] = []
         for provider in config.providers:
             if not provider.enabled:
+                continue
+            if provider.type == "bedrock" and provider.bedrock_protocol is not None:
+                # No AWS catalogue/IAM expansion: publish only the explicitly
+                # configured models when a key is configured. This is not an
+                # entitlement or live-inference claim.
+                try:
+                    key = self._resolver().resolve(
+                        provider_name=provider.name,
+                        api_key_env=provider.api_key_env,
+                        api_key_encrypted=provider.api_key_encrypted,
+                    )
+                except ValueError:
+                    key = None
+                if key:
+                    for native_model in provider.models:
+                        out.append(
+                            DiscoveredModel(
+                                id=f"{provider.name}/{native_model}",
+                                owned_by=provider.name,
+                                lq_ai_kind="provider_native",
+                                provider_type="bedrock",
+                                routed_inference_tier=derive_routed_inference_tier(
+                                    provider=provider,
+                                    native_model=native_model,
+                                    inference_tiers=config.inference_tiers,
+                                ),
+                            )
+                        )
                 continue
             if provider.type == "ollama":
                 tasks.append(asyncio.create_task(self.discover_ollama(provider)))
@@ -663,12 +691,11 @@ class ModelDiscoverer:
                 # options alongside aliases.
                 tasks.append(asyncio.create_task(self.discover_openai(provider)))
                 annotators.append(provider)
-            # Vertex / Bedrock discovery still deferred — both have
+            # Vertex / live Bedrock catalogue discovery remains deferred — both have
             # provider-specific catalog APIs (boto3 list_foundation_models,
             # GCP discovery client) that would pull large dependency
-            # surfaces. Operators wanting Vertex/Bedrock-native model
-            # names address them via aliases until those discoverers
-            # land.
+            # surfaces. Vertex model names remain addressable via aliases;
+            # Bedrock uses the explicit catalogue above.
 
         if tasks:
             results = await asyncio.gather(*tasks, return_exceptions=True)

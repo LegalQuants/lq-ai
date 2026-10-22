@@ -7,6 +7,13 @@ Implements the test DB strategy locked in CONTRIBUTING.md:
 - per-test fixture: opens a connection, BEGIN, yields an AsyncSession,
   ROLLBACK on teardown — so each test starts from the migrated baseline
   with no leakage from prior tests
+- after migrating, a copy of the migrated database is kept as a template, so
+  a test whose code commits through its own engine and reads global state
+  can take a fresh database of its own (``isolated_db_url``)
+- arq's pool creation fails at once (``_arq_unreachable``): no Redis runs in
+  the test environment, and arq's retries otherwise cost ~5 s per enqueue
+- bcrypt hashes at its minimum cost (``BCRYPT_ROUNDS=4``) unless the
+  environment sets one: at the production default each hash takes ~0.2 s
 
 Test database name pattern: lq_ai_test_<random_hex_8>. Created from a
 connection to the default `postgres` database; dropped at session teardown.
@@ -23,7 +30,7 @@ import os
 import secrets
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import pytest
 import pytest_asyncio
@@ -42,11 +49,70 @@ if TYPE_CHECKING:
 
 API_DIR = Path(__file__).resolve().parent.parent
 
+# The suite hashes passwords, refresh tokens and MFA recovery codes thousands
+# of times (an MFA enrollment alone hashes ten codes), and at the production
+# cost of 12 each bcrypt hash or check takes ~0.2 s. Cost 4 is bcrypt's
+# minimum. Verification follows whatever cost a hash was minted with, so the
+# code under test is the same; only the work factor differs, as the
+# ``bcrypt_rounds`` setting allows for CI. Set before any test imports
+# ``app.config``, so the cached settings see it.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")
+
 
 def _split_url(url: str) -> tuple[str, str]:
     """Split a SQLAlchemy URL into (prefix-without-db, db-name)."""
     base, dbname = url.rsplit("/", 1)
     return base, dbname
+
+
+async def _create_database(base: str, name: str, template: str | None = None) -> None:
+    """Create ``name`` on the server at ``base``, optionally copied from ``template``."""
+    admin_engine = create_async_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        async with admin_engine.connect() as conn:
+            clause = f' TEMPLATE "{template}"' if template else ""
+            await conn.execute(text(f'CREATE DATABASE "{name}"{clause}'))
+    finally:
+        await admin_engine.dispose()
+
+
+async def _drop_database(base: str, name: str) -> None:
+    """Drop ``name``, force-disconnecting any lingering sessions first."""
+    admin_engine = create_async_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        async with admin_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :db AND pid <> pg_backend_pid()"
+                ),
+                {"db": name},
+            )
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}"'))
+    finally:
+        await admin_engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _arq_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make arq's pool creation fail at once instead of retrying for ~5 s.
+
+    No Redis runs in the test environment, locally or in CI's API job. arq's
+    ``create_pool`` defaults to five connection retries a second apart, and
+    ``app.workers.queue`` keeps a pool only once one connects, so every
+    enqueue in a test waited about five seconds before the helper logged its
+    warning and returned False. Raising the same error at once keeps that
+    failure path and drops the wait. A test that needs a working pool patches
+    ``app.workers.queue._get_pool`` / ``_get_m3a6_pool`` or the enqueue helper,
+    as before; those patches sit above this one.
+    """
+    import arq
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    async def _refuse(*_args: object, **_kwargs: object) -> NoReturn:
+        raise RedisConnectionError("arq has no Redis in the test environment")
+
+    monkeypatch.setattr(arq, "create_pool", _refuse)
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -64,35 +130,22 @@ async def test_db_url() -> AsyncIterator[str]:
 
     base, _orig_db = _split_url(runtime_url)
     test_db = f"lq_ai_test_{secrets.token_hex(4)}"
-    admin_url = f"{base}/postgres"
-    test_url = f"{base}/{test_db}"
 
-    # Create the test database
-    admin_engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
-    async with admin_engine.connect() as conn:
-        await conn.execute(text(f'CREATE DATABASE "{test_db}"'))
-    await admin_engine.dispose()
-
+    await _create_database(base, test_db)
     try:
-        yield test_url
+        yield f"{base}/{test_db}"
     finally:
-        # Drop the test database. Force-disconnect any lingering sessions.
-        admin_engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
-        async with admin_engine.connect() as conn:
-            await conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": test_db},
-            )
-            await conn.execute(text(f'DROP DATABASE IF EXISTS "{test_db}"'))
-        await admin_engine.dispose()
+        await _drop_database(base, test_db)
 
 
 @pytest_asyncio.fixture(scope="session")
-async def test_engine(test_db_url: str) -> AsyncIterator[AsyncEngine]:
-    """Run Alembic migrations against the test DB; yield an engine bound to it."""
+async def pristine_db_name(test_db_url: str) -> AsyncIterator[str]:
+    """Run Alembic migrations against the test DB, then keep a copy as a template.
+
+    The copy is taken before anything else connects (Alembic's engine uses
+    ``NullPool``), because Postgres refuses ``CREATE DATABASE ... TEMPLATE``
+    while the template has sessions. Yields the copy's database name.
+    """
     # Run migrations via Alembic. Alembic uses sync drivers internally;
     # convert the asyncpg URL to plain postgresql:// for the alembic command.
     sync_url = test_db_url.replace("postgresql+asyncpg://", "postgresql://", 1)
@@ -113,11 +166,41 @@ async def test_engine(test_db_url: str) -> AsyncIterator[AsyncEngine]:
         else:
             os.environ["DATABASE_URL"] = saved
 
+    base, test_db = _split_url(test_db_url)
+    pristine = f"{test_db}_pristine"
+    await _create_database(base, pristine, template=test_db)
+    try:
+        yield pristine
+    finally:
+        await _drop_database(base, pristine)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_engine(test_db_url: str, pristine_db_name: str) -> AsyncIterator[AsyncEngine]:
+    """Yield an engine bound to the migrated test DB (migrations ran in ``pristine_db_name``)."""
     engine = create_async_engine(test_db_url, future=True)
     try:
         yield engine
     finally:
         await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def isolated_db_url(test_db_url: str, pristine_db_name: str) -> AsyncIterator[str]:
+    """A freshly migrated database of this test's own, dropped afterwards.
+
+    For code under test that commits through its own engine and reads global
+    state ("how many admins exist?"). Rows that other tests on the same xdist
+    worker committed to the shared test DB cannot reach it, and nothing it
+    commits reaches them. Copying the template takes well under a second.
+    """
+    base, _ = _split_url(test_db_url)
+    name = f"lq_ai_iso_{secrets.token_hex(4)}"
+    await _create_database(base, name, template=pristine_db_name)
+    try:
+        yield f"{base}/{name}"
+    finally:
+        await _drop_database(base, name)
 
 
 @pytest_asyncio.fixture

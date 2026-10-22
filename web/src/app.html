@@ -44,12 +44,23 @@
 			// On page load or when changing themes, best to add inline in `head` to avoid FOUC
 			(() => {
 				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
+				// LQ.AI uses one light palette, including before Svelte hydrates.
+				const isLQAI = () =>
+					window.location.pathname === '/lq-ai' || window.location.pathname.startsWith('/lq-ai/');
+				const applyLQAILightTheme = () => {
+					document.documentElement.classList.remove('dark', 'oled-dark', 'her');
+					document.documentElement.classList.add('light');
+					document.documentElement.style.colorScheme = 'light';
+					metaThemeColorTag.setAttribute('content', '#ffffff');
+				};
 
-				if (!localStorage?.theme) {
+				if (!isLQAI() && !localStorage?.theme) {
 					localStorage.theme = 'system';
 				}
 
-				if (localStorage.theme === 'system') {
+				if (isLQAI()) {
+					applyLQAILightTheme();
+				} else if (localStorage.theme === 'system') {
 					// LQ.AI: dark mode isn't a supported deployment theme, and most
 					// LQ.AI-authored components (ChatPanel, AppSidebar, etc.) have no
 					// dark: styling at all. Resolving 'system' to the OS color-scheme
@@ -87,6 +98,11 @@
 				preload.setAttribute('fetchpriority', 'high');
 				document.head.appendChild(preload);
 
+				window.matchMedia('(prefers-color-scheme: dark)').addListener(() => {
+					if (isLQAI()) {
+						applyLQAILightTheme();
+					}
+				});
 				const isDarkMode = document.documentElement.classList.contains('dark');
 
 				const logo = document.createElement('img');

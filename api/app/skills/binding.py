@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ from app.errors import ToolNotGranted
 from app.models.team import TeamMember
 from app.models.user_skill import UserSkill
 from app.skills.capabilities import SkillCapabilities
+from app.skills.references import ReferenceSnapshot
 from app.skills.registry import MutableSkillRegistry, SkillRecord
 
 
@@ -25,6 +27,15 @@ class SkillBinding:
     digest: str
     capabilities: SkillCapabilities
     bundle_digest: str | None = None
+    reference_paths: tuple[str, ...] = ()
+    """The skill's on-demand ``references/`` files, as paths relative to the
+    skill folder. Their contents are covered by ``digest``."""
+    reference_snapshots: tuple[tuple[str, ReferenceSnapshot], ...] = field(
+        default=(), repr=False, compare=False
+    )
+    """Ephemeral bytes from the hashed artifact; never policy, audit, or trace data."""
+    reference_folder: Path | None = field(default=None, repr=False, compare=False)
+    instructions: str = field(default="", repr=False, compare=False)
 
 
 def bind_record(record: SkillRecord) -> SkillBinding:
@@ -39,6 +50,12 @@ def bind_record(record: SkillRecord) -> SkillBinding:
         if record.frontmatter.lq_ai
         else SkillCapabilities(),
         bundle_digest=pinned.bundle_digest,
+        reference_paths=tuple(
+            path.relative_to(record.folder).as_posix() for path in record.on_demand_paths
+        ),
+        reference_snapshots=pinned.reference_snapshots,
+        reference_folder=record.folder,
+        instructions=record.body,
     )
 
 
@@ -59,7 +76,9 @@ def _bind_row(row: UserSkill) -> SkillBinding:
             separators=(",", ":"),
         ).encode()
     ).hexdigest()
-    return SkillBinding(row.slug, f"{row.scope}:{row.id}", digest, capabilities)
+    return SkillBinding(
+        row.slug, f"{row.scope}:{row.id}", digest, capabilities, instructions=row.body
+    )
 
 
 def _visible_rows(owner_id: UUID) -> Select[tuple[UserSkill]]:
@@ -105,12 +124,6 @@ async def revalidate_binding(
     binding: SkillBinding,
     registry: MutableSkillRegistry,
 ) -> None:
-    source, identity = binding.key.split(":", 1)
-    if source in {"user", "team"}:
-        row = await db.scalar(_visible_rows(owner_id).where(UserSkill.id == UUID(identity)))
-        current = _bind_row(row) if row else None
-    else:
-        record = registry.current().get(identity)
-        current = bind_record(record) if record and record.source == source else None
+    current = await resolve_binding(db, owner_id, binding.name, registry)
     if current != binding:
         raise ToolNotGranted("Skill changed or access was revoked; start a new invocation")

@@ -809,7 +809,12 @@ async def test_optional_ids_stored_in_row(db_session: AsyncSession) -> None:
     db_session.add(user)
     await db_session.flush()
 
-    chat_id = uuid.uuid4()
+    from app.models.chat import Chat
+
+    chat = Chat(owner_id=user.id, title="Governed test chat")
+    db_session.add(chat)
+    await db_session.flush()
+    chat_id = chat.id
     message_id = uuid.uuid4()
     session_id = uuid.uuid4()
 

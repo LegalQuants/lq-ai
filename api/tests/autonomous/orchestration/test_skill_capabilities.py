@@ -5,12 +5,13 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
 from tests.skills.conftest import real_runner as real_runner, runner_module as runner_module
+from tests.skills.reference_helpers import saif_reference, whole_page
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult
@@ -25,6 +26,7 @@ from app.autonomous.orchestration.store import WorkerClaim
 from app.config import get_settings
 from app.errors import Conflict, Forbidden, SessionHalted, ToolNotGranted
 from app.models.autonomous import AutonomousSession
+from app.models.orchestration import OrchestrationEffect
 from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
 from app.schemas.autonomous import Phase
 from app.skills.loader import load_registry
@@ -59,6 +61,11 @@ async def capable(env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> Simp
     )
     env.store.check_policy = CurrentPolicy(skills=env.skills, operator=lambda: policy)
     monkeypatch.setattr(get_settings(), "skill_workspaces_enabled", True)
+    return await activate(env)
+
+
+async def activate(env: SimpleNamespace) -> SimpleNamespace:
+    """Approve an exact plan and claim both roles through the durable store."""
     await env.store.save_plan(env.plan, actor_id=env.owner_id)
     await env.store.approve(
         env.root_id, actor_id=env.owner_id, revision=1, plan_hash=env.plan.approval_hash()
@@ -74,6 +81,58 @@ async def capable(env: SimpleNamespace, monkeypatch: pytest.MonkeyPatch) -> Simp
     return env
 
 
+@pytest.fixture
+async def reference_capable(
+    env: SimpleNamespace,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+) -> SimpleNamespace:
+    folder = tmp_path / "reference-demo"
+    (folder / "references").mkdir(parents=True)
+    (folder / "SKILL.md").write_text(
+        "---\nname: reference-demo\ndescription: Synthetic reference fixture\n"
+        "lq_ai:\n  minimum_inference_tier: 1\n---\nRead the guide on request.\n"
+    )
+    options = request.param if hasattr(request, "param") and isinstance(request.param, dict) else {}
+    env.reference_path = options.get("path", "references/guide.md")
+    env.reference = folder / env.reference_path
+    env.reference.parent.mkdir(parents=True, exist_ok=True)
+    env.reference.write_text(options.get("content", "Synthetic task data; not verified evidence."))
+    env.skills = MutableSkillRegistry(load_registry(tmp_path))
+    pin = skill_pin(env.skills.current().get("reference-demo"))
+    allowed = getattr(request, "param", True)
+    grants = env.plan.root.grants.model_copy(
+        update={"analysis": (ToolIntent.skill_reference_read,) if allowed else ()}
+    )
+    scope = env.plan.root.model_copy(update={"skill": pin, "grants": grants})
+    policy = OperatorPolicy(
+        skills=tuple(
+            SkillPolicy(pin=pin, profile=profile, grants=grants, source_types=())
+            for profile in ("orchestrator", "research")
+        ),
+        sources=(),
+        grants=grants,
+        minimum_inference_tier=1,
+        maximum_egress_tier=0,
+        require_anonymization=True,
+    )
+    env.config = SimpleNamespace(current=policy)
+    env.plan = env.plan.model_copy(
+        update={
+            "root": scope,
+            "delegation_grants": grants,
+            "policy_version": policy.version(),
+            "children": tuple(c.model_copy(update={"execution": scope}) for c in env.plan.children),
+        }
+    )
+    env.store.check_policy = CurrentPolicy(skills=env.skills, operator=lambda: env.config.current)
+    monkeypatch.setattr(get_settings(), "skill_reference_read_enabled", True)
+    monkeypatch.setattr(get_settings(), "skill_workspaces_enabled", False)
+    monkeypatch.setattr(get_settings(), "skill_script_runner_url", None)
+    return await activate(env)
+
+
 async def call(
     env: SimpleNamespace,
     claim: WorkerClaim,
@@ -84,6 +143,149 @@ async def call(
     return await env.effects.skill_tool(
         claim, effect_key=key, phase=Phase.analysis, intent=intent, params=params
     )
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+async def test_reference_read_approved_roles_and_durable_replay(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    params = {"path": "references/guide.md"}
+    with patch.object(
+        SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
+    ) as read:
+        result = await call(env, claim, ToolIntent.skill_reference_read, "reference", params)
+        replay = await call(env, claim, ToolIntent.skill_reference_read, "reference", params)
+    assert result.data == replay.data == whole_page(params["path"], env.reference.read_text())
+    assert result.cost_usd == replay.cost_usd == 0
+    assert result.outcome == replay.outcome == "success"
+    assert read.call_count == 1
+    async with env.factory() as db:
+        receipts = list(
+            await db.scalars(
+                select(OrchestrationEffect).where(
+                    OrchestrationEffect.session_id == claim.session_id
+                )
+            )
+        )
+        assert len(receipts) == 1
+        assert receipts[0].status == "completed" and receipts[0].charged_usd == 0
+        assert receipts[0].result == {"outcome": "success", "data": result.data}
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize(
+    "reference_capable",
+    [
+        {"content": "x" * 65536},
+        {"content": "\n" * 65536},
+        {"content": '"\\' * 32768},
+        {
+            "content": "\x01" * 65536,
+            "path": "references/" + "a" * 95 + "/" + "b" * 95 + "/" + "c" * 52,
+        },
+        {"content": "🚀" * 16384},
+    ],
+    indirect=True,
+    ids=["plain", "newlines", "quotes-and-backslashes", "worst-escape-longest-path", "utf8"],
+)
+async def test_reference_byte_boundary_completes_and_replays_exactly(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    expected = whole_page(env.reference_path, env.reference.read_text())
+    assert len(expected["content"].encode("utf-8")) == 65536
+    with patch.object(
+        SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
+    ) as read:
+        first = await call(
+            env, claim, ToolIntent.skill_reference_read, "boundary", {"path": env.reference_path}
+        )
+        replay = await call(
+            env, claim, ToolIntent.skill_reference_read, "boundary", {"path": env.reference_path}
+        )
+    assert first.data == replay.data == expected
+    assert first.outcome == replay.outcome == "success"
+    assert first.cost_usd == replay.cost_usd == 0
+    assert read.call_count == 1
+    async with env.factory() as db:
+        receipts = list(
+            await db.scalars(
+                select(OrchestrationEffect).where(
+                    OrchestrationEffect.session_id == claim.session_id
+                )
+            )
+        )
+        assert len(receipts) == 1
+        receipt = receipts[0]
+        assert receipt.status == "completed" and receipt.charged_usd == 0
+        assert receipt.result == {"data": expected, "outcome": "success"}
+        assert len(json.dumps(receipt.result, ensure_ascii=False).encode("utf-8")) <= 394240
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize("reference_capable", [False], indirect=True)
+async def test_reference_read_requires_an_approved_grant(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    with patch.object(SkillTools, "read_reference") as read, pytest.raises(ToolNotGranted):
+        await call(
+            env,
+            getattr(env, role),
+            ToolIntent.skill_reference_read,
+            "ungranted",
+            {"path": "references/guide.md"},
+        )
+    read.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize("change", ["policy", "pin", "host"])
+async def test_reference_read_rechecks_authority_before_new_calls_and_replay(
+    reference_capable: SimpleNamespace, monkeypatch: pytest.MonkeyPatch, role: str, change: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    params = {"path": "references/guide.md"}
+    await call(env, claim, ToolIntent.skill_reference_read, "reference", params)
+    if change == "policy":
+        env.config.current = env.config.current.model_copy(
+            update={"grants": env.config.current.grants.model_copy(update={"analysis": ()})}
+        )
+    elif change == "pin":
+        env.reference.write_text("Changed after approval; must never be returned.")
+    else:
+        monkeypatch.setattr(get_settings(), "skill_reference_read_enabled", False)
+    refusal = ToolNotGranted if change == "host" else Forbidden
+    with patch.object(SkillTools, "read_reference") as read:
+        for key in ("reference", "new-reference"):
+            with pytest.raises(refusal):
+                await call(env, claim, ToolIntent.skill_reference_read, key, params)
+    read.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+async def test_reference_read_cannot_move_its_grant_to_another_phase(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    await env.store.phase(claim, Phase.intake)
+    with (
+        patch.object(SkillTools, "read_reference") as read,
+        pytest.raises(Forbidden, match="phase or grants"),
+    ):
+        await env.effects.skill_tool(
+            claim,
+            effect_key="wrong-phase",
+            phase=Phase.intake,
+            intent=ToolIntent.skill_reference_read,
+            params={"path": "references/guide.md"},
+        )
+    read.assert_not_called()
 
 
 async def test_root_and_child_reuse_replay_atomicity_and_run_deletion(
@@ -181,3 +383,51 @@ async def test_guarded_root_and_child_execute_real_helper(
         )
         assert result.data["exit_code"] == 0, result.data
         assert json.loads(result.data["stdout"])["word_count"] == 3
+
+
+@pytest.mark.parametrize("role", ["claim", "child"])
+@pytest.mark.parametrize(
+    "reference_capable", [{"content": saif_reference().decode("utf-8")}], indirect=True
+)
+async def test_saif_large_reference_explicit_pages_complete_and_replay(
+    reference_capable: SimpleNamespace, role: str
+) -> None:
+    env = reference_capable
+    claim = getattr(env, role)
+    original = saif_reference()
+    cursor = 0
+    chunks = []
+    with patch.object(
+        SkillTools, "read_reference", autospec=True, side_effect=SkillTools.read_reference
+    ) as read:
+        for number in range(4):
+            params = {"path": env.reference_path, "offset_bytes": cursor}
+            first = await call(
+                env, claim, ToolIntent.skill_reference_read, f"page:{number}", params
+            )
+            replay = await call(
+                env, claim, ToolIntent.skill_reference_read, f"page:{number}", params
+            )
+            assert first.data == replay.data
+            page = first.data
+            piece = page["content"].encode("utf-8")
+            assert page["size_bytes"] == 208564
+            assert page["offset_bytes"] == cursor
+            assert page["returned_bytes"] == len(piece) <= 65536
+            cursor += len(piece)
+            assert page["end_offset_bytes"] == cursor
+            assert page["has_more"] is (cursor < 208564)
+            assert page["next_offset_bytes"] == (cursor if cursor < 208564 else None)
+            chunks.append(piece)
+            assert read.call_count == number + 1
+    assert b"".join(chunks) == original and cursor == 208564
+    async with env.factory() as db:
+        receipts = list(
+            await db.scalars(
+                select(OrchestrationEffect).where(
+                    OrchestrationEffect.session_id == claim.session_id
+                )
+            )
+        )
+        assert len(receipts) == 4
+        assert all(row.status == "completed" and row.charged_usd == 0 for row in receipts)

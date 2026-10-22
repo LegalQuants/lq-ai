@@ -442,6 +442,10 @@ def _to_ollama_request(
     """
 
     ollama_messages: list[dict[str, Any]] = []
+    # The function each earlier tool call named, by call id. A tool result is
+    # matched to its call by name on Ollama, and an OpenAI-shaped caller sends
+    # only the id.
+    called: dict[str, str] = {}
     for msg in request.messages:
         content = msg.content or ""
         # Ollama accepts the four standard roles unchanged. We do not
@@ -456,11 +460,20 @@ def _to_ollama_request(
             message_obj["tool_call_id"] = msg.tool_call_id
         if msg.tool_calls:
             message_obj["tool_calls"] = [_tool_call_to_ollama(tc) for tc in msg.tool_calls]
+            for tc in msg.tool_calls:
+                function = tc.get("function") if isinstance(tc, dict) else None
+                name = function.get("name") if isinstance(function, dict) else None
+                if isinstance(tc.get("id"), str) and isinstance(name, str) and name:
+                    called[tc["id"]] = name
         if msg.name:
             message_obj["name"] = msg.name
             if msg.role == "tool":
                 # Ollama matches a tool result to its call by ``tool_name``.
                 message_obj["tool_name"] = msg.name
+        elif msg.role == "tool" and msg.tool_call_id in called:
+            # No name given: take it from the call this result answers, so two
+            # results in one turn are each matched to their own call.
+            message_obj["tool_name"] = called[msg.tool_call_id]
         ollama_messages.append(message_obj)
 
     body: dict[str, Any] = {
@@ -502,7 +515,30 @@ def _to_ollama_request(
     if tool_choice is not None:
         body["tool_choice"] = tool_choice
 
+    # Reasoning effort. Ollama takes a top-level ``think``. Nothing is sent
+    # when the caller set none, so the model's own default stands.
+    think = _effort_to_think(request.reasoning_effort)
+    if think is not None:
+        body["think"] = think
+
     return body
+
+
+# OpenAI's ``reasoning_effort`` values as Ollama's ``think``: ``false`` turns
+# thinking off, and the levels are passed on for models that support levels.
+_EFFORT_TO_THINK: dict[str, bool | str] = {
+    "none": False,
+    "minimal": "low",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+}
+
+
+def _effort_to_think(effort: str | None) -> bool | str | None:
+    """Map a reasoning effort to Ollama's ``think``, or None to send nothing."""
+
+    return _EFFORT_TO_THINK.get(effort) if effort is not None else None
 
 
 def _tool_call_to_ollama(tool_call: dict[str, Any]) -> dict[str, Any]:
@@ -547,7 +583,10 @@ def _tool_calls_from_ollama(raw: Any, *, start_index: int = 0) -> list[dict[str,
             continue
         arguments = function.get("arguments")
         if not isinstance(arguments, str):
-            arguments = json.dumps(arguments if arguments is not None else {})
+            # Characters as themselves, not ``\uXXXX``: an escape makes the
+            # string longer than the text it stands for, and a caller that
+            # bounds a call's arguments in bytes would count the difference.
+            arguments = json.dumps(arguments if arguments is not None else {}, ensure_ascii=False)
         call_id = item.get("id")
         out.append(
             {

@@ -82,7 +82,7 @@ Each subsystem (`api/`, `gateway/`, `web/`) is a self-contained service. They ta
 - **Linter:** ESLint per `.eslintrc`.
 - **TypeScript:** required for new files; legacy `.js` files migrate gradually.
 - **Framework:** SvelteKit. The `web/` subdirectory is a fork of OpenWebUI, which is a SvelteKit app — extensions and customizations stay in Svelte. We do **not** mix React into `web/`. The Word add-in (`word-addin/`, M3) uses Office.js with React; the `web/` codebase does not.
-- **Component conventions:** match the OpenWebUI conventions for shared components; use the project's design system primitives rather than ad-hoc Tailwind.
+- **Component conventions:** match the OpenWebUI conventions for shared components (`web/src/lib/components/**`, untouched per ADR 0009). Within `web/src/lib/lq-ai/**`, prefer the `lq` primitives (`web/src/lib/lq-ai/components/shared/`) and their typed token vocabulary for new or changed components. See [ADR 0043](docs/adr/0043-lq-design-system-primitives.md) for the contract and bounded reference implementation; migration of the remaining shell is separate work.
 
 ### Both
 
@@ -131,9 +131,10 @@ These paths require security review per [.github/CODEOWNERS](.github/CODEOWNERS)
 - `gateway/**` — the security boundary.
 - `docs/security/**` — security artifacts.
 - `.github/workflows/**` — CI; supply-chain attack surface.
+- `script_runner/**`, `api/app/skills/**`, `deploy/compose.skill-runner.yml` — the skill script runner, its broker, and the skill loading and capability code.
 - Any change touching authentication, authorization, audit logging, or cryptographic implementations.
 
-If you are working in any of these areas, your PR is auto-routed to security reviewers and held until they approve.
+If you are working in any of these areas, your PR is routed by CODEOWNERS to the maintainer team and reviewed against the security-path checklist. Note the honest limit: the project has no separate security team yet, so "security review" here means maintainer review with that checklist applied. A dedicated security team returns to CODEOWNERS when it is staffed (see [ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md)).
 
 **Vulnerabilities** are not contributed via PR. They go through the disclosure process in [SECURITY.md](SECURITY.md).
 

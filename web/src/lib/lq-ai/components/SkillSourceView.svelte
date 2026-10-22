@@ -3,12 +3,21 @@
 	import { marked } from 'marked';
 	import DOMPurify from 'dompurify';
 	import { skillsApi } from '$lib/lq-ai/api';
-	import type { SkillInputs, SkillInputDef, SkillReferenceFile } from '$lib/lq-ai/types';
+	import type {
+		SkillInputs,
+		SkillInputDef,
+		SkillReferenceFile,
+		SkillResourceFile
+	} from '$lib/lq-ai/types';
+	import SkillResources from './SkillResources.svelte';
 
 	export let slug: string;
 	export let contentMd: string;
 	export let contentYaml: string;
 	export let scriptFiles: SkillReferenceFile[] = [];
+	export let referenceFiles: SkillReferenceFile[] = [];
+	export let onDemandFiles: SkillResourceFile[] = [];
+	export let referenceReadEnabled: boolean | undefined = undefined;
 
 	let inputs: SkillInputs | null = null;
 	let inputsError: string | null = null;
@@ -61,6 +70,18 @@
 </script>
 
 <div class="lq-source-view">
+	{#if referenceFiles.length > 0}
+		<section class="lq-source-section">
+			<h2 class="lq-text-label">Preloaded references</h2>
+			{#each referenceFiles as file (file.path)}
+				<details>
+					<summary>{file.path}</summary>
+					<pre class="lq-yaml-block">{file.content}</pre>
+				</details>
+			{/each}
+		</section>
+	{/if}
+	<SkillResources {slug} files={onDemandFiles} {referenceReadEnabled} />
 	{#if scriptFiles.length > 0}
 		<section class="lq-source-section">
 			<h2 class="lq-text-label">Bundled helpers</h2>
