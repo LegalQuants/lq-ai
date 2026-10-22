@@ -2606,6 +2606,34 @@ CREATE TABLE autonomous_artifacts (
 CREATE INDEX ix_autonomous_artifacts_session_id ON autonomous_artifacts(session_id);
 ```
 
+## Internal workspace-event foundation (0079, inactive)
+
+`workspace_events` is an internal metadata index, not an audit-log replacement or a source-content
+copy. No producer, Today endpoint or page is enabled. See [the service contract](workspace-events.md)
+for source-authorization/lifecycle gates, transaction ownership and operator-managed database scope.
+
+| Column | Type / constraints |
+| --- | --- |
+| `id` | UUID primary key, `gen_random_uuid()` |
+| `user_id` | UUID NOT NULL; users FK, ON DELETE CASCADE |
+| `project_id` | Nullable UUID; projects FK, ON DELETE CASCADE |
+| `source_kind` | TEXT NOT NULL, CHECK `internal` only |
+| `source_ref` | UUID NOT NULL, opaque reference; source-specific checks belong to the adapter |
+| `event_type` | TEXT NOT NULL, CHECK `finding.created` only |
+| `status` | TEXT NOT NULL, default/check `recorded` only |
+| `occurred_at`, `observed_at` | TIMESTAMPTZ NOT NULL; occurrence falls back to first observation |
+| `provenance` | JSONB NOT NULL, CHECK exactly `{"producer":"autonomous"}` |
+| `sensitivity` | TEXT NOT NULL, CHECK `confidential` or `privileged` |
+| `dedupe_digest` | TEXT NOT NULL, CHECK 64 lowercase hexadecimal characters |
+| `created_at`, `updated_at` | TIMESTAMPTZ NOT NULL, default `now()`; rows are immutable |
+
+`uq_workspace_events_source` uniquely constrains `(user_id, source_kind, source_ref, event_type)`.
+`ix_workspace_events_owner_time` indexes `(user_id, occurred_at, id)` for owner-scoped chronological
+keyset queries. `ix_workspace_events_project` indexes the project FK for lifecycle operations.
+The source reference is not a polymorphic FK; source creation/removal hooks are mandatory before
+any producer is enabled. Account/project deletion cascades remove metadata; personal-data export
+includes owned event rows. No raw source payload columns or new retention job exist.
+
 ## M4+ tables (sketched, land at the indicated milestone)
 
 ### `autonomous_tasks` (M4 — **superseded**)
@@ -2689,8 +2717,8 @@ CREATE INDEX idx_relationships_target ON contract_relationships(target_file_id);
 
 ## Migration approach
 
-- **Alembic** for schema migrations. **Migration head is `0047`.** The
-  `0001`–`0047` sequence in `api/alembic/versions/` is the schema truth;
+- **Alembic** for schema migrations. **Migration head is `0079` in this foundation slice.** The
+  `0001`–`0079` sequence in `api/alembic/versions/` is the schema truth;
   this document is reconciled to it.
 - `0001_initial.py` creates the core M1 tables (`users`, `user_sessions`,
   `audit_log`, `inference_routing_log`, and the M1 foundation). Note:
