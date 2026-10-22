@@ -18,7 +18,7 @@
 
 **The earlier merge dry-run** (also 2026-08-24, throwaway branch, discarded) corrected this runbook in five material ways, all folded in below:
 
-1. **§3's merge command does not work at all.** The fork has no shared ancestry with upstream. `git merge v0.11.0` fails with `fatal: refusing to merge unrelated histories`, and the obvious workaround is *worse* than the error. §3 now carries a procedure that was actually executed.
+1. **§3's merge command does not work at all.** The fork has no shared ancestry with upstream. `git merge owui/v0.11.0` fails with `fatal: refusing to merge unrelated histories`, and the obvious workaround is *worse* than the error. §3 now carries a procedure that was actually executed.
 2. **The conflict set is 6 files, not 10** — and it is a different 6 than §5 predicted. §5 is rewritten from the real merge output.
 3. **Upstream deleted Cypress entirely at v0.11.0.** Two files §5 listed as content merges are modify/delete conflicts. We keep the harness, and #432/#437 need to hear that it is now fork-owned. See §5.2.
 4. **The "970 added files" figure was misleading** — 657 of them are upstream files, not ours. See the table below.
@@ -32,7 +32,7 @@ The whole procedure, in order. Each step links to the section that explains it �
 
 | # | Step | Section |
 | --- | --- | --- |
-| 1 | Add the `upstream` remote, fetch tags, confirm the target is still latest stable | [§0](#0-before-you-start) |
+| 1 | Add the `upstream` remote, fetch its tags under `owui/`, confirm the target is still latest stable | [§0](#0-before-you-start) |
 | 2 | Decide: park in-flight PRs, or rebase first and ask them to rebase | [§1](#1-decide-how-to-handle-in-flight-prs--before-you-branch) |
 | 3 | `git checkout -b vendor/openwebui-upstream` off current `main` | [§2](#2-create-the-vendor-branch) |
 | 4 | Build the two synthetic `web/`-prefixed trees, graft, merge | [§3](#3-bring-upstream-in) |
@@ -82,12 +82,26 @@ When one of these surfaces, **file it as a DE-XXX in PRD §9 and move on** — t
 
 ```bash
 # The upstream remote is NOT configured by default — this is step zero.
-git remote add upstream https://github.com/open-webui/open-webui.git
-git fetch upstream --tags
+# --no-tags keeps upstream's tags out of our own v* namespace (see below).
+git remote add --no-tags upstream https://github.com/open-webui/open-webui.git
+# Remote already exists? Stop it auto-following tags instead:
+#   git config remote.upstream.tagOpt --no-tags
+git fetch upstream 'refs/tags/*:refs/tags/owui/*'
 
 # Confirm the target is still the latest stable.
-git tag -l 'v0.11*' --sort=-version:refname | head
+git tag -l 'owui/v0.11*' --sort=-version:refname | head
 ```
+
+**Upstream's tags live under `owui/`, never bare.** OpenWebUI's version names overlap LQ.AI's own (both projects have a `v0.9.0`), so a bare upstream tag shadows the project's release in a local clone. Git will not overwrite an existing tag on fetch, so whichever arrived first wins silently, and local builds and the docs-site changelog (`git tag --merged HEAD` in `site/scripts/lib/git.mjs`) miss the release. Every OpenWebUI tag in this runbook is written `owui/vX.Y.Z`; LQ.AI's own release tags stay bare.
+
+**If your clone already has upstream's bare tags** (you ran an older edition of this step with `git fetch upstream --tags`), stop the remote following tags, then re-fetch the project's tags with `--force`. The remote name may differ in your clone; check `git remote -v` for the one pointing at `LegalQuants/lq-ai`:
+
+```bash
+git config remote.upstream.tagOpt --no-tags
+git fetch legalquants --tags --force
+```
+
+That repoints any colliding tag (such as `v0.9.0`) at the project's release. Upstream tags that do not collide stay behind as bare clutter; delete them by hand if you want a clean `git tag -l`.
 
 **Our fork point** is `333fe654` — `feat(web): vendor-import OpenWebUI v0.9.2 fork (ADR 0001)`.
 
@@ -163,13 +177,13 @@ git checkout -b vendor/openwebui-upstream
 **The obvious command does not work. Do not start with it.**
 
 ```bash
-git merge v0.11.0 --no-commit --no-ff
+git merge owui/v0.11.0 --no-commit --no-ff
 # fatal: refusing to merge unrelated histories
 ```
 
 Two independent reasons, both structural:
 
-1. **No shared ancestry.** The vendor import `333fe654` is an ordinary single-parent commit in *our* history — its parent `7bef52f8` is ours, and our root is `91990aca`. Nothing in our history descends from upstream; `git merge-base HEAD v0.11.0` returns nothing.
+1. **No shared ancestry.** The vendor import `333fe654` is an ordinary single-parent commit in *our* history — its parent `7bef52f8` is ours, and our root is `91990aca`. Nothing in our history descends from upstream; `git merge-base HEAD owui/v0.11.0` returns nothing.
 2. **Different path layout.** Upstream keeps `package.json`, `src/`, and `backend/` at the repo root. Ours live under `web/`. Upstream's tree and our `web/` subtree share no paths.
 
 **Do not "fix" this with `--allow-unrelated-histories`.** It is far worse than the error it silences. Measured on the dry-run: **5020 staged additions, none under `web/`** — it dumps upstream's whole tree at *our* repo root — plus 11 conflicts in our own top-level files (`LICENSE`, `README.md`, `Makefile`, `CODE_OF_CONDUCT.md`, `.github/dependabot.yml`, `.github/workflows/release.yml`, `.gitignore`, `.dockerignore`, `.env.example`, `.gitattributes`, `.github/ISSUE_TEMPLATE/config.yml`). It would replace LQ.AI's licence and README with OpenWebUI's and add upstream's CI workflows under `.github/` — a security-sensitive path per [CODEOWNERS](../.github/CODEOWNERS) — while touching nothing under `web/`. If a merge proposes thousands of root-level additions, you ran this. Abort.
@@ -184,11 +198,11 @@ Give git the merge base it lacks. Rewrite both upstream endpoints under the `web
 export GIT_INDEX_FILE=$(mktemp)
 
 git read-tree --empty
-git read-tree --prefix=web/ 'v0.9.2^{tree}'
+git read-tree --prefix=web/ 'owui/v0.9.2^{tree}'
 BASE=$(git commit-tree $(git write-tree) -m 'synthetic: upstream v0.9.2 under web/')
 
 git read-tree --empty
-git read-tree --prefix=web/ 'v0.11.0^{tree}'
+git read-tree --prefix=web/ 'owui/v0.11.0^{tree}'
 THEIRS=$(git commit-tree $(git write-tree) -p "$BASE" -m 'synthetic: upstream v0.11.0 under web/')
 
 unset GIT_INDEX_FILE
@@ -291,7 +305,7 @@ They are *not* the same kind of change, and treating them alike is how you break
 ```bash
 # The only reliable starting point: our delta from the OLD upstream tag.
 git show <pre-merge-main>:web/backend/open_webui/main.py > /tmp/ours.py
-git show v0.9.2:backend/open_webui/main.py > /tmp/base.py
+git show owui/v0.9.2:backend/open_webui/main.py > /tmp/base.py
 diff /tmp/base.py /tmp/ours.py
 ```
 
@@ -405,8 +419,8 @@ grep -rhoE "from '\\\$lib/[^']+'" web/src/lib/lq-ai web/src/routes/lq-ai | grep 
 Both anchors survive v0.11.0 (`#chat-search` is still in `Sidebar/SearchInput.svelte`; `"Okay, Let's Go!"` is still in `ChangelogModal.svelte`), so **this does not fire this quarter**. Re-check both before trusting the suite:
 
 ```bash
-git grep -c "chat-search" v0.11.0 -- src/
-git grep -c "Okay, Let" v0.11.0 -- src/lib/components/ChangelogModal.svelte
+git grep -c "chat-search" owui/v0.11.0 -- src/
+git grep -c "Okay, Let" owui/v0.11.0 -- src/lib/components/ChangelogModal.svelte
 ```
 
 Separately, four of our Cypress specs are **upstream's own, inherited at the vendor import** — `chat.cy.ts`, `documents.cy.ts`, `registration.cy.ts`, `settings.cy.ts` — plus `support/index.d.ts` and `cypress/tsconfig.json`. They select upstream markup (`#chat-input`, `.chat-user`, `#chat-share-button`, `#copy-and-share-chat-button`) and upstream deleted every one of them at v0.11.0.
@@ -461,9 +475,9 @@ git rm web/backend/open_webui/utils/mcp/client.py
 **The import question is already answered for v0.11.0 — the answer is "no new imports, but two existing ones".** The dry-run ran this check against the upstream tag directly:
 
 ```bash
-git grep -n "utils\.mcp\.client" v0.11.0 -- backend/
-# v0.11.0:backend/open_webui/routers/configs.py:17:from open_webui.utils.mcp.client import MCPClient
-# v0.11.0:backend/open_webui/utils/middleware.py:99:from open_webui.utils.mcp.client import MCPClient
+git grep -n "utils\.mcp\.client" owui/v0.11.0 -- backend/
+# owui/v0.11.0:backend/open_webui/routers/configs.py:17:from open_webui.utils.mcp.client import MCPClient
+# owui/v0.11.0:backend/open_webui/utils/middleware.py:99:from open_webui.utils.mcp.client import MCPClient
 ```
 
 Both imports **also existed at v0.9.2** (at lines 20 and 117), and our fork already strips both — which is part of why `configs.py` and `middleware.py` are modified on our side at all. So this is the established pattern continuing, not a new decision, and the stop-and-raise at the end of this section does **not** fire for v0.11.0.
@@ -629,7 +643,7 @@ ADR 0001 **§Decision → Refresh cadence**, verbatim requirements:
 For the commit list, generate rather than curate:
 
 ```bash
-git log --oneline v0.9.2..v0.11.0 > /tmp/upstream-commits.txt
+git log --oneline owui/v0.9.2..owui/v0.11.0 > /tmp/upstream-commits.txt
 ```
 
 ### Stack the commits; do not stack the PRs
