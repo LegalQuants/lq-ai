@@ -3,8 +3,12 @@ import type { GuideReader } from './guide-reader';
 interface SearchData { url: string; excerpt: string; meta: { title?: string }; sub_results?: { url: string; title: string }[] }
 interface Pagefind { search(query: string): Promise<{ results: { data(): Promise<SearchData> }[] }> }
 
-/** Pagefind owns matching/ranking; Iris's composer only presents its results. */
-export function docsSearch(root: HTMLElement, reader: GuideReader, pauseTour: () => void) {
+/**
+ * Pagefind owns matching/ranking; Iris's composer only presents its results.
+ * `handedOver` is a search another page's composer sent here (`#q=…`); it runs
+ * as soon as the composer is ready, like a question typed on this page.
+ */
+export function docsSearch(root: HTMLElement, reader: GuideReader, pauseTour: () => void, handedOver: string | null = null) {
   const form = root.querySelector<HTMLFormElement>('[data-lq-search-form]')!;
   const input = root.querySelector<HTMLInputElement>('input')!;
   const button = form.querySelector<HTMLButtonElement>('button')!;
@@ -28,14 +32,19 @@ export function docsSearch(root: HTMLElement, reader: GuideReader, pauseTour: ()
   input.disabled = button.disabled = false;
   form.hidden = false;
   input.addEventListener('focus', pauseTour);
+  // ⌘K and the reader's Search button both close the reader and put the
+  // cursor in the composer, so search is one step away while reading.
+  const backToSearch = () => {
+    if (document.querySelector<HTMLDialogElement>('[data-lq-reader]')?.open) reader.close();
+    focusComposer();
+  };
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault(); event.stopImmediatePropagation();
-      if (document.querySelector<HTMLDialogElement>('[data-lq-reader]')?.open) reader.close();
-      focusComposer();
+      backToSearch();
     }
   }, true);
-  document.querySelector('.lq-explore-search')?.addEventListener('click', (event) => { event.preventDefault(); focusComposer(); });
+  document.querySelector('[data-lq-reader-search]')?.addEventListener('click', backToSearch);
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -74,7 +83,12 @@ export function docsSearch(root: HTMLElement, reader: GuideReader, pauseTour: ()
         const links = document.createElement('div'); links.className = 'lq-match-links';
         const full = document.createElement('a'); full.href = title.href; full.textContent = 'Open full guide'; full.dataset.noReader = '';
         const text = document.createElement('a'); text.href = entry.markdown; text.textContent = 'Markdown'; text.dataset.noReader = '';
-        const badge = document.createElement('span'); badge.className = 'lq-status'; badge.textContent = `Page status: ${entry.status}`;
+        // The same chip as the page title's StatusBadge: the word, with its
+        // label for screen readers only (the chip capitalises what it shows).
+        const badge = document.createElement('span');
+        badge.className = /^[a-z]+$/.test(entry.status) ? `lq-status lq-status--${entry.status}` : 'lq-status';
+        const label = document.createElement('span'); label.className = 'sr-only'; label.textContent = 'Page status: ';
+        badge.append(label, entry.status);
         links.append(full, text, badge); item.append(links); list.append(item);
       }
       if (list.children.length) section.append(list);
@@ -88,4 +102,6 @@ export function docsSearch(root: HTMLElement, reader: GuideReader, pauseTour: ()
       status.textContent = 'Search is unavailable in this preview. Browse all documentation or choose a pathway.';
     } finally { running = false; button.disabled = false; }
   });
+
+  if (handedOver) { input.value = handedOver; form.requestSubmit(); }
 }

@@ -1,7 +1,12 @@
 <dialog class="lq-guide-reader" data-lq-reader aria-labelledby="lq-reader-title">
   <header class="lq-reader-toolbar">
     <h2 id="lq-reader-title">Documentation</h2>
-    <button type="button" data-lq-reader-close aria-label="Close documentation">×</button>
+    <div class="lq-reader-actions">
+      <!-- Search never disappears while reading: this closes the reader and
+           puts the cursor in the composer, as ⌘K does. -->
+      <button type="button" class="lq-reader-search" data-lq-reader-search>Search</button>
+      <button type="button" data-lq-reader-close aria-label="Close documentation">×</button>
+    </div>
   </header>
   <nav class="lq-reader-links" aria-label="Guide reading options">
     <a data-lq-full-guide data-no-reader href="#">Open full guide</a>

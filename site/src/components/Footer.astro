@@ -7,7 +7,10 @@
  *      file linked at that commit;
  *   2. "Edit this page" (the canonical file under `docs/site/`, on GitHub);
  *   3. previous / next, which Starlight builds from the sidebar;
- *   4. one project line.
+ *   4. one project line;
+ *   5. in Version C, on every page but Explore (which has its own), the search
+ *      composer — fixed to the bottom of the reading column on screen, last in
+ *      the keyboard order (pathways/DocsComposer.astro).
  *
  * Starlight's own `Pagination` component is reused rather than re-implemented,
  * so its `rel="prev"`/`rel="next"` semantics and focus order are unchanged.
@@ -23,9 +26,13 @@
 import Pagination from 'virtual:starlight/components/Pagination';
 
 import Stamp from './Stamp.astro';
+import DocsComposer from './pathways/DocsComposer.astro';
 import { EDIT_BASE, toDocsSitePath } from '../repo.mjs';
+import { SITE_EXPERIENCE, SITE_LAYOUT } from '../../scripts/lib/paths.mjs';
 
-const { entry, editUrl } = Astro.locals.starlightRoute;
+const { entry, editUrl, id } = Astro.locals.starlightRoute;
+const isExplore = String(id ?? '').replace(/\/+$/, '') === '';
+const showComposer = SITE_LAYOUT === 'pathways' && SITE_EXPERIENCE === 'explore' && !isExplore;
 const { checkedAgainst, sourceFiles, editUrl: frontmatterEditUrl } = entry.data;
 
 const docsSitePath = toDocsSitePath(entry.filePath);
@@ -55,6 +62,8 @@ const editHref =
   <Pagination />
 
   <p class="lq-footer__project">An LQ Labs project · LegalQuants · Apache 2.0</p>
+
+  {showComposer && <DocsComposer />}
 </footer>
 
 <style>

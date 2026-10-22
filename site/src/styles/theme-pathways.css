@@ -41,8 +41,9 @@
   --lq-tabs-row: 3.25rem;
   --sl-nav-height: calc(var(--lq-nav-row) + var(--lq-tabs-row));
 
-  /* Version C's sidebar top: the 52px wordmark row, then the search pill. */
-  --lq-brand-height: 6.75rem;
+  /* Version C's sidebar top: the 52px wordmark row. Search is the composer at
+     the bottom of the page, not a control up here. */
+  --lq-brand-height: 3.25rem;
 }
 
 /* The phone breakpoint is 50rem (800px) throughout this layout, not the
@@ -53,6 +54,11 @@
     /* brand + buttons, then a full-width search, then the tabs as a 2×2 grid */
     --lq-nav-row: 7.25rem;
     --lq-tabs-row: 5.5rem;
+  }
+
+  /* Version C: one row, wordmark and buttons — no search row. */
+  :root[data-has-sidebar] {
+    --lq-nav-row: 3.75rem;
   }
 }
 
@@ -135,10 +141,10 @@ header.header {
 /*
  * Version C's app chrome (C5, C14). On wide screens there is no full-width
  * header: the pathways sidebar runs the full height of the window, with the
- * wordmark and search pinned to its top (Header.astro moves them there), and
- * the header is a 52px page bar over the reading column holding the three
- * round buttons. Scoped to `[data-has-sidebar]`, which routeData.mjs sets for
- * Version C only — B keeps its two-row header and tabs.
+ * wordmark pinned to its top (Header.astro moves it there), and the header is
+ * a 52px page bar over the reading column holding the three round buttons.
+ * Scoped to `[data-has-sidebar]`, which routeData.mjs sets for Version C only —
+ * B keeps its two-row header and tabs.
  */
 @media (min-width: 50rem) {
   :root[data-has-sidebar] {
@@ -156,7 +162,98 @@ header.header {
   }
 }
 
-/* Search reads as a pill, at every width. */
+/*
+ * The search composer — Version C's one search, drawn as the redesign's
+ * message box (one rounded, raised box with a hairline and a soft shadow; the
+ * action an ink pill). It is the same box on every page — Explore's
+ * (DocsSearch.astro) and everyone else's (DocsComposer.astro) — fixed to the
+ * bottom of the reading column. It stops short of the side reader when that is
+ * open (`--lq-reader-offset`, explore.css) and of the contents column where a
+ * page has one (`--lq-composer-end`, below).
+ */
+.lq-docs-composer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 1.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  background: var(--lq-color-surface-raised);
+}
+
+.lq-docs-composer input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.5rem;
+}
+
+.lq-docs-composer input::placeholder {
+  color: var(--sl-color-gray-4);
+}
+
+.lq-docs-composer button {
+  border: 0;
+  border-radius: var(--lq-radius-pill);
+  background: var(--sl-color-bg-accent);
+  color: var(--sl-color-text-invert);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.lq-docs-composer:focus-within {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 3px;
+}
+
+.lq-docs-composer:not([hidden]) {
+  position: fixed;
+  bottom: 1rem;
+  inset-inline-start: calc(var(--sl-content-inline-start, 0px) + var(--sl-nav-pad-x));
+  inset-inline-end: calc(
+    var(--lq-reader-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-nav-pad-x)
+  );
+  max-width: 54rem;
+  margin-inline: auto;
+  z-index: 20;
+  /* The ring in the page colour keeps text scrolling under it from showing
+     through at the edges. */
+  box-shadow:
+    0 0 0 0.5rem var(--sl-color-bg),
+    var(--lq-shadow-raised);
+}
+
+.lq-docs-composer[hidden] {
+  display: none;
+}
+
+/* Room under every page's last line, so nothing ends up beneath the box. */
+.main-frame:has(.lq-docs-composer) main {
+  padding-bottom: 8rem;
+}
+
+/* Starlight sizes the contents column as max(sidebar width, (viewport −
+   content width) / 2) from 72rem; the composer's end inset restates that. */
+@media (min-width: 72rem) {
+  :root[data-has-toc] {
+    --lq-composer-end: max(var(--sl-sidebar-width), (100vw - var(--sl-content-width)) / 2);
+  }
+}
+
+.lq-composer-fallback {
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+
+/* B's header search reads as a pill, at every width. */
 .lq-pw-search site-search,
 .lq-pw-search site-search > button {
   width: 100%;

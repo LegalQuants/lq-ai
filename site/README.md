@@ -527,8 +527,23 @@ diagram, screenshot, status badge, and source link as ordinary static HTML.
 `DocsSearch.astro` and `scripts/docs-search.ts` adapt Iris's composer to the
 existing Pagefind index. Search runs on this origin, loads the engine on demand,
 and presents matching excerpts with preview, full-guide, Markdown, and status
-links. Queries and results live in the current page session. Command/Ctrl K
-focuses the composer. No model request or additional ranking engine is used.
+links. Queries and results live in the current page session. No model request or
+additional ranking engine is used.
+
+**Version C has one search, in one place.** The composer is fixed to the bottom
+of the reading column on every page, and nothing else on the page searches:
+there is no search control in the sidebar or the top bar, and Starlight's
+Pagefind modal is not rendered (B keeps it). On Explore it is `DocsSearch.astro`
+and its results join the conversation; on every other page it is
+`DocsComposer.astro` (rendered from the footer, so it is last in keyboard
+order), which hands the question to Explore in the URL fragment — `/#q=…`,
+never sent to the server — where it runs as if typed there, and Back returns to
+the page. Command/Ctrl K focuses the composer on every page, and the guide
+reader's toolbar has a **Search** button that closes the reader and does the
+same, so search never disappears while reading (on narrow screens the reader
+covers the page). `exploreSearchHref` and `searchFromHash` in
+`src/lib/explore-state.mjs` are the hand-off's contract, pinned by
+`test/explore.test.mjs`.
 
 After Astro and the machine exports finish, `scripts/gen-reader-assets.mjs`
 extracts each full page's compiled article and metadata into a small registry

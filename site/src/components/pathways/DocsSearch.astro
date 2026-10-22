@@ -1,10 +1,17 @@
 ---
+/**
+ * Explore's search: the composer (fixed to the bottom of the reading column;
+ * styled in theme-pathways.css, the same box as every other page's
+ * DocsComposer.astro) and the conversation its results join, as turns in this
+ * section. A search handed over from another page arrives in the URL fragment
+ * and runs here (scripts/explore.ts).
+ */
 import { withBase } from '../../namespaces.mjs';
 const base = import.meta.env.BASE_URL;
 ---
 <section class="lq-docs-search" aria-labelledby="lq-search-label" data-lq-search data-base={base}>
   <h2 id="lq-search-label">Search documentation</h2>
-  <form class="lq-docs-composer" data-lq-search-form hidden>
+  <form class="lq-docs-composer" role="search" aria-label="Documentation" data-lq-search-form hidden>
     <label class="sr-only" for="lq-docs-question">Search the LQ.AI documentation</label>
     <input id="lq-docs-question" type="search" maxlength="1000" autocomplete="off" placeholder="Find a guide or ask what you want to do…" disabled />
     <button type="submit" disabled>Search</button>
@@ -16,12 +23,5 @@ const base = import.meta.env.BASE_URL;
 <style>
   .lq-docs-search { margin:2rem 0; max-width:54rem; }
   .lq-docs-search h2 { font-size:1.5rem; }
-  /* The redesign's message box (Main.dc.html): one rounded, raised box with a
-     hairline and a soft shadow; the action is an ink pill. */
-  .lq-docs-composer { display:flex; align-items:center; gap:0.5rem; border:1px solid var(--sl-color-hairline); border-radius:1.5rem; padding:0.5rem 0.5rem 0.5rem 0.75rem; background:var(--lq-color-surface-raised); box-shadow:var(--lq-shadow-raised); }
-  .lq-docs-composer input { min-width:0; flex:1; background:transparent; border:0; color:var(--sl-color-text); font:inherit; font-size:1rem; padding:0.5rem 0.5rem; }
-  .lq-docs-composer input::placeholder { color:var(--sl-color-gray-4); }
-  .lq-docs-composer button { border:0; border-radius:var(--lq-radius-pill); background:var(--sl-color-bg-accent); color:var(--sl-color-text-invert); font:inherit; font-size:0.9375rem; font-weight:600; padding:0.5rem 1.1rem; min-height:44px; cursor:pointer; }
-  .lq-docs-composer:focus-within { outline:2px solid var(--sl-color-text-accent); outline-offset:3px; }
   [data-lq-search-status] { font-size:0.95rem; line-height:1.5; margin:0.75rem 0; }
 </style>

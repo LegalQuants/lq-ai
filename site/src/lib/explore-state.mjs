@@ -9,6 +9,31 @@ export function guideLocation(href, { base, origin, pages }) {
   } catch { return null; }
 }
 
+/**
+ * One search, one place for its results. The composer on every page other
+ * than Explore hands its question to Explore in the URL fragment, which a
+ * browser never sends to the server — no host sees what a reader searched
+ * for. Explore reads it back, runs the search and drops the fragment.
+ */
+const SEARCH_PREFIX = '#q=';
+const MAX_QUERY = 1000;
+
+export function exploreSearchHref(base, query) {
+  const text = String(query ?? '').trim().slice(0, MAX_QUERY);
+  return text ? `${base}${SEARCH_PREFIX}${encodeURIComponent(text)}` : base;
+}
+
+export function searchFromHash(hash) {
+  const value = String(hash ?? '');
+  if (!value.startsWith(SEARCH_PREFIX)) return null;
+  try {
+    const text = decodeURIComponent(value.slice(SEARCH_PREFIX.length)).trim().slice(0, MAX_QUERY);
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 export class ReadingState {
   visits = new Map();
   save(route, { scroll = 0, expanded = [], filter = '' }) {

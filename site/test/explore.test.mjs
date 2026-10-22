@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { readerPayload } from '../scripts/lib/reader-assets.mjs';
-import { guideLocation, ReadingState, TourState } from '../src/lib/explore-state.mjs';
+import { exploreSearchHref, guideLocation, ReadingState, searchFromHash, TourState } from '../src/lib/explore-state.mjs';
 
 const page = { route:'start/example', url:'/start/example/', title:'A source example', status:'draft',
   kind:'how-to', sha:'abc123', date:'2026-10-06', sources:['docs/example.md'] };
@@ -44,6 +44,18 @@ describe('Explore navigation and continuity', () => {
       assert.deepEqual(guideLocation(`${base}start/example/#data%20boundary`,options),{route:'start/example',anchor:'data boundary',url:`${base}start/example/#data%20boundary`});
       for(const href of ['https://other.example/start/example/','javascript:alert(1)',`${base}toString/`,`${base}missing/`,`${base}start/example/#%bad`]) assert.equal(guideLocation(href,options),null);
     }
+  });
+  it('hands a search to Explore in the fragment only, and reads it back intact', () => {
+    for(const base of ['/','/lq-ai/']) {
+      const href=exploreSearchHref(base,'  install with docker & keys #1  ');
+      assert.equal(href,`${base}#q=install%20with%20docker%20%26%20keys%20%231`);
+      const url=new URL(href,'https://docs.example');
+      assert.equal(url.search,'','the query never reaches the server');
+      assert.equal(searchFromHash(url.hash),'install with docker & keys #1');
+      assert.equal(exploreSearchHref(base,'   '),base);
+    }
+    assert.equal(searchFromHash(new URL(exploreSearchHref('/','x'.repeat(1500)),'https://docs.example').hash).length,1000);
+    for(const hash of ['','#','#q=','#q=%20%20','#boundary','#q=%bad','#question=privacy']) assert.equal(searchFromHash(hash),null);
   });
   it('restores each guide’s own scroll, expanded sections, and list filter', () => {
     const state=new ReadingState();

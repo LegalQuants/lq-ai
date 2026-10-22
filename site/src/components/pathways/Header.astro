@@ -1,16 +1,19 @@
 ---
 /**
- * Shared pathways header. Explore's search link focuses the persistent composer;
- * full guides retain Starlight's Pagefind modal. C uses sidebar navigation,
- * while B retains the top pathway tabs. Preferences use the existing site keys.
+ * Shared pathways header. C uses sidebar navigation, while B retains the top
+ * pathway tabs. Preferences use the existing site keys.
+ *
+ * Search: Version C has one search, the composer fixed to the bottom of every
+ * page (DocsSearch on Explore, DocsComposer elsewhere), so its header carries
+ * none — a second control at the top would be a second way in to the same
+ * thing. B keeps Starlight's Pagefind modal here.
  *
  * Version C wears the interface redesign's app chrome (C5, C14): on wide
- * screens the wordmark and search (`.lq-pw-top`) are pinned to the top of the
- * pathways sidebar, and what is left of the header is a 52px page bar over the
- * reading column with the three round buttons. Elsewhere — B, and phones —
- * `.lq-pw-top` is `display: contents`, so its two children sit in the header
- * grid as before. Search still renders once per page (it carries a `<dialog>`),
- * and the DOM order — wordmark, search, buttons — is the order on screen.
+ * screens the wordmark (`.lq-pw-top`) is pinned to the top of the pathways
+ * sidebar, and what is left of the header is a 52px page bar over the reading
+ * column with the three round buttons. Elsewhere — B, and phones —
+ * `.lq-pw-top` is `display: contents`, so its children sit in the header grid.
+ * B's search renders once per page (it carries a `<dialog>`).
  */
 import Search from 'virtual:starlight/components/Search';
 import config from 'virtual:starlight/user-config';
@@ -34,7 +37,7 @@ const shouldRenderSearch =
   <div class="lq-pw-top">
     <a class="lq-pw-brand" href={siteTitleHref} translate="no">LQ.AI</a>
 
-    <div class="lq-pw-search print:hidden">{isLanding && SITE_EXPERIENCE === 'explore' ? <a class="lq-explore-search" href="#lq-docs-question">Search documentation</a> : shouldRenderSearch && <Search />}</div>
+    {SITE_EXPERIENCE === 'cards' && <div class="lq-pw-search print:hidden">{shouldRenderSearch && <Search />}</div>}
   </div>
 
   <div class="lq-pw-actions print:hidden">
@@ -148,24 +151,6 @@ const shouldRenderSearch =
     min-width: 0;
   }
 
-  .lq-explore-search {
-    display: flex;
-    align-items: center;
-    height: 2.5rem;
-    padding: 0 1rem;
-    border: 1px solid var(--sl-color-hairline);
-    border-radius: var(--lq-radius-pill);
-    background: var(--lq-color-control-bg);
-    color: var(--sl-color-gray-3);
-    text-decoration: none;
-    font-size: 0.9375rem;
-  }
-
-  .lq-explore-search:hover {
-    border-color: var(--lq-color-hairline-strong);
-    color: var(--sl-color-white);
-  }
-
   .lq-pw-actions {
     grid-area: actions;
     display: flex;
@@ -273,7 +258,7 @@ const shouldRenderSearch =
   }
 
   /*
-   * Version C on wide screens: the wordmark and search become the top of the
+   * Version C on wide screens: the wordmark becomes the top row of the
    * pathways sidebar. The block is fixed to the viewport (the header is
    * itself a fixed box with no transform, so nothing re-anchors it), sized to
    * the sidebar, and painted with the sidebar's ground and edge so it reads as
@@ -296,7 +281,7 @@ const shouldRenderSearch =
       flex-direction: column;
       width: var(--sl-sidebar-width);
       height: var(--lq-brand-height);
-      padding: 0 0.75rem 0.75rem;
+      padding: 0 0.75rem;
       background: var(--sl-color-bg-sidebar);
       border-inline-end: 1px solid var(--sl-color-hairline-shade);
     }
@@ -319,6 +304,13 @@ const shouldRenderSearch =
       /* 3.75 + 3.5 = --lq-nav-row on phones (theme-pathways.css) */
       grid-template-rows: 3.75rem 3.5rem var(--lq-tabs-row);
       align-content: start;
+    }
+
+    /* Version C on phones: one row — wordmark and buttons. Search is the
+       composer at the bottom of the screen, so there is no search row. */
+    :global(:root[data-has-sidebar]) .lq-pw-header {
+      grid-template-areas: 'brand actions';
+      grid-template-rows: var(--lq-nav-row);
     }
 
     .lq-pw-actions {

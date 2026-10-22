@@ -1,9 +1,7 @@
 /* LiquidUI interaction layer. The existing palette and full guide renderer own
    typography, diagrams, callouts, tables, and screenshot presentation. */
 .main-frame:has([data-lq-explore]) { height:100dvh; overflow:auto; }
-main:has([data-lq-explore]) { padding-bottom:8rem; }
-.lq-docs-composer:not([hidden]) { position:fixed; bottom:1rem; inset-inline-start:calc(var(--sl-content-inline-start,0px) + var(--sl-nav-pad-x)); inset-inline-end:calc(var(--lq-reader-offset,0px) + var(--sl-nav-pad-x)); max-width:54rem; margin-inline:auto; z-index:20; box-shadow:0 0 0 0.5rem var(--sl-color-bg), var(--lq-shadow-raised); }
-.lq-docs-composer[hidden] { display:none; }
+/* The composer itself is styled with every page's, in theme-pathways.css. */
 /* A search result is a hairline card on the page, like the redesign's lists:
    raised ground, 16px rounding, no fill of its own. */
 .lq-search-turn { margin:1.5rem 0; padding:1rem 1.25rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-2xl); background:var(--lq-color-surface-raised); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
@@ -19,6 +17,11 @@ main:has([data-lq-explore]) { padding-bottom:8rem; }
 .lq-reader-toolbar { position:static; display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:0.75rem 1.25rem; min-height:4.5rem; border-bottom:1px solid var(--sl-color-hairline); flex-shrink:0; }
 .lq-reader-toolbar h2 { margin:0; padding:0; border:0; font-size:1.25rem; line-height:1.4; }
 .lq-reader-toolbar button { width:44px; height:44px; flex-shrink:0; border:1px solid var(--sl-color-hairline); border-radius:50%; color:var(--sl-color-text); background:var(--sl-color-bg); font-size:1.75rem; cursor:pointer; }
+.lq-reader-actions { display:flex; align-items:center; gap:0.5rem; flex-shrink:0; }
+/* The reader's way back to search: a pill beside the close button (C4). */
+.lq-reader-toolbar .lq-reader-search { width:auto; padding:0 1rem; border-radius:var(--lq-radius-pill); font:inherit; font-size:0.9375rem; font-weight:600; color:var(--sl-color-text-invert); background:var(--sl-color-bg-accent); border-color:var(--sl-color-bg-accent); }
+.lq-reader-toolbar button:hover { background:var(--lq-color-hover); }
+.lq-reader-toolbar .lq-reader-search:hover { background:var(--sl-color-bg-accent); opacity:0.85; }
 .lq-reader-links { display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; padding:0.75rem 1.25rem; font-size:1rem; border-bottom:1px solid var(--sl-color-hairline); flex-shrink:0; }
 .lq-reader-scroll { flex:1; min-height:0; overflow:auto; overflow-anchor:none; padding:1.25rem; overscroll-behavior:contain; outline:none; }
 [data-lq-reader-status]:empty { display:none; }
