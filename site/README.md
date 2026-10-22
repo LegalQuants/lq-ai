@@ -93,7 +93,7 @@ variables (`npm run build`, CI, GitHub Pages) is C — `SITE_LAYOUT=pathways` an
 `SITE_EXPERIENCE=explore` are both defaults. A (`SITE_LAYOUT=classic`) and B
 (`SITE_EXPERIENCE=cards`) stay buildable for comparison; the gates run on C.
 B retains Iris's card landing and top pathway tabs; C uses the persistent sidebar,
-search composer and adjacent reader. B's introduction is selected from the same
+search composer and a contextual right sidebar. B's introduction is selected from the same
 canonical overview as C. The classic homepage, both pathway homepages, quickstart,
 tier explanation and table-mode skill section project the relevant captures.
 
@@ -543,9 +543,13 @@ diagram, screenshot, status badge, and source link as ordinary static HTML.
 
 `DocsSearch.astro` and `scripts/docs-search.ts` adapt Iris's composer to the
 existing Pagefind index. Search runs on this origin, loads the engine on demand,
-and presents matching excerpts with preview, full-guide, Markdown, and status
-links. Queries and results live in the current page session. No model request or
-additional ranking engine is used.
+and presents matching excerpts with section, Markdown and status links; a
+result's title opens the guide's own page. No model request or additional
+ranking engine is used. The conversation outlives a visit to a guide: this
+tab's questions and the result last selected or opened are kept in
+`sessionStorage` (never sent anywhere; `rememberSearches`/`recallSearches` in
+`src/lib/explore-state.mjs`), the searches run again when Explore loads, and
+Back returns to that result.
 
 **Version C has one search, in one place.** The composer is fixed to the bottom
 of the reading column on every page, and nothing else on the page searches:
@@ -555,54 +559,55 @@ and its results join the conversation; on every other page it is
 `DocsComposer.astro` (rendered from the footer, so it is last in keyboard
 order), which hands the question to Explore in the URL fragment — `/#q=…`,
 never sent to the server — where it runs as if typed there, and Back returns to
-the page. Command/Ctrl K focuses the composer on every page, and the guide
-reader's toolbar has a **Search** button that closes the reader and does the
-same, so search never disappears while reading (on narrow screens the reader
-covers the page). `exploreSearchHref` and `searchFromHash` in
-`src/lib/explore-state.mjs` are the hand-off's contract, pinned by
-`test/explore.test.mjs`.
+the page. Command/Ctrl K focuses the composer on every page. `exploreSearchHref`
+and `searchFromHash` in `src/lib/explore-state.mjs` are the hand-off's
+contract, pinned by `test/explore.test.mjs`.
 
-After Astro and the machine exports finish, `scripts/gen-reader-assets.mjs`
-extracts each full page's compiled article and metadata into a small registry
-and one lazy JSON asset per guide/navigation page under `dist/_reader/`.
+**Guides are read on their own pages; the right sidebar says what they are.**
+Version C follows the interface redesign's rule for the app's right sidebar
+(C19): it shows details of whatever is open or selected, can be closed, and is
+not drawn when there is nothing to show. It appears from 72rem wide, the width
+at which Starlight shows a page's contents column; narrower screens keep the
+same facts in the page.
+
+- **On Explore** (`GuideDetails.astro`, `scripts/guide-details.ts`), a search
+  result can be selected: click its free space or its **Details** button. The
+  sidebar shows the guide's kind and status, its one-line description, Open
+  guide and Markdown, its sections ("In this guide"), who it is written for, its
+  source files and the commit it was checked against. A new search selects its
+  first result; the close button or Escape closes the sidebar.
+- **On a guide page** (`TableOfContents.astro` and `GuideFacts.astro`, which
+  wrap Starlight's own "On this page"), the column reads: About this page (kind,
+  status, readers, the commit it was checked against — above the contents, so a
+  draft's status stays in view), On this page, Sources, Related (the other pages
+  of its pathway group, leading with the next; `relatedRoutes` in
+  `src/pathways.mjs`) and Text copies (Markdown, Docs for agents). While the
+  column is on screen, the title area's chips and text links and the footer
+  stamp give way to it.
+
+After Astro and the machine exports finish, `scripts/gen-guide-details.mjs`
+writes `dist/_guides/index.json`: one entry per guide and navigation page, which
+Explore loads with its first search. The facts come from the sync manifest; the
+sections are read from each full page's compiled HTML
+(`scripts/lib/guide-details.mjs`), so a section link always matches an anchor
+the page has. The page builds the sidebar from that text with `textContent`.
 Cheerio 1.0.0 is an explicitly pinned build dependency, matching the version
-already installed through the site's QA tooling. A real HTML parser preserves
-nested callouts, code, tables, pictures, captions, and accessibility references;
-regular-expression extraction would make that preservation unreliable. It is
-not shipped to browsers and introduces no additional transitive packages.
+already installed through the site's QA tooling; it is not shipped to browsers
+and introduces no additional transitive packages.
 
-`GuideReader.astro` and `scripts/guide-reader.ts` load those current assets.
-Wide screens use an adjacent pane; narrower screens use a native modal. Real
-guide permalinks remain the navigation contract: modified clicks and Open full
-guide use the complete page, and reload at a preview URL opens that same page.
-Back/Forward restores previews; closing restores Explore and its search state.
-Cancelled or superseded guide lookups cannot reopen an old preview.
-Each visited guide retains its scroll and disclosures. All documentation has no
-title filter of its own — the composer is the one way to type and find — so the
-reader's view of it matches the full page. Preview headings and accessibility references get
-their own IDs, while links retain the original public section anchors.
-
-The reader preserves source/status metadata and direct Markdown links. It uses
-the full page's styles and wraps code as the full page does. Its own copy buttons
-replace Expressive Code's page initializer. Diagram layout follows the actual
-reading-column width, so opening a pane does not squeeze a wide drawing into
-unreadable text. Unsupported active content fails preview generation rather
-than silently removing instructions.
+Explore scrolls the window like every other page; it has no inner scroll box of
+its own.
 
 Playback is an explicit opt-in. `scripts/tour-playback.ts` highlights and visits
 the three source-backed answers; it never removes content or search results.
 Pause, resume, and replay retain context, and reduced-motion settings suppress
 animated scrolling. Every answer and all guide links remain usable without
-JavaScript; the enhanced search and reader fall back to ordinary navigation.
+JavaScript; without it there is no search and no sidebar, only ordinary links.
 
 Iris's design/code attribution and the original license are retained under
 `third-party/iris-liquidui/`. `docs.js` from the ZIP is not a source dependency.
-Changing a repository guide rebuilds its full page, preview, search index, and
-agent Markdown in the same build.
-
-`test/reader-cancellation.test.mjs` exercises the actual TypeScript reader
-controller with a deferred first registry lookup. It uses esbuild already
-installed by Astro to compile that controller for the Node test runner.
+Changing a repository guide rebuilds its full page, sidebar details, search
+index, and agent Markdown in the same build.
 
 The sync resolves `docs/site/_data/explore.yaml` and `journeys.yaml` against the
 canonical Markdown route registry. It writes generated answer fragments under
@@ -622,7 +627,7 @@ then `npm run check` for the complete site gates (C is the default build). Inspe
 the introduction and quickstart in a browser, including opening optional details
 and following the text links. The introduction and quickstart include static diagrams compiled from the
 canonical Markdown. The LiquidUI interaction layer above adds local search,
-optional playback, and the adjacent guide reader; a complete guided fictional
+optional playback, and the contextual right sidebar; a complete guided fictional
 document walkthrough remains a later increment.
 
 ## Build-time diagram rendering

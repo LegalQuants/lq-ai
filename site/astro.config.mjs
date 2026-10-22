@@ -116,7 +116,12 @@ export default defineConfig({
       // "Built with Starlight" is off; the footer carries the project's own line.
       credits: false,
       components: {
-        ...(PATHWAYS && SITE_EXPERIENCE === 'explore' ? { Sidebar: './src/components/pathways/Sidebar.astro' } : {}),
+        ...(PATHWAYS && SITE_EXPERIENCE === 'explore'
+          ? {
+              Sidebar: './src/components/pathways/Sidebar.astro',
+              TableOfContents: './src/components/pathways/TableOfContents.astro',
+            }
+          : {}),
         Header: PATHWAYS
           ? './src/components/pathways/Header.astro'
           : './src/components/Header.astro',

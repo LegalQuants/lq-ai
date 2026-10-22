@@ -4,8 +4,8 @@
  *
  * Loaded after theme.css when the site is built with the pathways layout (the
  * default). Version C's structure is Iris's: four reader pathways, the Explore
- * landing, the search composer and the guide reader (Annex D of the docsite
- * mini-PRD). Its look is the proposed LQ.AI interface redesign, the same as
+ * landing with its details sidebar, and the search composer (Annex D of the
+ * docsite mini-PRD). Its look is the proposed LQ.AI interface redesign, the same as
  * the app's: theme.css holds the palette and content styles; this file holds
  * the layout and the per-pathway wiring.
  *
@@ -167,9 +167,9 @@ header.header {
  * message box (one rounded, raised box with a hairline and a soft shadow; the
  * action an ink pill). It is the same box on every page — Explore's
  * (DocsSearch.astro) and everyone else's (DocsComposer.astro) — fixed to the
- * bottom of the reading column. It stops short of the side reader when that is
- * open (`--lq-reader-offset`, explore.css) and of the contents column where a
- * page has one (`--lq-composer-end`, below).
+ * bottom of the reading column. It stops short of Explore's details sidebar
+ * while that is open (`--lq-side-offset`, explore.css) and of the contents
+ * column where a page has one (`--lq-composer-end`, below).
  */
 .lq-docs-composer {
   display: flex;
@@ -219,7 +219,7 @@ header.header {
   bottom: 1rem;
   inset-inline-start: calc(var(--sl-content-inline-start, 0px) + var(--sl-nav-pad-x));
   inset-inline-end: calc(
-    var(--lq-reader-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-nav-pad-x)
+    var(--lq-side-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-nav-pad-x)
   );
   max-width: 54rem;
   margin-inline: auto;

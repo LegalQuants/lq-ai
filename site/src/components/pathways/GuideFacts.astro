@@ -1,0 +1,116 @@
+---
+/**
+ * What a guide is and where it comes from, for Version C's right sidebar
+ * (TableOfContents.astro places it around "On this page"). It is the docs'
+ * version of the app's contextual right sidebar (interface redesign C19) and
+ * of its "Model and data" panel (C13): the page's kind, status and readers,
+ * the commit it was checked against and its source files, its neighbours, and
+ * its text copies.
+ *
+ * `part="about"` renders the facts that go above "On this page", so a draft's
+ * status stays in view however long the contents list is; `part="more"`
+ * renders the rest below it.
+ *
+ * On a wide screen these replace the same facts in the title area and the
+ * footer stamp, which stay in the page for narrower screens, where there is no
+ * right sidebar. Navigation pages (Explore, the pathway hubs, All
+ * documentation) are not guides and get none of this.
+ */
+import { getCollection } from 'astro:content';
+import StatusBadge from '../StatusBadge.astro';
+import { blobUrl, REPO_URL } from '../../repo.mjs';
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES, relatedRoutes } from '../../pathways.mjs';
+import { KIND_LABELS } from '../../../scripts/lib/routes.mjs';
+
+interface Props { part: 'about' | 'more' }
+const { part } = Astro.props;
+const { id, entry } = Astro.locals.starlightRoute;
+const route = String(id ?? '').replace(/\/+$/, '');
+const isNavPage = route === NAV_ROUTES.landing || route === NAV_ROUTES.all || route.startsWith('pathways/');
+const { status, audience = [], kind, checkedAgainst, sourceFiles = [] } = entry.data;
+const sha = checkedAgainst?.sha;
+const base = import.meta.env.BASE_URL;
+
+let related: { route: string; title: string }[] = [];
+let pathway;
+if (!isNavPage && part === 'more') {
+  const titleByRoute = new Map((await getCollection('docs')).map((doc) => [doc.id, doc.data.title]));
+  const near = relatedRoutes(route, [...titleByRoute.keys()]);
+  pathway = near.pathway;
+  related = near.routes.filter((r) => titleByRoute.has(r)).map((r) => ({ route: r, title: titleByRoute.get(r) }));
+}
+---
+
+{!isNavPage && part === 'about' && (
+  <div class="lq-facts lq-facts--about" data-pagefind-ignore>
+    <h2>About this page</h2>
+    <p class="lq-facts-chips">
+      {kind && <span class="lq-chip lq-chip--kind">{KIND_LABELS[kind]}</span>}
+      {status && <StatusBadge status={status} />}
+    </p>
+    {audience.length > 0 && (
+      <ul class="lq-facts-audience" aria-label="Written for">
+        {audience.map((who) => <li class="lq-chip">{who}</li>)}
+      </ul>
+    )}
+    {sha && (
+      <p class="lq-facts-checked">
+        Checked against <a href={`${REPO_URL}/commit/${sha}`} rel="nofollow"><code>{sha}</code></a>
+        {checkedAgainst.date && <>{' · '}<time datetime={checkedAgainst.date}>{checkedAgainst.date}</time></>}
+      </p>
+    )}
+  </div>
+)}
+
+{!isNavPage && part === 'more' && (
+  <div class="lq-facts" data-pagefind-ignore>
+    {sha && sourceFiles.length > 0 && (
+      <>
+        <h2>Sources</h2>
+        <ul class="lq-facts-sources">
+          {sourceFiles.map((path) => <li><a href={blobUrl(sha, path)} rel="nofollow">{path}</a></li>)}
+        </ul>
+      </>
+    )}
+    {related.length > 0 && (
+      <nav aria-labelledby="lq-facts-related">
+        <h2 id="lq-facts-related">Related</h2>
+        <ul>
+          {related.map((page) => <li><a href={withBase(base, page.route)}>{page.title}</a></li>)}
+        </ul>
+        {pathway && <a class="lq-facts-more" href={withBase(base, NAV_ROUTES.pathway(pathway.id))}>All of {pathway.title}</a>}
+      </nav>
+    )}
+    <nav aria-labelledby="lq-facts-text">
+      <h2 id="lq-facts-text">Text copies</h2>
+      <ul>
+        <li><a href={`${base}${route}.md`}>Read as Markdown</a></li>
+        <li><a href={`${base}llms.txt`}>Docs for agents</a></li>
+      </ul>
+    </nav>
+  </div>
+)}
+
+<style is:global>
+  /* Inside Starlight's right sidebar panel, whose own rules size the headings
+     and the links (block, small, muted). */
+  .lq-facts { margin-top: 1.5rem; display: grid; gap: 0.5rem; }
+  .lq-facts--about { margin: 0 0 1.5rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--sl-color-hairline); }
+  .lq-facts nav { display: grid; gap: 0.5rem; margin-top: 1rem; }
+  .lq-facts h2 { margin: 0; }
+  .lq-facts :is(p, ul) { margin: 0; }
+  .lq-facts ul { list-style: none; padding: 0; display: grid; gap: 0.35rem; }
+  .lq-facts-chips, .lq-facts ul.lq-facts-audience { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+  .lq-facts-checked { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
+  .right-sidebar-panel .lq-facts-checked a { display: inline; }
+  .right-sidebar-panel .lq-facts-sources a { font-family: var(--sl-font-mono); }
+  .right-sidebar-panel .lq-facts-more { margin-top: 0.25rem; text-decoration: underline; text-underline-offset: 0.2em; }
+
+  /* The same facts in the title area and the footer give way to these while
+     the right sidebar is on screen (Starlight shows it from 72rem). */
+  @media (min-width: 72rem) {
+    :root[data-has-toc] .lq-pw-page-title :is(.lq-page-title__meta, .lq-text-links),
+    :root[data-has-toc] .lq-footer .lq-stamp { display: none; }
+  }
+</style>

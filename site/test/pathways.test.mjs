@@ -11,6 +11,7 @@ import {
   expandPathways,
   pathwayOf,
   readingOrder,
+  relatedRoutes,
   validatePathways,
 } from '../src/pathways.mjs';
 
@@ -70,5 +71,16 @@ describe('pathways map', () => {
     assert.equal(order[0], 'overview');
     assert.equal(order.at(-1), 'trust/governance');
     assert.ok(order.indexOf('start/quickstart') < order.indexOf('operate'));
+  });
+
+  it('relates a guide to its group, leading with what comes after it', () => {
+    const near = relatedRoutes('start/quickstart', listed);
+    assert.equal(near.pathway.id, 'install');
+    assert.equal(near.group, 'Prepare and get started');
+    assert.deepEqual(near.routes, ['start/what-it-touches', 'start/choose-your-path', 'operate/hardware-sizing']);
+    assert.deepEqual(relatedRoutes('start/what-it-touches', listed).routes.slice(0, 1), ['start/choose-your-path']);
+    assert.equal(relatedRoutes('skills/coverage', listed).routes.length, 6, 'a long group is cut to six');
+    assert.ok(!relatedRoutes('skills/coverage', listed).routes.includes('skills/coverage'));
+    assert.deepEqual(relatedRoutes('not/a/page', listed).routes, []);
   });
 });

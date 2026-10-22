@@ -244,6 +244,23 @@ export function pathwayOf(route) {
   return PATHWAYS.find((p) => p.groups.some((g) => g.pages.includes(clean)));
 }
 
+/**
+ * A guide's neighbours for its "Related" list: the other pages of its group,
+ * in the group's order, starting after the guide and wrapping round — so the
+ * list leads with what comes next. Empty for a route in no group.
+ */
+export function relatedRoutes(route, routes, limit = 6) {
+  for (const pathway of expandPathways(routes)) {
+    for (const group of pathway.groups) {
+      const at = group.pages.indexOf(route);
+      if (at === -1) continue;
+      const others = [...group.pages.slice(at + 1), ...group.pages.slice(0, at)];
+      return { pathway, group: group.title, routes: others.slice(0, limit) };
+    }
+  }
+  return { pathway: undefined, group: undefined, routes: [] };
+}
+
 /** Every content route in reading order: pathway, then group, then page. */
 export function readingOrder(routes) {
   return expandPathways(routes).flatMap((p) => p.groups.flatMap((g) => g.pages));

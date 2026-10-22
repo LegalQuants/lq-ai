@@ -11,7 +11,7 @@
   "scripts": {
     "sync": "node scripts/sync-content.mjs",
     "dev": "npm run sync && npm run diagrams && astro dev",
-    "build": "npm run sync && npm run diagrams && astro build && node scripts/postbuild-machine-surface.mjs && node scripts/gen-reader-assets.mjs",
+    "build": "npm run sync && npm run diagrams && astro build && node scripts/postbuild-machine-surface.mjs && node scripts/gen-guide-details.mjs",
     "preview": "astro preview",
     "test": "node --test test/*.test.mjs",
     "check:links": "node scripts/check-internal-links.mjs",
