@@ -1,24 +1,43 @@
 ---
-/** Iris's persistent pathways, using the repository's single navigation map. */
+/**
+ * Iris's persistent pathways, using the repository's single navigation map.
+ *
+ * Drawn as the interface redesign's left navigation: 14px rows with a line
+ * icon (C16), muted at rest, the current pathway a grey pill in ink at 600.
+ * The state is carried three ways that are not colour (SC 1.4.1):
+ * `aria-current`, the weight and the pill. The trust centre's row carries the
+ * orange mark (C15; `governance` in src/pathways.mjs).
+ */
 import { NAV_ROUTES, PATHWAYS, pathwayOf } from '../../pathways.mjs';
 import { withBase } from '../../namespaces.mjs';
 const base = import.meta.env.BASE_URL;
 const route = String(Astro.locals.starlightRoute.id ?? '').replace(/\/+$/, '');
 const current = pathwayOf(route);
+
+/** Line icons, 24px grid, drawn with the row's own colour. */
+const ICONS = {
+  explore: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>',
+  about: '<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+  install: '<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
+  security: '<path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/>',
+  contribute: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7"/><path d="M18 10.5c0 4-4 4.5-9.5 6"/>',
+  all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
+};
+const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] ?? ''}</svg>`;
 ---
 <div class="lq-pathway-sidebar" data-lq-pathways data-base={base}>
-  <a class="lq-side-link" data-route="" data-tone="a" href={base} aria-current={route === '' ? 'page' : undefined}>Explore</a>
-  {PATHWAYS.map((p) => <a class="lq-side-link" data-pathway={p.id} data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))} aria-current={route === NAV_ROUTES.pathway(p.id) ? 'page' : current?.id === p.id ? 'true' : undefined}>{p.title}</a>)}
-  <a class="lq-side-link lq-side-all" data-route="all" href={withBase(base, NAV_ROUTES.all)} aria-current={route === 'all' ? 'page' : undefined}>All documentation</a>
+  <a class="lq-side-link" data-route="" data-tone="a" href={base} aria-current={route === '' ? 'page' : undefined}><Fragment set:html={icon('explore')} /><span>Explore</span></a>
+  {PATHWAYS.map((p) => <a class="lq-side-link" data-pathway={p.id} data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))} aria-current={route === NAV_ROUTES.pathway(p.id) ? 'page' : current?.id === p.id ? 'true' : undefined}><Fragment set:html={icon(p.id)} /><span class:list={{ 'lq-mark': p.governance }}>{p.title}</span></a>)}
+  <a class="lq-side-link lq-side-all" data-route="all" href={withBase(base, NAV_ROUTES.all)} aria-current={route === 'all' ? 'page' : undefined}><Fragment set:html={icon('all')} /><span>All documentation</span></a>
   <a class="lq-side-agents" href={`${base}llms.txt`}>Docs for agents</a>
 </div>
 <style>
-  .lq-pathway-sidebar { display:flex; flex-direction:column; gap:0.5rem; min-height:100%; padding-bottom:1rem; }
-  .lq-side-link { display:block; padding:1rem; border-radius:0.5rem; font-size:1.125rem; line-height:1.4; color:var(--sl-color-text); text-decoration:none; }
-  .lq-side-link:hover { background:var(--lq-color-hover); }
-  .lq-pathway-sidebar a.lq-side-link[aria-current] { font-weight:650; background:var(--lq-tone-a); color:var(--sl-color-text-invert); border-inline-start:0; }
-  .lq-pathway-sidebar a.lq-side-link[data-tone='b'][aria-current] { background:var(--lq-tone-b); }
-  .lq-pathway-sidebar a.lq-side-link[data-tone='c'][aria-current] { background:var(--lq-tone-c); }
-  .lq-side-all { margin-top:1rem; }
-  .lq-side-agents { margin-top:auto; padding:1rem; font-size:0.95rem; color:var(--sl-color-text-accent); text-underline-offset:0.2em; }
+  .lq-pathway-sidebar { display:flex; flex-direction:column; gap:2px; min-height:100%; padding:0.25rem 0 1rem; }
+  .lq-side-link { display:flex; align-items:center; gap:0.625rem; min-height:2.25rem; padding:0.4rem 0.75rem; border-radius:var(--lq-radius-pill); font-size:0.875rem; line-height:1.35; color:var(--sl-color-gray-3); text-decoration:none; }
+  .lq-side-link :global(svg) { width:17px; height:17px; flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+  .lq-side-link:hover { background:var(--lq-color-hover); color:var(--sl-color-white); }
+  .lq-pathway-sidebar a.lq-side-link[aria-current] { font-weight:600; background:var(--lq-color-sidebar-current-bg); color:var(--sl-color-white); border-inline-start:0; }
+  .lq-side-all { margin-top:0.75rem; }
+  .lq-side-agents { margin-top:auto; padding:0.75rem; font-size:0.8125rem; color:var(--sl-color-gray-4); text-underline-offset:0.2em; }
+  .lq-side-agents:hover { color:var(--sl-color-white); }
 </style>

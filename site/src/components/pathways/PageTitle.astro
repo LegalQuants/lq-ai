@@ -14,7 +14,6 @@
  * The H1 keeps Starlight's skip-link target id (`_top`; see the classic
  * PageTitle for why it is restated).
  */
-import Eyebrow from '../Eyebrow.astro';
 import StatusBadge from '../StatusBadge.astro';
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES, pathwayOf } from '../../pathways.mjs';
@@ -57,15 +56,15 @@ const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase
               <a href={withBase(base, NAV_ROUTES.landing)}>Docs</a>
             </li>
             <li>
-              <a href={withBase(base, NAV_ROUTES.pathway(pathway.id))}>{pathway.title}</a>
+              <a href={withBase(base, NAV_ROUTES.pathway(pathway.id))} class:list={{ 'lq-mark': pathway.governance }}>{pathway.title}</a>
             </li>
           </ol>
         </nav>
       )}
       <h1 id={PAGE_TITLE_ID}>{title}</h1>
-      {kind && <div data-pagefind-ignore><Eyebrow text={KIND_LABELS[kind]} as="p" class="lq-page-title__kind" /></div>}
-      {(status || audience?.length) && (
+      {(kind || status || audience?.length) && (
         <div class="lq-page-title__meta" data-pagefind-ignore>
+          {kind && <span class="lq-chip lq-chip--kind lq-page-title__kind">{KIND_LABELS[kind]}</span>}
           {status && <StatusBadge status={status} />}
           {audience?.length ? (
             <ul class="lq-page-title__audience" aria-label="Written for">
@@ -94,7 +93,7 @@ const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase
 <style>
   .lq-text-links { display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: 0.95rem; margin-top: 0.75rem; }
   .lq-text-links a, .lq-journey a { color: var(--lq-page-accent); }
-  .lq-journey { margin-top: 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--sl-color-hairline); border-radius: 0.75rem; }
+  .lq-journey { margin-top: 1.5rem; padding: 1rem 1.25rem; border: 1px solid var(--sl-color-hairline); border-radius: var(--lq-radius-2xl); }
   .lq-journey ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 1.5rem; list-style: none; padding: 0; margin: 0.75rem 0; }
   .lq-journey a { text-underline-offset: 0.2em; }
   @media (max-width: 40rem) { .lq-journey ol { grid-template-columns: 1fr; } }
@@ -119,9 +118,9 @@ const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase
   }
 
   .lq-pw-title--landing h1 {
-    font-size: clamp(3rem, 5.4vw, 4.875rem);
-    line-height: 1.02;
-    letter-spacing: -0.045em;
+    font-size: clamp(2.5rem, 4.5vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
     color: var(--sl-color-white);
   }
 
@@ -163,17 +162,23 @@ const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase
     color: var(--sl-color-gray-3);
   }
 
+  /* The redesign's "matter / title" header (C18): muted section names, a
+     faint slash, ink on hover. */
   .lq-pw-crumbs li + li::before {
     content: '/';
     padding: 0 0.4rem;
+    color: var(--sl-color-gray-4);
   }
 
   .lq-pw-crumbs a {
-    color: var(--sl-color-text-accent);
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
   }
 
-  :global(.lq-page-title__kind) {
-    margin-top: 0.35rem;
+  .lq-pw-crumbs a:hover {
+    color: var(--sl-color-white);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
   }
 
   .lq-page-title__meta {

@@ -3,6 +3,14 @@
  * Shared pathways header. Explore's search link focuses the persistent composer;
  * full guides retain Starlight's Pagefind modal. C uses sidebar navigation,
  * while B retains the top pathway tabs. Preferences use the existing site keys.
+ *
+ * Version C wears the interface redesign's app chrome (C5, C14): on wide
+ * screens the wordmark and search (`.lq-pw-top`) are pinned to the top of the
+ * pathways sidebar, and what is left of the header is a 52px page bar over the
+ * reading column with the three round buttons. Elsewhere — B, and phones —
+ * `.lq-pw-top` is `display: contents`, so its two children sit in the header
+ * grid as before. Search still renders once per page (it carries a `<dialog>`),
+ * and the DOM order — wordmark, search, buttons — is the order on screen.
  */
 import Search from 'virtual:starlight/components/Search';
 import config from 'virtual:starlight/user-config';
@@ -23,9 +31,11 @@ const shouldRenderSearch =
 ---
 
 <div class="lq-pw-header">
-  <a class="lq-pw-brand" href={siteTitleHref} translate="no">LQ.AI</a>
+  <div class="lq-pw-top">
+    <a class="lq-pw-brand" href={siteTitleHref} translate="no">LQ.AI</a>
 
-  <div class="lq-pw-search print:hidden">{isLanding && SITE_EXPERIENCE === 'explore' ? <a class="lq-explore-search" href="#lq-docs-question">Search documentation</a> : shouldRenderSearch && <Search />}</div>
+    <div class="lq-pw-search print:hidden">{isLanding && SITE_EXPERIENCE === 'explore' ? <a class="lq-explore-search" href="#lq-docs-question">Search documentation</a> : shouldRenderSearch && <Search />}</div>
+  </div>
 
   <div class="lq-pw-actions print:hidden">
     <a
@@ -117,11 +127,17 @@ const shouldRenderSearch =
     height: 100%;
   }
 
+  /* Brand and search sit in the header grid unless Version C pins them to
+     the sidebar (below). */
+  .lq-pw-top {
+    display: contents;
+  }
+
   .lq-pw-brand {
     grid-area: brand;
-    font-size: 1.45rem;
+    font-size: 1.0625rem;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     color: var(--sl-color-white);
     text-decoration: none;
     white-space: nowrap;
@@ -132,8 +148,23 @@ const shouldRenderSearch =
     min-width: 0;
   }
 
-  .lq-explore-search { display:block; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; padding:0.65rem 1rem; color:var(--sl-color-text); text-decoration:none; font-size:1rem; }
-  .lq-explore-search:hover { background:var(--lq-color-hover); }
+  .lq-explore-search {
+    display: flex;
+    align-items: center;
+    height: 2.5rem;
+    padding: 0 1rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-pill);
+    background: var(--lq-color-control-bg);
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    font-size: 0.9375rem;
+  }
+
+  .lq-explore-search:hover {
+    border-color: var(--lq-color-hairline-strong);
+    color: var(--sl-color-white);
+  }
 
   .lq-pw-actions {
     grid-area: actions;
@@ -142,6 +173,9 @@ const shouldRenderSearch =
     justify-self: end;
   }
 
+  /* Round buttons (C4), at the 44px target size (WCAG 2.5.5) rather than the
+     redesign's 32px. Icons are muted at rest and ink when hovered, pressed or
+     current. */
   .lq-pw-chip {
     position: relative;
     display: grid;
@@ -150,50 +184,41 @@ const shouldRenderSearch =
     height: 44px;
     padding: 0;
     border: 1px solid var(--sl-color-hairline);
-    border-radius: 12px;
-    background: var(--sl-color-bg);
-    color: var(--sl-color-white);
+    border-radius: var(--lq-radius-pill);
+    background: transparent;
+    color: var(--sl-color-gray-3);
     cursor: pointer;
   }
 
   .lq-pw-chip svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
     fill: none;
     stroke: currentColor;
-    stroke-width: 1.8;
+    stroke-width: 1.75;
     stroke-linejoin: round;
   }
 
   .lq-pw-chip:hover {
     background: var(--lq-color-hover);
+    color: var(--sl-color-white);
   }
 
-  /* "All documentation" is the filled chip, in the page's accent. */
-  a.lq-pw-chip {
-    background: var(--sl-color-bg-accent);
-    border-color: var(--sl-color-bg-accent);
-    color: var(--sl-color-text-invert);
-  }
-
-  a.lq-pw-chip:hover {
-    filter: brightness(1.08);
-  }
-
-  .lq-pw-chip[aria-pressed='true'] {
-    border-color: var(--sl-color-bg-accent);
+  .lq-pw-chip[aria-pressed='true'],
+  .lq-pw-chip[aria-current] {
+    border-color: var(--lq-color-hover);
     background: var(--lq-color-hover);
-    color: var(--sl-color-text-accent);
+    color: var(--sl-color-white);
   }
 
   .lq-pw-tip {
     position: absolute;
-    top: calc(100% + 9px);
+    top: calc(100% + 8px);
     right: 0;
     width: max-content;
     max-width: 16rem;
-    padding: 0.45rem 0.7rem;
-    border-radius: 6px;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--lq-radius-lg);
     background: var(--sl-color-white);
     color: var(--sl-color-bg);
     font-size: 0.8125rem;
@@ -227,23 +252,61 @@ const shouldRenderSearch =
 
   .lq-pw-tabs a {
     display: block;
-    padding: 0.45rem 0.8rem;
-    border-radius: 6px;
-    font-size: 1rem;
-    color: var(--sl-color-white);
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--lq-radius-pill);
+    font-size: 0.9375rem;
+    color: var(--sl-color-gray-3);
     text-decoration: none;
     transition: background-color 140ms ease;
   }
 
   .lq-pw-tabs a:hover {
     background: var(--lq-color-hover);
+    color: var(--sl-color-white);
   }
 
-  /* The current pathway's tab is filled in that pathway's own tone. */
+  /* The current pathway's tab is the redesign's selected row. */
   .lq-pw-tabs a[aria-current] {
-    background: var(--sl-color-bg-accent);
-    color: var(--sl-color-text-invert);
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
     font-weight: 600;
+  }
+
+  /*
+   * Version C on wide screens: the wordmark and search become the top of the
+   * pathways sidebar. The block is fixed to the viewport (the header is
+   * itself a fixed box with no transform, so nothing re-anchors it), sized to
+   * the sidebar, and painted with the sidebar's ground and edge so it reads as
+   * the sidebar's first rows. theme-pathways.css starts the sidebar's
+   * scrolling pane below it (`--lq-brand-height`) and narrows the header to
+   * the reading column.
+   */
+  @media (min-width: 50rem) {
+    :global(:root[data-has-sidebar]) .lq-pw-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: '. actions';
+      grid-template-rows: var(--lq-nav-row);
+    }
+
+    :global(:root[data-has-sidebar]) .lq-pw-top {
+      position: fixed;
+      inset-block-start: 0;
+      inset-inline-start: 0;
+      display: flex;
+      flex-direction: column;
+      width: var(--sl-sidebar-width);
+      height: var(--lq-brand-height);
+      padding: 0 0.75rem 0.75rem;
+      background: var(--sl-color-bg-sidebar);
+      border-inline-end: 1px solid var(--sl-color-hairline-shade);
+    }
+
+    :global(:root[data-has-sidebar]) .lq-pw-brand {
+      display: flex;
+      align-items: center;
+      height: 3.25rem;
+      padding-inline: 0.75rem;
+    }
   }
 
   @media (max-width: 50rem) {

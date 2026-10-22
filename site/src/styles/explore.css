@@ -2,9 +2,11 @@
    typography, diagrams, callouts, tables, and screenshot presentation. */
 .main-frame:has([data-lq-explore]) { height:100dvh; overflow:auto; }
 main:has([data-lq-explore]) { padding-bottom:8rem; }
-.lq-docs-composer:not([hidden]) { position:fixed; bottom:1rem; inset-inline-start:calc(var(--sl-content-inline-start,0px) + var(--sl-nav-pad-x)); inset-inline-end:calc(var(--lq-reader-offset,0px) + var(--sl-nav-pad-x)); max-width:54rem; margin-inline:auto; z-index:20; box-shadow:0 0 0 0.5rem var(--sl-color-bg); }
+.lq-docs-composer:not([hidden]) { position:fixed; bottom:1rem; inset-inline-start:calc(var(--sl-content-inline-start,0px) + var(--sl-nav-pad-x)); inset-inline-end:calc(var(--lq-reader-offset,0px) + var(--sl-nav-pad-x)); max-width:54rem; margin-inline:auto; z-index:20; box-shadow:0 0 0 0.5rem var(--sl-color-bg), var(--lq-shadow-raised); }
 .lq-docs-composer[hidden] { display:none; }
-.lq-search-turn { margin:1.5rem 0; padding:1rem 1.25rem; border:1px solid var(--sl-color-hairline); border-radius:1rem; background:var(--lq-color-hover); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+/* A search result is a hairline card on the page, like the redesign's lists:
+   raised ground, 16px rounding, no fill of its own. */
+.lq-search-turn { margin:1.5rem 0; padding:1rem 1.25rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-2xl); background:var(--lq-color-surface-raised); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
 .lq-search-turn h3 { margin:0 0 1rem; font-size:1.125rem; overflow-wrap:anywhere; }
 .sl-markdown-content .lq-search-matches { list-style:none; margin:0; padding:0; }
 .lq-search-matches li { margin:0; padding:1rem 0; border-top:1px solid var(--sl-color-hairline); }
@@ -27,14 +29,16 @@ main:has([data-lq-explore]) { padding-bottom:8rem; }
 .lq-guide-reader .lq-all-rail { position:static; display:flex; flex-direction:row; flex-wrap:wrap; border:0; }
 .lq-guide-reader .lq-all-group ul, .lq-guide-reader .lq-pathway-links { grid-template-columns:1fr; }
 .lq-guide-reader [id] { scroll-margin-top:1rem; }
-[data-lq-reader-filter] { display:block; width:100%; font:inherit; padding:0.6rem 0.75rem; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; background:var(--sl-color-bg); color:var(--sl-color-text); margin:0.5rem 0 1rem; }
+[data-lq-reader-filter] { display:block; width:100%; font:inherit; padding:0.6rem 1rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); background:var(--sl-color-bg); color:var(--sl-color-text); margin:0.5rem 0 1rem; }
 [data-lq-reader-filter][hidden] { display:none; }
-.lq-reader-copy { display:block; margin:1rem 0 0.5rem auto; padding:0.5rem 0.75rem; min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:0.5rem; font:inherit; font-size:0.9rem; background:var(--sl-color-bg); color:var(--sl-color-text); }
+.lq-reader-copy { display:block; margin:1rem 0 0.5rem auto; padding:0.5rem 1rem; min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); font:inherit; font-size:0.9rem; background:var(--sl-color-bg); color:var(--sl-color-text); }
 .lq-guide-reader :is(button,a,input):focus-visible { outline:3px solid var(--sl-color-text-accent); outline-offset:3px; }
 @media (min-width:78rem) {
   .lq-reader-wide { --lq-reader-offset:min(44vw,40rem); }
   .lq-reader-wide .main-frame { margin-inline-end:var(--lq-reader-offset); }
-  .lq-reader-wide .page > header.header { width:calc(100% - var(--lq-reader-offset)); }
+  /* The page bar runs from the sidebar's edge to the reader's (theme-pathways.css
+     anchors both ends), so it stops at the reader rather than being resized. */
+  .lq-reader-wide .page > header.header { inset-inline-end:var(--lq-reader-offset); width:auto; }
   .lq-guide-reader { inset:0 0 0 auto; margin:0; width:min(44vw,40rem); height:100dvh; border:0; border-inline-start:1px solid var(--sl-color-hairline); border-radius:0; }
 }
 @media (max-width:40rem) { .lq-guide-reader { inset:0.5rem; width:calc(100% - 1rem); height:calc(100dvh - 1rem); } .lq-reader-toolbar,.lq-reader-links,.lq-reader-scroll { padding-inline:1rem; } }

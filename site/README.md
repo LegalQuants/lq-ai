@@ -175,12 +175,45 @@ extended with the site's own frontmatter — `audience`, `status`, `sources`
 (written by the author) and `checkedAgainst`, `sourceFiles` (injected by the
 sync from git history).
 
-**The theme** is `src/styles/theme.css`, a single file mapping the design
-language onto Starlight's CSS variables for both themes. Light is the default.
-No webfonts: the type stack is what the reader's system already has, so
-rendering a page makes no third-party request. Every colour decision in it
-carries its measured contrast ratio in a comment, and `check:contrast` re-measures
-them from the file.
+**The theme** is the proposed LQ.AI interface redesign (October 2026), so the
+documentation reads as part of the same product as the app: ink on white in
+light, near-black in dark, pills and round buttons for every control, and colour
+spent on two meanings only. Its palette departs from ADR 0043's and is still
+with the committee (its flag F1). Two files carry it:
+
+- `src/styles/theme.css` — the palette for both themes and every content style
+  (prose, tables, asides, chips, cards, code), shared by all layouts. Colours the
+  redesign's mockups never needed are marked *derived*.
+- `src/styles/theme-pathways.css` — Version C's layout and per-pathway wiring,
+  loaded after it. Each page still takes its pathway's tone, but every tone is
+  ink. On wide screens there is no full-width header: the pathways sidebar runs
+  the full height with the wordmark and search at its top, and the header is a
+  52px page bar over the reading column with the three round buttons.
+
+Light is the default. No webfonts: the type stack is what the reader's system
+already has (SF on Apple devices, Segoe UI on Windows), so rendering a page makes
+no third-party request; the pathways layout's Source Sans 3 file is gone. Every
+colour decision carries its measured contrast ratio in a comment, and
+`check:contrast` re-measures them from both files.
+
+Where colour goes, because it is the rule a later edit is most likely to bend:
+
+- **Ink is the accent.** Links are the prose colour with an underline (the
+  underline is what marks them, so it is never removed); headings, the focus
+  ring, the current pathway and filled buttons are ink.
+- **Orange marks governance only** (the redesign's C15): the Security & privacy
+  pathway — the trust centre — gets the orange dot on its sidebar row, its
+  Explore card and its breadcrumb (`governance: true` in `src/pathways.mjs`).
+  `#e8590c` (`--lq-orange`) is the mark, never text; `check:contrast` fails if
+  it is ever measured as passing for text.
+- **Red is for danger only** (C26): Starlight's `danger` aside. Note, tip and
+  caution asides are monochrome — caution is told apart by an ink rule — and so
+  are status chips (C28): done is an ink outline, in motion a dashed line, not
+  live a quiet fill. Build-time diagrams use the same greys
+  (`scripts/lib/diagrams.mjs`).
+
+The classic layout (A) shares `theme.css` and so the palette, but none of
+Version C's chrome; it is kept for comparison, not styled further.
 
 Four places where the theme deliberately overrules a Starlight default, because
 each one is the kind of thing a later edit would quietly undo:
@@ -190,19 +223,18 @@ each one is the kind of thing a later edit would quietly undo:
   can sit on the last line, which means a border on the `h2` tracks the width of
   the *text* — a two-line heading gets a rule under only its second line. The
   wrapper is the block box.
-- **Cards are one object.** `<Card>`, `<LinkCard>` and the previous/next pair all
-  take the hairline border, the raised ground, the `xl` radius and the 3px
-  accent-border lift on hover (off under `prefers-reduced-motion`). Starlight
-  gives the last two a *strong* line, no ground and a grey-fill hover, so
-  without this the design language would stop at the edge of the prose — and the
-  hub pages and the entry page are built entirely from `<LinkCard>`.
-- **The current page in the sidebar is a 3px accent rule, not a solid accent
-  fill.** Starlight fills it with `--sl-color-text-accent` and inverts the text.
-  That passes contrast, but it makes a saturated block the loudest object on a
-  quiet page and spends the accent on "you are here" twice, since the header
-  already underlines the current namespace in accent. One device now does both.
-  The state is still carried three ways that are not colour: `aria-current`, the
-  weight, and the rule.
+- **Cards are one object.** `<Card>`, `<LinkCard>`, the previous/next pair and
+  the Explore pathway cards all take the hairline border, the raised ground and
+  the 16px radius; on hover the line darkens and the fill lifts one step —
+  nothing moves. Starlight gives the previous/next pair a *strong* line, no
+  ground and a grey-fill hover, so without this the design language would stop
+  at the edge of the prose.
+- **The current pathway is a grey pill, not a solid accent fill.** With an ink
+  accent, a filled row would be a black block — the loudest object on the page.
+  The pill is the redesign's selected row, at weight 600 rather than its 500,
+  because the fill is soft and the weight has to carry the state. The state is
+  carried three ways that are not colour: `aria-current`, the weight, and the
+  pill.
 - **Code frames lose their ornament.** Expressive Code draws three macOS
   "traffic light" dots on a terminal frame and a drop shadow around every frame;
   the design language has no illustration and no shadow. Both are off
@@ -218,8 +250,8 @@ each one is the kind of thing a later edit would quietly undo:
 | `PageTitle.astro` | Namespace eyebrow, the H1, the status badge, audience chips. |
 | `Footer.astro` | The stamp, "Edit this page", previous/next, and the project line. |
 | `Stamp.astro` | "Checked against `<sha>` · date" plus every source file linked at that commit. Renders nothing when the sync has not stamped the page. |
-| `StatusBadge.astro` | `draft` / `reviewed`, as text plus colour, never colour alone. |
-| `Eyebrow.astro` | The mono uppercase caption primitive. |
+| `StatusBadge.astro` | `draft` / `reviewed`, as a word in a chip whose outline repeats it, never colour alone. |
+| `Eyebrow.astro` | The small caption primitive (the classic layout's section label). |
 
 Each override keeps Starlight's landmarks, skip link and focus order: the H1
 keeps the `#_top` id the skip link targets, the header renders inside

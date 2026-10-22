@@ -17,7 +17,11 @@
 // in exactly one group, and every listed route must exist. `check:orphans`
 // runs it against the sync manifest in the pathways layout.
 
-/** Pathway id → the accent tone it takes (`--lq-tone-a|b|c` in the theme). */
+/**
+ * Pathway id → the accent tone it takes (`--lq-tone-a|b|c` in the theme).
+ * `governance` marks the trust centre: the one pathway the theme gives the
+ * orange mark (the interface redesign's C15 — orange marks governance only).
+ */
 export const PATHWAYS = [
   {
     id: 'about',
@@ -125,6 +129,7 @@ export const PATHWAYS = [
     id: 'security',
     title: 'Security & privacy',
     tone: 'c',
+    governance: true,
     groups: [
       {
         title: 'Data handling and risks',

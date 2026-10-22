@@ -1,53 +1,48 @@
 /*
- * LQ.AI documentation site — pathways layout theme
- * =================================================
+ * LQ.AI documentation site — pathways layout (Version C)
+ * =======================================================
  *
- * Loaded after theme.css when the site is built with SITE_LAYOUT=pathways.
- * It is Iris's "Graphite & copper" palette from her UI review (lq-docs-v2,
- * #lqai 2026-09-25): warm paper, charcoal ink, and three accent tones — one
- * per pathway — that colour a page's headings, links, current tab and focus
- * ring. Body copy stays neutral.
+ * Loaded after theme.css when the site is built with the pathways layout (the
+ * default). Version C's structure is Iris's: four reader pathways, the Explore
+ * landing, the search composer and the guide reader (Annex D of the docsite
+ * mini-PRD). Its look is the proposed LQ.AI interface redesign, the same as
+ * the app's: theme.css holds the palette and content styles; this file holds
+ * the layout and the per-pathway wiring.
  *
- * Token blocks use theme.css's own selectors, so `check:contrast` (run with
- * SITE_LAYOUT=pathways) reads both files in load order and checks every pair
- * against the values this layout renders. Each tone is also checked in each
- * role the accent plays.
+ * Each page still takes its pathway's tone (`--lq-page-accent`, set per page
+ * by routeData.mjs), but in the redesign every tone is ink (C3): headings,
+ * links, the current pathway and the focus ring read as one product. The
+ * Security & privacy pathway — the trust centre — is marked with the orange
+ * dot instead (C15), on its sidebar row, its Explore card and its breadcrumb.
  *
- * Type is Source Sans 3 (SIL OFL 1.1; licence beside the font file), served
- * from this site — not a third-party request, so theme.css rule 1's reason
- * still holds. The font file is Adobe's release converted to WOFF2, not
- * subset: a subset would be a Modified Version, which the OFL does not allow
- * to keep the reserved name "Source".
+ * Token blocks use theme.css's own selectors, so `check:contrast` reads both
+ * files in load order and checks every pair against the values this layout
+ * renders.
+ *
+ * Type is theme.css's system stack (C2). The layout previously served Source
+ * Sans 3; the redesign sets SF on Apple devices and each platform's own sans
+ * elsewhere, so no font file ships.
  */
-
-@font-face {
-  font-family: 'Source Sans 3';
-  src: url('../assets/fonts/SourceSans3VF-Upright.woff2') format('woff2');
-  font-weight: 200 900;
-  font-style: normal;
-  font-display: swap;
-}
 
 /* ------------------------------------------------------------------ *
  * Shared
  * ------------------------------------------------------------------ */
 
 :root {
-  --sl-font:
-    'Source Sans 3', -apple-system, 'SF Pro Text', BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', 'Noto Sans', Arial, sans-serif;
-
   --lq-text-body: 1.125rem;
 
-  /* No sidebar, so the reading column can be a little wider. */
+  /* The reading column is a little wider than the classic layout's. */
   --sl-content-width: 52rem;
   --sl-sidebar-width: 15.5rem;
 
   /* The header is two rows: brand / search / buttons, then the pathway tabs.
-     The landing page sets --lq-tabs-row to 0 (routeData.mjs): no tabs there. */
+     The landing page and Version C set --lq-tabs-row to 0 (routeData.mjs). */
   --lq-nav-row: 4.75rem;
   --lq-tabs-row: 3.25rem;
   --sl-nav-height: calc(var(--lq-nav-row) + var(--lq-tabs-row));
+
+  /* Version C's sidebar top: the 52px wordmark row, then the search pill. */
+  --lq-brand-height: 6.75rem;
 }
 
 /* The phone breakpoint is 50rem (800px) throughout this layout, not the
@@ -67,54 +62,27 @@
 
 :root[data-theme='light'],
 [data-theme='light'] ::backdrop {
-  /* The three accent tones. a: What is LQAI, Contribute. b: How to install.
-     c: Security & privacy. */
-  --lq-tone-a: #303a3c;
-  --lq-tone-b: #a1421c;
-  --lq-tone-c: #176566;
+  /* The three pathway tones. a: Getting started, Contribute. b: How to
+     install. c: Security & privacy. All ink (C3); see the header. */
+  --lq-tone-a: #111114;
+  --lq-tone-b: #111114;
+  --lq-tone-c: #111114;
 
-  /* Landing cards: fills, and the ink on them. */
-  --lq-card-a: #303a3c;
-  --lq-card-b: #b34d24;
-  --lq-card-c: #176566;
+  /* Version B's filled landing cards keep their shape, in ink. */
+  --lq-card-a: #111114;
+  --lq-card-b: #111114;
+  --lq-card-c: #111114;
   --lq-card-ink: #ffffff;
 
-  --sl-color-white: #24282a; /* heading text */
-  --sl-color-gray-1: #24282a;
-  --sl-color-gray-2: #24282a; /* body text */
-  --sl-color-gray-3: #5e6263; /* muted text */
-  --sl-color-gray-4: #7f8384; /* icons and controls, never prose */
-  --sl-color-gray-5: #cecfc9;
-  --sl-color-gray-6: #e2e4de;
-  --sl-color-gray-7: #eae7e0;
-  --sl-color-black: #f7f5f0; /* page background */
-
-  --lq-color-surface-raised: #eae7e0;
-  --lq-color-surface-sunken: #eae7e0;
-  --lq-color-control-bg: #f7f5f0;
-  --lq-color-sidebar-current-bg: #f7f5f0;
-  --lq-color-hover: #e2e4de;
+  /* Hover and pressed fills: the redesign's selected-row grey. */
+  --lq-color-hover: #e9e9ec;
 
   /* The page's accent: its pathway's tone, set per page by routeData.mjs. */
   --lq-accent: var(--lq-page-accent, var(--lq-tone-a));
-  --sl-color-accent-low: #e2e4de;
   --sl-color-accent: var(--lq-page-accent, var(--lq-tone-a));
   --sl-color-accent-high: var(--lq-page-accent, var(--lq-tone-a));
-
-  --sl-color-text: var(--sl-color-gray-2);
   --sl-color-text-accent: var(--lq-page-accent, var(--lq-tone-a));
-  --sl-color-text-invert: #f7f5f0;
-
-  --sl-color-bg: #f7f5f0;
-  --sl-color-bg-nav: #f7f5f0;
-  --sl-color-bg-sidebar: #f7f5f0; /* the TOC column sits on the page, as in the review */
-  --sl-color-bg-inline-code: #eae7e0;
   --sl-color-bg-accent: var(--lq-page-accent, var(--lq-tone-a));
-
-  --sl-color-hairline-light: #cecfc9;
-  --sl-color-hairline: #cecfc9;
-  --sl-color-hairline-shade: #cecfc9;
-  --lq-color-hairline-strong: #b9bab3;
 }
 
 /* ------------------------------------------------------------------ *
@@ -123,50 +91,22 @@
 
 :root,
 ::backdrop {
-  --lq-tone-a: #b7cccc;
-  --lq-tone-b: #ffab79;
-  --lq-tone-c: #72cdca;
+  --lq-tone-a: #f4f4f5;
+  --lq-tone-b: #f4f4f5;
+  --lq-tone-c: #f4f4f5;
 
-  --lq-card-a: #283638;
-  --lq-card-b: #79381f;
-  --lq-card-c: #164e50;
-  --lq-card-ink: #ffffff;
+  --lq-card-a: #f4f4f5;
+  --lq-card-b: #f4f4f5;
+  --lq-card-c: #f4f4f5;
+  --lq-card-ink: #08080a;
 
-  --sl-color-white: #f3f1e9;
-  --sl-color-gray-1: #f3f1e9;
-  --sl-color-gray-2: #e6e4dc;
-  --sl-color-gray-3: #bcc5c4;
-  --sl-color-gray-4: #7a8685;
-  --sl-color-gray-5: #344043;
-  --sl-color-gray-6: #202b2e;
-  --sl-color-gray-7: #13191b;
-  --sl-color-black: #090c0d;
-
-  --lq-color-surface-raised: #13191b;
-  --lq-color-surface-sunken: #13191b;
-  --lq-color-control-bg: #090c0d;
-  --lq-color-sidebar-current-bg: #13191b;
-  --lq-color-hover: #202b2e;
+  --lq-color-hover: #1e1f23;
 
   --lq-accent: var(--lq-page-accent, var(--lq-tone-a));
-  --sl-color-accent-low: #202b2e;
   --sl-color-accent: var(--lq-page-accent, var(--lq-tone-a));
   --sl-color-accent-high: var(--lq-page-accent, var(--lq-tone-a));
-
-  --sl-color-text: var(--sl-color-gray-2);
   --sl-color-text-accent: var(--lq-page-accent, var(--lq-tone-a));
-  --sl-color-text-invert: #090c0d;
-
-  --sl-color-bg: #090c0d;
-  --sl-color-bg-nav: #090c0d;
-  --sl-color-bg-sidebar: #090c0d;
-  --sl-color-bg-inline-code: #13191b;
   --sl-color-bg-accent: var(--lq-page-accent, var(--lq-tone-a));
-
-  --sl-color-hairline-light: #344043;
-  --sl-color-hairline: #344043;
-  --sl-color-hairline-shade: #344043;
-  --lq-color-hairline-strong: #46555a;
 }
 
 /* ------------------------------------------------------------------ *
@@ -183,7 +123,6 @@ header.header {
   border-top: 0;
 }
 
-/* Headings take the page's accent; body copy stays neutral. */
 .sl-markdown-content :is(h2, h3, h4) {
   color: var(--sl-color-text-accent);
   letter-spacing: -0.015em;
@@ -193,7 +132,31 @@ header.header {
   font-weight: 650;
 }
 
-/* Search reads as a wide box, as in the review, at every width. */
+/*
+ * Version C's app chrome (C5, C14). On wide screens there is no full-width
+ * header: the pathways sidebar runs the full height of the window, with the
+ * wordmark and search pinned to its top (Header.astro moves them there), and
+ * the header is a 52px page bar over the reading column holding the three
+ * round buttons. Scoped to `[data-has-sidebar]`, which routeData.mjs sets for
+ * Version C only — B keeps its two-row header and tabs.
+ */
+@media (min-width: 50rem) {
+  :root[data-has-sidebar] {
+    --lq-nav-row: 3.25rem;
+  }
+
+  :root[data-has-sidebar] header.header {
+    inset-inline-start: var(--sl-sidebar-width);
+    inset-inline-end: 0;
+    width: auto;
+  }
+
+  :root[data-has-sidebar] .sidebar-pane {
+    inset-block-start: var(--lq-brand-height);
+  }
+}
+
+/* Search reads as a pill, at every width. */
 .lq-pw-search site-search,
 .lq-pw-search site-search > button {
   width: 100%;
@@ -202,13 +165,13 @@ header.header {
 .lq-pw-search site-search > button {
   max-width: none;
   justify-content: flex-start;
-  height: 44px;
+  height: 2.5rem;
   padding-inline: 0.9rem;
   border: 1px solid var(--sl-color-hairline);
-  border-radius: 6px;
-  background: var(--sl-color-bg);
+  border-radius: var(--lq-radius-pill);
+  background: var(--lq-color-control-bg);
   color: var(--sl-color-gray-3);
-  font-size: 1rem;
+  font-size: 0.9375rem;
 }
 
 .lq-pw-search site-search > button > span {

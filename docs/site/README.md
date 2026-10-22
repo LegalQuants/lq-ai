@@ -64,7 +64,7 @@ nothing here is silently ignored.
 A `kind` is optional, and a page with none renders exactly as it did before
 this field existed. Set, it shows up twice: as a Starlight sidebar badge
 (`sidebar.badge`, merged in — an entry's own `sidebar: { order: … }` is kept)
-and as a short label right under the page title.
+and as the first chip in the row right under the page title.
 
 The manifest is also what registers the source file in the site's
 link-rewrite table: any other page or repository doc linking to

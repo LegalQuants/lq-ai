@@ -11,5 +11,6 @@ copied pathway map, search ranking, and fixed answer strings are not shipped
 by this integration. Current repository documents, the existing pathway map,
 Pagefind, and the shared Astro rendering pipeline supply those functions.
 
-The site retains its existing Source Sans 3 font and its accompanying SIL Open
-Font License under site/src/assets/fonts/. No additional font is imported.
+The site's visual design is the proposed LQ.AI interface redesign, which uses
+the reader's own system fonts. No font from the contributed archive, and no
+webfont of any kind, is shipped.

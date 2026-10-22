@@ -1,15 +1,20 @@
 /** Accessible Mermaid definitions stay in Markdown; only human HTML is replaced. */
 import { createHash } from 'node:crypto';
 
+/**
+ * The interface redesign's greys (site/src/styles/theme.css): nodes on the
+ * surface fill with ink text, lines and borders in the muted grey. Monochrome,
+ * like the rest of the site (C28). Measured in test/diagrams.test.mjs.
+ */
 export const DIAGRAM_COLORS = {
-  light: { background: '#f7f5f0', primaryColor: '#eae7e0', primaryTextColor: '#24282a',
-    primaryBorderColor: '#303a3c', lineColor: '#303a3c', secondaryColor: '#e8f0ee',
-    tertiaryColor: '#f0e3d9', clusterBkg: '#eeeae2', clusterBorder: '#5e6263',
-    edgeLabelBackground: '#f7f5f0', titleColor: '#24282a' },
-  dark: { background: '#090c0d', primaryColor: '#202b2e', primaryTextColor: '#f3f1e9',
-    primaryBorderColor: '#b7cccc', lineColor: '#b7cccc', secondaryColor: '#164e50',
-    tertiaryColor: '#283638', clusterBkg: '#13191b', clusterBorder: '#bcc5c4',
-    edgeLabelBackground: '#090c0d', titleColor: '#f3f1e9' },
+  light: { background: '#ffffff', primaryColor: '#f1f1f3', primaryTextColor: '#111114',
+    primaryBorderColor: '#4f5158', lineColor: '#4f5158', secondaryColor: '#f9f9fa',
+    tertiaryColor: '#e9e9ec', clusterBkg: '#f9f9fa', clusterBorder: '#686a72',
+    edgeLabelBackground: '#ffffff', titleColor: '#111114' },
+  dark: { background: '#0e0f12', primaryColor: '#1a1b1f', primaryTextColor: '#f4f4f5',
+    primaryBorderColor: '#b4b4bb', lineColor: '#b4b4bb', secondaryColor: '#141518',
+    tertiaryColor: '#1e1f23', clusterBkg: '#141518', clusterBorder: '#8e8e96',
+    edgeLabelBackground: '#0e0f12', titleColor: '#f4f4f5' },
 };
 
 export function diagramMetadata(source) {

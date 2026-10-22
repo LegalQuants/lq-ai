@@ -1,7 +1,12 @@
 ---
 /**
- * Iris's pathways and palette with a source-backed three-question introduction.
+ * Iris's pathways with a source-backed three-question introduction.
  * Guide content is selected at sync time; this component only renders navigation.
+ *
+ * Drawn in the interface redesign: the next steps are pills (C4), and the
+ * pathway cards are hairline boxes on the raised ground with the 16px
+ * rounding, ink titles and a round arrow — no fills. The trust centre's card
+ * carries the orange mark (C15).
  */
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES } from '../../pathways.mjs';
@@ -30,7 +35,7 @@ const base = import.meta.env.BASE_URL;
   {
     pathways.map((p) => (
       <a class="lq-landing-card" data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))}>
-        <strong>{p.title}</strong>
+        <strong class:list={{ 'lq-mark': p.governance }}>{p.title}</strong>
         <span class="lq-landing-arrow" aria-hidden="true">
           ↗
         </span>
@@ -49,64 +54,54 @@ const base = import.meta.env.BASE_URL;
      theme.css's unlayered prose rules would beat any layered style. */
   .lq-landing-grid {
     display: grid;
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
-  .lq-landing-next { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; }
-  .lq-landing-next a { border: 1px solid var(--sl-color-hairline); border-radius: 0.5rem; padding: 0.75rem 1rem; }
+  .lq-landing-next { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+  .lq-landing-next a {
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-pill);
+    padding: 0.5rem 1rem;
+    font-size: 0.9375rem;
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+  .lq-landing-next a:hover { background: var(--lq-color-hover); }
 
   .lq-landing-card {
-    grid-column: span 5;
-    min-height: 145px;
-    padding: 30px 34px;
-    border-radius: 12px;
+    min-height: 120px;
+    padding: 22px 24px;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-2xl);
+    background: var(--lq-color-surface-raised);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    color: var(--lq-card-ink);
+    color: var(--sl-color-white);
     text-decoration: none;
     transition:
-      transform 180ms ease,
-      filter 180ms ease,
-      box-shadow 180ms ease;
-  }
-
-  .lq-landing-card[data-tone='a'] {
-    background: var(--lq-card-a);
-  }
-  .lq-landing-card[data-tone='b'] {
-    background: var(--lq-card-b);
-  }
-  .lq-landing-card[data-tone='c'] {
-    background: var(--lq-card-c);
-  }
-
-  .lq-landing-card:nth-child(2),
-  .lq-landing-card:nth-child(3) {
-    grid-column: span 7;
-  }
-
-  .lq-landing-card:nth-child(n + 3) {
-    min-height: 145px;
+      background-color 150ms ease,
+      border-color 150ms ease;
   }
 
   .lq-landing-card strong {
     max-width: 90%;
-    font-size: clamp(1.5rem, 2.5vw, 2rem);
+    font-size: clamp(1.25rem, 2vw, 1.5rem);
     font-weight: 600;
-    line-height: 1.08;
-    letter-spacing: -0.025em;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
   }
 
   .lq-landing-arrow {
     align-self: flex-end;
     display: grid;
     place-items: center;
-    width: 48px;
-    height: 48px;
-    border: 1px solid currentColor;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--sl-color-hairline);
     border-radius: 50%;
-    font-size: 1.5rem;
+    color: var(--sl-color-gray-3);
+    font-size: 1.25rem;
     line-height: 1;
     transition: transform 180ms ease;
   }
@@ -114,51 +109,44 @@ const base = import.meta.env.BASE_URL;
   .lq-landing-card:is(:hover, :focus-visible),
   .lq-landing-card:is(:hover, :focus-visible) * {
     text-decoration: none;
-    color: var(--lq-card-ink);
+    color: var(--sl-color-white);
+  }
+
+  .lq-landing-card:hover {
+    border-color: var(--lq-color-hairline-strong);
+    background: var(--sl-color-bg-sidebar);
   }
 
   @media (hover: hover) {
-    .lq-landing-card:hover {
-      transform: translateY(-4px);
-      filter: brightness(1.045);
-      box-shadow: 0 12px 24px #0002;
-    }
-
     .lq-landing-card:hover .lq-landing-arrow {
       transform: rotate(45deg);
     }
   }
 
   .lq-landing-card:focus-visible {
-    outline: 3px solid var(--lq-accent);
-    outline-offset: 4px;
+    outline: 2px solid var(--lq-accent);
+    outline-offset: 3px;
   }
 
   @media (max-width: 50rem) {
     .lq-landing-grid {
       grid-template-columns: 1fr;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .lq-landing-card,
-    .lq-landing-card:nth-child(n) {
-      grid-column: 1;
-      min-height: 108px;
-      padding: 22px;
+    .lq-landing-card {
+      min-height: 84px;
+      padding: 18px 20px;
       flex-direction: row;
       align-items: center;
       gap: 14px;
     }
 
-    .lq-landing-card strong {
-      font-size: 1.75rem;
-    }
-
     .lq-landing-arrow {
       align-self: center;
       flex-shrink: 0;
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
     }
   }
 </style>

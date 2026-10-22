@@ -35,13 +35,17 @@ const questions = await Promise.all((await getCollection('explore'))
 <style>
   .lq-introduction { max-width: 54rem; margin: 0 0 2.5rem; }
   .lq-intro-controls { display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; font-size:0.95rem; margin-bottom:1.5rem; }
-  .lq-intro-controls button { min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:1.5rem; color:var(--sl-color-text); background:var(--sl-color-bg); padding:0.5rem 1rem; font:inherit; cursor:pointer; }
+  .lq-intro-controls button { min-height:44px; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); color:var(--sl-color-text); background:var(--sl-color-bg); padding:0.5rem 1rem; font:inherit; font-size:0.9375rem; cursor:pointer; }
+  .lq-intro-controls button:hover { background:var(--lq-color-hover); }
   .lq-intro-controls button[hidden] { display:none; }
   .lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
-  :global(.sl-markdown-content) .lq-introduction .lq-answer > h2 { margin:0 0 1rem auto; padding:0.85rem 1.1rem; width:fit-content; max-width:100%; font-size:1.25rem; line-height:1.4; border:0; border-radius:1rem; background:var(--lq-card-c); color:var(--lq-card-ink); }
-  .lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.75rem; }
-  .lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:50%; font-size:0.75rem; font-weight:650; background:var(--lq-tone-a); color:var(--sl-color-text-invert); }
-  .lq-answer-body { max-width:54rem; min-width:0; border-radius:1rem; padding:1rem 1.25rem; background:var(--lq-color-hover); }
+  /* The redesign's chat (Main.dc.html): the question is the reader's bubble on
+     the right — the surface fill, ink text, 20px rounding — and the answer is
+     plain text beside the LQ.AI mark, with no bubble of its own. */
+  :global(.sl-markdown-content) .lq-introduction .lq-answer > h2 { margin:0 0 1.25rem auto; padding:0.65rem 1.1rem; width:fit-content; max-width:min(100%, 36rem); font-size:1.125rem; font-weight:600; line-height:1.45; border:0; border-radius:1.25rem; background:var(--lq-color-surface-sunken); color:var(--sl-color-white); }
+  .lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.875rem; }
+  .lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:var(--lq-radius-pill); font-size:0.75rem; font-weight:650; background:var(--lq-accent); color:var(--lq-on-accent); }
+  .lq-answer-body { max-width:54rem; min-width:0; padding:0.15rem 0 0; }
   .lq-answer-body :global(p) { font-size: 1.125rem; line-height: 1.65; }
   .lq-answer-body :global(p:not(.lq-diagram-description)) { max-width: 44rem; }
   .lq-answer-links { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
@@ -50,5 +54,5 @@ const questions = await Promise.all((await getCollection('explore'))
   .lq-answer-sources summary { cursor: pointer; width: fit-content; padding: 0.25rem 0; }
   .lq-answer-sources[open] summary { margin-bottom: 0.75rem; }
   .lq-answer[data-tour-active] { outline:2px solid var(--sl-color-text-accent); outline-offset:0.5rem; border-radius:0.75rem; }
-  @media (max-width:40rem) { .lq-answer-reply { grid-template-columns:1fr; } .lq-docs-avatar { display:none; } .lq-answer-body { padding:0.75rem; } }
+  @media (max-width:40rem) { .lq-answer-reply { grid-template-columns:1fr; } .lq-docs-avatar { display:none; } }
 </style>

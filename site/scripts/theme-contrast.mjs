@@ -13,7 +13,7 @@
  *
  *   node scripts/theme-contrast.mjs        # table + exit 1 on any failure
  *
- * Eyebrows and badges are >= 0.62rem and semibold, not "large text", so they are
+ * Labels, chips and badges are 12px or smaller, not "large text", so they are
  * held to 4.5:1 like body copy. Pairs that never carry text (hairlines, icons,
  * control borders) are held to the 3:1 non-text floor of SC 1.4.11.
  */
@@ -112,27 +112,34 @@ const TEXT_PAIRS = [
   ['--sl-color-gray-1', '--sl-color-bg', 4.5, 'ink on page background'],
   ['--sl-color-text', '--sl-color-bg', 4.5, 'body text on page background'],
   ['--sl-color-text', '--lq-color-surface-raised', 4.5, 'body text on raised surface'],
-  ['--sl-color-text', '--sl-color-bg-sidebar', 4.5, 'sidebar link on sidebar'],
-  ['--sl-color-text', '--sl-color-bg-nav', 4.5, 'body text on nav'],
+  ['--sl-color-text', '--sl-color-bg-nav', 4.5, 'body text on the page bar'],
   ['--sl-color-text', '--sl-color-bg-inline-code', 4.5, 'inline code'],
-  ['--sl-color-text', '--lq-color-control-bg', 4.5, 'search trigger text on the control surface'],
+  ['--sl-color-gray-3', '--sl-color-bg-sidebar', 4.5, 'sidebar link on sidebar'],
+  ['--sl-color-gray-3', '--lq-color-control-bg', 4.5, 'search trigger text on the control surface'],
   ['--sl-color-white', '--lq-color-control-bg', 4.5, 'search trigger text, hovered'],
   ['--sl-color-gray-3', '--sl-color-bg', 4.5, 'muted text on page background'],
   ['--sl-color-gray-3', '--lq-color-surface-raised', 4.5, 'stamp / footer meta on surface'],
-  ['--sl-color-text-accent', '--sl-color-bg', 4.5, 'link and eyebrow on page background'],
-  ['--sl-color-text-accent', '--lq-color-surface-raised', 4.5, 'eyebrow on raised surface'],
+  ['--sl-color-gray-4', '--sl-color-bg', 4.5, 'label (12px) on page background'],
+  ['--sl-color-gray-4', '--sl-color-bg-sidebar', 4.5, 'sidebar label / "Docs for agents" on sidebar'],
+  ['--sl-color-gray-4', '--lq-color-surface-sunken', 4.5, 'label on the surface (search shortcut hint)'],
+  ['--sl-color-gray-4', '--lq-color-surface-raised', 4.5, 'composer placeholder on raised surface'],
+  ['--sl-color-text-accent', '--sl-color-bg', 4.5, 'link on page background'],
+  ['--sl-color-text-accent', '--lq-color-surface-raised', 4.5, 'link on raised surface'],
   ['--sl-color-text-accent', '--sl-color-bg-sidebar', 4.5, 'link on sidebar'],
   ['--sl-color-text-invert', '--sl-color-bg-accent', 4.5, 'inverted text on an accent fill'],
   ['--sl-color-white', '--lq-color-sidebar-current-bg', 4.5, 'current sidebar item'],
-  ['--lq-status-draft-text', '--lq-status-draft-bg', 4.5, 'status badge: draft'],
-  ['--lq-status-reviewed-text', '--lq-status-reviewed-bg', 4.5, 'status badge: reviewed'],
-  ['--sl-color-green-high', '--sl-color-green-low', 4.5, 'status badge: shipped / accepted'],
-  ['--sl-color-orange-high', '--sl-color-orange-low', 4.5, 'status badge: partial / proposed'],
+  ['--lq-orange-text', '--sl-color-bg', 4.5, 'governance label on page background'],
+  ['--sl-color-white', '--lq-color-surface-sunken', 4.5, 'question bubble / shaded table header row'],
+  ['--sl-badge-default-text', '--sl-badge-default-bg', 4.5, 'kind badge (How-to, Explanation, Reference)'],
+  ['--sl-color-gray-3', '--lq-color-surface-sunken', 4.5, 'kind chip under the page title'],
+  ['--lq-status-draft-text', '--lq-status-draft-bg', 4.5, 'status chip: draft'],
+  ['--lq-status-reviewed-text', '--lq-status-reviewed-bg', 4.5, 'status chip: reviewed / shipped / accepted'],
+  ['--lq-status-moving-text', '--lq-status-moving-bg', 4.5, 'status chip: partial / proposed'],
   [
     '--lq-status-draft-text',
     '--lq-status-draft-bg',
     4.5,
-    'status badge: scaffold / deferred / superseded / deprecated / rejected',
+    'status chip: scaffold / deferred / superseded / deprecated / rejected',
   ],
   ['--sl-color-gray-3', '--sl-color-bg', 4.5, 'audience chip label'],
   ['--sl-color-blue-high', '--sl-color-blue-low', 4.5, 'aside title: note'],
@@ -149,28 +156,33 @@ const TEXT_PAIRS = [
 const UI_PAIRS = [
   ['--lq-accent', '--sl-color-bg', 3.0, 'focus ring on page background'],
   ['--lq-accent', '--lq-color-surface-raised', 3.0, 'focus ring on raised surface'],
+  ['--lq-accent', '--sl-color-bg-sidebar', 3.0, 'focus ring on sidebar'],
   ['--sl-color-gray-4', '--sl-color-bg', 3.0, 'icon / control on page background'],
-  ['--lq-accent', '--lq-color-sidebar-current-bg', 3.0, 'current sidebar item: accent rule'],
+  ['--lq-orange', '--sl-color-bg', 3.0, 'governance mark (dot) on page background'],
+  ['--lq-orange', '--sl-color-bg-sidebar', 3.0, 'governance mark (dot) on sidebar'],
+  ['--lq-orange', '--lq-color-surface-raised', 3.0, 'governance mark (dot) on a card'],
+  ['--lq-status-moving-line', '--sl-color-bg', 3.0, 'status chip: dashed in-motion outline'],
+  ['--sl-color-blue', '--sl-color-blue-low', 3.0, 'aside rule: note'],
   ['--sl-color-green', '--sl-color-green-low', 3.0, 'aside rule: tip'],
   ['--sl-color-orange', '--sl-color-orange-low', 3.0, 'aside rule: caution'],
   ['--sl-color-red', '--sl-color-red-low', 3.0, 'aside rule: danger'],
 ];
 
 /**
- * Pairs that must NOT be used. The brand accent as text on white measures
- * 3.58:1; the check is here so that a future "just use the accent" edit trips
- * the gate instead of shipping.
+ * Pairs that must NOT be used. The orange mark as text on white measures
+ * 3.58:1 — it is for dots and rules, and `--lq-orange-text` is the text tint.
+ * The check is here so that a future "just use the mark" edit trips the gate
+ * instead of shipping. Both layouts share the palette, so it runs in both.
  */
-const FORBIDDEN = PATHWAYS
-  ? [] // the pathways palette has no brand orange; its accents are the tones below
-  : [['light', '--lq-accent', '--sl-color-bg', 4.5, 'brand accent as text on white']];
+const FORBIDDEN = [['light', '--lq-orange', '--sl-color-bg', 4.5, 'orange mark as text on white']];
 
 /**
  * The pathways layout's own pairs. A page's accent is one of three tones,
- * chosen per page, so each tone is checked in every role the accent plays:
- * headings and links on the page and on raised surfaces, and the filled tab
- * and "All documentation" chip with the page background as their text. The
- * landing cards carry white titles on the card fills.
+ * chosen per page; in the redesign all three are ink, and each is still
+ * checked in every role the accent plays — headings and links on the page,
+ * on raised surfaces and on the hover fill, and the inverted text of a filled
+ * tab or button. Version B's landing cards keep a fill (ink) with inverted
+ * titles.
  */
 const PATHWAY_PAIRS = PATHWAYS
   ? [
@@ -188,10 +200,10 @@ const PATHWAY_PAIRS = PATHWAYS
           `tone ${tone}: link on raised surface`,
         ],
         [`--lq-tone-${tone}`, '--lq-color-hover', 4.5, `tone ${tone}: link on hover surface`],
-        ['--sl-color-text-invert', `--lq-tone-${tone}`, 4.5, `tone ${tone}: filled tab text`],
-        ['--lq-card-ink', `--lq-card-${tone}`, 4.5, `card ${tone}: landing card title`],
+        ['--sl-color-text-invert', `--lq-tone-${tone}`, 4.5, `tone ${tone}: filled button text`],
+        ['--lq-card-ink', `--lq-card-${tone}`, 4.5, `card ${tone}: Version B landing card title`],
       ]),
-      ['--sl-color-white', '--lq-color-hover', 4.5, 'tab text on hover surface'],
+      ['--sl-color-white', '--lq-color-hover', 4.5, 'row / tab text on hover surface'],
       ['--sl-color-gray-3', '--sl-color-bg', 4.5, 'breadcrumb / intro on page background'],
     ]
   : [];
