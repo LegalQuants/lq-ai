@@ -54,14 +54,21 @@ function posixNormalise(input) {
   return out.join('/');
 }
 
-/** `**Status:** Accepted (2026-05-07)` → `Accepted (2026-05-07)`. */
-function statusOf(text) {
-  const bold = /^\s*\*\*Status:?\*\*\s*(.+)$/m.exec(text);
+/**
+ * `**Status:** Accepted (2026-05-07)` → `Accepted (2026-05-07)`.
+ *
+ * ADRs write the line four ways: bold on its own line, bold as the first item
+ * of a metadata list (`- **Status:** …`, as ADR 0044 does), a table row, or
+ * plain. A form this misses lists a decided ADR as "no status line in the
+ * file", so each one is pinned in test/adr-index.test.mjs.
+ */
+export function statusOf(text) {
+  const bold = /^\s*(?:[-*+]\s+)?\*\*Status:?\*\*\s*(.+)$/m.exec(text);
   if (bold) return bold[1].trim();
   // A table row: `| Status | Accepted |`
   const row = /^\s*\|\s*Status\s*\|\s*(.+?)\s*\|\s*$/im.exec(text);
   if (row) return row[1].trim();
-  const plain = /^\s*Status:\s*(.+)$/m.exec(text);
+  const plain = /^\s*(?:[-*+]\s+)?Status:\s*(.+)$/m.exec(text);
   if (plain) return plain[1].trim();
   return undefined;
 }
