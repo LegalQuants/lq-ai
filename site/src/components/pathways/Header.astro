@@ -41,6 +41,17 @@ const shouldRenderSearch =
   </div>
 
   <div class="lq-pw-actions print:hidden">
+    {/* Explore stays one tap away on every page: on a narrow window the
+        sidebar, and its Explore row, is behind the menu (Houfu, 2026-10-23). */}
+    {SITE_EXPERIENCE === 'explore' && (
+      <a class="lq-pw-chip" href={base} aria-label="Explore" aria-current={isLanding ? 'page' : undefined}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="m15.5 8.5-2 5-5 2 2-5z"></path>
+        </svg>
+        <span class="lq-pw-tip" aria-hidden="true">Explore</span>
+      </a>
+    )}
     <a
       class="lq-pw-chip"
       href={withBase(base, NAV_ROUTES.all)}
