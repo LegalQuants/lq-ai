@@ -1,6 +1,15 @@
 /** Extract the same compiled article used by the full page, never a saved corpus. */
 import { load } from 'cheerio';
 
+/**
+ * Navigation pages (pathway hubs, All documentation) carry no `url` in the
+ * manifest. The reader puts a page's URL in the address bar and in its
+ * in-page links, so derive it from the route rather than write "undefined".
+ */
+export function readerPage(page, base) {
+  return page.url ? page : { ...page, url: `${base}${page.route}/` };
+}
+
 export function readerPayload(html, page) {
   const dom = load(html);
   const article = dom('main .sl-markdown-content').first();

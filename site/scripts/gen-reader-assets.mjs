@@ -3,12 +3,13 @@
 import { readFile, mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { DIST_DIR, MANIFEST_PATH, SITE_BASE, SITE_LAYOUT } from './lib/paths.mjs';
-import { readerPayload } from './lib/reader-assets.mjs';
+import { readerPage, readerPayload } from './lib/reader-assets.mjs';
 import { pathwayOf } from '../src/pathways.mjs';
 
 if (SITE_LAYOUT === 'pathways') {
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
-  const pages = [...manifest.pages, ...manifest.navigation].filter((page) => page.route && page.route !== '404');
+  const pages = [...manifest.pages, ...manifest.navigation].filter((page) => page.route && page.route !== '404')
+    .map((page) => readerPage(page, SITE_BASE));
   const output = path.join(DIST_DIR, '_reader');
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });

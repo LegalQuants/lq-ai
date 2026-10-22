@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { readerPayload } from '../scripts/lib/reader-assets.mjs';
+import { readerPage, readerPayload } from '../scripts/lib/reader-assets.mjs';
 import { exploreSearchHref, guideLocation, ReadingState, searchFromHash, TourState } from '../src/lib/explore-state.mjs';
 
 const page = { route:'start/example', url:'/start/example/', title:'A source example', status:'draft',
@@ -29,6 +29,14 @@ describe('current guide previews', () => {
     assert.ok(!payload.html.includes('Old control'));
     assert.match(payload.html,/data-lq-copy="0"/);
     assert.ok(!payload.html.includes('<script'));
+  });
+  it('gives navigation pages a real permalink, which the manifest leaves out', () => {
+    for(const base of ['/','/lq-ai/']) {
+      const hub=readerPage({route:'pathways/install',title:'How to install',status:'draft',kind:'navigation',sources:[]},base);
+      assert.equal(hub.url,`${base}pathways/install/`);
+      assert.match(readerPayload(html,hub).html,new RegExp(`href="${base}pathways/install/#boundary"`));
+      assert.equal(readerPage(page,base),page,'a page with its own URL keeps it');
+    }
   });
   it('refuses unsupported interactive content rather than silently deleting instructions', () => {
     for(const content of ['<script>alert(1)</script>','<form>Required action</form>','<iframe src="https://example.com"></iframe>','<a onclick="alert(1)">A link</a>']) assert.throws(()=>readerPayload(html.replace('<h2',content+'<h2'),page),/active content|event handler/);
