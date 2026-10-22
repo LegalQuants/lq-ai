@@ -18,6 +18,15 @@
 .lq-reader-toolbar h2 { margin:0; padding:0; border:0; font-size:1.25rem; line-height:1.4; }
 .lq-reader-toolbar button { width:44px; height:44px; flex-shrink:0; border:1px solid var(--sl-color-hairline); border-radius:50%; color:var(--sl-color-text); background:var(--sl-color-bg); font-size:1.75rem; cursor:pointer; }
 .lq-reader-actions { display:flex; align-items:center; gap:0.5rem; flex-shrink:0; }
+/* The reader renders inside Explore's prose, where Starlight gives every
+   element after a sibling a 1rem top margin; in this row that pushed the close
+   button below the Search pill. The row spaces its own children. */
+.lq-reader-actions > * { margin:0; }
+/* Close is a round icon button like the header's (C4): a line ×, centred,
+   muted at rest and ink on hover — not a typed glyph sitting on a baseline. */
+.lq-reader-toolbar .lq-reader-close { display:grid; place-items:center; padding:0; color:var(--sl-color-gray-3); background:transparent; }
+.lq-reader-toolbar .lq-reader-close svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; }
+.lq-reader-toolbar .lq-reader-close:hover { color:var(--sl-color-white); }
 /* The reader's way back to search: a pill beside the close button (C4). */
 .lq-reader-toolbar .lq-reader-search { width:auto; padding:0 1rem; border-radius:var(--lq-radius-pill); font:inherit; font-size:0.9375rem; font-weight:600; color:var(--sl-color-text-invert); background:var(--sl-color-bg-accent); border-color:var(--sl-color-bg-accent); }
 .lq-reader-toolbar button:hover { background:var(--lq-color-hover); }
