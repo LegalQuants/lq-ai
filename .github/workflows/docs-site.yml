@@ -127,6 +127,16 @@ jobs:
         # WCAG 2.1 AA (pa11y-ci over the built pages) + repo link audit.
         run: npm run check
 
+      - name: Explore and guide-page checks
+        # Version C's own contracts, on the build `check` just made:
+        # `check:explore` reads dist/ (no draft chips, the Explore button on
+        # every page, a release beside every stamp, the sidebar's guide index
+        # and Explore's conversation order); `check:e2e` drives the built site
+        # in the Chrome pa11y-ci already installs (searches appended as turns,
+        # the selected-result sidebar, Back/reload/hand-off, phone widths).
+        # Its own step so a failure here is named apart from the gates above.
+        run: npm run check:explore && npm run check:e2e
+
       - name: Configure Pages
         # Reads the repository's Pages settings so the deploy step has them.
         # Not on pull_request: it calls the Pages API, which a pull_request

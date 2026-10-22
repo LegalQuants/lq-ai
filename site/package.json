@@ -24,7 +24,9 @@
     "check:single-source": "node scripts/check-single-source.mjs",
     "check": "npm test && npm run check:single-source && npm run build && npm run check:links && npm run check:orphans && npm run check:tables && npm run check:contrast && npm run check:a11y && npm run check:docs-links",
     "astro": "astro",
-    "diagrams": "node scripts/render-diagrams.mjs"
+    "diagrams": "node scripts/render-diagrams.mjs",
+    "check:explore": "node scripts/check-explore.mjs",
+    "check:e2e": "node --test --test-concurrency=1 e2e/*.e2e.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.0",
