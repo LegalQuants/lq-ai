@@ -154,8 +154,8 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       links.append(text, badge, toggle); item.append(links); list.append(item);
     }
     const count = list.children.length;
-    if (count) { say(body, count === 1 ? 'One guide matches.' : `${count} guides match.`); body.append(list); }
-    else say(body, 'No guide matches that. Try a topic such as Docker, citations, or privacy.');
+    if (count) { say(body, `${count === 1 ? 'One guide matches' : `${count} guides match`} “${query}”.`); body.append(list); }
+    else say(body, `No guide matches “${query}”. Try a topic such as Docker, citations, or privacy.`);
     history.append(section);
     return { section, list };
   };
