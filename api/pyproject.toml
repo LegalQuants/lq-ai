@@ -11,7 +11,7 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.141.1,<0.142",
+    "fastapi>=0.141.1,<0.144",
     "uvicorn[standard]>=0.52.1,<0.53",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
@@ -20,7 +20,7 @@ dependencies = [
     # must move in lockstep with gateway/pyproject.toml's, whose comment
     # records why (one asyncpg ABI per container image in a multi-service
     # deployment). This bump is paired with the identical bump in gateway/.
-    "asyncpg>=0.31.0,<0.32",
+    "asyncpg>=0.31.0,<0.33",
     # starlette is fastapi's ASGI layer and is imported nowhere in api/app
     # directly — it is pinned explicitly because 0.48.0 carries 10 known
     # advisories with no in-range fix (GHSA-7f5h-v6xp-fcq8,
@@ -31,7 +31,7 @@ dependencies = [
     # fastapi's own range allows, which is exactly what happened here: the
     # advisory sat unremediated in this lock while fastapi stayed on 0.116.
     # Mirrors the same explicit pin in gateway/pyproject.toml.
-    "starlette>=1.4.1,<1.7",
+    "starlette>=1.4.1,<1.9",
     "alembic>=1.19.0,<2",
     "psycopg2-binary>=2.9,<3",
     "greenlet>=3.0,<4",
@@ -137,7 +137,7 @@ dependencies = [
     # dependency. It stays dormant unless the operator enables the demo and
     # applies orchestration migration 0067. Existing executors retain
     # their checkpoint-free behavior; psycopg2 remains the migration driver.
-    "langgraph-checkpoint-postgres==3.1.2",
+    "langgraph-checkpoint-postgres==3.2.0",
     "psycopg[binary]>=3.2,<4",
     # M3-C4 — openpyxl powers the Tabular Review XLSX export
     # (GET /tabular/executions/{id}/export?format=xlsx). Each grid cell
@@ -175,7 +175,7 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.16.8",
+    "ruff==0.17.1",
     "mypy>=1.11",
     # PyYAML type stubs — pyyaml has no inline typings, so mypy needs the
     # types-PyYAML package to type-check `app.skills.loader` etc.
@@ -342,4 +342,4 @@ ignore_missing_imports = true
 
 [dependency-groups]
 # DE-229: opt-in only; normal dev/runtime installs exclude mutation tooling.
-mutation = ["mutmut==3.6.0"]
+mutation = ["mutmut==3.8.0"]
