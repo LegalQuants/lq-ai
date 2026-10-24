@@ -468,13 +468,37 @@ clustering quality fell short of the corpus README's target:
   document) with zero fallback tiers.
 
 The engine is **functional**; this is a tuning follow-on, not a
-correctness bug. DE-308 scopes the investigation (why near-synonym
-families aren't merged; why "Standard of Care" didn't cluster) and
-candidate fixes (a post-clustering merge/dedup pass; a
-minimum-document-support threshold for singleton positions). It is the
-exact kind of clustering-quality signal the corpus README flags as
-file-worthy — and the Step 3 inline editor is the safety net the
-quality bar relies on in the meantime.
+correctness bug. It is the exact kind of clustering-quality signal the
+corpus README flags as file-worthy — and the Step 3 inline editor is
+the safety net the quality bar relies on in the meantime.
+
+**DE-308 mitigations landed (2026-07-25); live re-verification
+pending.** Two fixes shipped:
+
+- A **minimum-document-support fold pass** in
+  `api/app/playbooks/easy/clustering.py`: after the centroid
+  label-merge, position groups backed by only one source document fold
+  into their nearest supported cluster when the clause-centroid cosine
+  similarity clears a floor (`0.80` default) — the folded clause
+  becomes a fallback-tier candidate instead of a standalone singleton
+  position. Below the floor the group stays standalone (fail-closed:
+  a genuinely distinct outlier keeps its own visible position rather
+  than being buried inside another cluster).
+- The **missed "Standard of Care" axis** traced to the extractor
+  prompt: the sample NDAs embed the care standard inside the
+  "Obligations of Receiving Party" section with no dedicated heading,
+  and the prompt's issue vocabulary never named the axis. The prompt
+  (`extractor.py` and its mirror `skills/playbook-easy-extract/SKILL.md`,
+  v1.1.0) now names `"Standard of Care"` and instructs
+  one-entry-per-issue splitting for sections that bundle multiple
+  positions.
+
+These are validated by deterministic unit tests and a fixture-based
+corpus-replay test (`api/tests/test_easy_playbook_corpus_replay.py`)
+asserting 5–10 positions with all five designed axes — against
+synthetic embeddings and recorded-style extraction fixtures, **not** a
+live pipeline run. A live wizard re-run over the sample corpus and the
+reviewing-attorney walk-through remain the confirmation steps.
 
 ### Executor citations are not Citation-Engine-verified
 

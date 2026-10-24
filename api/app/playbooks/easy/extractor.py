@@ -95,20 +95,32 @@ emit a structured list of the negotiated positions it takes.
 Identify every clause that:
 
 1. Takes a substantive position on a recurring contract issue
-   (confidentiality definition, term, limitation of liability,
-   indemnification, payment terms, governing law, etc.).
+   (confidentiality definition, term, standard of care, limitation
+   of liability, indemnification, payment terms, governing law,
+   etc.).
 2. Is recognizable as a position, not pure boilerplate. Skip
    standard severability / notice / integration clauses UNLESS the
    contract takes an unusual position on them.
 3. Is contained in identifiable, contiguous text. Don't emit
    overlapping or fragmentary spans.
 
+A single section often bundles positions on MORE than one issue —
+e.g., an "Obligations of Receiving Party" section that both fixes
+the standard of care and restricts use and disclosure. Emit one
+entry per issue, each quoting only the sentence(s) or list item(s)
+that carry that position; do not collapse distinct positions into
+one section-sized entry, and do not let the emitted spans overlap.
+The standard of care is a recurring negotiated position in
+confidentiality agreements — extract it as its own "Standard of
+Care" entry even when it has no dedicated heading.
+
 For each identified clause, emit one entry with:
 
 * ``issue`` — short descriptive noun phrase from common contract
   vocabulary ("Limitation of Liability", "Permitted Disclosures",
-  "Term of Confidentiality Obligation"). Reuse common labels when
-  they fit — clustering downstream depends on label consistency.
+  "Standard of Care", "Term of Confidentiality Obligation"). Reuse
+  common labels when they fit — clustering downstream depends on
+  label consistency.
 * ``clause_text`` — verbatim quote from the contract. Preserve
   original wording, casing, and punctuation. Do not paraphrase.
 * ``source_offsets`` — half-open character interval
