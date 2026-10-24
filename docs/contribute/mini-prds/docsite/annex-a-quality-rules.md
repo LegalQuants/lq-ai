@@ -78,8 +78,10 @@ with the tie-break buried in a register README.
 ## How the rules are used
 
 - They are **gates, not style advice**: the launch gate (parent PRD, "How we'd know it's
-  done") runs every failure test against the built site, executed by someone who did not
-  write it.
+  done") runs every failure test against the built site. A script runs the ones it can on
+  every page, in CI, so they stay true after launch; the rest are run by someone who did
+  not write the site — gate 1's readers for the newcomer tests, and one read of the trust
+  centre and the install pages for the others. The parent PRD's gate 2 says which is which.
 - The sixteen house-style rules are **authoring guidance, not gates** — reviewers cite
   them; they do not block merges.
 - A rule without a failure test is a preference, and preferences do not survive the second

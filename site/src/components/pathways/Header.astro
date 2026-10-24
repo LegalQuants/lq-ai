@@ -1,0 +1,347 @@
+---
+/**
+ * Shared pathways header. C uses sidebar navigation, while B retains the top
+ * pathway tabs. Preferences use the existing site keys.
+ *
+ * Search: Version C has one search, the composer fixed to the bottom of every
+ * page (DocsSearch on Explore, DocsComposer elsewhere), so its header carries
+ * none — a second control at the top would be a second way in to the same
+ * thing. B keeps Starlight's Pagefind modal here.
+ *
+ * Version C wears the interface redesign's app chrome (C5, C14): on wide
+ * screens the wordmark (`.lq-pw-top`) is pinned to the top of the pathways
+ * sidebar, and what is left of the header is a 52px page bar over the reading
+ * column with the three round buttons. Elsewhere — B, and phones —
+ * `.lq-pw-top` is `display: contents`, so its children sit in the header grid.
+ * B's search renders once per page (it carries a `<dialog>`).
+ */
+import Search from 'virtual:starlight/components/Search';
+import config from 'virtual:starlight/user-config';
+
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES, PATHWAYS, pathwayOf } from '../../pathways.mjs';
+import { SITE_EXPERIENCE } from '../../../scripts/lib/paths.mjs';
+
+const { id, siteTitleHref } = Astro.locals.starlightRoute;
+const base = import.meta.env.BASE_URL;
+const route = String(id ?? '').replace(/\/+$/, '');
+const isLanding = route === NAV_ROUTES.landing;
+const isAll = route === NAV_ROUTES.all;
+const current = pathwayOf(route);
+
+const shouldRenderSearch =
+  config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
+---
+
+<div class="lq-pw-header">
+  <div class="lq-pw-top">
+    <a class="lq-pw-brand" href={siteTitleHref} translate="no">LQ.AI</a>
+
+    {SITE_EXPERIENCE === 'cards' && <div class="lq-pw-search print:hidden">{shouldRenderSearch && <Search />}</div>}
+  </div>
+
+  <div class="lq-pw-actions print:hidden">
+    {/* Explore stays one tap away on every page: on a narrow window the
+        sidebar, and its Explore row, is behind the menu (Houfu, 2026-10-23). */}
+    {SITE_EXPERIENCE === 'explore' && (
+      <a class="lq-pw-chip" href={base} aria-label="Explore" aria-current={isLanding ? 'page' : undefined}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="m15.5 8.5-2 5-5 2 2-5z"></path>
+        </svg>
+        <span class="lq-pw-tip" aria-hidden="true">Explore</span>
+      </a>
+    )}
+    <a
+      class="lq-pw-chip"
+      href={withBase(base, NAV_ROUTES.all)}
+      aria-label="All documentation"
+      aria-current={isAll ? 'page' : undefined}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect>
+        <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect>
+        <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect>
+        <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect>
+      </svg>
+      <span class="lq-pw-tip" aria-hidden="true">All documentation</span>
+    </a>
+    <button class="lq-pw-chip" type="button" data-lq-toggle="theme" aria-label="Dark mode" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"></path>
+      </svg>
+      <span class="lq-pw-tip" aria-hidden="true">Dark mode</span>
+    </button>
+    <button class="lq-pw-chip" type="button" data-lq-toggle="motion" aria-label="Reduced motion" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M8 5.5v13l10.5-6.5Z"></path>
+      </svg>
+      <span class="lq-pw-tip" aria-hidden="true">Reduced motion</span>
+    </button>
+  </div>
+  {!isLanding && SITE_EXPERIENCE === 'cards' && (
+    <nav class="lq-pw-tabs print:hidden" aria-label="Documentation pathways">
+      <ul>{PATHWAYS.map((p) => (
+        <li><a href={withBase(base, NAV_ROUTES.pathway(p.id))} data-tone={p.tone}
+          aria-current={route === NAV_ROUTES.pathway(p.id) ? 'page' : current?.id === p.id ? 'true' : undefined}>
+          {p.title}
+        </a></li>
+      ))}</ul>
+    </nav>
+  )}
+</div>
+
+<script>
+  const root = document.documentElement;
+
+  function sync() {
+    for (const button of document.querySelectorAll<HTMLButtonElement>('[data-lq-toggle]')) {
+      const on =
+        button.dataset.lqToggle === 'theme'
+          ? root.dataset.theme === 'dark'
+          : root.dataset.motion === 'reduced';
+      button.setAttribute('aria-pressed', String(on));
+    }
+  }
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-lq-toggle]')) {
+    button.addEventListener('click', () => {
+      try {
+        if (button.dataset.lqToggle === 'theme') {
+          const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = next;
+          localStorage.setItem('starlight-theme', next);
+        } else {
+          const next = root.dataset.motion === 'reduced' ? 'full' : 'reduced';
+          root.dataset.motion = next;
+          localStorage.setItem('lq-motion', next);
+        }
+      } catch {
+        // Storage can be blocked; the toggle still works for this page view.
+      }
+      sync();
+    });
+  }
+  sync();
+</script>
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-pw-header {
+    display: grid;
+    grid-template-columns: auto minmax(10rem, 32.5rem) auto;
+    grid-template-areas:
+      'brand search actions'
+      'tabs tabs tabs';
+    grid-template-rows: var(--lq-nav-row) var(--lq-tabs-row);
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 1.5rem;
+    height: 100%;
+  }
+
+  /* Brand and search sit in the header grid unless Version C pins them to
+     the sidebar (below). */
+  .lq-pw-top {
+    display: contents;
+  }
+
+  .lq-pw-brand {
+    grid-area: brand;
+    font-size: 1.0625rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .lq-pw-search {
+    grid-area: search;
+    min-width: 0;
+  }
+
+  .lq-pw-actions {
+    grid-area: actions;
+    display: flex;
+    gap: 0.5rem;
+    justify-self: end;
+  }
+
+  /* Round buttons (C4), at the 44px target size (WCAG 2.5.5) rather than the
+     redesign's 32px. Icons are muted at rest and ink when hovered, pressed or
+     current. */
+  .lq-pw-chip {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-pill);
+    background: transparent;
+    color: var(--sl-color-gray-3);
+    cursor: pointer;
+  }
+
+  .lq-pw-chip svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linejoin: round;
+  }
+
+  .lq-pw-chip:hover {
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
+  }
+
+  .lq-pw-chip[aria-pressed='true'],
+  .lq-pw-chip[aria-current] {
+    border-color: var(--lq-color-hover);
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
+  }
+
+  .lq-pw-tip {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: max-content;
+    max-width: 16rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--lq-radius-lg);
+    background: var(--sl-color-white);
+    color: var(--sl-color-bg);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  .lq-pw-chip:is(:hover, :focus-visible) .lq-pw-tip {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .lq-pw-tabs {
+    grid-area: tabs;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--sl-color-hairline);
+  }
+
+  .lq-pw-tabs ul {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lq-pw-tabs a {
+    display: block;
+    padding: 0.4rem 0.9rem;
+    border-radius: var(--lq-radius-pill);
+    font-size: 0.9375rem;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+    transition: background-color 140ms ease;
+  }
+
+  .lq-pw-tabs a:hover {
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
+  }
+
+  /* The current pathway's tab is the redesign's selected row. */
+  .lq-pw-tabs a[aria-current] {
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
+    font-weight: 600;
+  }
+
+  /*
+   * Version C on wide screens: the wordmark becomes the top row of the
+   * pathways sidebar. The block is fixed to the viewport (the header is
+   * itself a fixed box with no transform, so nothing re-anchors it), sized to
+   * the sidebar, and painted with the sidebar's ground and edge so it reads as
+   * the sidebar's first rows. theme-pathways.css starts the sidebar's
+   * scrolling pane below it (`--lq-brand-height`) and narrows the header to
+   * the reading column.
+   */
+  @media (min-width: 50rem) {
+    :global(:root[data-has-sidebar]) .lq-pw-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: '. actions';
+      grid-template-rows: var(--lq-nav-row);
+    }
+
+    :global(:root[data-has-sidebar]) .lq-pw-top {
+      position: fixed;
+      inset-block-start: 0;
+      inset-inline-start: 0;
+      display: flex;
+      flex-direction: column;
+      width: var(--sl-sidebar-width);
+      height: var(--lq-brand-height);
+      padding: 0 0.75rem;
+      background: var(--sl-color-bg-sidebar);
+      border-inline-end: 1px solid var(--sl-color-hairline-shade);
+    }
+
+    :global(:root[data-has-sidebar]) .lq-pw-brand {
+      display: flex;
+      align-items: center;
+      height: 3.25rem;
+      padding-inline: 0.75rem;
+    }
+  }
+
+  @media (max-width: 50rem) {
+    .lq-pw-header {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        'brand actions'
+        'search search'
+        'tabs tabs';
+      /* 3.75 + 3.5 = --lq-nav-row on phones (theme-pathways.css) */
+      grid-template-rows: 3.75rem 3.5rem var(--lq-tabs-row);
+      align-content: start;
+    }
+
+    /* Version C on phones: one row — wordmark and buttons. Search is the
+       composer at the bottom of the screen, so there is no search row. */
+    :global(:root[data-has-sidebar]) .lq-pw-header {
+      grid-template-areas: 'brand actions';
+      grid-template-rows: var(--lq-nav-row);
+    }
+
+    .lq-pw-actions {
+      gap: 0.375rem;
+    }
+
+    .lq-pw-tabs {
+      padding-top: 0.5rem;
+    }
+
+    .lq-pw-tabs ul {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.25rem;
+      width: 100%;
+    }
+
+    .lq-pw-tabs a {
+      padding: 0.4rem 0.55rem;
+      font-size: 0.875rem;
+    }
+  }
+</style>

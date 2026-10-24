@@ -1,0 +1,296 @@
+/*
+ * LQ.AI documentation site — pathways layout (Version C)
+ * =======================================================
+ *
+ * Loaded after theme.css when the site is built with the pathways layout (the
+ * default). Version C's structure is Iris's: four reader pathways, the Explore
+ * landing with its details sidebar, and the search composer (Annex D of the
+ * docsite mini-PRD). Its look is the proposed LQ.AI interface redesign, the same as
+ * the app's: theme.css holds the palette and content styles; this file holds
+ * the layout and the per-pathway wiring.
+ *
+ * Each page still takes its pathway's tone (`--lq-page-accent`, set per page
+ * by routeData.mjs), but in the redesign every tone is ink (C3): headings,
+ * links, the current pathway and the focus ring read as one product. The
+ * Security & privacy pathway — the trust centre — is marked with the orange
+ * dot instead (C15), on its sidebar row, its Explore card and its breadcrumb.
+ *
+ * Token blocks use theme.css's own selectors, so `check:contrast` reads both
+ * files in load order and checks every pair against the values this layout
+ * renders.
+ *
+ * Type is theme.css's system stack (C2). The layout previously served Source
+ * Sans 3; the redesign sets SF on Apple devices and each platform's own sans
+ * elsewhere, so no font file ships.
+ */
+
+/* ------------------------------------------------------------------ *
+ * Shared
+ * ------------------------------------------------------------------ */
+
+:root {
+  --lq-text-body: 1.125rem;
+
+  /* The reading column is a little wider than the classic layout's. */
+  --sl-content-width: 52rem;
+  --sl-sidebar-width: 15.5rem;
+
+  /* The header is two rows: brand / search / buttons, then the pathway tabs.
+     The landing page and Version C set --lq-tabs-row to 0 (routeData.mjs). */
+  --lq-nav-row: 4.75rem;
+  --lq-tabs-row: 3.25rem;
+  --sl-nav-height: calc(var(--lq-nav-row) + var(--lq-tabs-row));
+
+  /* Version C's sidebar top: the 52px wordmark row. Search is the composer at
+     the bottom of the page, not a control up here. */
+  --lq-brand-height: 3.25rem;
+}
+
+/* The phone breakpoint is 50rem (800px) throughout this layout, not the
+   review's 760px: 50rem is Starlight's own `md` breakpoint (search label, page
+   padding), and matching it avoids a 40px band where the two disagree. */
+@media (max-width: 50rem) {
+  :root {
+    /* brand + buttons, then a full-width search, then the tabs as a 2×2 grid */
+    --lq-nav-row: 7.25rem;
+    --lq-tabs-row: 5.5rem;
+  }
+
+  /* Version C: one row, wordmark and buttons — no search row. */
+  :root[data-has-sidebar] {
+    --lq-nav-row: 3.75rem;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Light (default)
+ * ------------------------------------------------------------------ */
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  /* The three pathway tones. a: Getting started, Contribute. b: How to
+     install. c: Security & privacy. All ink (C3); see the header. */
+  --lq-tone-a: #111114;
+  --lq-tone-b: #111114;
+  --lq-tone-c: #111114;
+
+  /* Version B's filled landing cards keep their shape, in ink. */
+  --lq-card-a: #111114;
+  --lq-card-b: #111114;
+  --lq-card-c: #111114;
+  --lq-card-ink: #ffffff;
+
+  /* Hover and pressed fills: the redesign's selected-row grey. */
+  --lq-color-hover: #e9e9ec;
+
+  /* The page's accent: its pathway's tone, set per page by routeData.mjs. */
+  --lq-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-accent-high: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-text-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-bg-accent: var(--lq-page-accent, var(--lq-tone-a));
+}
+
+/* ------------------------------------------------------------------ *
+ * Dark
+ * ------------------------------------------------------------------ */
+
+:root,
+::backdrop {
+  --lq-tone-a: #f4f4f5;
+  --lq-tone-b: #f4f4f5;
+  --lq-tone-c: #f4f4f5;
+
+  --lq-card-a: #f4f4f5;
+  --lq-card-b: #f4f4f5;
+  --lq-card-c: #f4f4f5;
+  --lq-card-ink: #08080a;
+
+  --lq-color-hover: #1e1f23;
+
+  --lq-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-accent-high: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-text-accent: var(--lq-page-accent, var(--lq-tone-a));
+  --sl-color-bg-accent: var(--lq-page-accent, var(--lq-tone-a));
+}
+
+/* ------------------------------------------------------------------ *
+ * Layout
+ * ------------------------------------------------------------------ */
+
+/* The header grid sets its own rows (components/pathways/Header.astro). */
+header.header {
+  padding-block: 0;
+}
+
+/* No rule between the title block and the page body, as in the review. */
+.content-panel + .content-panel {
+  border-top: 0;
+}
+
+.sl-markdown-content :is(h2, h3, h4) {
+  color: var(--sl-color-text-accent);
+  letter-spacing: -0.015em;
+}
+
+.sl-markdown-content h2 {
+  font-weight: 650;
+}
+
+/*
+ * Version C's app chrome (C5, C14). On wide screens there is no full-width
+ * header: the pathways sidebar runs the full height of the window, with the
+ * wordmark pinned to its top (Header.astro moves it there), and the header is
+ * a 52px page bar over the reading column holding the three round buttons.
+ * Scoped to `[data-has-sidebar]`, which routeData.mjs sets for Version C only —
+ * B keeps its two-row header and tabs.
+ */
+@media (min-width: 50rem) {
+  :root[data-has-sidebar] {
+    --lq-nav-row: 3.25rem;
+  }
+
+  :root[data-has-sidebar] header.header {
+    inset-inline-start: var(--sl-sidebar-width);
+    inset-inline-end: 0;
+    width: auto;
+  }
+
+  :root[data-has-sidebar] .sidebar-pane {
+    inset-block-start: var(--lq-brand-height);
+  }
+}
+
+/*
+ * The search composer — Version C's one search, drawn as the redesign's
+ * message box (one rounded, raised box with a hairline and a soft shadow; the
+ * action an ink pill). It is the same box on every page — Explore's
+ * (DocsSearch.astro) and everyone else's (DocsComposer.astro) — fixed to the
+ * bottom of the reading column. It stops short of Explore's details sidebar
+ * while that is open (`--lq-side-offset`, explore.css) and of the contents
+ * column where a page has one (`--lq-composer-end`, below).
+ */
+.lq-docs-composer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 1.5rem;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  background: var(--lq-color-surface-raised);
+}
+
+.lq-docs-composer input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.5rem;
+}
+
+.lq-docs-composer input::placeholder {
+  color: var(--sl-color-gray-4);
+}
+
+.lq-docs-composer button {
+  border: 0;
+  border-radius: var(--lq-radius-pill);
+  background: var(--sl-color-bg-accent);
+  color: var(--sl-color-text-invert);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.lq-docs-composer:focus-within {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 3px;
+}
+
+.lq-docs-composer:not([hidden]) {
+  position: fixed;
+  bottom: 1rem;
+  inset-inline-start: calc(var(--sl-content-inline-start, 0px) + var(--sl-nav-pad-x));
+  inset-inline-end: calc(
+    var(--lq-side-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-nav-pad-x)
+  );
+  max-width: 54rem;
+  margin-inline: auto;
+  z-index: 20;
+  /* The ring in the page colour keeps text scrolling under it from showing
+     through at the edges. */
+  box-shadow:
+    0 0 0 0.5rem var(--sl-color-bg),
+    var(--lq-shadow-raised);
+}
+
+.lq-docs-composer[hidden] {
+  display: none;
+}
+
+/* Room under every page's last line, so nothing ends up beneath the box. */
+.main-frame:has(.lq-docs-composer) main {
+  padding-bottom: 8rem;
+}
+
+/* Starlight sizes the contents column as max(sidebar width, (viewport −
+   content width) / 2) from 72rem; the composer's end inset restates that. */
+@media (min-width: 72rem) {
+  :root[data-has-toc] {
+    --lq-composer-end: max(var(--sl-sidebar-width), (100vw - var(--sl-content-width)) / 2);
+  }
+}
+
+.lq-composer-fallback {
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+
+/* B's header search reads as a pill, at every width. */
+.lq-pw-search site-search,
+.lq-pw-search site-search > button {
+  width: 100%;
+}
+
+.lq-pw-search site-search > button {
+  max-width: none;
+  justify-content: flex-start;
+  height: 2.5rem;
+  padding-inline: 0.9rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: var(--lq-radius-pill);
+  background: var(--lq-color-control-bg);
+  color: var(--sl-color-gray-3);
+  font-size: 0.9375rem;
+}
+
+.lq-pw-search site-search > button > span {
+  display: block;
+}
+
+.lq-pw-search site-search > button > kbd {
+  margin-inline-start: auto;
+}
+
+/* ------------------------------------------------------------------ *
+ * Reduced motion — the header's play button, or the system setting
+ * ------------------------------------------------------------------ */
+
+:root[data-motion='reduced'] *,
+:root[data-motion='reduced'] *::before,
+:root[data-motion='reduced'] *::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+:root[data-motion='reduced'] :is(.lq-landing-card, .lq-landing-arrow) {
+  transform: none !important;
+}

@@ -261,7 +261,7 @@
 					<div>
 						<strong>Capability surfaces + integrations.</strong> Playbooks, Tabular Review,
 						Slack/Teams intake bridges, OpenTelemetry observability, and the Microsoft Word
-						add-in (Office.js — plumbing only at v0.3.0; the in-pane feature surface is deferred).
+						add-in (Office.js — a scaffold: the plumbing has shipped; the in-pane feature surface is deferred).
 					</div>
 				</div>
 				<div class="lq-roadmap-item lq-roadmap-item--shipped">

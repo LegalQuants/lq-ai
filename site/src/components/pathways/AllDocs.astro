@@ -1,0 +1,159 @@
+---
+/**
+ * The sitemap: every pathway, every group, every page, with a sticky rail to
+ * jump between pathways. In this layout it is the one page that links every
+ * page, so `check:orphans` reads its `All documentation` landmark the way the
+ * classic check reads the sidebar.
+ */
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES } from '../../pathways.mjs';
+
+const { pathways } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<div class="lq-all">
+  <nav class="lq-all-rail" aria-label="Jump to a pathway">
+    {pathways.map((p) => <a href={`#${p.id}`}>{p.title}</a>)}
+  </nav>
+
+  <nav class="lq-all-content" aria-label="All documentation">
+    {
+      pathways.map((p) => (
+        <section id={p.id} class="lq-all-pathway" data-tone={p.tone}>
+          <h2>
+            <a href={withBase(base, NAV_ROUTES.pathway(p.id))}>{p.title}</a>
+          </h2>
+          {p.groups.map((group) => (
+            <div class="lq-all-group">
+              <h3>{group.title}</h3>
+              <ul>
+                {group.pages.map((page) => (
+                  <li>
+                    <a href={withBase(base, page.route)}>{page.title}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </section>
+      ))
+    }
+  </nav>
+</div>
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-all {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+    gap: 2.8rem;
+    margin-top: 1.5rem;
+  }
+
+  .lq-all-rail {
+    position: sticky;
+    top: calc(var(--sl-nav-height) + 1.25rem);
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    padding-right: 1.25rem;
+    border-right: 1px solid var(--sl-color-hairline);
+  }
+
+  .lq-all-rail a {
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--lq-radius-pill);
+    font-size: 0.9375rem;
+    color: var(--sl-color-gray-3);
+    text-decoration: none;
+  }
+
+  .lq-all-rail a:hover {
+    background: var(--lq-color-hover);
+    color: var(--sl-color-white);
+  }
+
+  .lq-all-pathway {
+    margin-bottom: 2.5rem;
+    scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem);
+  }
+
+  /* Each pathway's heading takes that pathway's own tone. */
+  .lq-all-pathway[data-tone='a'] {
+    --lq-section-tone: var(--lq-tone-a);
+  }
+  .lq-all-pathway[data-tone='b'] {
+    --lq-section-tone: var(--lq-tone-b);
+  }
+  .lq-all-pathway[data-tone='c'] {
+    --lq-section-tone: var(--lq-tone-c);
+  }
+
+  /* Out-ranks theme.css's ruled prose h2 (0,3,0); see PathwayGroups. */
+  :global(.sl-markdown-content) .lq-all .lq-all-pathway > h2 {
+    margin: 0 0 0.9rem;
+    padding: 0;
+    border: 0;
+    font-size: 1.875rem;
+    font-weight: 600;
+  }
+
+  .lq-all-pathway h2 a {
+    color: var(--lq-section-tone);
+    text-decoration: none;
+  }
+
+  .lq-all-group h3 {
+    margin: 1.4rem 0 0.4rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--sl-color-white);
+  }
+
+  .lq-all-group ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lq-all-group li {
+    margin: 0;
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+
+  .lq-all-group a {
+    display: block;
+    padding: 0.6rem 0.25rem;
+    color: var(--lq-section-tone);
+    text-decoration: none;
+  }
+
+  .lq-all-group a:hover {
+    background: var(--lq-color-hover);
+  }
+
+  @media (max-width: 50rem) {
+    .lq-all {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .lq-all-rail {
+      position: static;
+      flex-direction: row;
+      flex-wrap: wrap;
+      padding: 0 0 0.75rem;
+      border-right: 0;
+      border-bottom: 1px solid var(--sl-color-hairline);
+    }
+
+    .lq-all-group ul {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

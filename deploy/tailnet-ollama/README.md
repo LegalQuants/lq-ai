@@ -1,43 +1,40 @@
-# Tailnet-Hosted Ollama for the Gateway
+# Use Ollama on another computer over Tailscale
 
-[Tailscale](https://tailscale.com/) is a networking platform that connects devices securely into a private network called a **tailnet**. Devices on the same tailnet can communicate without exposing their services directly to the public internet.
+You can point LQ.AI at an Ollama server on your private Tailscale network. Make sure that computer has the model you choose.
 
-[Ollama](https://ollama.com/) is a tool for running large language models locally. It provides an HTTP API that applications such as the LQ.AI inference gateway can use for model inference.
+## Apply the address change
 
-This recipe covers the setup when Ollama runs on a separate GPU host on your tailnet and the LQ.AI gateway runs on another machine.
+After changing `OLLAMA_BASE_URL` in the Compose environment, recreate the gateway container. Restarting it alone keeps the old value. Also check that the working `gateway.yaml` reads that variable.
 
----
+### Details
 
-## When to Use This
-
-Use this recipe when:
-
-- Ollama runs on a separate GPU machine from the LQ.AI gateway.
-- Both machines are connected to the same Tailscale tailnet.
-- You want the gateway to reach Ollama over HTTPS without exposing Ollama to the public internet.
-
-### Architecture
-
-```text
-Gateway
-    |
-    | HTTPS
-    v
-https://<host>.<tailnet>.ts.net
-    |
-    | Tailscale Serve
-    v
-127.0.0.1:11434
-    |
-    v
-Ollama on the GPU host
+```env
+OLLAMA_BASE_URL=https://<host>.<tailnet>.ts.net
 ```
 
-Tailscale Serve terminates HTTPS on the GPU host and forwards requests to Ollama on the host's loopback interface.
+*Example:* `OLLAMA_BASE_URL=https://gpu-box.example.ts.net`
 
----
+Set this in the environment used by the gateway, then recreate it:
 
-## Prerequisites
+```bash
+docker compose up -d --force-recreate gateway
+```
+
+A plain `docker compose restart gateway` keeps the environment the container was created with — it does not pick up the new value. `gateway.yaml` reads the variable as `base_url: ${OLLAMA_BASE_URL:-http://ollama:11434}` ([`gateway.yaml.example`](../../gateway.yaml.example)).
+
+## AI and tool connections have different rules
+
+AI connections allow some private-network addresses. External tool connections use stricter rules: HTTPS, an approved hostname and public network addresses. An address that works for Ollama won't necessarily be accepted for a tool.
+
+### Details
+
+The LLM-provider rule lives in [`base_url_policy.py`](../../gateway/app/providers/base_url_policy.py) — it's what this recipe's `OLLAMA_BASE_URL` has to satisfy. Tool providers — the research sources and MCP servers declared under `tool_providers:` — go through a separate, stricter guard, [`tool/egress.py`](../../gateway/app/providers/tool/egress.py): HTTPS is required with no local exception at all, the host must be on that provider's own allowlist, and every address the host resolves to must be public. A tailnet-hosted MCP server is refused under that guard even over HTTPS, because its `*.ts.net` name resolves to a `100.64.0.0/10` address — this recipe is for Ollama and other LLM providers only.
+
+## Prepare both computers
+
+Run Ollama on the model computer and confirm its `/api/tags` response lists the installed models. Both computers need access to the same private network; the documented recipe uses Tailscale DNS names and HTTPS certificates. On the Ollama computer, Tailscale Serve forwards HTTPS to its local port 11434.
+
+### Details
 
 You need:
 
@@ -51,85 +48,23 @@ You need:
 > **Note:** MagicDNS provides DNS names for devices on the tailnet. HTTPS Certificates allow Tailscale to provide a publicly trusted certificate for the device's `*.ts.net` hostname.
 > See the Tailscale documentation for [MagicDNS](https://tailscale.com/kb/1081/magicdns) and [HTTPS Certificates](https://tailscale.com/kb/1153/enabling-https).
 
----
+## Configure and verify the gateway
 
-## Quick Start
+Set `OLLAMA_BASE_URL` to the model computer's https:// address and confirm the gateway service receives that environment value. Recreate the gateway after changing its environment. Check the working `gateway.yaml` aliases and installed model names, then test connectivity from the gateway's actual environment. A successful model-list request establishes connectivity, not that chat and document search work.
 
-### 1. Verify Ollama on the GPU Host
+### Details
 
-Make sure Ollama is installed and running on the GPU host. Verify that its local API responds:
+The gateway's LLM provider egress policy allows HTTPS destinations without the local-host restriction; plaintext HTTP is restricted to explicitly local inference targets (see "If plaintext HTTP is refused" below). The Tailscale hostname carries a publicly trusted HTTPS certificate, so the gateway container needs no custom CA bundle for this connection.
 
-```bash
-curl http://127.0.0.1:11434/api/tags
-```
+`gateway.yaml`'s model aliases map to specific Ollama tags — for example the `local` alias defaults to `ollama-local` / `qwen3.5:9b` ([`gateway.yaml.example`](../../gateway.yaml.example)). If that tag isn't pulled on the model computer, the alias fails even though the endpoint itself is reachable.
 
-The response should contain the models available to Ollama.
+## If plaintext HTTP is refused
 
-### 2. Expose Ollama with Tailscale Serve
+The guard does not treat Tailscale's 100.x addresses as an allowed local HTTP target. Use the HTTPS hostname described by the recipe. Do not bypass the transport check just because the private network itself encrypts traffic — the guard stops LLM prompts from leaving the gateway in plaintext; it isn't a claim about the tailnet's own security.
 
-On the GPU host, run:
+### Details
 
-```bash
-sudo tailscale serve --bg --https=443 http://127.0.0.1:11434
-```
-
-Check the active configuration:
-
-```bash
-tailscale serve status
-```
-
-The Ollama endpoint is now available over the tailnet at:
-
-```text
-https://<host>.<tailnet>.ts.net
-```
-
-*Example:* `https://gpu-box.example.ts.net` (the exact hostname depends on your Tailscale machine name and tailnet DNS name).
-
-### 3. Configure the Gateway
-
-On the machine running the LQ.AI gateway, set:
-
-```env
-OLLAMA_BASE_URL=https://<host>.<tailnet>.ts.net
-```
-
-*Example:* `OLLAMA_BASE_URL=https://gpu-box.example.ts.net`
-
-Set this in the environment used by the gateway, then recreate or restart the gateway so that it loads the new value.
-
-### 4. Verify the Connection
-
-From the gateway host, verify that the Tailscale HTTPS endpoint is reachable:
-
-```bash
-curl -f https://<host>.<tailnet>.ts.net/api/tags
-```
-
-A successful response confirms that the gateway host can reach the Ollama API through the Tailscale HTTPS endpoint.
-
----
-
-## Technical Details
-
-### Why HTTPS is Required
-
-The gateway's LLM provider egress policy allows HTTPS destinations without the local-host restriction. Plaintext HTTP is restricted strictly to explicitly local inference targets.
-
-For a remote Ollama host on a tailnet, use:
-
-```env
-OLLAMA_BASE_URL=https://<host>.<tailnet>.ts.net
-```
-
-The Tailscale hostname uses a publicly trusted HTTPS certificate, so the gateway container does not need a custom CA bundle for this connection.
-
-### Why Plain HTTP to a Tailscale IP is Refused
-
-Tailscale addresses use the `100.64.0.0/10` CGNAT range. The gateway's LLM egress policy deliberately does not treat that range as a permitted local target for plaintext HTTP.
-
-Therefore, this configuration is refused:
+Tailscale addresses use the `100.64.0.0/10` CGNAT range, which the gateway's LLM egress policy deliberately does not treat as a permitted local target for plaintext HTTP. So this configuration is refused:
 
 ```env
 OLLAMA_BASE_URL=http://100.x.y.z:11434
@@ -143,12 +78,39 @@ plaintext http base_url is only permitted for local providers
 host '100.x.y.z' must use https
 ```
 
-This refusal is intentional. The egress guard prevents LLM prompts from being sent over plaintext HTTP to a remote host. HTTPS is required for remote destinations, so the supported tailnet configuration uses the Tailscale `*.ts.net` hostname instead.
+This refusal is intentional. HTTPS is required for remote destinations, so the supported tailnet configuration uses the Tailscale `*.ts.net` hostname instead.
 
-For egress policy details, see
-[ADR 0014 — Gateway egress boundary](../../docs/adr/0014-gateway-egress-boundary-for-tool-providers.md).
+## Test from the gateway's network
 
----
+A successful curl on the Ollama computer does not establish that the gateway can reach it. Use the HTTPS hostname in `OLLAMA_BASE_URL` and verify DNS, certificates and access from the gateway environment. A bare Tailscale IP over HTTP is rejected by the provider-address policy, even though the machines are on a private network.
+
+### Details
+
+From the gateway host, check that the Tailscale HTTPS endpoint is reachable:
+
+```bash
+curl -f https://<host>.<tailnet>.ts.net/api/tags
+```
+
+A successful response here confirms the gateway *host* can reach Ollama — but the gateway itself runs in a container, and it's the container that has to resolve the `*.ts.net` name. The gateway image ships no `curl`, so test from inside it with Python instead:
+
+```bash
+docker compose exec gateway python -c "import urllib.request; print(urllib.request.urlopen('https://<host>.<tailnet>.ts.net/api/tags').status)"
+```
+
+A `200` here means the gateway's own network can reach Ollama; a resolution error means the container isn't seeing MagicDNS even though the host is.
+
+## Check and publish the model endpoint
+
+Run these on the Ollama computer:
+
+```bash
+curl -f http://127.0.0.1:11434/api/tags
+sudo tailscale serve --bg --https=443 http://127.0.0.1:11434
+tailscale serve status
+```
+
+Then, on the gateway machine, set `OLLAMA_BASE_URL` to that HTTPS hostname and recreate — not restart — the gateway (see "Apply the address change" above), and confirm the connection from the gateway's own network (see "Test from the gateway's network" above).
 
 ## Alternatives to Tailscale Serve
 
@@ -159,8 +121,6 @@ Tailscale Serve is the simplest option when Ollama runs directly on the GPU host
 
 Regardless of the mechanism used, a remote Ollama endpoint should always be configured with an HTTPS `OLLAMA_BASE_URL`.
 
----
-
 ## References
 
 - **Tailscale Documentation:**
@@ -168,7 +128,7 @@ Regardless of the mechanism used, a remote Ollama endpoint should always be conf
   - [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve)
   - [MagicDNS](https://tailscale.com/kb/1081/magicdns)
   - [Enabling HTTPS](https://tailscale.com/kb/1153/enabling-https)
-  - **Ollama Documentation:** [ollama.com](https://ollama.com/)
-  - **Internal References:**
+- **Ollama Documentation:** [ollama.com](https://ollama.com/)
+- **Internal References:**
   - [Caddy + Tailscale deployment recipe](../caddy-tailscale/README.md)
   - [ADR 0014 — Gateway egress boundary](../../docs/adr/0014-gateway-egress-boundary-for-tool-providers.md)

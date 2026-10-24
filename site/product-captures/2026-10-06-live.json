@@ -1,0 +1,87 @@
+{
+  "assembledOn": "2026-10-06",
+  "productVersion": "v0.8.0",
+  "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+  "input": "docs/quickstart/sample-nda.md",
+  "inputSha256": "3d08afa96d7905a3c56e4b61ddfb9954eae4551b26f97bde0d0b9c3c3fcfd74a",
+  "captures": [
+    {
+      "id": "choose-skill",
+      "file": "choose-skill.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI's Contract QA skill chooser beside the fictional NDA marked ready in the chat's attached files.",
+      "caption": "The fictional NDA is attached and marked ready; the Contract QA skill chooser is open beside it.",
+      "note": "Ordinary chat in LQ.AI v0.8.0. Ready confirms text extraction; an AI answer is a separate check.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md",
+      "evidence": "Fresh browser capture after Docker/API recovery; the chooser is shown, not a successful Contract QA skill run.",
+      "assetSha256": "26025981277e2dcb3a3a1d02e4d23eee2dc5e3b569b30a4cd0e29cba2f48b68c"
+    },
+    {
+      "id": "document-ready",
+      "file": "document-ready.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "The fictional NDA demo matter contains a chat with sample-nda.md attached and marked ready.",
+      "caption": "Upload the fictional NDA and wait for its ready status before asking a question.",
+      "note": "Fresh LQ.AI v0.8.0 capture. Ready confirms text extraction, independently of a model answer.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md",
+      "evidence": "2026-10-06-live.json",
+      "assetSha256": "1df28aa48a154b0e0a24f9fe7ad8f177bac1c02ee366e2e41cd667ff85937efe"
+    },
+    {
+      "id": "local-answer",
+      "file": "local-answer.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "Ordinary LQ.AI document chat answers a fictional NDA follow-up about when the five-year confidentiality clock starts, quoting from the date of disclosure; the sample is ready and the response shows Tier 1.",
+      "caption": "Ask a focused question, then compare the answer's quoted wording with Section 4 of the fictional NDA.",
+      "note": "Completed ordinary chat using the configured local GLM model in LQ.AI v0.8.0. The displayed quote matches the sample; the UI badges do not replace your review. This is separate from the skill-chooser example.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md, Section 4",
+      "evidence": "2026-10-06-live.json",
+      "assetSha256": "faff7b3a7cb140a2b02e169ac432723a2c3851d66734c13ea05884cbd34451a5"
+    },
+    {
+      "id": "inference-route",
+      "file": "inference-route.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "The completed fictional NDA response's Tier 1 details identify the host-ollama provider, with the question, answer and ready document behind the dialog.",
+      "caption": "Open the response's tier badge to inspect the declared route and provider.",
+      "note": "This response used the configured local route. A Tier 1 badge on one answer does not establish that document search, fallbacks or other enabled connections are local.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "The completed ordinary-chat response to the fictional NDA follow-up.",
+      "evidence": "2026-10-06-live.json",
+      "assetSha256": "66c8270f08a73ddbb50d2144e03ecc6b90ec904d4f51a8192564431ed5746919"
+    },
+    {
+      "id": "table-skills",
+      "file": "table-skills.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI's My skills page lists the built-in Contract Snapshot, MSA Snapshot and NDA Snapshot reference skills with Table badges.",
+      "caption": "Browse the built-in table-mode examples before choosing a multi-document review workflow.",
+      "note": "Fresh LQ.AI v0.8.0 library view. This screenshot shows the available examples, not a completed tabular review.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "The demo deployment's reference table-mode skill library; no model call.",
+      "evidence": "2026-10-06-live.json",
+      "assetSha256": "0d9c361bf55106354380db8036d541819d1b6b814f283ae0a139fb502ab36694"
+    }
+  ],
+  "liveAttempt": {
+    "apiRecovery": "Started the existing stopped API container after Docker recovery; healthy.",
+    "documentExtraction": "ready",
+    "skillChooser": "captured; Contract QA run failed with skill_input_missing for document and question, despite the UI saying no required inputs.",
+    "ordinaryChat": "Completed on smart -> host-ollama/glm-4.7-flash:latest, declared Tier 1, with no attached skill.",
+    "sourceCheck": "Follow-up says the clock begins from the date of disclosure and quotes from the date of disclosure; both match Section 4 of the fictional sample.",
+    "libraryView": "Reference table-mode skills only; no tabular review was run."
+  }
+}

@@ -1,0 +1,140 @@
+---
+/**
+ * One pathway's groups as a stack of disclosure sections, the first open.
+ * `<details>` needs no script and is announced as expandable by every screen
+ * reader; each group's pages are a two-column list of links.
+ */
+import { withBase } from '../../namespaces.mjs';
+
+const { pathway } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<div class="lq-pathway">
+  {
+    pathway.groups.map((group, index) => (
+      <details class="lq-pathway-group" open={index === 0}>
+        <summary>
+          <h2>{group.title}</h2>
+        </summary>
+        <ul class="lq-pathway-links">
+          {group.pages.map((page) => (
+            <li>
+              <a href={withBase(base, page.route)}>
+                <span>{page.title}</span>
+                <span class="lq-pathway-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ))
+  }
+</div>
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-pathway {
+    margin-top: 1.25rem;
+  }
+
+  /* Starlight gives Markdown <details> a left rule and indent; these are
+     navigation, ruled only between groups. */
+  .lq-pathway-group {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+
+  .lq-pathway-group > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.3rem 0.3rem;
+    list-style: none;
+    cursor: pointer;
+    color: var(--sl-color-text-accent);
+  }
+
+  .lq-pathway-group > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .lq-pathway-group > summary::before {
+    content: '›';
+    display: inline-block;
+    width: 1rem;
+    font-size: 1.75rem;
+    line-height: 1;
+    text-align: center;
+    transition: transform 160ms ease;
+  }
+
+  .lq-pathway-group[open] > summary::before {
+    transform: rotate(90deg);
+  }
+
+  .lq-pathway-group[open] > summary {
+    padding-bottom: 0.75rem;
+  }
+
+  /* Out-ranks theme.css's ruled prose h2 (0,3,0): Astro's scoping adds no
+     specificity, so the selector has to carry it. */
+  :global(.sl-markdown-content) .lq-pathway .lq-pathway-group > summary > h2 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: inherit;
+  }
+
+  .lq-pathway-links {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 3rem;
+    margin: 0;
+    padding: 0 0.6rem 1.4rem;
+    list-style: none;
+  }
+
+  .lq-pathway-links li {
+    margin: 0;
+    border-bottom: 1px solid var(--sl-color-hairline);
+  }
+
+  .lq-pathway-links a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 0.5rem;
+    font-size: 1.1rem;
+    color: var(--sl-color-text-accent);
+    text-decoration: none;
+  }
+
+  .lq-pathway-links a:hover {
+    background: var(--lq-color-hover);
+  }
+
+  .lq-pathway-arrow {
+    flex-shrink: 0;
+    color: var(--sl-color-gray-3);
+  }
+
+  @media (max-width: 50rem) {
+    .lq-pathway-links {
+      grid-template-columns: 1fr;
+      padding-inline: 0.5rem;
+    }
+
+    .sl-markdown-content .lq-pathway .lq-pathway-group > summary > h2 {
+      font-size: 1.25rem;
+    }
+  }
+</style>

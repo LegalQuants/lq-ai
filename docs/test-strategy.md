@@ -58,7 +58,7 @@ The dedicated `accessibility.yml` check uses a production frontend with syntheti
 | Not in CI | Where it lives | Closed by |
 |---|---|---|
 | General Cypress E2E on PRs (separate from the accessibility slice) | `web/cypress/e2e/` | roadmap 4.2 |
-| Coverage measurement or gate (no `--cov` anywhere in workflows) | — | roadmap 4.3 |
+| Coverage gate — now enforced: `ci.yml` runs `--cov-fail-under=80` (api) and `--cov-fail-under=88` (gateway) as a ratchet | `.github/workflows/ci.yml` | done (was roadmap 4.3) |
 | Provider-marked tests (`pytest -m provider`) | `gateway/tests/test_anthropic_provider.py`, `test_inference_anthropic.py`, `test_courtlistener_live.py` | operator-run only (need real API keys) |
 | Cross-cutting contract tests | `tests/` | not wired into any workflow |
 | Slack/Teams bridge suites | `slack-bridge/tests/`, `teams-bridge/tests/` | not wired into any workflow |

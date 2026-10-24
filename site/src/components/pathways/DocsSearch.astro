@@ -1,0 +1,28 @@
+---
+/**
+ * Explore's search: the composer (fixed to the bottom of the reading column;
+ * styled in theme-pathways.css, the same box as every other page's
+ * DocsComposer.astro) and the reader's own turns in the conversation. Each
+ * search is appended after the introduction and its "Where do I go from
+ * here?" turn, as a question bubble with LQ's answer: how many guides matched,
+ * then the guides. A search handed over from another page arrives in the URL
+ * fragment and runs here (scripts/explore.ts).
+ *
+ * The status line is for screen readers: the turn itself shows the result.
+ */
+import { withBase } from '../../namespaces.mjs';
+const base = import.meta.env.BASE_URL;
+---
+<section class="lq-docs-search" aria-label="Your questions" data-lq-search data-base={base}>
+  <form class="lq-docs-composer" role="search" aria-label="Documentation" data-lq-search-form hidden>
+    <label class="sr-only" for="lq-docs-question">Search the LQ.AI documentation</label>
+    <input id="lq-docs-question" type="search" maxlength="1000" autocomplete="off" placeholder="Find a guide or ask what you want to do…" disabled />
+    <button type="submit" disabled>Search</button>
+  </form>
+  <p class="sr-only" data-lq-search-status role="status" aria-live="polite"></p>
+  <div data-lq-search-history></div>
+  <noscript><p>Browse <a href={withBase(base, 'all')}>all documentation</a> or choose a pathway.</p></noscript>
+</section>
+<style>
+  .lq-docs-search { margin:0; max-width:54rem; }
+</style>

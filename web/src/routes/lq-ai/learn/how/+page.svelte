@@ -519,7 +519,7 @@
 				The Word add-in is an Office.js task pane installed against the operator's own deployment.
 				This playground walks the four-stage flow: admin generates a per-deployment manifest, the
 				operator sideloads the unsigned manifest via the Microsoft 365 Admin Center (which warns
-				about the unsigned add-in — expected at v0.3.0), the task pane completes OAuth against the
+				about the unsigned add-in — expected while the package is unsigned), the task pane completes OAuth against the
 				deployment, and the version handshake confirms compatibility. M3 shipped the plumbing only —
 				the in-pane feature surface (chat, skills, playbooks) is deferred (DE-287; M4 closed without
 				it — community-friendly), and the signed distribution package is community-led.

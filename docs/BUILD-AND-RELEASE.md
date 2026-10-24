@@ -16,6 +16,12 @@ re-discovered.
 | Container images | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | push a `vX.Y.Z` tag (or `workflow_dispatch`) | multi-arch images → `ghcr.io/legalquants/lq-ai-{api,gateway,web}` |
 | macOS app | [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) | push a `desktop-vX.Y.Z` tag (or `workflow_dispatch` with a `tag` input) | signed + notarized `.dmg` on a GitHub Release |
 
+The documentation site follows on its own: `docs/releases/vX.Y.Z.md` in the release PR becomes the
+release page when that PR merges, and when the image release finishes,
+[`.github/workflows/docs-site.yml`](../.github/workflows/docs-site.yml) redeploys `main` so the
+release-notes index lists the new tag. Nothing to run by hand; `workflow_dispatch` on that workflow
+rebuilds it if a tag is added or moved later.
+
 The two are **independent tags** so they can be cut separately. Cut the image release first (the
 launcher pulls those images), then the desktop release.
 
