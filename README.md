@@ -183,7 +183,7 @@ Open `.env` and set the four required secrets (the file explains each one):
 - `LQ_AI_GATEWAY_KEY` — any long random string
 - `JWT_SECRET` — any long random string
 
-Generate all four at once, labelled and ready to paste into `.env`:
+Generate all four at once with Python 3 (`python3`), labelled and ready to paste into `.env`:
 
 ```bash
 python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","OBJECT_STORE_SECRET_KEY","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'

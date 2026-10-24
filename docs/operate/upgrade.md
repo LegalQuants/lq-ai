@@ -29,7 +29,7 @@ then pull:
 docker compose -f docker-compose.release.yml pull
 ```
 
-For a source installation, fetch the tag and check it out instead:
+For a source installation, fetch the tag with `git` and check it out instead:
 
 ```bash
 git fetch --tags && git checkout v0.8.0

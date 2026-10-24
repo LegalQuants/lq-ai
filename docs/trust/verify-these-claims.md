@@ -7,7 +7,7 @@ where noted.
 
 ## Repeat the setup checks
 
-Clone the repository and note the commit you're checking against:
+Clone the repository with Git (`git`) and note the commit you're checking against:
 
 ```bash
 git clone https://github.com/LegalQuants/lq-ai.git

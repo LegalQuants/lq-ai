@@ -40,7 +40,8 @@ done
 
 ## Verify the SBOM attestation
 
-The SBOM is bound to the image digest as a cosign attestation of type `spdxjson`:
+The SBOM is bound to the image digest as a cosign attestation of type `spdxjson`. Checking it
+needs `cosign`, `jq`, and an SBOM scanner (`grype` below; use your own):
 
 ```bash
 cosign verify-attestation \

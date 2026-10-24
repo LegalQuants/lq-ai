@@ -22,7 +22,7 @@ Replacing the key through LQ.AI's admin screen doesn't remove any copy of the ol
 
 Generate a fresh key from the provider, then get it into `gateway.yaml`:
 
-- **If `LQ_AI_GATEWAY_MASTER_KEY` is set**, use the runtime admin surface — **Admin → Provider keys**, or its API directly. The runtime provider-key API is `DELETE`-to-revoke, `PATCH`-to-rotate ([`docs/HONEST-STATE.md`](../HONEST-STATE.md) §2): revoke first if you want the compromised key out of the live adapter even before the replacement is ready, or `PATCH` the new key directly to revoke and replace in one move. Either action is Fernet-encrypted into `gateway.yaml` and hot-applied to the live adapter with no restart. This is the fastest path — the one to use at 11pm — from the command line, with an admin bearer token:
+- **If `LQ_AI_GATEWAY_MASTER_KEY` is set**, use the runtime admin surface — **Admin → Provider keys**, or its API directly. The runtime provider-key API is `DELETE`-to-revoke, `PATCH`-to-rotate ([`docs/HONEST-STATE.md`](../HONEST-STATE.md) §2): revoke first if you want the compromised key out of the live adapter even before the replacement is ready, or `PATCH` the new key directly to revoke and replace in one move. Either action is Fernet-encrypted into `gateway.yaml` and hot-applied to the live adapter with no restart. This is the fastest path — the one to use at 11pm — from the command line, with an admin bearer token (the status check pipes through `jq` to pick out the fields; drop it to see the raw JSON):
 
   ```bash
   # revoke the compromised key immediately

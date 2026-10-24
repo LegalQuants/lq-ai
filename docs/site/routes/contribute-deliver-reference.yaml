@@ -135,6 +135,7 @@
 
   sidebar:
     order: 2
+  next: [deliver, operate/install-docker-compose, reference/versioning]
 
 - route: reference/versioning
   source: docs/adr/0025-release-versioning-and-pipeline-ordering.md
@@ -147,3 +148,4 @@
     - desktop/src/main/index.ts
   sidebar:
     order: 2
+  next: [operate/upgrade, changelog, reference/adr-index]

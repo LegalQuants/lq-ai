@@ -27,7 +27,8 @@ signed release: the app is signed and notarized by Apple (Developer ID: Tucuxi, 
 [Install and set up](#install-and-set-up), below — and that's checkable rather than merely
 asserted. This is the same check the maintainer runs by hand against the published artifact
 ([`docs/BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md) records it precisely because a green CI run
-is not proof the shipped `.dmg` is signed and stapled):
+is not proof the shipped `.dmg` is signed and stapled). It uses the GitHub CLI (`gh`) and
+Xcode's command-line tools (`xcrun`):
 
 ```bash
 gh release download desktop-vX.Y.Z -R LegalQuants/lq-ai -p '*.dmg' -D /tmp --clobber

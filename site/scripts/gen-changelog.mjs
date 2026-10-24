@@ -67,7 +67,18 @@ export async function generate(ctx) {
         // takes a number, so the tag is turned into one; see `orderOf`.
         sidebar: { order: orderOf(version) },
       },
-      body: dropFirstH1(text),
+      // The notes end where their author stopped; the page still owes the
+      // reader a way on (Annex A, rule 10).
+      body: [
+        dropFirstH1(text).trimEnd(),
+        '',
+        '## Next',
+        '',
+        `- [Upgrade](${ctx.route('operate/upgrade')}) — the runbook for taking this release.`,
+        `- [Release versioning](${ctx.route('reference/versioning')}) — what a patch and a minor each commit to.`,
+        `- [All release notes](${ctx.route('changelog')}) — every tag, and which have notes.`,
+        '',
+      ].join('\n'),
       // Links inside release notes are written relative to `docs/releases/`.
       linkBaseDir: RELEASES_DIR,
     });

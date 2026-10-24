@@ -52,7 +52,12 @@ starts a real browser for the accessibility pass.
 | `check:a11y` | pa11y-ci with the axe runner, `WCAG2AA`, over every route in `dist/`, against a real `astro preview` server. |
 | `check:a11y:review` | The same run with axe's "needs review" findings included. Not a gate — see below. |
 | `check:docs-links` | `docs/audits/check_doc_links.py` over every page under `docs/site/**` and every route-manifest `source:` file, so a page's Markdown also works as-is on GitHub, wherever it lives. `docs/site/README.md` is excluded: it is the authoring contract, not a page, and its link table shows illustrative paths that resolve nowhere on purpose. |
-| `check` | `test`, `build`, and every gate above. What CI runs. |
+| `check` | `test`, `build`, and every gate above. What CI runs first. |
+| `check:explore` | Version C's own contracts, read from `dist/`: no draft chips, the Explore button on every page, a release beside every stamp, Explore's guide index and conversation order, and the guide pages' right column. |
+| `check:rules` | The mechanical part of launch gate 2: Annex A's rules 10–12 on every content page of `dist/` (Version C). Each page's text links onward; its menu, breadcrumb, All documentation entry and `llms.txt` entry name the same pathway and group; every program its shell blocks run is named in its text. |
+| `check:e2e` | Twelve browser journeys over the built site, in the Chrome pa11y-ci installs: searches appended as turns, the selected-result sidebar, Back, reload and hand-off, phone widths. |
+
+CI runs `check:explore`, `check:rules` and `check:e2e` as their own step, after `check`, on the build it made.
 
 One tool sits outside the table because it is not a gate:
 `node scripts/screenshot.mjs` captures full-page PNGs of a handful of

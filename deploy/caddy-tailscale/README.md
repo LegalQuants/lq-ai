@@ -108,7 +108,7 @@ https://<host>.<tailnet>.ts.net
 
 ## Verify from another permitted device
 
-From any tailnet device:
+From any tailnet device with `curl`:
 
 ```bash
 # TLS terminates and the web shell answers (expect HTTP/2 200, valid cert):

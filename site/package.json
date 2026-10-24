@@ -26,6 +26,7 @@
     "astro": "astro",
     "diagrams": "node scripts/render-diagrams.mjs",
     "check:explore": "node scripts/check-explore.mjs",
+    "check:rules": "node scripts/check-rules.mjs",
     "check:e2e": "node --test --test-concurrency=1 e2e/*.e2e.mjs"
   },
   "dependencies": {

@@ -24,7 +24,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { DIST_DIR, MANIFEST_PATH, OUT_ROOT, canonicalUrl } from './lib/paths.mjs';
+import { DIST_DIR, MANIFEST_PATH, OUT_ROOT, SITE_LAYOUT, canonicalUrl } from './lib/paths.mjs';
+import { expandPathways } from '../src/pathways.mjs';
 import { parsePage, reduceMdx } from './lib/markdown.mjs';
 import { taskIndex, markdownUrl } from './lib/views.mjs';
 
@@ -122,12 +123,33 @@ async function main() {
     for (const task of tasks.tasks) llms.push(`- [${task.title}](${task.markdownUrl}): prerequisites, steps, applicable alternatives, and verification.`);
     llms.push('', 'The structured task index is [tasks.json](./tasks.json).', '');
   }
-  for (const [namespace, group] of byNamespace) {
-    llms.push(`## ${labelOf(namespace)}`, '');
-    for (const page of group) {
-      llms.push(`- [${oneLine(page.title)}](${canonicalUrl(page.route)}): ${oneLine(page.description)} [Markdown](${markdownUrl(page.route)})`);
+  const entry = (page) =>
+    `- [${oneLine(page.title)}](${canonicalUrl(page.route)}): ${oneLine(page.description)} [Markdown](${markdownUrl(page.route)})`;
+  if (SITE_LAYOUT === 'pathways') {
+    // Grouped like the menu — pathway, then group, in the map's order — so the
+    // sidebar, the breadcrumb and this lookup agree (Annex A, rule 11). The
+    // layout's own navigation pages lead, as "Entry".
+    const byRoute = new Map(pages.map((page) => [page.route, page]));
+    const listed = new Set();
+    const sections = expandPathways([...byRoute.keys()]).map((pathway) => ({
+      title: pathway.title,
+      groups: pathway.groups.map((group) => ({
+        title: group.title,
+        pages: group.pages.filter((route) => byRoute.has(route)).map((route) => (listed.add(route), byRoute.get(route))),
+      })),
+    }));
+    const unlisted = pages.filter((page) => !listed.has(page.route));
+    if (unlisted.length) {
+      llms.push('## Entry', '', ...unlisted.map(entry), '');
     }
-    llms.push('');
+    for (const section of sections) {
+      llms.push(`## ${section.title}`, '');
+      for (const group of section.groups) llms.push(`### ${group.title}`, '', ...group.pages.map(entry), '');
+    }
+  } else {
+    for (const [namespace, group] of byNamespace) {
+      llms.push(`## ${labelOf(namespace)}`, '', ...group.map(entry), '');
+    }
   }
   await writeFile(path.join(DIST_DIR, 'llms.txt'), `${llms.join('\n').trimEnd()}\n`, 'utf8');
   await writeFile(path.join(DIST_DIR, 'tasks.json'), `${JSON.stringify(tasks, null, 2)}\n`, 'utf8');

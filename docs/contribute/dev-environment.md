@@ -20,6 +20,8 @@ Alembic migrations from the host against the live database, and `docker compose 
 
 ## Bring up the stack
 
+You need Git (`git`) and Docker with Compose:
+
 ```bash
 git clone https://github.com/legalquants/lq-ai.git
 cd lq-ai
