@@ -120,7 +120,7 @@ None of these blocks a demo or the launch. Each carries the default the site pro
 Earlier drafts asked the committee for four more decisions. They are withdrawn, not deferred:
 
 - **Priority order** — the phases above are the working plan and change by PR.
-- **Quality rules** — Annex A's failure tests are this PRD's acceptance tests; no separate adoption is sought. The core set still lands under its author's name.
+- **Quality rules** — Annex A's failure tests are this PRD's acceptance tests; no separate adoption is sought. The core set is in Annex A under its author's name.
 - **Mentors per section** — maintainer review by default; CODEOWNERS routing applies because content stays in the repo.
 - **Hosting ownership** — Pages is already enabled on `LegalQuants/lq-ai` and deploys from `main`; the repository's maintainers operate it as they do CI (ADR 0028).
 
