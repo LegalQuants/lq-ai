@@ -9,7 +9,7 @@ This page records an observed deployment, not an API quickstart.
 
 ## Deployment observed
 
-Tested on October 12–13, 2026, using the then-current `main` at
+Tested on October 12–13, 2026, using the then-current `main` (application version v0.9.0) at
 [`f36c0c09c9dd`](https://github.com/LegalQuants/lq-ai/commit/f36c0c09c9dd7a6dd930bc8ec4051f52cdd5b21f),
 on macOS arm64 with Docker Desktop 4.92.0, Engine 29.8.0 and Compose 5.5.1.
 No application source or Compose changes were needed.
@@ -55,7 +55,12 @@ docker compose -p lq-ai-headless-690 up -d --build ingest-worker
 
 A public Harvey Labs [power-purchase-agreement negotiation task](https://github.com/harveyai/harvey-labs/tree/a15650fe74bb20b86f160aaabdad75b87a91b6e8/tasks/contracts/energy/power-purchase-agreement-term-negotiation)
 provided 11 source files. All originals uploaded, but ten DOCX, EML and XLSX files
-failed ingestion with `unsupported_type`; only the TXT succeeded. External
+failed ingestion with `unsupported_type`; only the TXT succeeded.
+DOCX ingestion has an accepted design in
+[ADR 0017](../adr/0017-docx-ingest-via-pandoc.md), with implementation planned
+separately. It was not available in the tested deployment. Broader parser and OCR
+work is described in
+[ADR 0033](../adr/0033-document-pipeline-honesty-and-ocr.md). External
 conversion to labeled text allowed all 11 sources to reach `ready`.
 
 With a funded OpenAI key configured in the gateway, `openai-prod/gpt-5` returned
