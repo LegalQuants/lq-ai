@@ -58,6 +58,24 @@ export const blobUrl = (sha, relPath) => `${REPO_URL}/blob/${blobSha(sha)}/${rel
 /** A repository directory at an exact commit. */
 export const treeUrl = (sha, relPath) => `${REPO_URL}/tree/${blobSha(sha)}/${relPath}`;
 
+/** A repository file opened for editing on `main` ("Edit this page"). */
+export const editUrl = (relPath) => `${REPO_URL}/edit/main/${relPath}`;
+
+/**
+ * The repository file "Edit this page" opens, or `undefined` for none.
+ *
+ * An authored page is its own `docs/site/` file, and a mapped page is the
+ * canonical file its manifest names. A generated page is built from its
+ * `sources:`; when exactly one of those is a file (a release's notes), that
+ * is the file to edit, and otherwise the hand-written intro is, if it has one.
+ * `isFile` says whether a repository path is a file.
+ */
+export function editTarget(page, isFile) {
+  if (page.kind !== 'generated') return page.sourcePath;
+  const files = (page.data?.sources ?? []).filter(isFile);
+  return files.length === 1 ? files[0] : page.sourcePath;
+}
+
 /**
  * Split `path#anchor?query` into its parts without decoding the path, so a
  * filename containing a space survives the round trip.
