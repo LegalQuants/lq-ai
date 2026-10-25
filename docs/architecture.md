@@ -317,52 +317,29 @@ This direction is not a v1 commitment. It is named in the PRD and reflected in t
 
 The gateway is shown as a single service in the main diagram; its internal request flow matters enough to call out separately. Every inbound request follows this pipeline:
 
-```
-            ┌──────────────┐
-   Inbound  │ Auth         │  (API key resolution; rejects unauthenticated)
-   request──▶│              │
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Router       │  (provider/model selection; fallback chains)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Rate Limit   │  (Redis token bucket; per-key, per-model)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Tier         │  (annotates request with routed_inference_tier 1–5;
-            │ Derivation   │   refuses if below skill or Project minimum)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Anonymization│  (M2; pseudonymizes sensitive entities;
-            │ — pre        │   stable mapping for the request lifetime)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Provider     │  (HTTP/gRPC to Anthropic / OpenAI / Azure /
-            │ Adapter      │   Ollama / vLLM; Vertex + Bedrock deferred — DE-034/035)
-            └──────┬───────┘
-                   │
-                 (response)
-                   │
-                   ▼
-            ┌──────────────┐
-            │ Anonymization│  (M2; rehydrates pseudonyms in response and
-            │ — post       │   inside cited chunks; mapping discarded)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Cost Tracker │  (tokens × per-model rates; tagged for analytics)
-            └──────┬───────┘
-                   ▼
-            ┌──────────────┐
-   Outbound │ Telemetry    │  (OTel traces; Langfuse if configured)
-   response │              │
-   ◀────────│              │
-            └──────────────┘
+```mermaid
+flowchart TB
+    accTitle: The Inference Gateway pipeline
+    accDescr: Every inbound request passes through Auth, Router, Rate Limit, Tier Derivation and Anonymization (pre) to the Provider Adapter. The response then passes through Anonymization (post), Cost Tracker and Telemetry before it returns as the outbound response.
+    inbound(["Inbound request"]) --> auth
+    auth["`**Auth**
+API key resolution; rejects unauthenticated`"] --> router
+    router["`**Router**
+provider/model selection; fallback chains`"] --> ratelimit
+    ratelimit["`**Rate Limit**
+Redis token bucket; per-key, per-model`"] --> tier
+    tier["`**Tier Derivation**
+annotates request with routed_inference_tier 1–5; refuses if below skill or Project minimum`"] --> anonpre
+    anonpre["`**Anonymization — pre**
+M2; pseudonymizes sensitive entities; stable mapping for the request lifetime`"] --> adapter
+    adapter["`**Provider Adapter**
+HTTP/gRPC to Anthropic / OpenAI / Azure / Ollama / vLLM; Vertex + Bedrock deferred — DE-034/035`"] -->|response| anonpost
+    anonpost["`**Anonymization — post**
+M2; rehydrates pseudonyms in response and inside cited chunks; mapping discarded`"] --> cost
+    cost["`**Cost Tracker**
+tokens × per-model rates; tagged for analytics`"] --> telemetry
+    telemetry["`**Telemetry**
+OTel traces; Langfuse if configured`"] --> outbound(["Outbound response"])
 ```
 
 The pipeline is what makes the Inference Tier model operationally real. **The Tier Derivation stage is the choke point**: every request gets classified, every classification is logged in the audit trail, and every UI surface reflects the actual routed tier in real time. The user does not have to take the application's word for it — they can verify the tier badge against the operator's gateway configuration and against the audit log entries.

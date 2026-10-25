@@ -112,6 +112,14 @@ export async function generate(ctx) {
   ];
 }
 
+/**
+ * Settings render as records at every width. Most sections measure short
+ * enough to classify as a grid, and a four-column grid squeezed into a phone
+ * splits setting names mid-word (`log_lev`/`el`); records keep each name on
+ * one line, and match the sections that already classify as records.
+ */
+const RECORDS = '<!-- table: records -->';
+
 /** One table per `# ----- Section -----` banner the source file groups by. */
 function renderFields(fields) {
   const headers = ['Setting', 'Type', 'Default', 'Description'];
@@ -136,11 +144,12 @@ function renderFields(fields) {
   }
 
   if (sections.length === 1 && !sections[0].name) {
-    return [table(headers, sections[0].rows)];
+    return [RECORDS, table(headers, sections[0].rows)];
   }
 
   return sections.flatMap((section) => [
     ...(section.name ? [`**${section.name}**`, ''] : []),
+    RECORDS,
     table(headers, section.rows),
     '',
   ]);

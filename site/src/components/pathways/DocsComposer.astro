@@ -19,19 +19,21 @@ const base = import.meta.env.BASE_URL;
 ---
 <form class="lq-docs-composer" role="search" aria-label="Documentation" data-lq-composer data-base={base} hidden>
   <label class="sr-only" for="lq-docs-question">Search the LQ.AI documentation</label>
-  <input id="lq-docs-question" type="search" maxlength="1000" autocomplete="off" placeholder="Find a guide or ask what you want to do…" disabled />
+  <input id="lq-docs-question" type="search" maxlength="1000" autocomplete="off" placeholder="Find a guide or ask what you want to do…" data-short-placeholder="Search the docs…" disabled />
   <button type="submit" disabled>Search</button>
 </form>
 <noscript><p class="lq-composer-fallback">Browse <a href={withBase(base, 'all')}>all documentation</a> or choose a pathway.</p></noscript>
 
 <script>
   import { exploreSearchHref } from '../../lib/explore-state.mjs';
+  import { fitPlaceholder } from '../../scripts/fit-placeholder';
 
   const form = document.querySelector<HTMLFormElement>('[data-lq-composer]');
   if (form) {
     const input = form.querySelector('input')!;
     const button = form.querySelector('button')!;
     input.disabled = button.disabled = false;
+    fitPlaceholder(input);
     form.hidden = false;
     form.addEventListener('submit', (event) => {
       event.preventDefault();

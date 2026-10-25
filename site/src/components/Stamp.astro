@@ -12,7 +12,7 @@
  * When the sync has not run (or could not resolve a commit), the component
  * renders nothing rather than an empty or invented stamp.
  */
-import { blobUrl, REPO_URL } from '../repo.mjs';
+import { blobUrl, breakAfterSlashes, REPO_URL } from '../repo.mjs';
 import { releaseLabel } from '../lib/release-label.mjs';
 
 interface Props {
@@ -49,7 +49,7 @@ const release = releaseLabel(checkedAgainst);
           {sourceFiles.map((path) => (
             <li>
               <a href={blobUrl(sha, path)} rel="nofollow">
-                {path}
+                {breakAfterSlashes(path).map((part, i) => <>{i > 0 && <wbr />}{part}</>)}
               </a>
             </li>
           ))}

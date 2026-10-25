@@ -131,6 +131,8 @@ in.
 
 ## Configuration
 
+<!-- table: records -->
+
 | Variable          | Default     | Purpose                            |
 | ----------------- | ----------- | ---------------------------------- |
 | `CADDY_BIND_ADDR` | `127.0.0.1` | Host interface Caddy publishes on. |

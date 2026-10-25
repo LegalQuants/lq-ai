@@ -18,7 +18,7 @@
  */
 import { getCollection } from 'astro:content';
 import StatusBadge from '../StatusBadge.astro';
-import { blobUrl, REPO_URL } from '../../repo.mjs';
+import { blobUrl, breakAfterSlashes, REPO_URL } from '../../repo.mjs';
 import { withBase } from '../../namespaces.mjs';
 import { NAV_ROUTES, relatedRoutes } from '../../pathways.mjs';
 import { KIND_LABELS } from '../../../scripts/lib/routes.mjs';
@@ -71,7 +71,7 @@ if (!isNavPage && part === 'more') {
       <>
         <h2>Sources</h2>
         <ul class="lq-facts-sources">
-          {sourceFiles.map((path) => <li><a href={blobUrl(sha, path)} rel="nofollow">{path}</a></li>)}
+          {sourceFiles.map((path) => <li><a href={blobUrl(sha, path)} rel="nofollow">{breakAfterSlashes(path).map((part, i) => <>{i > 0 && <wbr />}{part}</>)}</a></li>)}
         </ul>
       </>
     )}
@@ -107,7 +107,7 @@ if (!isNavPage && part === 'more') {
   .lq-facts-release { font-size: var(--sl-text-sm); font-weight: 600; color: var(--sl-color-white); }
   .lq-facts-checked { font-size: var(--sl-text-xs); color: var(--sl-color-gray-3); }
   .right-sidebar-panel .lq-facts-checked a { display: inline; }
-  .right-sidebar-panel .lq-facts-sources a { font-family: var(--sl-font-mono); }
+  .right-sidebar-panel .lq-facts-sources a { font-family: var(--sl-font-mono); overflow-wrap: anywhere; }
   .right-sidebar-panel .lq-facts-more { margin-top: 0.25rem; text-decoration: underline; text-underline-offset: 0.2em; }
 
   /* The same facts in the title area and the footer give way to these while

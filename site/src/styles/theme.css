@@ -342,9 +342,6 @@
   margin-bottom: var(--lq-prose-gap);
   text-wrap: pretty;
 }
-.sl-markdown-content :is(h2, h3, h4) {
-  scroll-margin-top: 5rem;
-}
 .sl-markdown-content h2 {
   margin-top: 2.5rem;
 }
@@ -397,7 +394,7 @@
  * in the faint grey at rest and darkens to ink on hover, so a paragraph full
  * of references does not read as a wall of rules.
  */
-.sl-markdown-content a:not(:where(.sl-link-card a, .card a, .sl-anchor-link)) {
+.sl-markdown-content a:not(:where(.sl-link-card a, .card a, .sl-anchor-link, .lq-landing-card)) {
   color: var(--sl-color-text-accent);
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
@@ -405,7 +402,7 @@
   text-underline-offset: 0.2em;
 }
 
-.sl-markdown-content a:not(:where(.sl-link-card a, .card a, .sl-anchor-link)):hover {
+.sl-markdown-content a:not(:where(.sl-link-card a, .card a, .sl-anchor-link, .lq-landing-card)):hover {
   text-decoration-color: currentColor;
 }
 
@@ -453,6 +450,11 @@
      when hyphenation can't find one — a plain word split reads as broken
      layout, a hyphenated one reads as considered. */
   hyphens: auto;
+}
+
+/* Never hyphenate code: a hyphen inside an identifier reads as part of it. */
+.lq-table :is(th, td) code {
+  hyphens: manual;
 }
 
 /*
@@ -668,7 +670,8 @@
 /* The mark — a 7px dot, as on the redesign's tier and Trust & Privacy rows. It
    repeats the label beside it and is never the only carrier. */
 .lq-mark::before,
-.lq-eyebrow--governance::before {
+.lq-eyebrow--governance::before,
+.lq-side-link .lq-mark::after {
   content: '';
   display: inline-block;
   inline-size: 0.4375rem;
@@ -677,6 +680,16 @@
   border-radius: var(--lq-radius-pill);
   background-color: var(--lq-orange);
   vertical-align: 0.1em;
+}
+
+/* In the sidebar the dot follows its label, so every label starts on the
+   same line after its icon. */
+.lq-side-link .lq-mark::before {
+  content: none;
+}
+
+.lq-side-link .lq-mark::after {
+  margin-inline: 0.4rem 0;
 }
 
 /* ------------------------------------------------------------------ *
@@ -799,6 +812,18 @@
   color: var(--sl-color-gray-3);
 }
 
+/* Too narrow for one line: the release takes its own, without a separator
+   left dangling at its end. */
+@media (max-width: 40rem) {
+  .lq-stamp__release {
+    flex-basis: 100%;
+  }
+
+  .lq-stamp__release::after {
+    content: none;
+  }
+}
+
 .lq-stamp code {
   font-size: 0.95em;
   background-color: var(--sl-color-bg-inline-code);
@@ -812,7 +837,7 @@
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  gap: 0.125rem 1rem;
   font-family: var(--sl-font-mono);
   font-size: var(--sl-text-xs);
 }
@@ -824,6 +849,21 @@
 .lq-stamp__sources a {
   color: var(--sl-color-gray-3);
   text-underline-offset: 0.2em;
+}
+
+/* A path breaks at its slashes first (`<wbr>`, Stamp.astro), inside a name
+   only when one part is wider than the column. Each link is a 24px-tall
+   target (WCAG 2.5.8). */
+.lq-stamp__sources a {
+  display: inline-block;
+  padding-block: 0.15rem;
+  overflow-wrap: anywhere;
+}
+
+/* Out-ranks the prose list spacing (`li + li`), which pushed every source
+   after the first down a little. */
+.sl-markdown-content .lq-stamp__sources li {
+  margin: 0;
 }
 
 .lq-stamp__line a:hover,
@@ -928,6 +968,12 @@ mobile-starlight-toc .toggle {
   color: var(--sl-color-gray-3);
 }
 
+/* The bar spans the screen under the header, which covers a ring drawn
+   outside it: draw this one inside. */
+mobile-starlight-toc summary:focus-visible {
+  outline-offset: -3px;
+}
+
 .right-sidebar-panel starlight-toc a {
   color: var(--sl-color-gray-3);
   font-size: var(--sl-text-sm);
@@ -1020,9 +1066,29 @@ starlight-theme-select label:hover {
   border: none;
 }
 
+/* Expressive Code spaces the copy button below the title bar
+   (`--button-spacing`); with the bar gone it would hang below a one-line
+   command and cover the next paragraph. Back to its default spacing, and the
+   first two lines stop short of the button so wrapped text never runs under it. */
+.expressive-code .frame.is-terminal:not(.has-title) {
+  --button-spacing: 0.4rem;
+}
+
+.expressive-code .frame.is-terminal:not(.has-title) .ec-line:nth-child(-n + 2) .code {
+  padding-inline-end: 2.75rem;
+}
+
 /* The bar's bottom hairline goes with the bar. */
 .expressive-code .frame.is-terminal:not(.has-title) > .header::after {
   content: none;
+}
+
+/* A file name too long for its tab wraps instead of being clipped. The tab
+   stops 3rem short of the edge, the copy button's column. */
+.expressive-code .frame.has-title:not(.is-terminal) .title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: calc(100% - 3rem);
 }
 
 /* Give the code box the top edge the title bar used to draw. */
@@ -1051,7 +1117,9 @@ starlight-theme-select label:hover {
 :root[data-theme='dark'] .lq-diagram a.lq-diagram-dark { display: inline; }
 .lq-diagram-actions { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.75rem 1.5rem; font-size: 0.95rem; }
 .lq-diagram-actions a { color: var(--lq-page-accent, var(--sl-color-text-accent)); }
-.lq-diagram-actions details { min-width: 0; max-width: 100%; }
+/* Starlight rules every content `<details>` down its left side; inside the
+   diagram card that is a third frame around the source. */
+.lq-diagram-actions details { min-width: 0; max-width: 100%; padding-inline: 0; border-inline-start: 0; }
 .lq-diagram-actions summary { cursor: pointer; }
 .lq-diagram-actions pre { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; font-size: 0.8rem; }
 @media (max-width: 40rem) { .lq-diagram { padding: 0.75rem; } }

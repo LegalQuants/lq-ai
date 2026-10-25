@@ -96,5 +96,13 @@ const editHref =
       font-size: var(--sl-text-xs);
       color: var(--sl-color-gray-3);
     }
+
+    /* On a navigation page nothing sits between the page's own last rule and
+       this line (no stamp, no edit link, no previous/next), so it draws none. */
+    .lq-footer > .lq-footer__project:first-child,
+    .lq-footer > :global(.pagination-links:empty) + .lq-footer__project {
+      padding-top: 0;
+      border-top: 0;
+    }
   }
 </style>

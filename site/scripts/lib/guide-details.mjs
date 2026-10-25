@@ -32,7 +32,7 @@ export function guideDetails(html, page) {
     description: page.description ?? '', audience: page.audience ?? [],
     sections,
     checkedAgainst: page.sha ? { sha: page.sha, date: page.date, href: `${REPO_URL}/commit/${page.sha}`,
-      release: releaseLabel({ release: page.release, released: page.released }) ?? null } : null,
+      release: releaseLabel({ release: page.release, released: page.released, notes: page.notes }) ?? null } : null,
     sources: page.sha ? (page.sources ?? []).map((path) => ({ path, href: blobUrl(page.sha, path) })) : [],
   };
 }

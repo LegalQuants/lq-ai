@@ -11,6 +11,11 @@ describe('the release a page describes', () => {
     assert.equal(releaseLabel({sha:'abc'}),undefined,'no tags in the clone: say nothing rather than guess');
     assert.equal(releaseLabel(undefined),undefined);
   });
+
+  it('names a release-note page by the release it records, not the one its last edit landed in', () => {
+    assert.equal(releaseLabel({sha:'abc',release:'v0.8.0',released:true,notes:true}),'Release notes for v0.8.0');
+    assert.equal(releaseLabel({sha:'abc',release:'v1.0.0',released:false,notes:true}),'Release notes for v1.0.0 (not yet released)');
+  });
 });
 
 const page = { route:'start/example', url:'/start/example/', title:'A source example', status:'draft',

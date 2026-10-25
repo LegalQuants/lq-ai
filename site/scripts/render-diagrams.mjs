@@ -42,6 +42,9 @@ async function renderSvg(source, theme, portrait = false) {
       globalThis.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
         theme: 'base', themeVariables: { ...colors, fontFamily: 'Arial, sans-serif', fontSize: '18px' },
         fontFamily: 'Arial, sans-serif', htmlLabels: false,
+        // The base theme draws edge-label backgrounds at half opacity, so a
+        // line shows straight through its own label.
+        themeCSS: '.edgeLabel rect { opacity: 1; }',
         flowchart: { htmlLabels: false, nodeSpacing: portrait ? 12 : 50, rankSpacing: portrait ? 36 : 50 },
         deterministicIds: true, deterministicIDSeed: key, maxTextSize: 20000, maxEdges: 200,
       });

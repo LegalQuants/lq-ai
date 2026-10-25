@@ -61,7 +61,7 @@ import {
 import { OVERVIEW_ROUTE, PATHWAYS, expandPathways } from '../src/pathways.mjs';
 import { resolveViews } from './lib/views.mjs';
 import { addProductScreenshots, productScreenshots, renderScreenshots, SCREENSHOTS_CONFIG, validateScreenshots } from './lib/product-screenshots.mjs';
-import { head, releaseOf, stampFor } from './lib/git.mjs';
+import { head, releaseFor, releaseOf, stampFor } from './lib/git.mjs';
 import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
 import {
@@ -635,9 +635,18 @@ async function main() {
       continue;
     }
 
+    // 4f3. A first section headed with the page's own title ("# What is LQ.AI?"
+    // then "## What is LQ.AI?", which Explore and the screenshots select by
+    // name) would show the same words twice under the title. The page drops
+    // that heading; the canonical and machine bodies keep it.
+    if (title) {
+      const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      body = body.replace(new RegExp(`^\\s*##[ \\t]+${escaped}[ \\t]*\\n`), '');
+    }
+
     // 4g. Frontmatter the build owns.
     const data = { ...page.data };
-    data.checkedAgainst = { sha: stamp.sha, date: stamp.date, ...releaseOf(stamp.sha) };
+    data.checkedAgainst = { sha: stamp.sha, date: stamp.date, ...releaseFor(page, stamp.sha) };
     data.sourceFiles = stamp.sourceFiles.filter(Boolean);
 
     const target = path.join(CONTENT_DIR, page.outPath ?? page.relPath);

@@ -68,6 +68,8 @@ const intro = landing.intro;
     justify-content: space-between;
     color: var(--lq-card-ink);
     text-decoration: none;
+    /* The card's own pressed state below replaces the browser's square tap flash. */
+    -webkit-tap-highlight-color: transparent;
     transition:
       transform 180ms ease,
       filter 180ms ease,
@@ -118,6 +120,10 @@ const intro = landing.intro;
   .lq-landing-card:is(:hover, :focus-visible) * {
     text-decoration: none;
     color: var(--lq-card-ink);
+  }
+
+  .lq-landing-card:active {
+    filter: brightness(0.96);
   }
 
   @media (hover: hover) {

@@ -9,12 +9,12 @@ import path from 'node:path';
 import { DIST_DIR, MANIFEST_PATH, SITE_BASE, SITE_LAYOUT } from './lib/paths.mjs';
 import { detailsPage, guideDetails } from './lib/guide-details.mjs';
 import { pathwayOf } from '../src/pathways.mjs';
-import { releaseOf } from './lib/git.mjs';
+import { releaseFor } from './lib/git.mjs';
 
 if (SITE_LAYOUT === 'pathways') {
   const manifest = JSON.parse(await readFile(MANIFEST_PATH, 'utf8'));
   const pages = [...manifest.pages, ...manifest.navigation].filter((page) => page.route && page.route !== '404')
-    .map((page) => ({ ...detailsPage(page, SITE_BASE), ...releaseOf(page.sha) }));
+    .map((page) => ({ ...detailsPage(page, SITE_BASE), ...releaseFor(page, page.sha) }));
   const output = path.join(DIST_DIR, '_guides');
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });

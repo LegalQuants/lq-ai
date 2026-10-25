@@ -13,20 +13,18 @@
 
 LQ.AI runs as 7 services on a single operator-controlled deployment (Docker Compose for dev; Helm/Kubernetes for production per `deploy/helm/lq-ai/`). The Inference Gateway is the only component holding plaintext provider API keys per PRD §4; this defines the primary trust boundary. Everything internal to the operator's deployment is one trust zone; the LLM providers (Anthropic, OpenAI, etc.) are another; the operator's IdP (if integrated) is a third.
 
-```
-┌────────────────────────────────────────────────────────────┐
-│ Operator deployment                                        │
-│  ┌──────┐   ┌─────────┐   ┌──────────┐   ┌────────────┐   │
-│  │ web  │──>│   api   │──>│ gateway  │──>│ providers  │   │
-│  └──────┘   └────┬────┘   └────┬─────┘   └────────────┘   │
-│                  ▼             ▼                          │
-│              ┌────────┐    ┌─────────┐                    │
-│              │postgres│    │ rustfs  │                    │
-│              └────────┘    └─────────┘                    │
-│              ┌────────┐                                   │
-│              │ redis  │                                   │
-│              └────────┘                                   │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    accTitle: Trust boundaries in an LQ.AI deployment
+    accDescr: The services sit inside one operator deployment; the model providers sit outside it, a separate trust zone. Requests run from web to api to gateway, and only the gateway calls out to the providers; api also connects to postgres, gateway to rustfs, and redis runs alongside.
+    subgraph deployment["Operator deployment"]
+        direction LR
+        web["web"] --> api["api"] --> gateway["gateway"]
+        api --> postgres["postgres"]
+        gateway --> rustfs["rustfs"]
+        redis["redis"]
+    end
+    gateway --> providers["providers"]
 ```
 
 The five rows in the STRIDE table below cover the production-facing services (`api`, `gateway`, `web`, `postgres`, `rustfs`). Redis and the ingest-worker are cluster-internal and inherit `postgres`-tier mitigations (least-privilege role, no external listener, operator-managed secret); they do not add a distinct row.

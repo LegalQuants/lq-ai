@@ -116,7 +116,7 @@ const escape = (text) => String(text).replace(/[&<>"'{}]/g,
   (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '{': '&#123;', '}': '&#125;' })[character]);
 
 export function diagramFigure(diagram, assets) {
-  const picture = (theme) => `<picture class="lq-diagram-${theme}"><source media="(max-width: 600px)" srcset="${escape(assets[theme].portrait)}" /><img src="${escape(assets[theme].landscape)}" alt="${escape(diagram.title)}" loading="lazy" decoding="async" /></picture>`;
+  const picture = (theme) => `<picture class="lq-diagram-${theme}"><source media="(max-width: 1000px)" srcset="${escape(assets[theme].portrait)}" /><img src="${escape(assets[theme].landscape)}" alt="${escape(diagram.title)}" loading="lazy" decoding="async" /></picture>`;
   return `<figure class="lq-diagram" aria-label="${escape(diagram.title)}">
 <figcaption><strong>${escape(diagram.title)}</strong></figcaption>
 ${picture('light')}

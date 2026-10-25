@@ -44,7 +44,7 @@ const shouldRenderSearch =
     {/* Explore stays one tap away on every page: on a narrow window the
         sidebar, and its Explore row, is behind the menu (Houfu, 2026-10-23). */}
     {SITE_EXPERIENCE === 'explore' && (
-      <a class="lq-pw-chip" href={base} aria-label="Explore" aria-current={isLanding ? 'page' : undefined}>
+      <a class="lq-pw-chip lq-pw-chip--explore" href={base} aria-label="Explore" aria-current={isLanding ? 'page' : undefined}>
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="12" cy="12" r="9"></circle>
           <path d="m15.5 8.5-2 5-5 2 2-5z"></path>
@@ -74,7 +74,8 @@ const shouldRenderSearch =
     </button>
     <button class="lq-pw-chip" type="button" data-lq-toggle="motion" aria-label="Reduced motion" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M8 5.5v13l10.5-6.5Z"></path>
+        <circle cx="15.5" cy="12" r="4.5"></circle>
+        <path d="M3.5 9h5M3.5 15h5M6 12h3.5"></path>
       </svg>
       <span class="lq-pw-tip" aria-hidden="true">Reduced motion</span>
     </button>
@@ -326,6 +327,14 @@ const shouldRenderSearch =
 
     .lq-pw-actions {
       gap: 0.375rem;
+    }
+
+    /* Below 340px the wordmark would run under the buttons. Explore goes:
+       the wordmark beside it links to the same page. */
+    @media (max-width: 21.25rem) {
+      .lq-pw-chip--explore {
+        display: none;
+      }
     }
 
     .lq-pw-tabs {

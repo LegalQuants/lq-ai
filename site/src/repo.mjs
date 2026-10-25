@@ -34,3 +34,9 @@ export const toDocsSitePath = (filePath) => {
   const i = filePath.indexOf(CONTENT_DIR_PREFIX);
   return i === -1 ? undefined : filePath.slice(i + CONTENT_DIR_PREFIX.length);
 };
+
+/**
+ * A repository path split after each slash, for rendering with `<wbr>`
+ * between the parts: a long path then wraps at a slash, not mid-name.
+ */
+export const breakAfterSlashes = (path) => String(path).split(/(?<=\/)/);

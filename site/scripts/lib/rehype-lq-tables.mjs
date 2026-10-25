@@ -203,6 +203,16 @@ export function classifyTable({ headerText, cellText }, directive) {
 // output builders
 // ---------------------------------------------------------------------------
 
+/**
+ * A term ending in a space, so extracted text keeps it apart from its value:
+ * without one, search excerpts read "behind a reverse proxy)Operate".
+ */
+function withTrailingSpace(children) {
+  const last = children.at(-1);
+  if (last?.type === 'text') return [...children.slice(0, -1), text(`${last.value} `)];
+  return [...children, text(' ')];
+}
+
 /** `div.lq-dl > p.lq-dl__caption + dl > (div.lq-dl__item > dt + dd)*` */
 function buildDl(table) {
   const h1 = table.headerText[0] ?? '';
@@ -223,7 +233,7 @@ function buildDl(table) {
     const dd = valueIsEmpty
       ? h('dd', {}, [h('span', { class: 'lq-muted' }, [text('—')])])
       : h('dd', {}, valueChildren);
-    return h('div', { class: 'lq-dl__item' }, [h('dt', {}, keyChildren), dd]);
+    return h('div', { class: 'lq-dl__item' }, [h('dt', {}, withTrailingSpace(keyChildren)), dd]);
   });
 
   return h('div', { class: 'lq-dl', role: 'group', 'aria-label': `${h1} and ${h2}` }, [

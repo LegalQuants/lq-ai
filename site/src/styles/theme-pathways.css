@@ -196,6 +196,24 @@ header.header {
   color: var(--sl-color-gray-4);
 }
 
+/* The browser's own clear button (Safari, Chrome), drawn as the site's icons:
+   a muted stroke cross, ink on hover. */
+.lq-docs-composer input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  margin-inline-start: 0.5rem;
+  background-color: var(--sl-color-gray-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7 7 17'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M7 7l10 10M17 7 7 17'/%3E%3C/svg%3E") center / contain no-repeat;
+  cursor: pointer;
+}
+
+.lq-docs-composer input::-webkit-search-cancel-button:hover {
+  background-color: var(--sl-color-white);
+}
+
 .lq-docs-composer button {
   border: 0;
   border-radius: var(--lq-radius-pill);
@@ -214,30 +232,96 @@ header.header {
   outline-offset: 3px;
 }
 
+/* The form's ring above is the focus indicator; the site-wide input ring
+   would draw a second, square one inside it. */
+.lq-docs-composer input:focus-visible {
+  outline: none;
+}
+
 .lq-docs-composer:not([hidden]) {
+  --lq-composer-bottom: 1rem;
   position: fixed;
-  bottom: 1rem;
-  inset-inline-start: calc(var(--sl-content-inline-start, 0px) + var(--sl-nav-pad-x));
+  bottom: var(--lq-composer-bottom);
+  /* The reading column's own edges: the same padding, the same maximum width,
+     and Starlight's alignment for it — start-aligned below 72rem, centred or
+     pushed against the contents column above (`--sl-content-margin-inline`). */
+  inset-inline-start: calc(var(--sl-content-inline-start, 0px) + var(--sl-content-pad-x));
   inset-inline-end: calc(
-    var(--lq-side-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-nav-pad-x)
+    var(--lq-side-offset, 0px) + var(--lq-composer-end, 0px) + var(--sl-content-pad-x)
   );
-  max-width: 54rem;
-  margin-inline: auto;
+  max-width: var(--sl-content-width);
+  margin-inline: 0 auto;
   z-index: 20;
-  /* The ring in the page colour keeps text scrolling under it from showing
-     through at the edges. */
+  /* Page-colour cover around the box and down to the bottom of the screen, so
+     no slice of text scrolling under it shows through. The raised shadow is
+     listed first so it still draws over that cover. */
   box-shadow:
+    var(--lq-shadow-raised),
     0 0 0 0.5rem var(--sl-color-bg),
-    var(--lq-shadow-raised);
+    0 var(--lq-composer-bottom) 0 0.5rem var(--sl-color-bg);
+}
+
+@media (min-width: 72rem) {
+  .lq-docs-composer:not([hidden]) {
+    margin-inline: var(--sl-content-margin-inline, auto);
+  }
+}
+
+/* A phone held sideways has too little height for a fixed box as well as the
+   header and the contents bar: the composer joins the end of the page. */
+@media (max-height: 30rem) {
+  .lq-docs-composer:not([hidden]) {
+    position: static;
+    margin-block-start: 1rem;
+    max-width: none;
+    box-shadow: none;
+  }
 }
 
 .lq-docs-composer[hidden] {
   display: none;
 }
 
+/* Starlight's menu button, drawn like the header's round buttons (C4): the
+   same 44px hairline circle and muted icon in both themes, filled only while
+   the menu is open. Its size is Starlight's own property, which also places
+   it and reserves its room in the header. `display` is left to Starlight,
+   which hides the button from 50rem. */
+:root {
+  --sl-menu-button-size: 44px;
+}
+
+.sl-menu-button {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border: 1px solid var(--sl-color-hairline);
+  background-color: var(--sl-color-bg-nav);
+  color: var(--sl-color-gray-3);
+  box-shadow: none;
+}
+
+.sl-menu-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sl-menu-button:hover,
+.sl-menu-button:has(~ :popover-open) {
+  border-color: var(--lq-color-hover);
+  background-color: var(--lq-color-hover);
+  color: var(--sl-color-white);
+}
+
 /* Room under every page's last line, so nothing ends up beneath the box. */
 .main-frame:has(.lq-docs-composer) main {
   padding-bottom: 8rem;
+}
+
+@media (max-height: 30rem) {
+  .main-frame:has(.lq-docs-composer) main {
+    padding-bottom: 0;
+  }
 }
 
 /* Starlight sizes the contents column as max(sidebar width, (viewport −

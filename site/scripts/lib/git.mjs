@@ -77,6 +77,24 @@ export function releaseOf(sha) {
   return releaseCache.get(sha);
 }
 
+/**
+ * The release a page describes. A release-note page describes its own version
+ * (`changelog/v0-8-0` is v0.8.0), marked `notes`; any other page, the release
+ * that contains the commit it was checked against (`releaseOf`). Without the
+ * first case the v0.8.0 notes, last edited in a v0.9.0 commit, read "Applies
+ * to v0.9.0 and later".
+ *
+ * @param {{ route?: string, generator?: string }} page
+ * @param {string} sha
+ * @returns {{ release: string, released: boolean, notes?: boolean } | undefined}
+ */
+export function releaseFor(page, sha) {
+  const own = page?.generator === 'gen-changelog' && /^changelog\/v(\d+)-(\d+)-(\d+)$/.exec(page.route ?? '');
+  if (!own) return releaseOf(sha);
+  const release = `v${own[1]}.${own[2]}.${own[3]}`;
+  return { release, released: git(['tag', '--list', release]) === release, notes: true };
+}
+
 function lastCommitTouching(paths) {
   if (paths.length === 0) return undefined;
   const line = git(['log', '-1', '--format=%h%x09%cs', '--', ...paths]);

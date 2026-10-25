@@ -1,8 +1,9 @@
+import { fitPlaceholder } from './fit-placeholder';
 import { loadGuides, type GuideIndex } from './guide-index';
 import type { GuideDetails } from './guide-details';
 import { recallSearches, rememberSearches } from '../lib/explore-state.mjs';
 
-interface SearchData { url: string; excerpt: string; meta: { title?: string }; sub_results?: { url: string; title: string }[] }
+interface SearchData { url: string; excerpt: string; content?: string; meta: { title?: string }; sub_results?: { url: string; title: string }[] }
 interface Pagefind { search(query: string): Promise<{ results: { data(): Promise<SearchData> }[] }> }
 
 const MEMORY = 'lq-explore-searches';
@@ -40,6 +41,7 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
     else input.focus({ preventScroll: true });
   };
   input.disabled = button.disabled = false;
+  fitPlaceholder(input);
   form.hidden = false;
   input.addEventListener('focus', pauseTour);
   // ⌘K puts the cursor in the composer from anywhere on the page.
@@ -130,7 +132,13 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       const snippet = document.createElement('p');
       // Decode Pagefind's excerpt in an inert template; insert text only.
       const template = document.createElement('template'); template.innerHTML = match.excerpt;
-      snippet.textContent = template.content.textContent;
+      // Pagefind's excerpt is a window into the page; an ellipsis marks each
+      // side where it starts or stops mid-text.
+      const excerpt = (template.content.textContent ?? '').trim();
+      const page = (match.content ?? '').trim();
+      const cut = (side: 'start' | 'end') => page !== '' && excerpt !== ''
+        && !(side === 'start' ? page.startsWith(excerpt.slice(0, 24)) : page.endsWith(excerpt.slice(-24)));
+      snippet.textContent = `${cut('start') ? '… ' : ''}${excerpt}${cut('end') ? ' …' : ''}`;
       item.append(snippet);
       const sections = document.createElement('div'); sections.className = 'lq-match-links';
       for (const part of (match.sub_results ?? []).filter((part) => { const hash = new URL(part.url, location.origin).hash; return hash && hash !== '#_top'; }).slice(0, 2)) {

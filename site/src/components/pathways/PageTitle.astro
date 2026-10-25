@@ -170,7 +170,10 @@ const sectionHref = (heading) => '#' + heading.replace(/^#+\s+/, '').toLowerCase
     color: var(--sl-color-gray-4);
   }
 
+  /* 24px-tall targets (WCAG 2.5.8) without moving the text. */
   .lq-pw-crumbs a {
+    display: inline-block;
+    padding-block: 0.1rem;
     color: var(--sl-color-gray-3);
     text-decoration: none;
   }

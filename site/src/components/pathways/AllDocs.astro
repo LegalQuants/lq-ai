@@ -121,7 +121,9 @@ const base = import.meta.env.BASE_URL;
     list-style: none;
   }
 
-  .lq-all-group li {
+  /* Out-ranks theme.css's prose `li + li` spacing, which would push the
+     second column's first link down. */
+  :global(.sl-markdown-content) .lq-all-group li {
     margin: 0;
     border-bottom: 1px solid var(--sl-color-hairline);
   }
@@ -137,7 +139,9 @@ const base = import.meta.env.BASE_URL;
     background: var(--lq-color-hover);
   }
 
-  @media (max-width: 50rem) {
+  /* Stacked until the two link columns have room beside the rail: at 50–60rem
+     the sidebar is showing too, and each column would be about 135px. */
+  @media (max-width: 60rem) {
     .lq-all {
       grid-template-columns: 1fr;
       gap: 1rem;

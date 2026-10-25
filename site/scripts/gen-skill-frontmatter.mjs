@@ -75,7 +75,10 @@ export async function generate(ctx) {
     }
     sections.push(`## ${wanted.heading}`, '', wanted.lead, '');
     if (klass.doc) sections.push(fromRst(klass.doc), '');
+    // Records at every width, as on the configuration reference: a five-column
+    // grid on a phone splits field names mid-word.
     sections.push(
+      '<!-- table: records -->',
       table(
         ['Field', 'Type', 'Required', 'Default', 'What it is'],
         klass.fields.map((field) => [
