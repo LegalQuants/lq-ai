@@ -11,6 +11,14 @@
  * LQ.AI mark, with no bubble of its own.
  */
 .lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+/* The introduction tour (tour-playback.ts): each step's place sits above its
+   question once the tour has started, so the reader can see where they are
+   wherever the page has scrolled; the step being shown is outlined and its
+   place is in ink. */
+.lq-tour-place { display:none; margin:0 0 0.5rem; font-size:var(--sl-text-sm); font-weight:600; color:var(--sl-color-gray-3); }
+.lq-explore[data-tour-started] .lq-tour-place { display:block; }
+.lq-answer[data-tour-active] .lq-tour-place { color:var(--sl-color-white); }
+.lq-answer[data-tour-active] { outline:2px solid var(--sl-color-text-accent); outline-offset:0.5rem; border-radius:0.75rem; }
 .sl-markdown-content .lq-explore :is(h2, h3).lq-ask { margin:0 0 1.25rem; padding:0.65rem 1.1rem; width:fit-content; max-width:min(100%, 36rem); font-size:1.125rem; font-weight:600; line-height:1.45; overflow-wrap:anywhere; border:1px solid var(--sl-color-hairline); border-radius:1.25rem; background:var(--lq-color-hover); color:var(--sl-color-white); }
 .lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.875rem; }
 .lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:var(--lq-radius-pill); font-size:0.75rem; font-weight:650; background:var(--lq-accent); color:var(--lq-on-accent); }

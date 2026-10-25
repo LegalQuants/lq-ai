@@ -58,6 +58,29 @@ describe('Explore is one conversation', () => {
   });
 });
 
+describe('the introduction tour', () => {
+  it('has four steps, each showing its place above its question once played', async () => {
+    const page = await openPage(site.browser, 390, 844);
+    await page.goto(url(), { waitUntil: 'load' });
+    const places = () => page.$$eval('[data-lq-tour-step]', (steps) => steps.map((step) => {
+      const place = step.querySelector(':scope > .lq-tour-place');
+      return { place: place && getComputedStyle(place).display !== 'none' ? place.textContent : null,
+        ask: step.querySelector('.lq-ask').textContent.trim(), active: step.hasAttribute('data-tour-active') };
+    }));
+    const before = await places();
+    assert.equal(before.length, 4);
+    assert.equal(before[3].ask, 'Where do I go from here?', 'the last step is "Where do I go from here?"');
+    assert.ok(before.every((step) => step.place === null), 'no places before the tour starts');
+    await page.click('[data-lq-tour-play]');
+    const after = await places();
+    assert.deepEqual(after.map((step) => step.place), [1, 2, 3, 4].map((n) => `Introduction ${n} of 4`));
+    assert.deepEqual(after.map((step) => step.active), [true, false, false, false]);
+    assert.match(await page.$eval('[data-lq-tour-status]', (s) => s.textContent), /^Introduction 1 of 4: /);
+    await page.click('[data-lq-tour-play]'); // pause, so no timer outlives the test
+    noErrors(page);
+  });
+});
+
 describe('the right sidebar shows the selected result', () => {
   it('selects the first result, follows a row click, and moves focus on Details', async () => {
     const page = await openPage(site.browser, 1440);

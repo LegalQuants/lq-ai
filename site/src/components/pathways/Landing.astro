@@ -25,9 +25,10 @@ const base = import.meta.env.BASE_URL;
 <div data-lq-explore class="lq-explore">
 <GuidedIntro />
 
-<!-- The introduction's last turn: what to read next. The reader's own
-     searches join the conversation after it (DocsSearch.astro). -->
-<section class="lq-answer lq-read-next" aria-labelledby="question-next">
+<!-- The introduction's last turn, and the tour's last step: what to read
+     next. The reader's own searches join the conversation after it
+     (DocsSearch.astro). -->
+<section class="lq-answer lq-read-next" data-lq-tour-step aria-labelledby="question-next">
 <h2 id="question-next" class="lq-ask">Where do I go from here?</h2>
 <div class="lq-answer-reply"><span class="lq-docs-avatar" aria-hidden="true">LQ</span><div class="lq-answer-body">
 <p>Pick the path that fits what you're doing, or ask your own question below.</p>
