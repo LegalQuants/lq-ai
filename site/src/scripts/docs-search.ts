@@ -109,7 +109,7 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
     section.dataset.turn = String(queries.length);
     const heading = document.createElement('h2'); heading.className = 'lq-ask';
     heading.id = `lq-search-${history.children.length}`; section.setAttribute('aria-labelledby', heading.id);
-    heading.append(Object.assign(document.createElement('span'), { className: 'sr-only', textContent: 'You searched: ' }), query);
+    heading.textContent = `Search for “${query}”`;
     const reply = document.createElement('div'); reply.className = 'lq-answer-reply';
     const avatar = document.createElement('span'); avatar.className = 'lq-docs-avatar'; avatar.setAttribute('aria-hidden', 'true'); avatar.textContent = 'LQ';
     const body = document.createElement('div'); body.className = 'lq-answer-body';
@@ -164,8 +164,10 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       links.append(text, ...(badge.childNodes.length ? [badge] : []), toggle); item.append(links); list.append(item);
     }
     const count = list.children.length;
-    if (count) { say(body, `${count === 1 ? 'One guide matches' : `${count} guides match`} “${query}”.`); body.append(list); }
-    else say(body, `No guide matches “${query}”. Try a topic such as Docker, citations, or privacy.`);
+    // Said as a reply, but only ever about guides found: a search never reads
+    // as a generated answer (Annex D).
+    if (count) { say(body, `Here's what I found for “${query}”: ${count === 1 ? 'one guide' : `${count} guides`}.`); body.append(list); }
+    else say(body, `I found no guides for “${query}”. Try a topic such as Docker, citations, or privacy.`);
     history.append(section);
     return { section, list };
   };
@@ -181,7 +183,7 @@ export function docsSearch(root: HTMLElement, details: GuideDetails, pauseTour: 
       guides = index;
       const { section, list } = render(query, index, data);
       queries.push(query); input.value = '';
-      status.textContent = `${list.children.length} guides match ${query}.`;
+      status.textContent = `Found ${list.children.length === 1 ? 'one guide' : `${list.children.length} guides`} for ${query}.`;
       section.scrollIntoView({ block: 'start' });
       const first = list.querySelector<HTMLElement>('li[data-route]');
       if (first && details.available) select(first);

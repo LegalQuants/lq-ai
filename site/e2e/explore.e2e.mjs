@@ -37,9 +37,9 @@ describe('Explore is one conversation', () => {
     await searchOnExplore(page, 'docker');
     await searchOnExplore(page, 'backup');
     const all = await asks(page);
-    assert.deepEqual(all.slice(4), ['You searched: docker', 'You searched: backup'], 'newest search last');
+    assert.deepEqual(all.slice(4), ['Search for “docker”', 'Search for “backup”'], 'newest search last');
     const answers = await page.$$eval('.lq-search-turn .lq-answer-body > p:first-child', (ps) => ps.map((p) => p.textContent));
-    assert.match(answers[0], /^(\d+ guides match|One guide matches) “docker”\.$/);
+    assert.match(answers[0], /^Here's what I found for “docker”: (\d+ guides|one guide)\.$/);
     assert.match(answers[1], /“backup”/);
     // The reader's bubble sits on the left, in line with the conversation.
     const [bubble, column] = await page.$eval('.lq-search-turn:last-child', (turn) => [
@@ -53,7 +53,7 @@ describe('Explore is one conversation', () => {
     await page.goto(url(), { waitUntil: 'load' });
     await searchOnExplore(page, 'zzqxjv');
     const answer = await page.$eval('.lq-search-turn .lq-answer-body > p', (p) => p.textContent);
-    assert.match(answer, /^No guide matches “zzqxjv”\./);
+    assert.match(answer, /^I found no guides for “zzqxjv”\./);
     noErrors(page);
   });
 });
@@ -152,7 +152,7 @@ describe('the conversation outlives a visit to a guide', () => {
     await page.type('[data-lq-composer] input', 'privacy');
     await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.keyboard.press('Enter')]);
     await page.waitForFunction(() => document.querySelectorAll('.lq-search-turn').length === 2, { timeout: 20000 });
-    assert.deepEqual((await asks(page)).slice(4), ['You searched: docker', 'You searched: privacy']);
+    assert.deepEqual((await asks(page)).slice(4), ['Search for “docker”', 'Search for “privacy”']);
     const address = new URL(page.url());
     assert.equal(address.pathname, BASE);
     assert.equal(address.hash, '', 'the question is not left in the address');
