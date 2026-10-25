@@ -10,7 +10,10 @@
  * hairline, ink text, 20px rounding — and the answer is plain text beside the
  * LQ.AI mark, with no bubble of its own.
  */
-.lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); scroll-margin-top:calc(var(--sl-nav-height) + 1rem); }
+/* No scroll-margin of its own: Starlight's scroll-padding-top already clears
+   the top bar, and the two added up left a 100px gap above each turn that the
+   tour and a new search scroll to. */
+.lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); }
 /* The introduction tour (tour-playback.ts): each step's place sits above its
    question once the tour has started, so the reader can see where they are
    wherever the page has scrolled; the step being shown is outlined and its
