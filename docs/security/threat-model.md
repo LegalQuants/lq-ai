@@ -16,13 +16,14 @@ LQ.AI runs as 7 services on a single operator-controlled deployment (Docker Comp
 ```mermaid
 flowchart LR
     accTitle: Trust boundaries in an LQ.AI deployment
-    accDescr: The services sit inside one operator deployment; the model providers sit outside it, a separate trust zone. Requests run from web to api to gateway, and only the gateway calls out to the providers; api also connects to postgres, gateway to rustfs, and redis runs alongside.
+    accDescr: The services sit inside one operator deployment; the model providers sit outside it, a separate trust zone. Requests run from web to api to gateway, and only the gateway calls out to the providers; api also connects to postgres, redis and rustfs, and the gateway writes its routing log to postgres.
     subgraph deployment["Operator deployment"]
         direction LR
         web["web"] --> api["api"] --> gateway["gateway"]
         api --> postgres["postgres"]
-        gateway --> rustfs["rustfs"]
-        redis["redis"]
+        api --> redis["redis"]
+        api --> rustfs["rustfs"]
+        gateway --> postgres
     end
     gateway --> providers["providers"]
 ```
