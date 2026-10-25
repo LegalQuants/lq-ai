@@ -567,6 +567,16 @@
   border-top: 1px solid var(--sl-color-hairline-light);
 }
 
+/* Straight under an H2 the heading's own rule is the first record's top
+   edge; a second rule there would draw two lines with nothing between. */
+.sl-markdown-content
+  :is(.sl-heading-wrapper.level-h2, h2:not(.sl-heading-wrapper > *))
+  + .lq-records
+  > .lq-record:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .lq-record__title {
   margin: 0;
   color: var(--sl-color-white);
