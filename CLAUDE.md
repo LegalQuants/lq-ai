@@ -96,11 +96,11 @@ Full conventions in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Testing
 
-Coverage target is 80% across `api/` and `gateway/`. Current PR CI does not enforce a coverage threshold or no-decrease rule.
+Coverage target is 80% for `api/` and 90% for `gateway/` (`docs/PRD.md`). PR CI enforces it as a ratchet (`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and `--cov-fail-under=88` for `gateway/`, each pinned at or below the measured figure so a PR that lowers coverage fails.
 
 - **Unit tests** — fast, no external deps. `pytest` in each subsystem's `tests/` folder.
 - **Integration tests** — run against real Postgres in Docker. Provider integration gated behind `pytest -m provider`.
-- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
+- **End-to-end tests** — the deterministic Cypress track runs nightly and on manual dispatch (`.github/workflows/e2e.yml`), not on every PR; the live-model track stays opt-in.
 
 Bug fixes include a regression test. New API endpoints include unit tests for handler logic, integration tests for the endpoint, and OpenAPI schema-conformance tests.
 

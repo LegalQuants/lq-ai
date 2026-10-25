@@ -1,0 +1,55 @@
+---
+/**
+ * The search composer on every Version C page other than Explore.
+ *
+ * Version C has one search, in one place: the composer fixed to the bottom of
+ * the reading column, the same box on every page (Annex D: Pagefind presented
+ * through Iris's composer, "rather than keeping two search implementations",
+ * and available while reading). Explore renders its own (DocsSearch.astro),
+ * where results become turns in the conversation. Here the question is handed
+ * to Explore in the URL fragment — never sent to the server — so results
+ * always appear in the same place; Back returns to this page.
+ *
+ * It is rendered from the footer so it comes after the page in the keyboard
+ * order, as it does on screen. Without JavaScript the form stays hidden and a
+ * link to All documentation stands in.
+ */
+import { withBase } from '../../namespaces.mjs';
+const base = import.meta.env.BASE_URL;
+---
+<form class="lq-docs-composer" role="search" aria-label="Documentation" data-lq-composer data-base={base} hidden>
+  <label class="sr-only" for="lq-docs-question">Search the LQ.AI documentation</label>
+  <input id="lq-docs-question" type="search" maxlength="1000" autocomplete="off" placeholder="Find a guide or ask what you want to do…" data-short-placeholder="Search the docs…" disabled />
+  <button type="submit" disabled>Search</button>
+</form>
+<noscript><p class="lq-composer-fallback">Browse <a href={withBase(base, 'all')}>all documentation</a> or choose a pathway.</p></noscript>
+
+<script>
+  import { exploreSearchHref } from '../../lib/explore-state.mjs';
+  import { fitPlaceholder } from '../../scripts/fit-placeholder';
+
+  const form = document.querySelector<HTMLFormElement>('[data-lq-composer]');
+  if (form) {
+    const input = form.querySelector('input')!;
+    const button = form.querySelector('button')!;
+    input.disabled = button.disabled = false;
+    fitPlaceholder(input);
+    form.hidden = false;
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!input.value.trim()) return;
+      location.assign(exploreSearchHref(form.dataset.base!, input.value));
+    });
+    // ⌘K / Ctrl+K focuses the composer on every page, as it does on Explore.
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+          event.preventDefault();
+          input.focus();
+        }
+      },
+      true
+    );
+  }
+</script>
