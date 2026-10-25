@@ -5,7 +5,7 @@
  * Order, top to bottom:
  *   1. the stamp — the commit the page was checked against, and every source
  *      file linked at that commit;
- *   2. "Edit this page" (the canonical file under `docs/site/`, on GitHub);
+ *   2. "Edit this page" (the repository file the page is made from, on GitHub);
  *   3. previous / next, which Starlight builds from the sidebar;
  *   4. one project line;
  *   5. in Version C, on every page but Explore (which has its own), the search
@@ -19,9 +19,11 @@
  * `Astro.locals.starlightRoute.editUrl`. Starlight builds that URL by appending
  * `entry.filePath` to `editLink.baseUrl`, and our entries live in the generated
  * `src/content/docs/` tree, so the default would point at a path that is not in
- * the repository. Stripping that prefix gives the page's real `docs/site/` path.
- * A page with a frontmatter `editUrl` (which the generators can set for pages
- * that have no single hand-written source) wins over the derived one.
+ * the repository. The sync sets every page's `editUrl` to the file it is made
+ * from (a mapped page's canonical file, a generated page's one source or
+ * intro; `lib/links.mjs` `editTarget`), and that wins. Stripping the prefix to
+ * get a `docs/site/` path is only the fallback for a page without one.
+ * `check:links` fails the build on an edit link to a file that does not exist.
  */
 import Pagination from 'virtual:starlight/components/Pagination';
 

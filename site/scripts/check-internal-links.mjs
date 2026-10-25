@@ -17,13 +17,18 @@
  *
  * External URLs are not checked. A trust centre that fetched every outbound
  * link on every build would be slow, flaky, and rate-limited; the stamp is what
- * makes an outbound repository link verifiable, not a HEAD request.
+ * makes an outbound repository link verifiable, not a HEAD request. The one
+ * exception is "Edit this page": it names a file on `main`, so it is checked
+ * against this checkout instead.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-import { DIST_DIR, MANIFEST_PATH, SITE_BASE } from './lib/paths.mjs';
+import { DIST_DIR, MANIFEST_PATH, REPO_ROOT, SITE_BASE } from './lib/paths.mjs';
+import { REPO_BRANCH, REPO_URL } from '../src/repo.mjs';
+
+const EDIT_PREFIX = `${REPO_URL}/edit/${REPO_BRANCH}/`;
 
 // `href="…"`, `href='…'`, and the unquoted form some minifiers emit.
 const ATTRIBUTE = /\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))/gi;
@@ -85,6 +90,19 @@ function main() {
     for (const match of html.matchAll(ATTRIBUTE)) {
       const raw = decodeEntities(match[1] ?? match[2] ?? match[3] ?? '');
       if (!raw || raw.startsWith('#') || raw.startsWith('data:')) continue;
+      // "Edit this page" points into the repository on `main`, which is this
+      // checkout, so it is checked without the network: the file must exist.
+      if (raw.startsWith(EDIT_PREFIX)) {
+        if (seen.has(raw)) continue;
+        seen.add(raw);
+        checked += 1;
+        const repoFile = decodeURIComponent(raw.slice(EDIT_PREFIX.length).split(/[?#]/)[0]);
+        const onDisk = path.join(REPO_ROOT, repoFile);
+        if (!existsSync(onDisk) || statSync(onDisk).isDirectory()) {
+          failures.push({ file, url: raw, why: `no file ${repoFile} in the repository` });
+        }
+        continue;
+      }
       if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) continue;
       if (!raw.startsWith(SITE_BASE)) {
         // A root-absolute URL that is not under the base can never resolve on a

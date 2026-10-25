@@ -30,6 +30,8 @@ import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { editTarget } from '../scripts/lib/links.mjs';
+
 const SITE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURES = path.join(SITE_ROOT, 'test', 'fixtures', 'docs-site');
 
@@ -238,6 +240,15 @@ describe('frontmatter and the stamp', () => {
     assert.match(page, /sourceFiles:\n\s+- site\/test\/fixtures\/docs-site\/start\/links\.md/);
   });
 
+  it('points "Edit this page" at the file each page is made from', () => {
+    // The YAML writer may quote the URL.
+    const EDIT = "editUrl: '?https://github.com/LegalQuants/lq-ai/edit/main/";
+    assert.match(contentOf('start/links'), new RegExp(`${EDIT}site/test/fixtures/docs-site/start/links\\.md`));
+    // A mapped page is its canonical file, not a docs/site/ path that does
+    // not exist.
+    assert.match(contentOf('operate/manifest-slice'), new RegExp(`${EDIT}site/test/fixtures/repo/route-mapped/sliced\\.md`));
+  });
+
   it('keeps the author’s own frontmatter', () => {
     assert.match(contentOf('start'), /status: reviewed/);
     assert.match(contentOf('start'), /audience:\n\s+- agent/);
@@ -249,6 +260,22 @@ describe('frontmatter and the stamp', () => {
     for (const page of manifest.pages.filter((entry) => entry.kind === 'generated')) {
       assert.equal(page.status, 'draft', `${page.route} is generated but not a draft`);
     }
+  });
+});
+
+describe('the file "Edit this page" opens', () => {
+  const isFile = (repoFile) => !repoFile.endsWith('/');
+
+  it('is a generated page’s one source file, else its intro, else none', () => {
+    const generated = (sources, intro) => ({ kind: 'generated', sourcePath: intro, data: { sources } });
+    assert.equal(editTarget(generated(['docs/releases/v0.8.0.md']), isFile), 'docs/releases/v0.8.0.md');
+    assert.equal(editTarget(generated(['skills/', 'docs/a.md', 'docs/b.md'], 'docs/site/x.intro.md'), isFile), 'docs/site/x.intro.md');
+    assert.equal(editTarget(generated(['skills/']), isFile), undefined);
+  });
+
+  it('is an authored or mapped page’s own source', () => {
+    assert.equal(editTarget({ kind: 'mapped', sourcePath: 'docs/operate/air-gapped.md' }, isFile), 'docs/operate/air-gapped.md');
+    assert.equal(editTarget({ kind: 'authored', sourcePath: 'docs/site/start/index.md' }, isFile), 'docs/site/start/index.md');
   });
 });
 

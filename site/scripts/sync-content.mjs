@@ -39,7 +39,7 @@
  * run, for building the rest of the pipeline while one page is mid-flight.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -62,7 +62,7 @@ import { OVERVIEW_ROUTE, PATHWAYS, expandPathways } from '../src/pathways.mjs';
 import { resolveViews } from './lib/views.mjs';
 import { addProductScreenshots, productScreenshots, renderScreenshots, SCREENSHOTS_CONFIG, validateScreenshots } from './lib/product-screenshots.mjs';
 import { head, releaseFor, releaseOf, stampFor } from './lib/git.mjs';
-import { blobUrl, createResolver, mapLinks, treeUrl } from './lib/links.mjs';
+import { blobUrl, createResolver, editTarget, editUrl, mapLinks, treeUrl } from './lib/links.mjs';
 import { expandIncludes, includedFiles } from './lib/includes.mjs';
 import {
   convertGithubAlerts,
@@ -657,6 +657,16 @@ async function main() {
     const data = { ...page.data };
     data.checkedAgainst = { sha: stamp.sha, date: stamp.date, ...releaseFor(page, stamp.sha) };
     data.sourceFiles = stamp.sourceFiles.filter(Boolean);
+    // "Edit this page" opens the file the page is made from; the footer's own
+    // guess (`docs/site/<route>.md`) only holds for authored pages that were
+    // not moved. A page that names its own `editUrl` keeps it.
+    if (data.editUrl === undefined) {
+      const editable = editTarget(page, (repoFile) => {
+        const onDisk = path.join(REPO_ROOT, repoFile);
+        return existsSync(onDisk) && statSync(onDisk).isFile();
+      });
+      data.editUrl = editable ? editUrl(editable) : false;
+    }
 
     const target = path.join(CONTENT_DIR, page.outPath ?? page.relPath);
     await mkdir(path.dirname(target), { recursive: true });
