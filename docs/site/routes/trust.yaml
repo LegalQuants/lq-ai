@@ -11,7 +11,6 @@
   status: draft
   sources: [README.md, docs/security/anonymization.md, docs/HONEST-STATE.md, gateway.yaml.example]
   sidebar: { order: 2 }
-  next: [trust/anonymization, trust/threat-model, trust/verify-these-claims]
 
 - route: trust/threat-model
   source: docs/security/threat-model.md
@@ -86,7 +85,6 @@
   status: draft
   sources: [LICENSE, docs/PRD.md, docs/adr/0025-release-versioning-and-pipeline-ordering.md, GOVERNANCE.md, docker-compose.yml, docs/BUILD-AND-RELEASE.md]
   sidebar: { order: 9 }
-  next: [trust/supply-chain, trust/governance, trust/published-gaps]
 
 - route: trust/security-disclosure
   source: SECURITY.md
@@ -130,4 +128,3 @@
   status: draft
   sources: [README.md, docs/HONEST-STATE.md, docs/db-schema.md, .github/workflows/release.yml, docker-compose.yml, docs/adr/0022-committee-governance-and-meeting-records.md]
   sidebar: { order: 13 }
-  next: [trust/published-gaps]

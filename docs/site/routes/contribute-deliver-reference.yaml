@@ -69,7 +69,6 @@
     - docs/adr/0036-bundled-object-store-rustfs.md
   sidebar:
     order: 7
-  next: [contribute/engineers, contribute/coding-agents]
 
 - route: contribute/engineers
   source: CONTRIBUTING.md
@@ -116,7 +115,6 @@
     - skills/CONTRIBUTING.md
   sidebar:
     order: 8
-  next: [contribute/board]
 
 - route: deliver/branding-and-licensing
   source: docs/adr/0001-openwebui-fork-pin.md

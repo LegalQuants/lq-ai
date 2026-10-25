@@ -51,7 +51,6 @@
     - api/app/__init__.py
     - gateway/app/__init__.py
   sidebar: { order: 12 }
-  next: [operate/reverse-proxy-tls, operate/architecture]
 
 - route: operate/reverse-proxy-tls
   source: docs/operate/reverse-proxy-tls.md
@@ -65,7 +64,6 @@
     - deploy/reverse-proxy/README.md
     - docs/adr/0014-gateway-egress-boundary-for-tool-providers.md
   sidebar: { order: 13 }
-  next: [operate/air-gapped, operate/recipes/caddy-tailscale, operate/install-docker-compose]
 
 - route: operate/air-gapped
   source: docs/operate/air-gapped.md
@@ -84,7 +82,6 @@
     - gateway.yaml.example
     - docs/quickstart.md
   sidebar: { order: 14 }
-  next: [operate/install-docker-compose, trust/what-leaves-my-deployment, operate/hardware-sizing]
 
 - route: operate/hardware-sizing
   source: docs/operate/hardware-sizing.md
@@ -102,7 +99,6 @@
     - docs/PRD.md
     - deploy/helm/lq-ai/values.yaml
   sidebar: { order: 22 }
-  next: [operate/air-gapped, operate/install-docker-compose, operate/install-macos]
 
 - route: operate/architecture
   source: docs/architecture.md

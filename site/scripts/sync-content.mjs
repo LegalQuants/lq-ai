@@ -614,7 +614,16 @@ async function main() {
     // manifest, not as Markdown links in the source, because the titles have
     // to come from whatever page each route actually resolved to — a writer
     // names `operate/upgrade`, not "Upgrade" spelled out and hoped to match.
-    if (page.kind === 'mapped' && page.nextRoutes?.length) {
+    // A source that writes its own "## Next" keeps it, and a manifest `next:`
+    // on top of it would print a second one: the build stops and asks for one.
+    if (page.kind === 'mapped' && page.nextRoutes?.length && /^## Next\b/m.test(body)) {
+      report({
+        level: 'error',
+        page: page.sourcePath,
+        line: 1,
+        message: `route "${page.route}" has a manifest \`next:\` and its source has its own "## Next"; keep one`,
+      });
+    } else if (page.kind === 'mapped' && page.nextRoutes?.length) {
       const items = page.nextRoutes
         .filter((target) => titleByRoute.has(target))
         .map((target) => `- [${titleByRoute.get(target)}](${withBase(target)})`);

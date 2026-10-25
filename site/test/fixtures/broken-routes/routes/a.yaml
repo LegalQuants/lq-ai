@@ -55,3 +55,9 @@
   source: site/test/fixtures/repo/route-mapped/kind-invalid.md
   description: Entry whose kind is not one of the allowed values.
   kind: not-a-real-kind
+
+# k. a next list on a source that writes its own "## Next"
+- route: broken/double-next
+  source: site/test/fixtures/repo/route-mapped/own-next.md
+  description: Entry whose source has its own Next section as well as a next list.
+  next: [start]

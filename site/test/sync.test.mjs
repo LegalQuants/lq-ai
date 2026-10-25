@@ -480,6 +480,13 @@ describe('route manifests: validation', () => {
     assert.match(output, /entry "broken\/bad-next": next: "nowhere\/at-all" is not a known route/);
   });
 
+  it('fails when a next: list sits on a source with its own "## Next"', () => {
+    assert.match(
+      output,
+      /route "broken\/double-next" has a manifest `next:` and its source has its own "## Next"; keep one/
+    );
+  });
+
   it('fails on a kind outside how-to / explanation / reference', () => {
     assert.match(
       output,
