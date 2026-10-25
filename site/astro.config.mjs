@@ -93,6 +93,15 @@ export default defineConfig({
           tag: 'meta',
           attrs: { name: 'color-scheme', content: 'light dark' },
         },
+        // Replaces Starlight's own viewport tag (same `name`). With
+        // `resizes-content`, Android Chrome shrinks the page itself when the
+        // keyboard opens, so the search box fixed to the bottom of the screen
+        // rises above the keyboard; by default only the visible area shrinks
+        // and the box can stay behind it. Safari ignores the key.
+        {
+          tag: 'meta',
+          attrs: { name: 'viewport', content: 'width=device-width, initial-scale=1, interactive-widget=resizes-content' },
+        },
       ],
       expressiveCode: {
         /**
