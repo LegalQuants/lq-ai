@@ -201,10 +201,14 @@ const shouldRenderSearch =
     color: var(--sl-color-white);
   }
 
+  /* On (a pressed toggle) and current (Explore) carry an ink ring. The soft
+     fill alone is about 1.2:1 against the bar, under the 3:1 a state needs
+     (SC 1.4.11), and it is also the hover look; the ring is about 15:1. */
   .lq-pw-chip[aria-pressed='true'],
   .lq-pw-chip[aria-current] {
-    border-color: var(--lq-color-hover);
+    border-color: var(--sl-color-white);
     background: var(--lq-color-hover);
+    box-shadow: inset 0 0 0 1px var(--sl-color-white);
     color: var(--sl-color-white);
   }
 
