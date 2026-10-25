@@ -629,6 +629,13 @@
   margin: 0;
 }
 
+/* A token longer than the column (an API path, a long identifier) breaks
+   only when it cannot fit; at 320px three did and the page scrolled
+   sideways. */
+.lq-record {
+  overflow-wrap: break-word;
+}
+
 .sl-markdown-content blockquote {
   border-inline-start-color: var(--lq-color-hairline-strong);
   color: var(--sl-color-gray-3);
