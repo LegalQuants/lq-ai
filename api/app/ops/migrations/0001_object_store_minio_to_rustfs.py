@@ -68,7 +68,7 @@ async def _database_checks() -> tuple[Check, Check]:
     engine = create_async_engine(_database_url(), pool_pre_ping=True)
     try:
         async with engine.connect() as connection:
-            revision = (
+            revision: str = (
                 await connection.execute(text("SELECT version_num FROM alembic_version"))
             ).scalar_one()
             floor_ok = str(revision).isdigit() and int(str(revision)) >= 38

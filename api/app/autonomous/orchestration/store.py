@@ -2103,10 +2103,13 @@ class OrchestrationStore:
             return _receipt(effect)
         if effect.status != "admitted":
             raise Conflict(message="Uncertain effect requires reconciliation")
+        # SQLAlchemy 2.1 autoflushes the clock query too. Read it before
+        # changing any completed-state fields, which must satisfy one CHECK.
+        completed_at = await _now(db)
         account.reserved_usd -= effect.reserved_usd
         account.spent_usd += charge
         effect.status, effect.charged_usd = "completed", charge
-        effect.result, effect.completed_at = json.loads(content), await _now(db)
+        effect.result, effect.completed_at = json.loads(content), completed_at
         if account.spent_usd + account.reserved_usd > account.allocation_usd:
             root.status, root.stop_reason = "halted", "observed_budget_overrun"
         root.updated_at = effect.completed_at

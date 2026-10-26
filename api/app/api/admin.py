@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import uuid as _uuid_mod
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -427,9 +428,9 @@ async def get_usage(
     if tier is not None:
         conditions.append(InferenceRoutingLog.routed_inference_tier == tier)
 
-    # `group_col` is dynamic across the if-branches above, so mypy can't
-    # infer the row type for the Select; annotate explicitly.
-    stmt: Select[Any] = (
+    # SQLAlchemy 2.1 types each selected column separately. The grouping
+    # expression is dynamic; the remaining aggregate types are fixed.
+    stmt: Select[Any, int, int | None, int | None, Decimal | None] = (
         select(
             group_col.label("group_key"),
             func.count().label("request_count"),

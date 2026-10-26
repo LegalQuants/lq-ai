@@ -591,7 +591,7 @@ async def test_receipt_records_insert_times_in_one_transaction(
     from app.autonomous.receipt import build_receipt
 
     sess = await _make_session(db_session, user=user_a)
-    transaction_start = (await db_session.execute(text("SELECT now()"))).scalar_one()
+    transaction_start: datetime = (await db_session.execute(text("SELECT now()"))).scalar_one()
 
     # Separate the audit inserts from transaction start on the database's
     # clock, without relying on the application clock or per-row ordering.

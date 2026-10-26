@@ -211,7 +211,7 @@ async def require_matter(
     return project
 
 
-def visible_project_ids(user: User, *, need: MatterAccess = "read") -> Select[tuple[uuid.UUID]]:
+def visible_project_ids(user: User, *, need: MatterAccess = "read") -> Select[uuid.UUID]:
     """Subquery of project ids ``user`` reaches through an explicit grant.
 
     Ownership and ``share_scope='org'`` are handled by
@@ -225,7 +225,7 @@ def visible_project_ids(user: User, *, need: MatterAccess = "read") -> Select[tu
     )
 
 
-def blocked_project_ids(user: User) -> Select[tuple[uuid.UUID]]:
+def blocked_project_ids(user: User) -> Select[uuid.UUID]:
     """Subquery of project ids ``user`` is explicitly screened off."""
     return select(ProjectMember.project_id).where(
         ProjectMember.user_id == user.id,
@@ -270,7 +270,7 @@ async def require_matter_management(db: AsyncSession, project_id: uuid.UUID, use
     return project
 
 
-def denied_file_ids(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+def denied_file_ids(user_id: uuid.UUID) -> Select[uuid.UUID]:
     """An explicit screen follows a file's direct scope and attachment links."""
     from app.models.file import File
     from app.models.knowledge import KnowledgeBaseFile
@@ -288,7 +288,7 @@ def denied_file_ids(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
     )
 
 
-def denied_kb_ids(user_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+def denied_kb_ids(user_id: uuid.UUID) -> Select[uuid.UUID]:
     """Screens follow both KB scope and matter-to-KB attachment links."""
     from app.models.knowledge import KnowledgeBase
     from app.models.project_knowledge_base import ProjectKnowledgeBase
@@ -308,7 +308,7 @@ async def require_resource_write(
     db: AsyncSession,
     user: User,
     direct_project_id: uuid.UUID | None,
-    linked_projects: Select[tuple[uuid.UUID]],
+    linked_projects: Select[uuid.UUID],
 ) -> None:
     """A resource edit must satisfy every matter whose contents it changes."""
     ids = set((await db.scalars(linked_projects)).all())
@@ -318,7 +318,7 @@ async def require_resource_write(
         await require_matter(db, project_id, user, need="write", include_archived=True)
 
 
-def file_matter_ids(file_id: uuid.UUID) -> Select[tuple[uuid.UUID]]:
+def file_matter_ids(file_id: uuid.UUID) -> Select[uuid.UUID]:
     """All matters affected by a file, including KB source membership."""
     from app.models.file import File
     from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
@@ -366,7 +366,7 @@ async def require_document_matter_access(
         await require_matter(db, project_id, user, need=need, include_archived=True)
 
 
-def readable_autonomous_session_ids(user: User) -> Select[tuple[uuid.UUID]]:
+def readable_autonomous_session_ids(user: User) -> Select[uuid.UUID]:
     """Matter authorization follows a session into memory, precedents and notices."""
     from app.models.autonomous import AutonomousSession
 

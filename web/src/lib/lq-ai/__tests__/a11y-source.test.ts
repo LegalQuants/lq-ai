@@ -3,7 +3,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { assertBaselineSource, frontendFingerprint } from '../../../../cypress/support/a11y-source';
+import {
+	assertBaselineSource,
+	baselineComparisonBase,
+	frontendFingerprint
+} from '../../../../cypress/support/a11y-source';
 let dir: string;
 function git(...args: string[]) {
 	return execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
@@ -50,6 +54,76 @@ function setup() {
 afterEach(() => {
 	if (dir) rmSync(dir, { recursive: true, force: true });
 });
+
+describe('Baseline comparison base', () => {
+	function mergeFixture() {
+		const oldBase = setup();
+		git('checkout', '-q', '-b', 'pr');
+		file('api/dependency.txt', 'dependency update');
+		const head = commit();
+		git('checkout', '-q', '-b', 'base', oldBase);
+		file('web/cypress/fixtures/a11y-baseline.json', '{}');
+		const base = commit();
+		git(
+			'-c',
+			'user.name=Fixture',
+			'-c',
+			'user.email=fixture@example.invalid',
+			'-c',
+			'commit.gpgsign=false',
+			'merge',
+			'--no-ff',
+			'--no-edit',
+			head
+		);
+		return { oldBase, head, base, merge: git('rev-parse', 'HEAD') };
+	}
+	it('uses the tested merge base when the event predates baseline adoption', () => {
+		const { oldBase, head, base, merge } = mergeFixture();
+		const actual = baselineComparisonBase(
+			{ pull_request: { head: { sha: head }, base: { sha: oldBase } } },
+			merge,
+			dir
+		);
+		expect(actual).toBe(base);
+		expect(git('show', `${actual}:web/cypress/fixtures/a11y-baseline.json`)).toBe('{}');
+		expect(() => assertBaselineSource(base, oldBase, dir)).toThrow();
+	});
+	it('rejects a different event head instead of accepting an unrelated merge', () => {
+		const { oldBase, base, merge } = mergeFixture();
+		expect(() =>
+			baselineComparisonBase(
+				{ pull_request: { head: { sha: oldBase }, base: { sha: base } } },
+				merge,
+				dir
+			)
+		).toThrow('Expected the tested PR merge');
+	});
+	it('rejects a head-only checkout for a pull request', () => {
+		const { oldBase, head } = mergeFixture();
+		expect(() =>
+			baselineComparisonBase(
+				{ pull_request: { head: { sha: head }, base: { sha: oldBase } } },
+				head,
+				dir
+			)
+		).toThrow('Expected the tested PR merge');
+	});
+	it('keeps push comparisons on the previous commit', () => {
+		const before = setup();
+		file('api/new.py', '# new');
+		const head = commit();
+		expect(baselineComparisonBase({ before }, head, dir)).toBe(before);
+	});
+	it('rejects an absent or all-zero push comparison base', () => {
+		const head = setup();
+		expect(() => baselineComparisonBase({}, head, dir)).toThrow('Cannot establish');
+		expect(() => baselineComparisonBase({ before: '0'.repeat(40) }, head, dir)).toThrow(
+			'Cannot establish'
+		);
+	});
+});
+
 describe('Initial baseline source provenance', () => {
 	it('accepts a newer base with only docs, backend and test changes', () => {
 		const before = setup();
