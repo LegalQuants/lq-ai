@@ -2,6 +2,7 @@ import base64
 import os
 import random
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Annotated
 
@@ -49,11 +50,12 @@ def serve(
     if os.getenv('USE_CUDA_DOCKER', 'false') == 'true':
         typer.echo('CUDA is enabled, appending LD_LIBRARY_PATH to include torch/cudnn & cublas libraries.')
         LD_LIBRARY_PATH = os.getenv('LD_LIBRARY_PATH', '').split(':')
+        site_packages = Path(sysconfig.get_path('platlib'))
         os.environ['LD_LIBRARY_PATH'] = ':'.join(
             LD_LIBRARY_PATH
             + [
-                '/usr/local/lib/python3.11/site-packages/torch/lib',
-                '/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib',
+                str(site_packages / 'torch/lib'),
+                str(site_packages / 'nvidia/cudnn/lib'),
             ]
         )
         try:
