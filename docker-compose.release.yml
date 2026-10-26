@@ -50,7 +50,7 @@ services:
   postgres:
     # Digest-pinned for reproducible boots (matches the pin in
     # docker-compose.yml). Bump the tag and digest together.
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -98,7 +98,7 @@ services:
       - ${LQ_AI_OPS_SOURCE:-lq-ai-ops}:/lq-ai/ops:ro
 
   rustfs:
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
     restart: unless-stopped
     depends_on:
       rustfs-init:
