@@ -45,11 +45,20 @@ failed boot. If the gate still reports an unknown non-empty volume, stop and ins
 up before choosing a repair. Do not delete its contents or bypass the gate. Existing MinIO
 data still follows the [MinIO-to-RustFS migration runbook](minio-to-rustfs.md).
 
-## pgvector: update the image and each database's extension
+## pgvector: update the image, and optionally each database's extension
 
 Replacing the image supplies new binaries and SQL files. It **does not** update an existing
 database's `pg_extension.extversion`; `CREATE EXTENSION IF NOT EXISTS` also leaves it unchanged.
-[Upstream requires an extension update in each database using vector](https://github.com/pgvector/pgvector#upgrading).
+[Upstream's upgrade instructions](https://github.com/pgvector/pgvector#upgrading) run
+`ALTER EXTENSION vector UPDATE` in each database you want to upgrade.
+
+For 0.8.6 to 0.8.7 that extension update is **optional**. The packaged
+`vector--0.8.6--0.8.7.sql` only changes catalog comments, and `vector.control` loads the
+unversioned `$libdir/vector` library, so the 0.8.7 fixes take effect when Postgres restarts on
+the new image whether or not the extension is updated. A database left at 0.8.6 keeps working;
+the receipt below shows one doing so. The desktop launcher does not run the update. Run it if
+you want `extversion` to match the installed binaries. A later pgvector update whose script
+changes functions or operators will need it.
 
 Use a maintenance window, stop application writers, and take a tested Postgres backup and
 an object-store backup/snapshot before the storage update. Retain the old image digests.
@@ -66,7 +75,8 @@ docker compose exec -T postgres sh -c \
 docker compose pull postgres rustfs
 docker compose up -d --wait --force-recreate postgres
 
-# Run as the extension owner/superuser, once per database using vector.
+# Optional for 0.8.7 (see above). Run as the extension owner/superuser, once per
+# database using vector.
 docker compose exec -T postgres sh -c \
   'psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
 SELECT extversion FROM pg_extension WHERE extname = 'vector';
@@ -81,8 +91,9 @@ docker compose up -d --wait --force-recreate rustfs-init rustfs
 docker compose up -d --wait
 ```
 
-Confirm `extversion = 0.8.7`, storage health, an existing document download, a new upload/download
-byte match, and representative knowledge-base searches. Fresh databases install 0.8.7 by
+Confirm storage health, an existing document download, a new upload/download byte match, and
+representative knowledge-base searches. If you ran the extension update, also confirm
+`extversion = 0.8.7`. Fresh databases install 0.8.7 by
 default. An extension downgrade is not supplied by this update; rollback after changing
 extension metadata requires the tested backup/restore procedure with the matching old image.
 

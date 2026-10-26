@@ -200,6 +200,14 @@ git tag -a desktop-vX.Y.Z "$RELEASE_COMMIT" -m "Desktop release vX.Y.Z" && git p
 #   …or dispatch: gh workflow run desktop-release.yml -R LegalQuants/lq-ai -f tag=desktop-vX.Y.Z
 ```
 
+> ⚠️ **Check the tag name is free in your clone first:** `git tag -l vX.Y.Z` must print nothing.
+> A clone that once fetched OpenWebUI's tags bare can hold upstream's tag of the same name (its
+> `v0.9.1` is an April 2026 OpenWebUI commit). `git tag -a` then refuses, and pushing the existing
+> tag would publish OpenWebUI's commit as `vX.Y.Z` on LegalQuants and run whatever tag-triggered
+> workflows that commit carries. Confirm with `git log -1 vX.Y.Z` that it is
+> not LQ.AI's, delete it locally with `git tag -d vX.Y.Z`, and see the
+> [rebase runbook](openwebui-rebase-runbook.md) for keeping upstream's tags under `owui/`.
+
 > ⚠️ **Build images from a ref that actually contains the release Dockerfiles + `release.yml`** (e.g.
 > `main`), not an older source tag that predates the pre-built-images feature. If you dispatch, pass
 > the *image* tag separately (`-f tag=vX.Y.Z`) and point `ref` at `main`. Pushing a `vX.Y.Z` tag from
