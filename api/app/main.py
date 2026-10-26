@@ -120,6 +120,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="LQ.AI Backend API",
     version=__version__,
+    # FastAPI's native telemetry activates when a global OTel provider exists.
+    # Keep the explicit opt-in instrumentation below as the single owner.
+    telemetry={"tracing": False, "metrics": False, "logs": False, "auto_configure": False},
     description=(
         "Backend API for the LQ.AI platform. The full surface is specified "
         "in docs/api/backend-openapi.yaml. M1 implementation lands progressively "

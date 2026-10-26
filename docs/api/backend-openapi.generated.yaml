@@ -633,8 +633,7 @@ components:
         max_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         playbook_id:
@@ -885,8 +884,7 @@ components:
         max_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         name:
@@ -986,8 +984,7 @@ components:
           title: Last Run At
         max_cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         name:
@@ -1082,8 +1079,7 @@ components:
         max_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         name:
@@ -1179,7 +1175,6 @@ components:
           title: Cost Cap Reached
           type: boolean
         cost_total_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Cost Total Usd
           type: string
         created_at:
@@ -1208,8 +1203,7 @@ components:
           type: string
         max_cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         params:
@@ -1303,8 +1297,7 @@ components:
         max_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         playbook_id:
@@ -1388,8 +1381,7 @@ components:
           type: string
         max_cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         playbook_id:
@@ -1464,8 +1456,7 @@ components:
         max_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Max Cost Usd
         playbook_id:
@@ -1644,8 +1635,7 @@ components:
           type: string
         cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Usd
         error:
@@ -1706,8 +1696,7 @@ components:
           title: Attempt Timeout Seconds
         budget_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Budget Usd
         child_skill:
@@ -1740,8 +1729,7 @@ components:
           title: Packet Id
         planning_allowance_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Planning Allowance Usd
         planning_notice:
@@ -1768,8 +1756,7 @@ components:
           title: Project Name
         root_allowance_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Root Allowance Usd
         title:
@@ -1973,7 +1960,6 @@ components:
           - type: 'null'
           title: Reads
         reserved_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
           type: string
         root_id:
@@ -1987,7 +1973,6 @@ components:
           title: Sources
           type: array
         spent_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Spent Usd
           type: string
         status:
@@ -2873,8 +2858,7 @@ components:
           title: Accounting
         charged_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Charged Usd
         completed_at:
@@ -2902,7 +2886,6 @@ components:
           - type: 'null'
           title: Outcome
         reserved_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
           type: string
         skill:
@@ -4529,7 +4512,6 @@ components:
       title: MfaVerifyRequest
       type: object
     Money:
-      pattern: ^(?!^[-+.]*$)[+-]?0*(?:\d{0,6}|(?=[\d.]{1,11}0*$)\d{0,6}\.\d{0,4}0*$)
       type: string
     NotificationChannel:
       description: 'Delivery channel for an autonomous notification.
@@ -5248,14 +5230,12 @@ components:
           type: boolean
         budget_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Budget Usd
         child_allowance_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Child Allowance Usd
         child_turn_limit:
@@ -5301,8 +5281,7 @@ components:
           title: Model
         planning_allowance_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Planning Allowance Usd
         planning_notice:
@@ -5347,8 +5326,7 @@ components:
           title: Reasoning Effort
         root_allowance_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Root Allowance Usd
         routed_tier:
@@ -5407,8 +5385,7 @@ components:
           title: Attempt Timeout Seconds
         budget_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Budget Usd
         child_prompt:
@@ -6284,7 +6261,6 @@ components:
     RunRead:
       properties:
         allocation_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Allocation Usd
           type: string
         effects:
@@ -6305,7 +6281,6 @@ components:
         phase:
           $ref: '#/components/schemas/Phase'
         reserved_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
           type: string
         session_id:
@@ -6313,7 +6288,6 @@ components:
           title: Session Id
           type: string
         spent_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Spent Usd
           type: string
         status:
@@ -7530,8 +7504,7 @@ components:
       properties:
         cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Usd
         document_id:
@@ -7631,7 +7604,6 @@ components:
           title: Calls Count
           type: integer
         estimated_cost_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Estimated Cost Usd
           type: string
         kind:
@@ -7641,7 +7613,6 @@ components:
           title: Kind
           type: string
         per_call_cost_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Per Call Cost Usd
           type: string
         skill_content_hash:
@@ -7698,8 +7669,7 @@ components:
         confirmed_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Confirmed Cost Usd
         kind:
@@ -7743,14 +7713,12 @@ components:
           title: Completed At
         confirmed_cost_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Confirmed Cost Usd
         cost_actual_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Actual Usd
         created_at:
@@ -7913,8 +7881,7 @@ components:
         confirmed_cost_usd:
           anyOf:
           - type: number
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Confirmed Cost Usd
         document_ids:
@@ -7956,14 +7923,12 @@ components:
           title: Completed At
         cost_actual_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Actual Usd
         cost_estimate_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Estimate Usd
         created_at:
@@ -8059,14 +8024,12 @@ components:
           title: Completed At
         cost_actual_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Actual Usd
         cost_estimate_usd:
           anyOf:
-          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
-            type: string
+          - type: string
           - type: 'null'
           title: Cost Estimate Usd
         created_at:
@@ -8182,11 +8145,9 @@ components:
           type: integer
         ensemble_premium_usd:
           default: '0'
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Ensemble Premium Usd
           type: string
         estimated_cost_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Estimated Cost Usd
           type: string
         estimated_tokens:
@@ -8884,7 +8845,6 @@ components:
           title: Plan Hash
           type: string
         reserved_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
           type: string
         result:
@@ -8898,7 +8858,6 @@ components:
           title: Root Id
           type: string
         spent_usd:
-          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Spent Usd
           type: string
         status:
