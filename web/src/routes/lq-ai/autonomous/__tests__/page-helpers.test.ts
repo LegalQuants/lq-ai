@@ -7,8 +7,36 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { formatCost, formatCreatedAt, isHaltable, statusPillClass } from '../page-helpers';
+import {
+	formatCost,
+	formatCreatedAt,
+	isHaltable,
+	skillRefusalMessage,
+	statusPillClass
+} from '../page-helpers';
 import type { SessionStatus } from '$lib/lq-ai/api/autonomous';
+
+describe('skillRefusalMessage', () => {
+	it('gives the user a recovery action for a changed binding or unavailable artifact', () => {
+		expect(
+			skillRefusalMessage(
+				'ToolNotGranted: Skill changed or access was revoked; start a new invocation'
+			)
+		).toContain('Start a new invocation');
+		expect(
+			skillRefusalMessage('ToolNotGranted: Pinned skill artifact is unavailable or changed')
+		).toContain('Restore it');
+		expect(
+			skillRefusalMessage('ToolNotGranted: Optional skill capability is not enabled')
+		).toContain('operator enables it');
+	});
+	it('does not expose unknown exception bodies or missing errors', () => {
+		expect(
+			skillRefusalMessage('ProviderError: private upstream body <script>secret</script>')
+		).toBeNull();
+		expect(skillRefusalMessage(null)).toBeNull();
+	});
+});
 
 // ---------------------------------------------------------------------------
 // statusPillClass

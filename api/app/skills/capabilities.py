@@ -6,7 +6,7 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FileName = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$")]
 HelperName = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,47}$")]
@@ -14,6 +14,9 @@ MAX_FILE_BYTES = 65536
 MAX_FILES = 32
 MAX_WORKSPACE_BYTES = 1048576
 MAX_INPUT_BYTES = 65536
+MAX_REFERENCE_FILES = 64
+REFERENCE_PATH_PATTERN = r"^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$"
+ReferencePath = Annotated[str, Field(pattern=REFERENCE_PATH_PATTERN, max_length=255)]
 
 
 class StrictModel(BaseModel):
@@ -39,6 +42,43 @@ class SkillCapabilities(StrictModel):
 
 class FileRead(StrictModel):
     name: FileName
+
+
+class ReferenceRead(StrictModel):
+    """One of the skill's own ``references/`` files, by its listed path."""
+
+    path: ReferencePath
+    offset_bytes: Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)] = 0
+    max_bytes: Annotated[int, Field(strict=True, ge=1, le=MAX_FILE_BYTES)] = MAX_FILE_BYTES
+
+
+class ReferenceReadResult(StrictModel):
+    """An exact UTF-8 byte range; more content requires another explicit call."""
+
+    path: ReferencePath
+    content: str
+    size_bytes: Annotated[int, Field(strict=True, ge=0, le=2**63 - 1)]
+    offset_bytes: Annotated[int, Field(strict=True, ge=0)]
+    end_offset_bytes: Annotated[int, Field(strict=True, ge=0)]
+    returned_bytes: Annotated[int, Field(strict=True, ge=0, le=MAX_FILE_BYTES)]
+    has_more: Annotated[bool, Field(strict=True)]
+    next_offset_bytes: Annotated[int, Field(strict=True, ge=0)] | None
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+    @model_validator(mode="after")
+    def exact_range(self) -> ReferenceReadResult:
+        raw = self.content.encode("utf-8")
+        if (
+            b"\x00" in raw
+            or len(raw) != self.returned_bytes
+            or not 0 <= self.offset_bytes <= self.end_offset_bytes <= self.size_bytes
+            or self.end_offset_bytes != self.offset_bytes + self.returned_bytes
+            or self.has_more != (self.end_offset_bytes < self.size_bytes)
+            or self.next_offset_bytes != (self.end_offset_bytes if self.has_more else None)
+            or (self.has_more and not self.returned_bytes)
+        ):
+            raise ValueError("invalid bounded reference range")
+        return self
 
 
 class FileWrite(FileRead):

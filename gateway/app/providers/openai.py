@@ -102,6 +102,7 @@ _LQ_AI_EXTENSION_KEYS = frozenset(
         "lq_ai_purpose",
         "lq_ai_privileged",
         "lq_ai_file_ids",
+        "lq_ai_restore_tool_arguments",
     }
 )
 
@@ -153,6 +154,9 @@ class OpenAIAdapter(ProviderAdapter):
         self._api_key = api_key
         self._timeout = timeout_s
         self._use_max_completion_tokens = use_max_completion_tokens
+        # Bedrock opts in when composing this translator; existing providers
+        # retain their permissive SSE behavior.
+        self.strict_stream: bool = False
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
@@ -177,7 +181,10 @@ class OpenAIAdapter(ProviderAdapter):
         speak the OpenAI wire format). The API-key check is skipped when
         the provider is ``openai_compatible`` and no key source is
         configured — many local OpenAI-compatible servers don't require
-        a key.
+        a key. An ``openai_compatible`` entry that does name a key source
+        (``api_key_env`` or ``api_key_encrypted``) must resolve it, like
+        ``openai``: a hosted service declared with a key that is not set
+        is a missing key, not a keyless server.
 
         ``env`` defaults to :data:`os.environ`; tests override.
         ``key_resolver`` (ADR 0011) handles ``api_key_encrypted`` paths.
@@ -208,9 +215,11 @@ class OpenAIAdapter(ProviderAdapter):
             api_key_env=effective_env,
             api_key_encrypted=provider.api_key_encrypted,
         )
-        if not api_key and provider.type == "openai":
+        key_declared = bool(provider.api_key_env or provider.api_key_encrypted)
+        if not api_key and (provider.type == "openai" or key_declared):
+            label = "OpenAI" if provider.type == "openai" else "OpenAI-compatible"
             raise ValueError(
-                f"OpenAI provider {provider.name!r} requires either "
+                f"{label} provider {provider.name!r} requires either "
                 f"api_key_encrypted or environment variable "
                 f"{(effective_env or 'OPENAI_API_KEY')!r} to be set"
             )
@@ -260,6 +269,7 @@ class OpenAIAdapter(ProviderAdapter):
                 headers=self._auth_headers(),
                 provider_name=self.name,
                 requested_model=model,
+                strict_stream=self.strict_stream,
             )
         return await self._chat_completion_unary(body, model=model)
 
@@ -587,6 +597,7 @@ async def _openai_stream_iter(
     provider_name: str,
     requested_model: str,
     path: str = "/chat/completions",
+    strict_stream: bool = False,
 ) -> AsyncIterator[ChatCompletionChunk]:
     """Stream OpenAI SSE and yield :class:`ChatCompletionChunk` objects.
 
@@ -605,6 +616,8 @@ async def _openai_stream_iter(
     """
 
     fallback_id = f"chatcmpl-{uuid.uuid4().hex}"
+    terminal_seen = False
+    finish_seen = False
 
     try:
         async with client.stream("POST", path, json=body, headers=headers) as response:
@@ -617,25 +630,50 @@ async def _openai_stream_iter(
                 )
 
             async for raw_data in _iter_sse_data(response):
-                if not raw_data or raw_data == "[DONE]":
+                if not raw_data:
+                    continue
+                if raw_data == "[DONE]":
+                    terminal_seen = True
                     continue
                 try:
                     parsed = json.loads(raw_data)
                 except json.JSONDecodeError:
+                    if strict_stream:
+                        raise ProviderHTTPError(
+                            "Malformed Bedrock Chat Completions event", upstream_status=502
+                        ) from None
                     continue
                 if not isinstance(parsed, dict):
+                    if strict_stream:
+                        raise ProviderHTTPError(
+                            "Malformed Bedrock Chat Completions event", upstream_status=502
+                        )
                     continue
+                if strict_stream and "error" in parsed:
+                    raise ProviderHTTPError(
+                        "Bedrock Chat Completions stream failed", upstream_status=502
+                    )
                 if not parsed.get("model"):
                     parsed["model"] = requested_model
                 if not parsed.get("id"):
                     parsed["id"] = fallback_id
                 try:
-                    yield ChatCompletionChunk.model_validate(parsed)
+                    chunk = ChatCompletionChunk.model_validate(parsed)
                 except Exception:
+                    if strict_stream:
+                        raise ProviderHTTPError(
+                            "Malformed Bedrock Chat Completions event", upstream_status=502
+                        ) from None
                     # Defensive: skip malformed chunks rather than killing
                     # the whole stream. The route handler still emits
                     # [DONE] when the iterator finishes.
                     continue
+                finish_seen |= any(choice.finish_reason is not None for choice in chunk.choices)
+                yield chunk
+            if strict_stream and not (terminal_seen and finish_seen):
+                raise ProviderHTTPError(
+                    "Bedrock Chat Completions stream ended before completion", upstream_status=502
+                )
     except httpx.TimeoutException as exc:
         # Our own timeout elapsed mid-stream — see the unary path.
         raise ProviderTimeoutError(

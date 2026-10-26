@@ -32,8 +32,9 @@ from typing import TYPE_CHECKING, Any
 from langgraph.graph import END, StateGraph
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz.documents import DocumentWorkflowGateway
 from app.models.tabular import TabularExecution
-from app.observability_helpers import get_tracer, record_attributes
+from app.observability_helpers import get_tracer, quiet_span, record_attributes
 from app.tabular.nodes import (
     make_aggregate_node,
     make_extract_cells_node,
@@ -100,7 +101,9 @@ async def run_tabular_execution(
     execution.started_at = datetime.now(UTC)
     await db.commit()
 
+    gateway = DocumentWorkflowGateway(gateway, db, execution.user_id, execution.document_ids)
     try:
+        await gateway.authorize()
         # The columns + document_ids are already snapshotted on the row
         # at request time (per Decision C-1's snapshotting posture).
         document_ids = [uuid.UUID(str(did)) for did in execution.document_ids]
@@ -110,8 +113,19 @@ async def run_tabular_execution(
             "execution_id": str(execution_id),
             "columns": columns_state,
             "judge_model": judge_model,
+            # DE-331: the operator-confirmed cost ceiling (persisted as
+            # cost_estimate_usd from the request's confirmed_cost_usd).
+            # Decimal-as-string for state serializability; None means no
+            # ceiling was confirmed → no mid-run ensemble halt applies.
+            "confirmed_cost_usd": (
+                format(execution.cost_estimate_usd, "f")
+                if execution.cost_estimate_usd is not None
+                else None
+            ),
             "documents": [],
             "per_cell_results": [],
+            "ensemble_halted_at_ceiling": False,
+            "ensemble_halted_cells": 0,
             "error": None,
         }
 
@@ -122,7 +136,7 @@ async def run_tabular_execution(
             judge_model=judge_model,
         )
         tracer = get_tracer()
-        with tracer.start_as_current_span("tabular.execute") as span:
+        with quiet_span(tracer, "tabular.execute") as span:
             record_attributes(
                 span,
                 **{

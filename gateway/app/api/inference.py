@@ -50,11 +50,15 @@ What B4 added on top of B3
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
+import functools
 import json
 import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Final
 
 from fastapi import APIRouter, Depends, Request, status
@@ -322,6 +326,25 @@ def _backend(request: Request) -> BackendClient:
     if pre_built is not None:
         return pre_built
     return get_backend_client()
+
+
+# The detector is CPU-bound and every request shares one spaCy pipeline. The
+# request pre-pass therefore runs on a single worker thread: the event loop stays
+# free for other requests while a long tool result is analysed (a document read
+# of tens of thousands of characters takes seconds). One thread keeps two
+# requests' passes from overlapping; the bound-tool path still analyses on the
+# loop's thread, so the engine's own lock (``_ANALYSIS_LOCK``) is what keeps that
+# one apart from this.
+_PRE_PASS: Final = ThreadPoolExecutor(max_workers=1, thread_name_prefix="anonymization-pre")
+
+
+async def _pre_anonymize(**kwargs: Any) -> PseudonymMapper | None:
+    """Run :func:`pre_anonymize_request` on the pre-pass thread, in this request's context."""
+
+    context = contextvars.copy_context()
+    return await asyncio.get_running_loop().run_in_executor(
+        _PRE_PASS, functools.partial(context.run, pre_anonymize_request, **kwargs)
+    )
 
 
 def _anonymizer(request: Request) -> Anonymizer:
@@ -683,7 +706,7 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
     # ``None`` when any skip condition fires (master disabled / tier
     # outside apply_at_tiers / privileged chat / per-request opt-out).
     anonymizer = _anonymizer(request)
-    anon_mapper: PseudonymMapper | None = pre_anonymize_request(
+    anon_mapper: PseudonymMapper | None = await _pre_anonymize(
         chat_request=chat_request,
         config=config.anonymization,
         routed_tier=primary.routed_inference_tier,
@@ -768,7 +791,14 @@ async def chat_completions(request: Request) -> JSONResponse | StreamingResponse
         # then dropped on function exit — never persisted, never logged.
         if anon_mapper is not None:
             post_anonymize_response(
-                response=result.response, mapper=anon_mapper, anonymizer=anonymizer
+                response=result.response,
+                mapper=anon_mapper,
+                anonymizer=anonymizer,
+                # Opt-in, for a caller that holds its tool arguments as
+                # originals (a governed run). The same opt-in is what put its
+                # tool text under the pre-pass, so what it holds and sends back
+                # is pseudonymized again on the way out.
+                restore_tool_arguments=chat_request.lq_ai_restore_tool_arguments,
             )
 
         # --- Success: stamp tier on body, write log, return --------------------
@@ -1215,13 +1245,14 @@ async def _stream_openai_sse(
     """
 
     last_chunk: ChatCompletionChunk | None = None
-    # Issue #503: a stream can finish having emitted no text at all. That used
+    # Issue #503: a stream can finish having emitted no usable output. That used
     # to fall straight through to the success path below, so an upstream that
     # accepted the request and produced nothing was indistinguishable from a
     # genuinely empty answer — the client saw a clean [DONE] with no content,
     # no error and no routing metadata. Track it so the tail can refuse to call
     # that a success.
-    produced_content = False
+    # Tool calls are usable output even when the model emits no text (#649).
+    produced_output = False
     finish_reason_seen: str | None = None
     rehydrator: StreamingRehydrator | None = None
     if anon_mapper is not None and anonymizer is not None:
@@ -1240,8 +1271,8 @@ async def _stream_openai_sse(
                     choice.delta.content = rehydrator.process(choice.delta.content)
             last_chunk = chunk
             for choice in chunk.choices:
-                if choice.delta.content:
-                    produced_content = True
+                if choice.delta.content or choice.delta.tool_calls:
+                    produced_output = True
                 if choice.finish_reason:
                     finish_reason_seen = choice.finish_reason
             payload = chunk.model_dump(mode="json", exclude_none=True)
@@ -1277,7 +1308,7 @@ async def _stream_openai_sse(
             # (a pseudonym that crystallizes only at flush), so this tail is
             # real content the in-loop flag never saw. Count it, or the
             # empty-stream check below fires on a stream that delivered text.
-            produced_content = True
+            produced_output = True
             terminal = last_chunk.model_copy(deep=True)
             for choice in terminal.choices:
                 choice.delta.content = tail
@@ -1287,17 +1318,17 @@ async def _stream_openai_sse(
             payload = terminal.model_dump(mode="json", exclude_none=True)
             yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
 
-    # Issue #503 — a stream that produced no visible text is a FAILURE, and the
+    # Issue #503 — a stream with neither text nor tool calls is a FAILURE, and the
     # client must be told. Before this, control fell through to the success tail
     # below: routing-log row with usage=None, clean [DONE], and a caller with no
     # way to distinguish "the provider broke" from "the model had nothing to
     # say". For a legal tool that ambiguity is the defect: an operator reading an
     # empty answer will blame the model.
     #
-    # Two shapes, one response. `length` with no text means the output budget was
+    # Two shapes, one response. `length` with no output means the output budget was
     # consumed by reasoning tokens, which needs naming explicitly because raising
     # max_tokens is the fix and nothing else in the response hints at it.
-    if not produced_content:
+    if not produced_output:
         if finish_reason_seen == "length":
             message = (
                 "The provider stopped at the output-token limit before emitting any "
@@ -1415,24 +1446,42 @@ def _correlation_ids(
     return chat_id, message_id
 
 
-# Known values for the ``inference_routing_log.purpose`` column. Values
-# outside this set fall back to ``'chat'`` in :func:`_purpose_from_request`
-# so an arbitrary caller can't pollute the column with free-form strings.
-_KNOWN_PURPOSES = frozenset({"chat", "judge_paraphrase", "embedding"})
+# Known values for the ``inference_routing_log.purpose`` column: a closed
+# set, so an arbitrary caller can't pollute the column with free-form
+# strings. Every label the backend sends is listed, so each kind of traffic
+# is recorded as what it is and not as ``'chat'`` (ADR 0038 D2). The column
+# is ``varchar(32)``; a label must fit it.
+_KNOWN_PURPOSES = frozenset(
+    {
+        "chat",
+        "embedding",
+        # Citation Engine judges, each calibrated on its own rows.
+        "judge_paraphrase",
+        "judge_case_content",
+        "judge_authority_content",
+        "judge_treatment",
+        # Batch executors.
+        "tabular_extraction",
+        "tabular_bulk_op",
+        "playbook_executor",
+        "playbook_easy_extract",
+        # The autonomous layer: a legacy single session, and a governed run.
+        "autonomous_executor",
+        "orchestration_run",
+    }
+)
 
 
 def _purpose_from_request(chat_request: ChatCompletionRequest) -> str:
     """Resolve the routing-log ``purpose`` tag from the chat request envelope.
 
-    M2-E2 added ``lq_ai_purpose`` to :class:`ChatCompletionRequest`. The
-    Citation Engine sets it to ``'judge_paraphrase'`` on every Stage 3
-    / Stage 4 judge call so the api/ cost-calibration query can filter
-    routing-log rows down to judge traffic only. Other callers leave
-    it unset and the row records ``'chat'``.
+    M2-E2 added ``lq_ai_purpose`` to :class:`ChatCompletionRequest` so the
+    backend's cost-calibration queries can filter routing-log rows down to
+    one kind of traffic. Callers that leave it unset record ``'chat'``.
 
-    Unknown values fall back to ``'chat'`` defensively — the column is
-    ``varchar(32)`` and downstream code expects one of the known
-    values.
+    A known label is recorded as sent. An unknown value still falls back to
+    ``'chat'`` defensively: the set is closed, and a caller cannot add to it
+    by sending a string.
     """
 
     raw = chat_request.lq_ai_purpose

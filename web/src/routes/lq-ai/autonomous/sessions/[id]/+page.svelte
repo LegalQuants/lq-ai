@@ -25,7 +25,7 @@
 	import { autonomousApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead, SessionReceipt } from '$lib/lq-ai/api/autonomous';
-	import { formatCost, isHaltable, statusPillClass } from '../../page-helpers';
+	import { formatCost, isHaltable, skillRefusalMessage, statusPillClass } from '../../page-helpers';
 	import { buildTimeline } from '$lib/lq-ai/autonomous/receipt-timeline';
 	import type { TimelineNode } from '$lib/lq-ai/autonomous/receipt-timeline';
 
@@ -44,6 +44,7 @@
 	// Reactive: re-load if the route param changes (e.g. browser back/forward).
 	$: sessionId = $page.params.id;
 	$: timeline = receipt ? buildTimeline(receipt) : ([] as TimelineNode[]);
+	$: skillRefusal = session?.status === 'failed' ? skillRefusalMessage(session.error) : null;
 
 	onMount(() => {
 		load();
@@ -144,12 +145,7 @@
 			<div class="receipt-header-top">
 				<h1 class="lq-text-page-h">Session receipt</h1>
 				{#if isHaltable(session.status)}
-					<button
-						type="button"
-						class="halt-button"
-						on:click={haltSession}
-						disabled={haltPending}
-					>
+					<button type="button" class="halt-button" on:click={haltSession} disabled={haltPending}>
 						{haltPending ? 'Halting…' : 'Halt session'}
 					</button>
 				{/if}
@@ -199,6 +195,11 @@
 				{/if}
 			</dl>
 		</header>
+		{#if skillRefusal}
+			<div class="error-banner" role="alert" aria-label="Skill operation refusal">
+				{skillRefusal}
+			</div>
+		{/if}
 
 		<!-- ------------------------------------------------------------------ -->
 		<!-- Timeline                                                             -->

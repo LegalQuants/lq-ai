@@ -103,7 +103,12 @@ Both catalogues are agent-readable page-by-page via the machine surface: **a cod
 The journeys in Annex B each carry a *failed-when* test runnable by someone who did not write the site. **Launch gate:**
 
 1. The P0 journeys (*Is this for me · Get it running · Hand this to our security team*) pass, run by a non-author; the first additionally passes with a **second reader who has not read the source** — until that reader exists it is unverified, not passed. *What leaves my deployment* joins the gate, with its own second reader, when its page ships (#439).
-2. The twelve community-authored failure tests (Annex A): none fires against the built site.
+2. Annex A's failure tests don't fire against the built site, checked three ways:
+   - **in CI, on every page**, for the tests a script can run (`check:rules` in `site/`, plus the orphan, link and stamp checks): an onward route from every page (rule 10); one grouping, with the menu, breadcrumb, All documentation page and `llms.txt` agreeing (rule 11; the address is the second lens Annex B allows, so it may differ); no command running a tool its page never names (rule 12);
+   - **by gate 1's readers**, for the tests that turn on reading as a newcomer (rules 1, 5, 7 and 9);
+   - **by one non-author read of the trust centre and the install pages**, for the rest (rules 2, 3, 4, 6 and 8, R-A to R-C, and the cross-surface rule).
+
+   A test that fires after launch is a bug against the page that fails it, filed like any other.
 3. Machine surface verified: `/llms.txt` present; every page URL serves `.md`; an agent can orient from one fetch.
 4. Accessibility gate in CI (WCAG 2.1 AA) passes — including on generated reference pages, which is where it usually fails.
 5. Zero orphan pages; every page stamped with the commit it was checked against; the link checker (`docs/audits/check_doc_links.py`) passes.
@@ -120,7 +125,7 @@ None of these blocks a demo or the launch. Each carries the default the site pro
 Earlier drafts asked the committee for four more decisions. They are withdrawn, not deferred:
 
 - **Priority order** — the phases above are the working plan and change by PR.
-- **Quality rules** — Annex A's failure tests are this PRD's acceptance tests; no separate adoption is sought. The core set still lands under its author's name.
+- **Quality rules** — Annex A's failure tests are this PRD's acceptance tests; no separate adoption is sought. The core set is in Annex A under its author's name.
 - **Mentors per section** — maintainer review by default; CODEOWNERS routing applies because content stays in the repo.
 - **Hosting ownership** — Pages is already enabled on `LegalQuants/lq-ai` and deploys from `main`; the repository's maintainers operate it as they do CI (ADR 0028).
 
@@ -135,7 +140,7 @@ Pre-existing obligations this PRD names as dependencies and refuses to swallow:
    before treating that follow-up as closed.
 3. **Scoped API tokens**: PRD §5.1 promises them; the code has JWT session auth only. File the DE and the HONEST-STATE row — the one currently unregistered PRD-vs-code divergence.
 4. **Release-notes backfill**: 7 of 12 version tags have no GitHub Release (against PRD §7.8's "full changelog" commitment — second HONEST-STATE row); source material exists for all seven; Effort M. Plus a five-minute edit: v0.4.0's published Release still carries its DRAFT banner.
-5. **The founder loop-in.** The committee already decided it (2026-07-26, decision 4: bring Kevin up to date before any public release). A docs-site launch plausibly triggers it; there are two heavier items to bundle (the Apple signing identity SPOF named in ADR 0025; the standing CallDonna.ai transfer offer). Human task, not an agent's.
+5. **The founder loop-in.** The committee already decided it (2026-07-26, decision 4: bring Kevin up to date before any public release, once the roadmap items are addressed). It is tied to the 1.0 release, not to this site's launch (maintainer, 2026-10-24), so it does not gate the site. Two heavier items go with it (the Apple signing identity SPOF named in ADR 0025; the standing CallDonna.ai transfer offer). Human task, not an agent's.
 6. **Machine-actionable jurisdiction / practice-area packs (file as a DE).** The coverage index above is *readable* by agents; the further step — a manifest an agent can *apply* ("for Singapore data-protection work: enable these skills, allowlist this MCP connector, set this tier floor") — crosses into product configuration and legal-substance governance (who attests a pack, and what does the attestation cover?). Too consequential to absorb here; the index is designed so a manifest can be generated from it once the DE lands.
 
 ## Where this proposal is weak

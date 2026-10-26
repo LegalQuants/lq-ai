@@ -1,5 +1,140 @@
 components:
   schemas:
+    ActiveRun:
+      description: The owner's run that holds the single active-run allowance.
+      properties:
+        chat_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Chat Id
+        chat_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Chat Title
+        message_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Message Id
+        profile:
+          title: Profile
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+      - root_id
+      - status
+      - profile
+      title: ActiveRun
+      type: object
+    AdminConfigResponse:
+      additionalProperties: true
+      description: Preserve gateway configuration and add the API host's resource
+        policy.
+      properties:
+        skill_resource_policy:
+          $ref: '#/components/schemas/SkillResourcePolicy'
+      required:
+      - skill_resource_policy
+      title: AdminConfigResponse
+      type: object
+    AdminPasswordResetResponse:
+      description: '``POST /admin/users/{id}/reset-password`` response.'
+      properties:
+        email:
+          title: Email
+          type: string
+        initial_password:
+          title: Initial Password
+          type: string
+        sessions_revoked:
+          title: Sessions Revoked
+          type: integer
+        user_id:
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - email
+      - initial_password
+      - sessions_revoked
+      title: AdminPasswordResetResponse
+      type: object
+    AdminUserCreateRequest:
+      description: '``POST /admin/users`` body.'
+      properties:
+        display_name:
+          anyOf:
+          - maxLength: 200
+            type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          format: email
+          title: Email
+          type: string
+        role:
+          default: member
+          description: One of admin / member / viewer / auditor.
+          title: Role
+          type: string
+      required:
+      - email
+      title: AdminUserCreateRequest
+      type: object
+    AdminUserCreatedResponse:
+      description: '``POST /admin/users`` response — carries the initial password
+        once.
+
+
+        ``initial_password`` is returned in this response only and cannot be
+
+        retrieved later. Use
+
+        ``POST /admin/users/{id}/reset-password`` to mint a new one.'
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        initial_password:
+          title: Initial Password
+          type: string
+        is_admin:
+          title: Is Admin
+          type: boolean
+        must_change_password:
+          title: Must Change Password
+          type: boolean
+        role:
+          title: Role
+          type: string
+        user_id:
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - email
+      - display_name
+      - role
+      - is_admin
+      - must_change_password
+      - initial_password
+      title: AdminUserCreatedResponse
+      type: object
     AdminUserListResponse:
       description: Paginated user list for ``GET /api/v1/admin/users``.
       properties:
@@ -1436,6 +1571,52 @@ components:
       - logs_hint
       title: BootstrapStatus
       type: object
+    CallRead:
+      description: What one model call was opened with.
+      properties:
+        check:
+          enum:
+          - matches
+          - differs
+          - not_recorded
+          - not_rebuilt
+          title: Check
+          type: string
+        effect_key:
+          title: Effect Key
+          type: string
+        opening:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Opening
+        sent:
+          title: Sent
+          type: boolean
+        step:
+          enum:
+          - plan
+          - task
+          - combine
+          title: Step
+          type: string
+        system:
+          $ref: '#/components/schemas/InstructionsRead'
+        tools:
+          default: []
+          items:
+            additionalProperties: true
+            type: object
+          title: Tools
+          type: array
+      required:
+      - step
+      - effect_key
+      - sent
+      - system
+      - check
+      title: CallRead
+      type: object
     CellResult:
       description: 'One cell in the tabular grid.
 
@@ -1733,11 +1914,43 @@ components:
       type: object
     ChatRunRead:
       properties:
+        answered_directly:
+          default: false
+          title: Answered Directly
+          type: boolean
+        chat_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Chat Id
+        direct_answer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Direct Answer
         effects:
           items:
             $ref: '#/components/schemas/EffectRead'
           title: Effects
           type: array
+        evidence:
+          default: unverified
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        evidence_result:
+          anyOf:
+          - $ref: '#/components/schemas/EvidenceRead'
+          - type: 'null'
+        message_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Message Id
         packet:
           anyOf:
           - type: string
@@ -1745,6 +1958,20 @@ components:
           title: Packet
         planning:
           $ref: '#/components/schemas/PlanningSnapshot'
+        profile:
+          default: model_demo_v1
+          title: Profile
+          type: string
+        profile_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Profile Title
+        reads:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reads
         reserved_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
@@ -1753,6 +1980,12 @@ components:
           format: uuid
           title: Root Id
           type: string
+        sources:
+          default: []
+          items:
+            $ref: '#/components/schemas/SourceRead'
+          title: Sources
+          type: array
         spent_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Spent Usd
@@ -1779,6 +2012,33 @@ components:
       - reserved_usd
       - tree
       title: ChatRunRead
+      type: object
+    ChatRunRequest:
+      additionalProperties: false
+      properties:
+        file_ids:
+          default: []
+          items:
+            format: uuid
+            type: string
+          maxItems: 8
+          title: File Ids
+          type: array
+        goal:
+          $ref: '#/components/schemas/TaskText'
+        profile:
+          pattern: ^[a-z][a-z0-9_]{0,63}$
+          title: Profile
+          type: string
+        request_id:
+          format: uuid
+          title: Request Id
+          type: string
+      required:
+      - request_id
+      - profile
+      - goal
+      title: ChatRunRequest
       type: object
     ChatSearchHit:
       description: 'One row in the chat-search response.
@@ -1883,6 +2143,20 @@ components:
           type: string
         task:
           $ref: '#/components/schemas/ResearchTask'
+        tools:
+          $ref: '#/components/schemas/PhaseTools'
+          default:
+            analysis: []
+            delivery: []
+            drafting: []
+            ethics_review: []
+            intake: []
+        turn_limit:
+          default: 0
+          maximum: 16.0
+          minimum: 0.0
+          title: Turn Limit
+          type: integer
       required:
       - dispatch_id
       - profile
@@ -1933,6 +2207,16 @@ components:
             type: string
           - type: 'null'
           title: Source File Id
+        source_offset_end:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Offset End
+        source_offset_start:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Source Offset Start
         source_page:
           anyOf:
           - type: integer
@@ -1943,6 +2227,11 @@ components:
           - type: string
           - type: 'null'
           title: Source Text
+        verification_confidence:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Verification Confidence
         verification_method:
           anyOf:
           - type: string
@@ -2068,6 +2357,224 @@ components:
       - query
       title: ColumnSpec
       type: object
+    CommunityCatalogResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/CommunitySkillSummary'
+          title: Items
+          type: array
+        load_errors:
+          items:
+            type: string
+          title: Load Errors
+          type: array
+        source:
+          $ref: '#/components/schemas/CommunityCatalogSource'
+      required:
+      - items
+      - source
+      title: CommunityCatalogResponse
+      type: object
+    CommunityCatalogSource:
+      properties:
+        metadata_source:
+          default: unknown
+          title: Metadata Source
+          type: string
+        operator_hint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Operator Hint
+        path:
+          title: Path
+          type: string
+        repository:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Repository
+        sha:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sha
+        submodule_present:
+          title: Submodule Present
+          type: boolean
+      required:
+      - path
+      - submodule_present
+      title: CommunityCatalogSource
+      type: object
+    CommunitySkillDetail:
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          title: Description
+          type: string
+        install_ref:
+          title: Install Ref
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        installed_for_me:
+          title: Installed For Me
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        provenance:
+          additionalProperties: true
+          title: Provenance
+          type: object
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - installed_for_me
+      - body_preview
+      - content_yaml
+      - content_md
+      - install_ref
+      - provenance
+      title: CommunitySkillDetail
+      type: object
+    CommunitySkillInstall:
+      additionalProperties: false
+      properties:
+        expected_review_hash:
+          pattern: ^[0-9a-f]{64}$
+          title: Expected Review Hash
+          type: string
+        owner_team_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+        scope:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      required:
+      - expected_review_hash
+      title: CommunitySkillInstall
+      type: object
+    CommunitySkillSummary:
+      properties:
+        attested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Attested By
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        body_preview:
+          title: Body Preview
+          type: string
+        description:
+          title: Description
+          type: string
+        installed:
+          title: Installed
+          type: boolean
+        installed_for_me:
+          title: Installed For Me
+          type: boolean
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        license:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License
+        slug:
+          title: Slug
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+      - slug
+      - title
+      - description
+      - version
+      - installed
+      - installed_for_me
+      - body_preview
+      title: CommunitySkillSummary
+      type: object
     CurrentTierResponse:
       description: '``GET /inference/current-tier`` response.
 
@@ -2160,6 +2667,64 @@ components:
     Digest:
       pattern: ^[0-9a-f]{64}$
       type: string
+    DirectoryEntry:
+      description: One colleague, as the people-pickers need them.
+      properties:
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+      required:
+      - id
+      - email
+      title: DirectoryEntry
+      type: object
+    DocumentRef:
+      additionalProperties: false
+      description: 'One owner-selected document, numbered in selection order (ADR
+        0038 D5).
+
+
+        The number is what a child cites and what the read tool accepts. The file
+
+        name is display data from the owner''s own record. Neither grants a read:
+
+        the boundary rechecks selection, ownership and project attachment.'
+      properties:
+        attached_for_run:
+          default: false
+          title: Attached For Run
+          type: boolean
+        document_id:
+          format: uuid
+          title: Document Id
+          type: string
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          $ref: '#/components/schemas/ShortText'
+        number:
+          maximum: 128.0
+          minimum: 1.0
+          title: Number
+          type: integer
+      required:
+      - number
+      - document_id
+      - file_id
+      - filename
+      title: DocumentRef
+      type: object
     EasyPlaybookGeneration:
       description: 'One Easy Playbook generation row.
 
@@ -2331,6 +2896,11 @@ components:
           default: ''
           title: Intent
           type: string
+        outcome:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Outcome
         reserved_usd:
           pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
           title: Reserved Usd
@@ -2345,6 +2915,10 @@ components:
         status:
           title: Status
           type: string
+        step:
+          anyOf:
+          - $ref: '#/components/schemas/StepRead'
+          - type: 'null'
       required:
       - effect_key
       - status
@@ -2523,6 +3097,48 @@ components:
       - expanded_prompt
       title: EnhancePromptResponse
       type: object
+    EvidenceRead:
+      description: 'The result of the citation checks on a delivered answer (ADR 0038
+        D5).
+
+
+        Counts from the answer''s fiduciary gate. ``flagged`` means at least one
+
+        quotation could not be matched to the file it cites. Absent when the
+
+        answer carried no quotation that named a source of the run (a selected
+
+        document, or a file one of its searches found): nothing was checked, and
+
+        the answer is unverified.'
+      properties:
+        checked:
+          title: Checked
+          type: integer
+        gate_status:
+          title: Gate Status
+          type: string
+        matched:
+          title: Matched
+          type: integer
+        unmarked:
+          default: 0
+          title: Unmarked
+          type: integer
+        unmatched:
+          title: Unmatched
+          type: integer
+        unresolved:
+          default: 0
+          title: Unresolved
+          type: integer
+      required:
+      - gate_status
+      - checked
+      - matched
+      - unmatched
+      title: EvidenceRead
+      type: object
     ExecutionScope:
       additionalProperties: false
       properties:
@@ -2646,6 +3262,14 @@ components:
           format: uuid
           title: Id
           type: string
+        ingestion_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Why ingestion failed, e.g. ``unsupported_type``, ``decode_error``
+            or ``parse_failed``. Set only when ``ingestion_status`` is ``failed``;
+            otherwise null.
+          title: Ingestion Error
         ingestion_status:
           enum:
           - pending
@@ -2739,6 +3363,10 @@ components:
       - snippet
       title: FindMatch
       type: object
+    Finding:
+      maxLength: 16384
+      minLength: 1
+      type: string
     HTTPValidationError:
       properties:
         detail:
@@ -2818,6 +3446,79 @@ components:
       - parse_failed
       - total_documents
       title: IngestHealthResponse
+      type: object
+    InstructionsRead:
+      description: A session's pinned system message.
+      properties:
+        digest:
+          title: Digest
+          type: string
+        kind:
+          enum:
+          - skill
+          - prompt
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      required:
+      - kind
+      - name
+      - digest
+      title: InstructionsRead
+      type: object
+    InstructionsRef:
+      description: 'What instructs one role of a profile: an installed skill or an
+        engine prompt file.
+
+
+        For a prompt, ``name`` is ``<family>/<role>.v<N>`` and its text is at
+
+        ``GET /autonomous/orchestration/prompts/{family}/{role}.v{N}``, so it can
+
+        be read before anything is sent.'
+      properties:
+        digest:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Digest
+        kind:
+          enum:
+          - skill
+          - prompt
+          title: Kind
+          type: string
+        name:
+          title: Name
+          type: string
+        role:
+          enum:
+          - orchestrator
+          - sub-agent
+          title: Role
+          type: string
+        version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Version
+      required:
+      - role
+      - kind
+      - name
+      title: InstructionsRef
       type: object
     IntakeBridgesList:
       description: Section-split response for the admin intake-bridges list.
@@ -3036,6 +3737,29 @@ components:
       required:
       - name
       title: KnowledgeBaseCreateRequest
+      type: object
+    KnowledgeBaseRef:
+      additionalProperties: false
+      description: 'One knowledge base a run''s tasks may search, as the plan lists
+        it (ADR 0038 D5).
+
+
+        The name is display data from the owner''s own record, taken when the
+
+        request was accepted. Neither field grants a search: the boundary rechecks
+
+        ownership, archival and attachment to the run''s matter at every call.'
+      properties:
+        knowledge_base_id:
+          format: uuid
+          title: Knowledge Base Id
+          type: string
+        name:
+          $ref: '#/components/schemas/ShortText'
+      required:
+      - knowledge_base_id
+      - name
+      title: KnowledgeBaseRef
       type: object
     KnowledgeBaseResponse:
       description: '``KnowledgeBase`` schema from backend-openapi.yaml.
@@ -3371,6 +4095,159 @@ components:
       - enabled
       title: MCPToolView
       type: object
+    MatterAdministrationSummary:
+      properties:
+        archived_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Archived At
+        id:
+          format: uuid
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        share_scope:
+          title: Share Scope
+          type: string
+      required:
+      - id
+      - name
+      - owner_id
+      - share_scope
+      - archived_at
+      title: MatterAdministrationSummary
+      type: object
+    MatterMemberAdd:
+      additionalProperties: false
+      properties:
+        reason:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+        role:
+          default: contributor
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      title: MatterMemberAdd
+      type: object
+    MatterMemberResponse:
+      description: One row of a matter's roster.
+      properties:
+        added_by_user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Added By User Id
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        display_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Display Name
+        email:
+          title: Email
+          type: string
+        is_owner:
+          default: false
+          title: Is Owner
+          type: boolean
+        role:
+          title: Role
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - user_id
+      - email
+      - role
+      - added_by_user_id
+      - created_at
+      title: MatterMemberResponse
+      type: object
+    MatterMemberRoleUpdate:
+      additionalProperties: false
+      properties:
+        reason:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+        role:
+          title: Role
+          type: string
+      required:
+      - role
+      title: MatterMemberRoleUpdate
+      type: object
+    MatterOwnershipTransfer:
+      additionalProperties: false
+      properties:
+        former_owner_role:
+          default: reader
+          enum:
+          - lead
+          - contributor
+          - reader
+          - blocked
+          title: Former Owner Role
+          type: string
+        owner_id:
+          format: uuid
+          title: Owner Id
+          type: string
+        reason:
+          maxLength: 1000
+          minLength: 1
+          title: Reason
+          type: string
+      required:
+      - reason
+      - owner_id
+      title: MatterOwnershipTransfer
+      type: object
+    MatterPolicyUpdate:
+      additionalProperties: false
+      properties:
+        reason:
+          maxLength: 1000
+          minLength: 1
+          title: Reason
+          type: string
+        share_scope:
+          enum:
+          - personal
+          - members
+          - org
+          title: Share Scope
+          type: string
+      required:
+      - reason
+      - share_scope
+      title: MatterPolicyUpdate
+      type: object
     MemoryKeepRequest:
       description: 'Optional request body for ``POST /autonomous/memory/{id}/keep``.
 
@@ -3439,6 +4316,12 @@ components:
             type: string
           title: Applied Skills
           type: array
+        autonomous_session_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Autonomous Session Id
         chat_id:
           format: uuid
           title: Chat Id
@@ -3466,6 +4349,12 @@ components:
           format: date-time
           title: Created At
           type: string
+        directed_by_user_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Directed By User Id
         error_code:
           anyOf:
           - type: string
@@ -3486,6 +4375,7 @@ components:
           - ai
           - refusal
           - system
+          - run
           title: Kind
           type: string
         prompt_tokens:
@@ -3847,91 +4737,52 @@ components:
       - delivery
       title: PhaseGrants
       type: object
-    PlanningSnapshot:
+    PhaseTools:
       additionalProperties: false
-      description: Server-owned intake; deliberately cannot be used as an approved
-        plan.
+      description: 'Registry tool names a model may be offered in each phase (ADR
+        0038 D3, D4).
+
+
+        Names, not authority. Every call still needs the matching intent in
+
+        ``PhaseGrants``, current operator policy and durable effect admission. The
+
+        plan carries this list so approval of the exact plan is consent for it.'
       properties:
-        attempt_timeout_seconds:
-          default: 120
-          maximum: 900.0
-          minimum: 1.0
-          title: Attempt Timeout Seconds
-          type: integer
-        budget_usd:
-          type: string
-        child_skill_version:
-          $ref: '#/components/schemas/ShortText'
-        contract_version:
-          const: 1
-          default: 1
-          title: Contract Version
-          type: integer
-        deadline:
-          format: date-time
-          title: Deadline
-          type: string
-        delegation_grants:
-          $ref: '#/components/schemas/PhaseGrants'
-        gateway_revision:
-          $ref: '#/components/schemas/Digest'
-        goal:
-          $ref: '#/components/schemas/TaskText'
-        max_active_children:
-          default: 2
-          maximum: 4.0
-          minimum: 1.0
-          title: Max Active Children
-          type: integer
-        model:
-          $ref: '#/components/schemas/ShortText'
-        owner_id:
-          format: uuid
-          title: Owner Id
-          type: string
-        packet_digest:
-          $ref: '#/components/schemas/Digest'
-        plan_id:
-          format: uuid
-          title: Plan Id
-          type: string
-        planning_allowance_usd:
-          type: string
-        policy_version:
-          $ref: '#/components/schemas/ShortText'
-        project_id:
-          format: uuid
-          title: Project Id
-          type: string
-        root:
-          $ref: '#/components/schemas/ExecutionScope'
-        root_allowance_usd:
-          type: string
-        root_id:
-          format: uuid
-          title: Root Id
-          type: string
-        root_skill_version:
-          $ref: '#/components/schemas/ShortText'
-      required:
-      - plan_id
-      - root_id
-      - owner_id
-      - project_id
-      - goal
-      - policy_version
-      - root
-      - delegation_grants
-      - budget_usd
-      - root_allowance_usd
-      - planning_allowance_usd
-      - deadline
-      - packet_digest
-      - gateway_revision
-      - model
-      - child_skill_version
-      - root_skill_version
-      title: PlanningSnapshot
+        analysis:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Analysis
+          type: array
+        delivery:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Delivery
+          type: array
+        drafting:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Drafting
+          type: array
+        ethics_review:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Ethics Review
+          type: array
+        intake:
+          default: []
+          items:
+            $ref: '#/components/schemas/ShortText'
+          title: Intake
+          type: array
+      title: PhaseTools
+      type: object
+    PlanningSnapshot:
+      additionalProperties: true
       type: object
     Playbook:
       description: 'Full playbook — header plus ordered positions.
@@ -4380,6 +5231,299 @@ components:
     PreparedPlan:
       additionalProperties: true
       type: object
+    ProfileAvailability:
+      description: One registry profile, as the composer shows it for this chat.
+      properties:
+        answers_directly:
+          default: false
+          title: Answers Directly
+          type: boolean
+        attempt_timeout_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt Timeout Seconds
+        available:
+          title: Available
+          type: boolean
+        budget_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Budget Usd
+        child_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Child Allowance Usd
+        child_turn_limit:
+          title: Child Turn Limit
+          type: integer
+        documents:
+          enum:
+          - packet
+          - selected
+          - optional
+          title: Documents
+          type: string
+        evidence:
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        instructions:
+          default: []
+          items:
+            $ref: '#/components/schemas/InstructionsRef'
+          title: Instructions
+          type: array
+        max_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Children
+        max_documents:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Documents
+        min_documents:
+          default: 0
+          title: Min Documents
+          type: integer
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        planning_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Planning Allowance Usd
+        planning_notice:
+          title: Planning Notice
+          type: string
+        profile:
+          title: Profile
+          type: string
+        pseudonymized:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Pseudonymized
+        reads:
+          title: Reads
+          type: string
+        reason:
+          anyOf:
+          - enum:
+            - operator_disabled
+            - not_configured
+            - autonomous_opt_in_required
+            - role_read_only
+            - chat_archived
+            - project_required
+            - project_unavailable
+            - project_not_permitted
+            - route_unavailable
+            - active_run
+            type: string
+          - type: 'null'
+          title: Reason
+        reason_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason Text
+        reasoning_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reasoning Effort
+        root_allowance_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Root Allowance Usd
+        routed_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Routed Tier
+        summary:
+          title: Summary
+          type: string
+        title:
+          title: Title
+          type: string
+        tools:
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+      required:
+      - profile
+      - title
+      - summary
+      - reads
+      - documents
+      - evidence
+      - available
+      - planning_notice
+      - child_turn_limit
+      - tools
+      title: ProfileAvailability
+      type: object
+    ProfileRegistryRead:
+      properties:
+        deployment_children:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Deployment Children
+        profiles:
+          items:
+            $ref: '#/components/schemas/ProfileState'
+          title: Profiles
+          type: array
+      required:
+      - profiles
+      - deployment_children
+      title: ProfileRegistryRead
+      type: object
+    ProfileState:
+      description: One registry profile as the operator has configured it.
+      properties:
+        attempt_timeout_seconds:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Attempt Timeout Seconds
+        budget_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Budget Usd
+        child_prompt:
+          default: ''
+          title: Child Prompt
+          type: string
+        child_skill:
+          title: Child Skill
+          type: string
+        composer:
+          default: false
+          title: Composer
+          type: boolean
+        documents:
+          enum:
+          - packet
+          - selected
+          - optional
+          title: Documents
+          type: string
+        enabled:
+          title: Enabled
+          type: boolean
+        evidence:
+          enum:
+          - unverified
+          - citations
+          title: Evidence
+          type: string
+        limits:
+          additionalProperties: true
+          title: Limits
+          type: object
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+        problem:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Problem
+        profile:
+          title: Profile
+          type: string
+        project_scope:
+          enum:
+          - dedicated
+          - owned
+          - any
+          title: Project Scope
+          type: string
+        provider:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Provider
+        pseudonymization:
+          default: required
+          enum:
+          - required
+          - operator
+          title: Pseudonymization
+          type: string
+        reads:
+          title: Reads
+          type: string
+        reasoning_effort:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reasoning Effort
+        root_prompt:
+          default: ''
+          title: Root Prompt
+          type: string
+        root_skill:
+          title: Root Skill
+          type: string
+        summary:
+          title: Summary
+          type: string
+        switch:
+          title: Switch
+          type: string
+        title:
+          title: Title
+          type: string
+        tools:
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+      required:
+      - profile
+      - title
+      - summary
+      - reads
+      - enabled
+      - switch
+      - documents
+      - project_scope
+      - evidence
+      - root_skill
+      - child_skill
+      - tools
+      - limits
+      title: ProfileState
+      type: object
     ProjectContextProposalListResponse:
       description: 'Paginated list of :class:`ProjectContextProposalRead` items (M4-B2).
 
@@ -4493,6 +5637,17 @@ components:
             type: string
           - type: 'null'
           title: Description
+        max_egress_tier:
+          anyOf:
+          - enum:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - enum:
@@ -4513,6 +5668,15 @@ components:
           default: false
           title: Privileged
           type: boolean
+        share_scope:
+          anyOf:
+          - enum:
+            - personal
+            - members
+            - org
+            type: string
+          - type: 'null'
+          title: Share Scope
         slug:
           anyOf:
           - maxLength: 80
@@ -4560,6 +5724,14 @@ components:
             type: string
           title: Attached Skill Names
           type: array
+        caller_access:
+          default: read
+          title: Caller Access
+          type: string
+        caller_access_basis:
+          default: owner
+          title: Caller Access Basis
+          type: string
         context_md:
           anyOf:
           - type: string
@@ -4582,6 +5754,11 @@ components:
           default: false
           title: Is Sandbox
           type: boolean
+        max_egress_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - type: integer
@@ -4597,6 +5774,10 @@ components:
         privileged:
           title: Privileged
           type: boolean
+        share_scope:
+          default: personal
+          title: Share Scope
+          type: string
         slug:
           title: Slug
           type: string
@@ -4654,6 +5835,17 @@ components:
             type: string
           - type: 'null'
           title: Description
+        max_egress_tier:
+          anyOf:
+          - enum:
+            - 1
+            - 2
+            - 3
+            - 4
+            - 5
+            type: integer
+          - type: 'null'
+          title: Max Egress Tier
         minimum_inference_tier:
           anyOf:
           - enum:
@@ -4677,6 +5869,15 @@ components:
           - type: boolean
           - type: 'null'
           title: Privileged
+        share_scope:
+          anyOf:
+          - enum:
+            - personal
+            - members
+            - org
+            type: string
+          - type: 'null'
+          title: Share Scope
         slug:
           anyOf:
           - maxLength: 80
@@ -4704,6 +5905,35 @@ components:
       required:
       - project_id
       title: PromotePrecedentRequest
+      type: object
+    PromptRead:
+      description: One of the engine's own versioned prompt files (ADR 0038 D3).
+      properties:
+        digest:
+          $ref: '#/components/schemas/Digest'
+        family:
+          title: Family
+          type: string
+        name:
+          title: Name
+          type: string
+        role:
+          title: Role
+          type: string
+        text:
+          title: Text
+          type: string
+        version:
+          title: Version
+          type: integer
+      required:
+      - name
+      - family
+      - role
+      - version
+      - digest
+      - text
+      title: PromptRead
       type: object
     ProposalState:
       description: 'Lifecycle state of a project-context promotion proposal.
@@ -4777,6 +6007,62 @@ components:
       - detail
       title: ReceiptEvent
       type: object
+    ReferenceReadResult:
+      additionalProperties: false
+      description: An exact UTF-8 byte range; more content requires another explicit
+        call.
+      properties:
+        content:
+          title: Content
+          type: string
+        end_offset_bytes:
+          minimum: 0.0
+          title: End Offset Bytes
+          type: integer
+        has_more:
+          title: Has More
+          type: boolean
+        next_offset_bytes:
+          anyOf:
+          - minimum: 0.0
+            type: integer
+          - type: 'null'
+          title: Next Offset Bytes
+        offset_bytes:
+          minimum: 0.0
+          title: Offset Bytes
+          type: integer
+        path:
+          maxLength: 255
+          pattern: ^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$
+          title: Path
+          type: string
+        returned_bytes:
+          maximum: 65536.0
+          minimum: 0.0
+          title: Returned Bytes
+          type: integer
+        sha256:
+          pattern: ^[0-9a-f]{64}$
+          title: Sha256
+          type: string
+        size_bytes:
+          maximum: 9.223372036854776e+18
+          minimum: 0.0
+          title: Size Bytes
+          type: integer
+      required:
+      - path
+      - content
+      - size_bytes
+      - offset_bytes
+      - end_offset_bytes
+      - returned_bytes
+      - has_more
+      - next_offset_bytes
+      - sha256
+      title: ReferenceReadResult
+      type: object
     RefreshRequest:
       description: '`/auth/refresh` body per backend-openapi.yaml.'
       properties:
@@ -4849,32 +6135,151 @@ components:
       title: ResearchTask
       type: object
     ResourceScope:
-      additionalProperties: false
-      description: 'Selected document IDs and configured source names, including empty
-        scope.
-
-
-        The resolver must check adapter-specific operations at call time; a source
-
-        name never grants every operation offered by that provider.'
+      additionalProperties: true
+      type: object
+    RunDocument:
       properties:
-        document_ids:
+        attached_to_project:
+          title: Attached To Project
+          type: boolean
+        characters:
+          title: Characters
+          type: integer
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          title: Filename
+          type: string
+        matter_minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Matter Minimum Inference Tier
+        matter_privileged:
+          default: false
+          title: Matter Privileged
+          type: boolean
+        matters:
+          default: []
+          items:
+            type: string
+          title: Matters
+          type: array
+        mime_type:
+          title: Mime Type
+          type: string
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        selectable:
+          title: Selectable
+          type: boolean
+        size_bytes:
+          title: Size Bytes
+          type: integer
+      required:
+      - file_id
+      - filename
+      - mime_type
+      - size_bytes
+      - characters
+      - attached_to_project
+      - selectable
+      title: RunDocument
+      type: object
+    RunDocumentsRead:
+      properties:
+        chat_id:
+          format: uuid
+          title: Chat Id
+          type: string
+        documents:
+          items:
+            $ref: '#/components/schemas/RunDocument'
+          title: Documents
+          type: array
+        knowledge_bases:
+          default: []
+          items:
+            $ref: '#/components/schemas/RunKnowledgeBase'
+          title: Knowledge Bases
+          type: array
+        knowledge_bases_omitted:
+          default: 0
+          title: Knowledge Bases Omitted
+          type: integer
+        max_documents:
+          title: Max Documents
+          type: integer
+        project_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Project Id
+        suggested_file_ids:
+          default: []
           items:
             format: uuid
             type: string
-          maxItems: 128
-          title: Document Ids
-          type: array
-        source_names:
-          items:
-            $ref: '#/components/schemas/ShortText'
-          maxItems: 32
-          title: Source Names
+          title: Suggested File Ids
           type: array
       required:
-      - document_ids
-      - source_names
-      title: ResourceScope
+      - chat_id
+      - project_id
+      - max_documents
+      - documents
+      title: RunDocumentsRead
+      type: object
+    RunKnowledgeBase:
+      properties:
+        knowledge_base_id:
+          format: uuid
+          title: Knowledge Base Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - knowledge_base_id
+      - name
+      title: RunKnowledgeBase
+      type: object
+    RunProfilesRead:
+      properties:
+        active_run:
+          anyOf:
+          - $ref: '#/components/schemas/ActiveRun'
+          - type: 'null'
+        chat_id:
+          format: uuid
+          title: Chat Id
+          type: string
+        composer_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Composer Profile
+        profiles:
+          items:
+            $ref: '#/components/schemas/ProfileAvailability'
+          title: Profiles
+          type: array
+        project_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Project Id
+      required:
+      - chat_id
+      - project_id
+      - profiles
+      title: RunProfilesRead
       type: object
     RunRead:
       properties:
@@ -4914,6 +6319,16 @@ components:
         status:
           title: Status
           type: string
+        tools:
+          default: []
+          items:
+            $ref: '#/components/schemas/ToolRead'
+          title: Tools
+          type: array
+        turn_limit:
+          default: 0
+          title: Turn Limit
+          type: integer
         updated_at:
           anyOf:
           - format: date-time
@@ -4930,6 +6345,66 @@ components:
       - updated_at
       - effects
       title: RunRead
+      type: object
+    RunTerms:
+      additionalProperties: false
+      description: 'The limits a run states to its models and is held to, frozen at
+        intake.
+
+
+        Taken from the profile when the request is accepted. The run''s messages
+
+        state these numbers and the engine enforces the same ones, so a later
+
+        change to the profile changes neither for a retained run.
+
+
+        ``planning`` is how the orchestrator hands over its plan. ``text`` is a
+
+        JSON object in the reply. ``tool`` is one call to ``propose_plan``; under
+
+        it a reply with no call is the orchestrator''s own answer, and no plan
+
+        exists (ADR 0038 D1).
+
+
+        The number of tool calls one turn may make is a constant of the engine
+
+        (``inference.MAX_TOOL_CALLS``), not a profile''s choice, and is not here.'
+      properties:
+        answer_chars:
+          maximum: 16384.0
+          minimum: 1.0
+          title: Answer Chars
+          type: integer
+        planning:
+          default: text
+          enum:
+          - text
+          - tool
+          title: Planning
+          type: string
+        read_chars:
+          maximum: 65536.0
+          minimum: 256.0
+          title: Read Chars
+          type: integer
+        task_answer_chars:
+          maximum: 16384.0
+          minimum: 1.0
+          title: Task Answer Chars
+          type: integer
+        task_turns:
+          maximum: 16.0
+          minimum: 0.0
+          title: Task Turns
+          type: integer
+      required:
+      - task_turns
+      - task_answer_chars
+      - answer_chars
+      - read_chars
+      title: RunTerms
       type: object
     SavedContent:
       properties:
@@ -5302,10 +6777,197 @@ components:
       - failed
       title: SessionStatus
       type: string
+    SessionTraceRead:
+      properties:
+        calls:
+          items:
+            $ref: '#/components/schemas/CallRead'
+          title: Calls
+          type: array
+        note:
+          default: The opening messages are rebuilt from this run's records by the
+            code that sent them. They are what the application sent to the gateway,
+            before any pseudonymization there. A later turn's full request is not
+            kept; its reply and tool calls are. Document text returned by a read,
+            and passages returned by a search, are not shown here.
+          title: Note
+          type: string
+        role:
+          enum:
+          - orchestrator
+          - sub-agent
+          title: Role
+          type: string
+        root_id:
+          format: uuid
+          title: Root Id
+          type: string
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+        turns:
+          items:
+            $ref: '#/components/schemas/TurnRead'
+          title: Turns
+          type: array
+      required:
+      - root_id
+      - session_id
+      - role
+      - calls
+      - turns
+      title: SessionTraceRead
+      type: object
     ShortText:
       maxLength: 256
       minLength: 1
       type: string
+    Skill:
+      description: 'The shape ``GET /api/v1/skills/{name}`` returns.
+
+
+        Mirrors ``Skill`` in ``docs/api/backend-openapi.yaml`` (which is an
+
+        ``allOf`` of ``SkillSummary`` plus body fields). ``content_yaml`` is
+
+        the raw frontmatter block (re-emitted, not the source bytes), and
+
+        ``content_md`` is the body markdown. Reference and example files
+
+        are loaded lazily — only when this shape is materialised.
+
+
+        Wave D.2 — ``id`` surfaces the underlying ``user_skills.id`` row UUID
+
+        when the resolved scope is ``user`` or ``team``. Built-in
+
+        (filesystem-canonical) skills have no DB row and return ``None``.
+
+        The skill detail page''s Versions tab needs this id to call the
+
+        audit-history endpoint; surfacing it on the detail GET avoids a
+
+        second round-trip to look it up by slug.'
+      properties:
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        ensemble_verification:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Ensemble Verification
+        example_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Example Files
+          type: array
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
+        name:
+          title: Name
+          type: string
+        on_demand_files:
+          items:
+            $ref: '#/components/schemas/SkillFileRef'
+          title: On Demand Files
+          type: array
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        reference_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Reference Files
+          type: array
+        reference_read_enabled:
+          default: true
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          enum:
+          - builtin
+          - user
+          - team
+          title: Scope
+          type: string
+        script_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Script Files
+          type: array
+        source:
+          default: built-in
+          enum:
+          - built-in
+          - community
+          - user
+          - team
+          title: Source
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tool Usage
+        unavailable_tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Unavailable Tool Usage
+        version:
+          title: Version
+          type: string
+      required:
+      - name
+      - version
+      - scope
+      - title
+      - content_yaml
+      - content_md
+      title: Skill
+      type: object
     SkillAutocompleteItem:
       description: 'One row in the autocomplete response.
 
@@ -5365,6 +7027,35 @@ components:
       required:
       - results
       title: SkillAutocompleteResponse
+      type: object
+    SkillFile:
+      description: A reference or example file relative to the skill folder.
+      properties:
+        content:
+          title: Content
+          type: string
+        path:
+          title: Path
+          type: string
+      required:
+      - path
+      - content
+      title: SkillFile
+      type: object
+    SkillFileRef:
+      description: A file the skill ships that is read on request, not sent with the
+        prompt.
+      properties:
+        path:
+          title: Path
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+      required:
+      - path
+      - size_bytes
+      title: SkillFileRef
       type: object
     SkillForkBody:
       additionalProperties: false
@@ -5461,17 +7152,156 @@ components:
       - name
       title: SkillInputs
       type: object
-    SkillPin:
-      additionalProperties: false
+    SkillInspection:
+      description: Human-only inspection response; never used by the gateway resolver.
       properties:
-        digest:
-          $ref: '#/components/schemas/Digest'
+        author:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author
+        content_md:
+          title: Content Md
+          type: string
+        content_yaml:
+          title: Content Yaml
+          type: string
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        ensemble_verification:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Ensemble Verification
+        example_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Example Files
+          type: array
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+        jurisdiction:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jurisdiction
+        minimum_inference_tier:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Minimum Inference Tier
         name:
-          $ref: '#/components/schemas/ShortText'
+          title: Name
+          type: string
+        on_demand_contents:
+          items:
+            $ref: '#/components/schemas/ReferenceReadResult'
+          title: On Demand Contents
+          type: array
+        on_demand_files:
+          items:
+            $ref: '#/components/schemas/SkillFileRef'
+          title: On Demand Files
+          type: array
+        output_format:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Format
+        reference_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Reference Files
+          type: array
+        reference_read_enabled:
+          default: true
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          enum:
+          - builtin
+          - user
+          - team
+          title: Scope
+          type: string
+        script_files:
+          items:
+            $ref: '#/components/schemas/SkillFile'
+          title: Script Files
+          type: array
+        source:
+          default: built-in
+          enum:
+          - built-in
+          - community
+          - user
+          - team
+          title: Source
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        title:
+          title: Title
+          type: string
+        tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Tool Usage
+        unavailable_tool_usage:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Unavailable Tool Usage
+        version:
+          title: Version
+          type: string
       required:
       - name
-      - digest
-      title: SkillPin
+      - version
+      - scope
+      - title
+      - content_yaml
+      - content_md
+      title: SkillInspection
+      type: object
+    SkillPin:
+      additionalProperties: true
+      type: object
+    SkillResourcePolicy:
+      description: Current API/worker host policy for installed skill reference reads.
+      properties:
+        max_files:
+          title: Max Files
+          type: integer
+        max_read_bytes:
+          title: Max Read Bytes
+          type: integer
+        reference_read_enabled:
+          title: Reference Read Enabled
+          type: boolean
+        scope:
+          title: Scope
+          type: string
+      required:
+      - reference_read_enabled
+      - max_files
+      - max_read_bytes
+      - scope
+      title: SkillResourcePolicy
       type: object
     SlackWorkspaceCreate:
       additionalProperties: false
@@ -5596,6 +7426,38 @@ components:
       - installed_at
       title: SlackWorkspaceSummary
       type: object
+    SourceRead:
+      description: 'A knowledge-base file one of the run''s searches found, with its
+        source number.
+
+
+        The number is what a quotation''s ``(Source: [N])`` marker carries. Numbers
+
+        above the selected documents belong to these files. ``session_id`` is the
+
+        task whose search found it.'
+      properties:
+        file_id:
+          format: uuid
+          title: File Id
+          type: string
+        filename:
+          title: Filename
+          type: string
+        number:
+          title: Number
+          type: integer
+        session_id:
+          format: uuid
+          title: Session Id
+          type: string
+      required:
+      - number
+      - file_id
+      - filename
+      - session_id
+      title: SourceRead
+      type: object
     SourcesResponse:
       description: Envelope for GET /api/v1/research/sources.
       properties:
@@ -5607,6 +7469,418 @@ components:
       required:
       - sources
       title: SourcesResponse
+      type: object
+    StepRead:
+      description: 'What one step did, in registry terms (ADR 0038 D3).
+
+
+        ``kind`` selects a renderer in the client; an unknown kind falls back to a
+
+        generic presentation of ``label`` and ``summary``. ``label`` comes from the
+
+        tool registry, so a tool the client has never seen is still described.
+
+        ``reason`` is the model''s own stated reason: text to display, never markup
+
+        and never an instruction. ``summary`` holds counts, numbers and the owner''s
+
+        own file names; it carries no document text.'
+      properties:
+        kind:
+          title: Kind
+          type: string
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        summary:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Summary
+        tool:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tool
+      required:
+      - kind
+      title: StepRead
+      type: object
+    TabularBulkOpItem:
+      description: 'One item in a bulk op''s results.
+
+
+        ``redline_rows`` produces one item per parent grid row (in grid-row
+
+        order); ``summarize_column`` produces a single item with
+
+        ``document_id = None`` (the memo spans the whole grid). Failed
+
+        items carry ``status=''failed''`` + ``error`` and are rendered as
+
+        failures — the report never silently omits failed rows (C-10).'
+      properties:
+        cost_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Cost Usd
+        document_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Document Id
+        document_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Document Name
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        finish_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finish Reason
+        output_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Output Text
+        source_rows:
+          items:
+            $ref: '#/components/schemas/TabularBulkOpSourceRow'
+          title: Source Rows
+          type: array
+        status:
+          enum:
+          - completed
+          - failed
+          title: Status
+          type: string
+      required:
+      - status
+      title: TabularBulkOpItem
+      type: object
+    TabularBulkOpPreviewRequest:
+      description: 'Request body for
+
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost``.
+
+
+        Same shape as :class:`TabularBulkOpRequest` minus the
+
+        ``confirmed_cost_usd`` echo — preview produces the cost;
+
+        confirmation echoes it back on the subsequent create call.'
+      properties:
+        column_name:
+          title: Column Name
+          type: string
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        skill_inputs:
+          additionalProperties: true
+          title: Skill Inputs
+          type: object
+        skill_name:
+          maxLength: 128
+          minLength: 1
+          title: Skill Name
+          type: string
+      required:
+      - kind
+      - column_name
+      - skill_name
+      title: TabularBulkOpPreviewRequest
+      type: object
+    TabularBulkOpPreviewResponse:
+      description: 'Response from the bulk-op cost preview.
+
+
+        ``calls_count`` is the number of gateway calls the op will make
+
+        (one per grid row for ``redline_rows``; one for
+
+        ``summarize_column``). ``estimated_cost_usd`` = ``calls_count`` x
+
+        the rolling-average per-call cost over recent
+
+        ``purpose=''tabular_bulk_op''`` routing-log rows (conservative
+
+        cold-start default before calibration; ADR 0040 D3).'
+      properties:
+        calls_count:
+          title: Calls Count
+          type: integer
+        estimated_cost_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Estimated Cost Usd
+          type: string
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        per_call_cost_usd:
+          pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+          title: Per Call Cost Usd
+          type: string
+        skill_content_hash:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Skill Content Hash
+        skill_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Skill Name
+        skill_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Skill Version
+      required:
+      - kind
+      - calls_count
+      - per_call_cost_usd
+      - estimated_cost_usd
+      title: TabularBulkOpPreviewResponse
+      type: object
+    TabularBulkOpRequest:
+      description: 'Request body for
+
+        ``POST /api/v1/tabular/executions/{id}/bulk-ops`` (DE-304 / ADR 0040).
+
+
+        Replaces the never-wired M3-C4 stub of the same name (which
+
+        anticipated Decision C-9 sibling rows; ADR 0040 D1 stores bulk-op
+
+        output in a dedicated ``tabular_bulk_ops`` table instead because
+
+        the outputs are not grids).
+
+
+        ``column_name`` is required for both operations and validated against
+
+        the execution''s snapshotted column spec. Instructions come from a
+
+        selected, immutable skill snapshot. ``confirmed_cost_usd`` is the echo of
+        the
+
+        ``.../bulk-ops/preview-cost`` response value — persisted for audit,
+
+        same idiom as :class:`TabularExecutionCreate.confirmed_cost_usd`.'
+      properties:
+        column_name:
+          title: Column Name
+          type: string
+        confirmed_cost_usd:
+          anyOf:
+          - type: number
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Confirmed Cost Usd
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        skill_content_hash:
+          pattern: ^[a-f0-9]{64}$
+          title: Skill Content Hash
+          type: string
+        skill_inputs:
+          additionalProperties: true
+          title: Skill Inputs
+          type: object
+        skill_name:
+          maxLength: 128
+          minLength: 1
+          title: Skill Name
+          type: string
+      required:
+      - kind
+      - column_name
+      - skill_name
+      - skill_content_hash
+      title: TabularBulkOpRequest
+      type: object
+    TabularBulkOpResponse:
+      description: 'Wire shape for one bulk op — embedded in
+
+        :class:`TabularExecutionResponse.bulk_ops` (ADR 0040 D2: the detail
+
+        endpoint and available through independent owner-scoped reads).'
+      properties:
+        completed_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Completed At
+        confirmed_cost_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Confirmed Cost Usd
+        cost_actual_usd:
+          anyOf:
+          - pattern: ^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$
+            type: string
+          - type: 'null'
+          title: Cost Actual Usd
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        error_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Text
+        execution_id:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Execution Id
+        id:
+          format: uuid
+          title: Id
+          type: string
+        kind:
+          enum:
+          - redline_rows
+          - summarize_column
+          title: Kind
+          type: string
+        params:
+          additionalProperties:
+            anyOf:
+            - type: string
+            - type: 'null'
+          title: Params
+          type: object
+        provenance:
+          additionalProperties: true
+          title: Provenance
+          type: object
+        results:
+          anyOf:
+          - $ref: '#/components/schemas/TabularBulkOpResults'
+          - type: 'null'
+        source_execution_id:
+          format: uuid
+          title: Source Execution Id
+          type: string
+        started_at:
+          anyOf:
+          - format: date-time
+            type: string
+          - type: 'null'
+          title: Started At
+        status:
+          enum:
+          - pending
+          - running
+          - completed
+          - failed
+          title: Status
+          type: string
+        user_id:
+          format: uuid
+          title: User Id
+          type: string
+      required:
+      - id
+      - execution_id
+      - source_execution_id
+      - provenance
+      - user_id
+      - kind
+      - status
+      - params
+      - created_at
+      title: TabularBulkOpResponse
+      type: object
+    TabularBulkOpResults:
+      description: Shape persisted in ``tabular_bulk_ops.results`` once terminal.
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/TabularBulkOpItem'
+          title: Items
+          type: array
+        schema_version:
+          title: Schema Version
+          type: string
+        summary:
+          $ref: '#/components/schemas/TabularBulkOpSummary'
+      required:
+      - schema_version
+      - items
+      - summary
+      title: TabularBulkOpResults
+      type: object
+    TabularBulkOpSourceRow:
+      description: Selected-column evidence coverage, generated from the saved grid.
+      properties:
+        document_name:
+          title: Document Name
+          type: string
+        status:
+          enum:
+          - available
+          - missing
+          title: Status
+          type: string
+        value:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Value
+      required:
+      - document_name
+      - status
+      title: TabularBulkOpSourceRow
+      type: object
+    TabularBulkOpSummary:
+      description: Honesty counters for a bulk op's results panel.
+      properties:
+        failed_items:
+          title: Failed Items
+          type: integer
+        total_items:
+          title: Total Items
+          type: integer
+      required:
+      - total_items
+      - failed_items
+      title: TabularBulkOpSummary
       type: object
     TabularExecutionCreate:
       description: 'Request body for ``POST /api/v1/tabular/execute``.
@@ -5664,6 +7938,11 @@ components:
 
         (``POST /execute``, ``GET /executions/{id}``, etc.).'
       properties:
+        bulk_ops:
+          items:
+            $ref: '#/components/schemas/TabularBulkOpResponse'
+          title: Bulk Ops
+          type: array
         columns:
           items:
             $ref: '#/components/schemas/ColumnSpec'
@@ -5930,6 +8209,14 @@ components:
 
         once status is ``completed``.'
       properties:
+        ensemble_halted_at_ceiling:
+          default: false
+          title: Ensemble Halted At Ceiling
+          type: boolean
+        ensemble_halted_cells:
+          default: 0
+          title: Ensemble Halted Cells
+          type: integer
         rows:
           items:
             $ref: '#/components/schemas/TabularRow'
@@ -6270,6 +8557,38 @@ components:
       - installed_at
       title: TeamsTenantSummary
       type: object
+    ThreadMessage:
+      additionalProperties: false
+      description: 'One earlier message of the chat, as the planning call is shown
+        it.
+
+
+        Frozen at intake: an effect''s identity covers its input, so a replay must
+
+        read exactly what the first attempt read. ``cut`` says the text was
+
+        shortened to fit, so the model and the owner can both see that it was.'
+      properties:
+        content:
+          maxLength: 6000
+          minLength: 1
+          title: Content
+          type: string
+        cut:
+          default: false
+          title: Cut
+          type: boolean
+        role:
+          enum:
+          - user
+          - assistant
+          title: Role
+          type: string
+      required:
+      - role
+      - content
+      title: ThreadMessage
+      type: object
     TierConfigResponse:
       description: '``GET /inference/tier-config`` response — the operator''s tier
         policy.'
@@ -6391,6 +8710,23 @@ components:
       - refresh_token
       title: TokenResponse
       type: object
+    ToolCallRead:
+      properties:
+        arguments:
+          title: Arguments
+          type: string
+        id:
+          title: Id
+          type: string
+        name:
+          title: Name
+          type: string
+      required:
+      - id
+      - name
+      - arguments
+      title: ToolCallRead
+      type: object
     ToolIntent:
       description: 'The closed set of tool intents the autonomous executor can invoke.
 
@@ -6417,6 +8753,7 @@ components:
       - skill_workspace_read
       - skill_workspace_write
       - run_bundled_script
+      - skill_reference_read
       - plan
       - retrieve_authority
       - workspace_read
@@ -6459,6 +8796,28 @@ components:
       - type
       title: ToolProviderSetRequest
       type: object
+    ToolRead:
+      description: A tool a child's approved plan grants, as the plan card lists it.
+      properties:
+        label:
+          title: Label
+          type: string
+        name:
+          title: Name
+          type: string
+        phase:
+          title: Phase
+          type: string
+        registered:
+          default: true
+          title: Registered
+          type: boolean
+      required:
+      - name
+      - label
+      - phase
+      title: ToolRead
+      type: object
     TopicOutcome:
       additionalProperties: false
       properties:
@@ -6476,7 +8835,7 @@ components:
           title: Failure Code
         findings:
           items:
-            $ref: '#/components/schemas/TaskText'
+            $ref: '#/components/schemas/Finding'
           maxItems: 8
           title: Findings
           type: array
@@ -6511,7 +8870,6 @@ components:
           title: Children
           type: array
         mode:
-          const: model_demo_v1
           default: model_demo_v1
           title: Mode
           type: string
@@ -6583,6 +8941,37 @@ components:
       - manual
       title: TriggerKind
       type: string
+    TurnRead:
+      description: 'One model reply. ``text`` is model-written: display it as text
+        only.'
+      properties:
+        effect_key:
+          title: Effect Key
+          type: string
+        finish_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finish Reason
+        status:
+          title: Status
+          type: string
+        text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Text
+        tool_calls:
+          default: []
+          items:
+            $ref: '#/components/schemas/ToolCallRead'
+          title: Tool Calls
+          type: array
+      required:
+      - effect_key
+      - status
+      title: TurnRead
+      type: object
     UsageResponse:
       properties:
         group_by:
@@ -7027,6 +9416,12 @@ components:
           format: uuid
           title: Id
           type: string
+        installation_provenance:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Installation Provenance
         owner_team_id:
           anyOf:
           - format: uuid
@@ -7469,7 +9864,7 @@ info:
     until then, all endpoints under /api/v1 return 501 with a structured 'not implemented'
     body that names the implementing task.
   title: LQ.AI Backend API
-  version: 0.8.0
+  version: 0.9.0
 openapi: 3.1.0
 paths:
   /api/v1/admin/aliases:
@@ -7757,6 +10152,128 @@ paths:
       summary: Report whether the first-run bootstrap admin password is still active.
       tags:
       - admin
+  /api/v1/admin/community-skills:
+    get:
+      operationId: list_community_skills_api_v1_admin_community_skills_get
+      parameters:
+      - in: query
+        name: scope
+        required: false
+        schema:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      - in: query
+        name: owner_team_id
+        required: false
+        schema:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityCatalogResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Community Skills
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}:
+    get:
+      operationId: get_community_skill_api_v1_admin_community_skills__slug__get
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      - in: query
+        name: scope
+        required: false
+        schema:
+          default: user
+          enum:
+          - user
+          - team
+          title: Scope
+          type: string
+      - in: query
+        name: owner_team_id
+        required: false
+        schema:
+          anyOf:
+          - format: uuid
+            type: string
+          - type: 'null'
+          title: Owner Team Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunitySkillDetail'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Community Skill
+      tags:
+      - admin-community-skills
+  /api/v1/admin/community-skills/{slug}/install:
+    post:
+      operationId: install_community_skill_api_v1_admin_community_skills__slug__install_post
+      parameters:
+      - in: path
+        name: slug
+        required: true
+        schema:
+          title: Slug
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommunitySkillInstall'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSkillResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Install Community Skill
+      tags:
+      - admin-community-skills
   /api/v1/admin/config:
     get:
       description: Return the gateway's sanitized current config (D0.5).
@@ -7766,9 +10283,7 @@ paths:
           content:
             application/json:
               schema:
-                additionalProperties: true
-                title: Response Get Admin Config Api V1 Admin Config Get
-                type: object
+                $ref: '#/components/schemas/AdminConfigResponse'
           description: Successful Response
       security:
       - OAuth2PasswordBearer: []
@@ -7897,6 +10412,155 @@ paths:
       summary: Soft Delete Teams Tenant
       tags:
       - admin-intake-bridges
+  /api/v1/admin/matters:
+    get:
+      operationId: list_matters_api_v1_admin_matters_get
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 100
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterAdministrationSummary'
+                title: Response List Matters Api V1 Admin Matters Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Matters
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/members:
+    get:
+      operationId: get_roster_api_v1_admin_matters__project_id__members_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterMemberResponse'
+                title: Response Get Roster Api V1 Admin Matters  Project Id  Members
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Get Roster
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/policy:
+    patch:
+      operationId: update_policy_api_v1_admin_matters__project_id__policy_patch
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterPolicyUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterAdministrationSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Update Policy
+      tags:
+      - admin
+      - matters
+  /api/v1/admin/matters/{project_id}/transfer:
+    post:
+      operationId: transfer_ownership_api_v1_admin_matters__project_id__transfer_post
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterOwnershipTransfer'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterAdministrationSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Transfer Ownership
+      tags:
+      - admin
+      - matters
   /api/v1/admin/mcp:
     get:
       description: GET /api/v1/admin/mcp — list configured MCP servers + cached tools.
@@ -7995,6 +10659,27 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Set Mcp Tool Enabled
+      tags:
+      - admin
+  /api/v1/admin/orchestration/profiles:
+    get:
+      description: 'The closed set of run profiles and each one''s operator state.
+
+
+        Read-only. Profiles are switched on and routed through deployment
+
+        configuration; this route reports what that configuration yields.'
+      operationId: list_profiles_api_v1_admin_orchestration_profiles_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileRegistryRead'
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Profiles
       tags:
       - admin
   /api/v1/admin/provider-keys:
@@ -8706,6 +11391,101 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: List users for RBAC administration (Wave B v2 — PRD §5.2)
+      tags:
+      - admin
+    post:
+      description: 'POST /api/v1/admin/users — provision a user.
+
+
+        Admin-only. Generates a CSPRNG initial password, stores only its bcrypt
+
+        hash, and sets ``must_change_password=True`` so the new user is forced to
+
+        rotate it on first login. ``is_admin`` is derived from ``role`` (True iff
+
+        ``role=''admin''``), keeping the two admin signals in sync exactly as
+
+        :func:`update_user_role` and the first-run bootstrap do.
+
+
+        Returns 201 with the plaintext password and ``Cache-Control: no-store``.
+
+        The password is never stored or logged by this handler.
+
+        Returns 409 if the email is already taken — ``users.email`` is CITEXT, so
+
+        the collision is case-insensitive.'
+      operationId: create_user_api_v1_admin_users_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserCreateRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserCreatedResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Create a user with a generated initial password (admin-only)
+      tags:
+      - admin
+  /api/v1/admin/users/{user_id}/reset-password:
+    post:
+      description: 'POST /api/v1/admin/users/{user_id}/reset-password — mint a new
+        password.
+
+
+        Admin-only. Generates a fresh CSPRNG password, sets
+
+        ``must_change_password=True``, and revokes every active refresh session
+
+        for the target user so an attacker holding a stolen refresh token cannot
+
+        outlive the reset. This is the same revocation the self-service
+
+        ``/auth/change-password`` path performs.
+
+
+        Increments the target''s credential version, immediately invalidating
+
+        existing access tokens and MFA challenges. Existing MFA enrollment is
+
+        preserved. The password response uses ``Cache-Control: no-store``.'
+      operationId: reset_user_password_api_v1_admin_users__user_id__reset_password_post
+      parameters:
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          title: User Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPasswordResetResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Reset a user's password to a generated value (admin-only)
       tags:
       - admin
   /api/v1/admin/users/{user_id}/role:
@@ -9440,6 +12220,13 @@ paths:
       tags:
       - autonomous
     post:
+      description: 'Start a fictional-profile run with no chat. Retained for existing
+        clients.
+
+
+        New runs start from a chat (``POST /chats/{chat_id}/runs``). A run started
+
+        here has no message; its page remains its receipt view (ADR 0038 D1).'
       operationId: start_chat_api_v1_autonomous_orchestration_chat_runs_post
       requestBody:
         content:
@@ -9467,6 +12254,13 @@ paths:
       - autonomous
   /api/v1/autonomous/orchestration/chat-runs/{root_id}:
     get:
+      description: 'A run as its owner sees it: the request, the plan, each step and
+        the answer.
+
+
+        The owner, or an admin or auditor reading another owner''s run; that
+
+        read writes one ``auditor.run_viewed`` audit row.'
       operationId: chat_run_api_v1_autonomous_orchestration_chat_runs__root_id__get
       parameters:
       - in: path
@@ -9492,6 +12286,46 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Chat Run
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/chat-runs/{root_id}/close:
+    post:
+      description: 'Close an uncertain run without a retry (ADR 0038 D6).
+
+
+        Owner-only. Nothing is repeated: each unresolved effect is closed without
+        an
+
+        outcome and its reservation is charged. Retained work stays readable, and
+
+        the owner''s single active-run allowance is released. Like halt, this stays
+
+        reachable after opt-out or a switched-off profile: it only narrows authority.'
+      operationId: close_chat_api_v1_autonomous_orchestration_chat_runs__root_id__close_post
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Close Chat
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/chat-runs/{root_id}/halt:
@@ -9521,6 +12355,48 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Halt Chat
+      tags:
+      - autonomous
+  /api/v1/autonomous/orchestration/prompts/{family}/{name}:
+    get:
+      description: 'The text of one engine prompt, for example ``new_harness/orchestrator.v1``.
+
+
+        Any signed-in user may read it, before sending anything: a prompt is open
+
+        work product, like a skill (PRD §1.3). A released file is never edited, so
+
+        a name and its digest always give the same text.'
+      operationId: prompt_api_v1_autonomous_orchestration_prompts__family___name__get
+      parameters:
+      - in: path
+        name: family
+        required: true
+        schema:
+          title: Family
+          type: string
+      - in: path
+        name: name
+        required: true
+        schema:
+          title: Name
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Prompt
       tags:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/approve:
@@ -9560,6 +12436,8 @@ paths:
       - autonomous
   /api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}:
     get:
+      description: 'One of a run''s working files. Owner-only: an admin or auditor
+        is not given it.'
       operationId: workspace_file_api_v1_autonomous_orchestration__root_id__files__session_id___name__get
       parameters:
       - in: path
@@ -9664,8 +12542,67 @@ paths:
       summary: Reject
       tags:
       - autonomous
+  /api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace:
+    get:
+      description: 'How one session of a run was set up, and what its model wrote
+        back.
+
+
+        The owner, or an admin or auditor reading another owner''s run; that read
+
+        writes one ``auditor.run_trace_viewed`` audit row (ADR 0038, ruling 10).
+
+        ``session_id`` is the run''s root for the orchestrator, or one
+
+        task''s dispatch id. Gives the pinned system message, the opening message,
+
+        the tools offered, and each turn''s text and tool calls. See
+
+        :mod:`app.autonomous.orchestration.trace` for what is rebuilt, how it is
+
+        checked against what was sent, and what is not kept.'
+      operationId: session_trace_api_v1_autonomous_orchestration__root_id__sessions__session_id__trace_get
+      parameters:
+      - in: path
+        name: root_id
+        required: true
+        schema:
+          format: uuid
+          title: Root Id
+          type: string
+      - in: path
+        name: session_id
+        required: true
+        schema:
+          format: uuid
+          title: Session Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTraceRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Session Trace
+      tags:
+      - autonomous
   /api/v1/autonomous/orchestration/{root_id}/tree:
     get:
+      description: 'A run''s approved plan and its sessions.
+
+
+        The owner, or an admin or auditor reading another owner''s run; that
+
+        read writes one ``auditor.run_viewed`` audit row.'
       operationId: tree_api_v1_autonomous_orchestration__root_id__tree_get
       parameters:
       - in: path
@@ -11486,6 +14423,188 @@ paths:
       summary: Export receipts as JSONL (one event per line)
       tags:
       - chats
+  /api/v1/chats/{chat_id}/run-documents:
+    get:
+      description: 'The files a run from this chat could read, with whether each can
+        be.
+
+
+        Also the knowledge bases a task could search: those attached to the chat''s
+
+        matter, where the composer''s profile grants the search. None outside a
+
+        matter.
+
+
+        In a matter: the matter''s files, plus named candidates. Selecting a
+
+        candidate attaches it to the matter when the run is accepted. A file that
+
+        another matter holds through a knowledge base is listed with that matter''s
+
+        name, floor and privilege flag; a run that reads it takes the stricter of
+
+        those terms and its own matter''s. Outside a
+
+        matter: named candidates only. One that a matter holds is listed with that
+
+        matter''s name, floor and privilege flag, which a run that reads it takes
+
+        on. The documents the last run in this chat read are always
+
+        listed, and are returned as the suggested selection while they can still be
+
+        read.
+
+
+        A file that cannot be read is listed with its reason and is not selectable;
+
+        it is never silently omitted (ADR 0038 D5).'
+      operationId: run_documents_api_v1_chats__chat_id__run_documents_get
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      - description: The owner's own files that are not attached to the matter, typically
+          this chat's attachments, to list as candidates.
+        in: query
+        name: file_id
+        required: false
+        schema:
+          anyOf:
+          - items:
+              format: uuid
+              type: string
+            maxItems: 16
+            type: array
+          - type: 'null'
+          description: The owner's own files that are not attached to the matter,
+            typically this chat's attachments, to list as candidates.
+          title: File Id
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDocumentsRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Files a run started from this chat could read
+      tags:
+      - chats
+  /api/v1/chats/{chat_id}/run-profiles:
+    get:
+      description: 'Each registry profile''s availability here, and why when it is
+        not.
+
+
+        Reports the allowances a run would be quoted before any planning is paid
+
+        for, the inference tier its pinned route resolves to, and whether message
+
+        text on that route is pseudonymized. Makes no model call. ``active_run`` names
+        the
+
+        owner''s run that is holding the single active-run allowance, in any chat,
+
+        so the composer can say which one is blocking and offer to close it when it
+
+        is uncertain.'
+      operationId: run_profiles_api_v1_chats__chat_id__run_profiles_get
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunProfilesRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Run profiles available to this chat's composer
+      tags:
+      - chats
+  /api/v1/chats/{chat_id}/runs:
+    post:
+      description: 'Accept one planning request and write its two messages.
+
+
+        The request becomes an ordinary user message. The reply is one assistant
+
+        message of kind ``run`` linked to the run''s root session; it carries the
+
+        answer once the root delivers one, and stays empty otherwise. Accepting the
+
+        request authorizes one planning call within the disclosed allowance. Child
+
+        work needs the owner''s approval of the exact plan on the existing route.
+
+
+        What the planning call receives is the profile''s to say and is in its
+
+        ``planning_notice``: the request only, or the request with the chat''s
+
+        recent messages. What it received is kept with the run.
+
+
+        The chat may be outside any matter where the profile allows it.'
+      operationId: start_run_api_v1_chats__chat_id__runs_post
+      parameters:
+      - in: path
+        name: chat_id
+        required: true
+        schema:
+          format: uuid
+          title: Chat Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRunRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRunRead'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Start a governed run as a turn in this chat
+      tags:
+      - chats
   /api/v1/chats/{chat_id}/tool-calls/{pending_call_id}:
     post:
       description: 'POST /{chat_id}/tool-calls/{pending_call_id} — approve or deny
@@ -12008,11 +15127,9 @@ paths:
         \ calls this with the authenticated user's UUID during\nC2 prompt assembly\
         \ so shadows actually shape the system prompt;\ncallers that don't care about\
         \ user-scope (e.g., admin tooling)\nomit ``user_id`` and get the registry\
-        \ view directly.\n\nCache key strategy (D8.1b decision): the gateway-side\
-        \ cache stays\nkeyed on ``(name, user_id)``. Team-membership changes are\n\
-        operator-mediated and rare; the existing 60s skill-cache TTL\nabsorbs propagation\
-        \ lag without a per-membership signature in\nthe key. Re-evaluate if team-membership\
-        \ churn becomes routine."
+        \ view directly.\n\nUser-resolved gateway reads bypass the TTL cache so the\
+        \ current\nreplacement and membership agree with the backend's tool binding.\n\
+        Registry-only callers retain the gateway's 60s cache."
       operationId: get_skill_internal_api_v1_internal_skills__skill_name__get
       parameters:
       - in: path
@@ -13258,6 +16375,50 @@ paths:
       summary: Partial update of a project
       tags:
       - projects
+  /api/v1/projects/{project_id}/access:
+    get:
+      description: 'Resolve the caller''s own access.
+
+
+        ``ProjectResponse`` already carries ``caller_access``, so the UI rarely
+
+        needs this; it exists for clients that hold only a matter id (a
+
+        deep-link, a bridge) and want to decide what to render before fetching
+
+        the matter itself.'
+      operationId: get_caller_access_api_v1_projects__project_id__access_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: string
+                title: Response Get Caller Access Api V1 Projects  Project Id  Access
+                  Get
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: What the caller may do on this matter, and why
+      tags:
+      - projects
+      - matters
   /api/v1/projects/{project_id}/files:
     post:
       description: 'Body: ``{file_id}``. The caller must own both the project and
@@ -13395,6 +16556,198 @@ paths:
       summary: Detach a knowledge base from a matter
       tags:
       - projects
+  /api/v1/projects/{project_id}/members:
+    get:
+      description: 'Anyone who can read the matter can see who else is on it.
+
+
+        Withholding the roster from readers would make the collaboration
+
+        surface unusable — you cannot see who authored the thread you are
+
+        reading — and it protects nothing, since those people''s work product
+
+        is already visible to the same caller.'
+      operationId: list_members_api_v1_projects__project_id__members_get
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MatterMemberResponse'
+                title: Response List Members Api V1 Projects  Project Id  Members
+                  Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people on a matter
+      tags:
+      - projects
+      - matters
+    post:
+      description: 'Add a roster row. ``role=''blocked''`` erects an ethical screen.
+
+
+        A screen is stored as an ordinary membership row so the roster answers
+
+        both halves of the question a conflicts check asks: who may see this
+
+        matter, and who explicitly may not.'
+      operationId: add_member_api_v1_projects__project_id__members_post
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberAdd'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Add someone to a matter (or screen them off it)
+      tags:
+      - projects
+      - matters
+  /api/v1/projects/{project_id}/members/{user_id}:
+    delete:
+      description: 'Drop a roster row.
+
+
+        Removing a ``blocked`` row *lifts a screen* — it is the one deletion
+
+        here that widens access, so the audit row records the role the person
+
+        held at removal rather than just the fact of it.
+
+
+        The owner''s row cannot be removed: their access does not depend on it,
+
+        so deleting it would only make the roster lie.'
+      operationId: remove_member_api_v1_projects__project_id__members__user_id__delete
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      - in: query
+        name: reason
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 1000
+            type: string
+          - type: 'null'
+          title: Reason
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Remove someone from a matter
+      tags:
+      - projects
+      - matters
+    patch:
+      description: 'Move a roster row between roles, including to and from ``blocked``.
+
+
+        The audit row carries before/after so "when was this person screened
+
+        off, and by whom" is answerable from the log alone — the same
+
+        before/after convention ``team.member_role_updated`` uses.'
+      operationId: update_member_role_api_v1_projects__project_id__members__user_id__patch
+      parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema:
+          format: uuid
+          title: Project Id
+          type: string
+      - in: path
+        name: user_id
+        required: true
+        schema:
+          format: uuid
+          title: User Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMemberRoleUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterMemberResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Change someone's role on a matter
+      tags:
+      - projects
+      - matters
   /api/v1/projects/{project_id}/skills:
     post:
       description: 'Body: ``{skill_name}``. The skill must exist in the in-memory
@@ -13884,13 +17237,12 @@ paths:
     get:
       description: "Return summaries for skills visible to the caller.\n\nMerging\
         \ semantics (per ADR 0012):\n\n* ``scope=all`` (default) — caller's user-scope\
-        \ rows first, then\n  built-ins. Dedup on slug: a user shadow hides the built-in\
-        \ of\n  the same slug from this listing.\n* ``scope=user`` — caller's user-scope\
-        \ rows only.\n* ``scope=builtin`` — filesystem built-ins only (no shadow merge).\n\
-        * ``scope=team`` — empty list until D8.1 (team scope deferred).\n\nThe ``tag``\
-        \ filter applies to both layers; a built-in matches if\nits ``lq_ai.tags``\
-        \ contains the tag, a user shadow matches if its\n``tags`` column contains\
-        \ it."
+        \ rows, newest eligible\n  team rows, then built-ins. Dedup matches single-skill\
+        \ resolution.\n* ``scope=user`` — caller's user-scope rows only.\n* ``scope=builtin``\
+        \ — filesystem built-ins only (no shadow merge).\n* ``scope=team`` — skills\
+        \ from teams the caller belongs to.\n\nThe ``tag`` filter applies after personal/team\
+        \ precedence; a built-in matches if\nits ``lq_ai.tags`` contains the tag,\
+        \ a user shadow matches if its\n``tags`` column contains it."
       operationId: list_skills_api_v1_skills_get
       parameters:
       - in: query
@@ -14000,7 +17352,8 @@ paths:
         '200':
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/Skill'
           description: Successful Response
         '422':
           content:
@@ -14019,19 +17372,16 @@ paths:
         files.
 
 
-        Same shape as ``GET /skills/{skill_name}`` (the user-facing read
+        Adds first bounded ranges of installed ``references/`` for human inspection.
 
-        endpoint). PRD §3.4 names this endpoint explicitly as the contract
+        Supply reference_path and offset_bytes for another explicit range; use the
 
-        the "view this skill" affordance + the skill inspector side panel
+        prior sha256 as expected_sha256 to refuse changed text. Each range is at most
 
-        target; exposing it under a distinct URL lets the frontend use URL
+        65536 UTF-8 bytes, including when runtime model reads are disabled. Applies
+        the D8.1b resolution
 
-        semantics ("/contents") to signal inspection intent, even though
-
-        the response body is the same as the base GET. Applies the same
-
-        D8.1b resolution stack (user > team > built-in).'
+        stack (user > team > built-in); DB shadows have no filesystem resources.'
       operationId: get_skill_contents_api_v1_skills__skill_name__contents_get
       parameters:
       - in: path
@@ -14040,11 +17390,49 @@ paths:
         schema:
           title: Skill Name
           type: string
+      - in: query
+        name: reference_path
+        required: false
+        schema:
+          anyOf:
+          - maxLength: 255
+            pattern: ^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$
+            type: string
+          - type: 'null'
+          title: Reference Path
+      - in: query
+        name: offset_bytes
+        required: false
+        schema:
+          default: 0
+          maximum: 9223372036854775807
+          minimum: 0
+          title: Offset Bytes
+          type: integer
+      - in: query
+        name: max_bytes
+        required: false
+        schema:
+          default: 65536
+          maximum: 65536
+          minimum: 1
+          title: Max Bytes
+          type: integer
+      - in: query
+        name: expected_sha256
+        required: false
+        schema:
+          anyOf:
+          - pattern: ^[0-9a-f]{64}$
+            type: string
+          - type: 'null'
+          title: Expected Sha256
       responses:
         '200':
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/SkillInspection'
           description: Successful Response
         '422':
           content:
@@ -14167,6 +17555,77 @@ paths:
       summary: Declared inputs (form schema) for the skill-input-form pattern
       tags:
       - skills
+  /api/v1/tabular/bulk-ops:
+    get:
+      operationId: list_tabular_bulk_ops_api_v1_tabular_bulk_ops_get
+      parameters:
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 100
+          minimum: 1
+          title: Limit
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          default: 0
+          minimum: 0
+          title: Offset
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TabularBulkOpResponse'
+                title: Response List Tabular Bulk Ops Api V1 Tabular Bulk Ops Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the caller's retained bulk-operation outputs.
+      tags:
+      - tabular
+  /api/v1/tabular/bulk-ops/{bulk_op_id}:
+    get:
+      operationId: get_tabular_bulk_op_api_v1_tabular_bulk_ops__bulk_op_id__get
+      parameters:
+      - in: path
+        name: bulk_op_id
+        required: true
+        schema:
+          format: uuid
+          title: Bulk Op Id
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabularBulkOpResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Read an owned report or memo independently of its source execution.
+      tags:
+      - tabular
   /api/v1/tabular/execute:
     post:
       description: 'Kick off a tabular execution against the supplied document corpus.
@@ -14299,7 +17758,32 @@ paths:
 
         Authorization: caller must be the row''s ``user_id`` OR an admin.
 
-        Cross-user / missing / soft-deleted rows collapse into 404.'
+        Cross-user / missing / soft-deleted rows collapse into 404.
+
+
+        Citations (DE-309): when the execution was produced by the minting
+
+        aggregate node (``results.schema_version`` is a minting vintage,
+
+        currently ``m3-c2-v2``), every cell''s ``citations`` list is rebuilt
+
+        from the execution''s minted ``tabular_cell_citations`` rows — real
+
+        ``citation_id``s plus chunk-local char offsets; cells the locator
+
+        could not ground get an EMPTY list (fail-closed: they render
+
+        unverified), including the case where the execution minted zero
+
+        rows in total. Executions predating migration 0079 (``m3-c2-v1``)
+
+        keep the legacy uuid5-bridge citations synthesized by the schema
+
+        validator. The discriminator is the persisted schema-version stamp,
+
+        not minted-row presence — row count cannot distinguish a legacy-v1
+
+        execution from a minting-vintage one where nothing located.'
       operationId: get_tabular_execution_api_v1_tabular_executions__execution_id__get
       parameters:
       - in: path
@@ -14325,6 +17809,111 @@ paths:
       security:
       - OAuth2PasswordBearer: []
       summary: Get a tabular execution by id.
+      tags:
+      - tabular
+  /api/v1/tabular/executions/{execution_id}/bulk-ops:
+    post:
+      description: 'Create a ``tabular_bulk_ops`` row at ``pending`` and enqueue the
+
+        ARQ job on the shared playbook queue (Decision C-3). Returns 202;
+
+        the detail view polls ``GET /tabular/executions/{id}`` — the
+
+        ``bulk_ops`` array embedded there is the read-side (ADR 0040 D2).
+
+
+        ``confirmed_cost_usd`` is the echo of the preview response —
+
+        persisted for audit; the $1.00 confirmation gate stays UI-side,
+
+        exactly like ``POST /tabular/execute`` (Decision C-5).
+
+
+        Per ADR 0040 D4, batch "completed" does NOT mean every item
+
+        succeeded — failed items are persisted per-row and rendered as
+
+        failures in the report.'
+      operationId: create_tabular_bulk_op_api_v1_tabular_executions__execution_id__bulk_ops_post
+      parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema:
+          format: uuid
+          title: Execution Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TabularBulkOpRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabularBulkOpResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Start a bulk operation over a completed tabular execution.
+      tags:
+      - tabular
+  /api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost:
+    post:
+      description: 'Synchronous cost preview — no bulk-op row is created.
+
+
+        Mirrors ``POST /tabular/preview-cost`` (Decision C-5): the UI calls
+
+        this before arming the confirmation gate. Calls count is one per
+
+        grid row for ``redline_rows``, one total for ``summarize_column``;
+
+        per-call cost is the rolling average over recent
+
+        ``purpose=''tabular_bulk_op''`` routing-log rows (conservative
+
+        cold-start default before calibration; ADR 0040 D3).'
+      operationId: preview_tabular_bulk_op_cost_api_v1_tabular_executions__execution_id__bulk_ops_preview_cost_post
+      parameters:
+      - in: path
+        name: execution_id
+        required: true
+        schema:
+          format: uuid
+          title: Execution Id
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TabularBulkOpPreviewRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TabularBulkOpPreviewResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Preview the cost of a proposed bulk operation.
       tags:
       - tabular
   /api/v1/tabular/executions/{execution_id}/cancel:
@@ -14847,6 +18436,74 @@ paths:
       summary: Audit-log view of edits for this user-skill (Wave D.2)
       tags:
       - user-skills
+  /api/v1/users/directory:
+    get:
+      description: 'GET /api/v1/users/directory — id, email, and display name only.
+
+
+        Any signed-in user may call this. Sharing a matter is impossible without
+
+        it: the roster endpoints take a ``user_id``, and a matter lead who is not
+
+        an operator-admin cannot reach ``GET /admin/users`` to find one. Asking a
+
+        lawyer to paste a colleague''s UUID is not a design.
+
+
+        Deliberately minimal — no role, no admin flag, no MFA or password state,
+
+        no last-login. Those stay behind ``GET /admin/users``. A deployment is a
+
+        single organisation (PRD §2.3), so who else works here is not a secret;
+
+        *what they can do* still is.
+
+
+        Soft-deleted users are excluded so a picker cannot re-add someone who has
+
+        exercised erasure.'
+      operationId: list_directory_api_v1_users_directory_get
+      parameters:
+      - description: Case-insensitive substring match on email or display name.
+        in: query
+        name: q
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Case-insensitive substring match on email or display name.
+          title: Q
+      - in: query
+        name: limit
+        required: false
+        schema:
+          default: 50
+          maximum: 200
+          minimum: 1
+          title: Limit
+          type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DirectoryEntry'
+                title: Response List Directory Api V1 Users Directory Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List the people in this deployment (for people-pickers)
+      tags:
+      - users
   /api/v1/users/me:
     get:
       description: 'GET /api/v1/users/me — return the calling user''s public profile.

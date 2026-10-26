@@ -20,8 +20,13 @@
 		"i18n:parse": "i18next --config i18next-parser.config.ts && prettier --write \"src/lib/i18n/**/*.{js,json}\"",
 		"cy:open": "svelte-kit sync && cypress open",
 		"cy:run": "svelte-kit sync && cypress run",
+		"cy:inventory": "node --experimental-strip-types scripts/check-cypress-inventory.ts",
+		"cy:inventory:test": "node --experimental-strip-types --test scripts/tests/cypress-inventory.test.ts",
 		"test:frontend": "vitest --passWithNoTests",
-		"pyodide:fetch": "node scripts/prepare-pyodide.js"
+		"pyodide:fetch": "node scripts/prepare-pyodide.js",
+		"cy:a11y": "node --experimental-strip-types scripts/run-a11y.ts gate",
+		"cy:a11y:baseline": "node --experimental-strip-types scripts/run-a11y.ts capture",
+		"cy:a11y:proof": "node --experimental-strip-types scripts/run-a11y.ts proof"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "3.2.2",
@@ -33,7 +38,9 @@
 		"@tailwindcss/typography": "^0.5.13",
 		"@typescript-eslint/eslint-plugin": "^8.31.1",
 		"@typescript-eslint/parser": "^8.31.1",
+		"axe-core": "4.14.0",
 		"cypress": "^13.15.0",
+		"cypress-axe": "1.7.0",
 		"eslint": "^8.56.0",
 		"eslint-config-prettier": "^9.1.0",
 		"eslint-plugin-cypress": "^3.4.0",
@@ -67,6 +74,7 @@
 		"@pyscript/core": "^0.4.32",
 		"@sveltejs/adapter-node": "^2.0.0",
 		"@sveltejs/svelte-virtual-list": "^3.0.1",
+		"@tabler/icons-svelte": "^3.44.0",
 		"@tiptap/core": "^3.0.7",
 		"@tiptap/extension-bubble-menu": "^3.0.7",
 		"@tiptap/extension-code": "^3.0.7",

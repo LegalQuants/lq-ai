@@ -39,7 +39,16 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -54,6 +63,12 @@ class ChatPendingToolCall(Base):
     """
 
     __tablename__ = "chat_pending_tool_call"
+    __table_args__ = (
+        CheckConstraint(
+            "max_egress_tier IS NULL OR (max_egress_tier BETWEEN 1 AND 5)",
+            name="chk_chat_pending_tool_call_max_egress_tier_range",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -110,6 +125,15 @@ class ChatPendingToolCall(Base):
 
     tier: Mapped[int] = mapped_column(Integer, nullable=False)
     """Provider egress tier (0-5) at call time."""
+
+    max_egress_tier: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    """Egress ceiling resolved at proposal time (issue #593).
+
+    On approval the call executes under ``min(original, current)`` over the
+    set values, so a ceiling tightened between proposal and approval still
+    binds. Rows created before the migration carry NULL and are resolved
+    against the current ceiling alone; they are TTL-bounded by expires_at.
+    """
 
     tool_call_args: Mapped[dict] = mapped_column(JSONB, nullable=False)
     """Full args for the pending call — payload class; NEVER logged.

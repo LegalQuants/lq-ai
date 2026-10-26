@@ -151,11 +151,9 @@ async def get_skill_internal(
     callers that don't care about user-scope (e.g., admin tooling)
     omit ``user_id`` and get the registry view directly.
 
-    Cache key strategy (D8.1b decision): the gateway-side cache stays
-    keyed on ``(name, user_id)``. Team-membership changes are
-    operator-mediated and rare; the existing 60s skill-cache TTL
-    absorbs propagation lag without a per-membership signature in
-    the key. Re-evaluate if team-membership churn becomes routine.
+    User-resolved gateway reads bypass the TTL cache so the current
+    replacement and membership agree with the backend's tool binding.
+    Registry-only callers retain the gateway's 60s cache.
     """
 
     _verify_gateway_key(x_lq_ai_gateway_key)
@@ -190,6 +188,7 @@ async def get_skill_internal(
         )
 
     raw = skill.model_dump()
+    raw["reference_read_enabled"] = get_settings().skill_reference_read_enabled
     payload = {
         k: v
         for k, v in raw.items()

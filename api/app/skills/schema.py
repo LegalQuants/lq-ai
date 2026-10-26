@@ -27,7 +27,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.skills.capabilities import SkillCapabilities
+from app.skills.capabilities import ReferenceReadResult, SkillCapabilities
 
 # All built-in M1 skills are filesystem-canonical; user/team-scope forks
 # land later and gain ``user`` / ``team`` values for ``scope``. C1 only
@@ -69,15 +69,21 @@ class ColumnSpec(BaseModel):
     """When ``True``, this column's cells route through Stage 4 of the
     Citation Engine cascade (ensemble verification). Overrides the
     skill-level field when both are set. ``None`` means 'inherit from
-    skill / project / deployment default'."""
+    skill / project / deployment default'. Stage 4 only runs when the
+    gateway's ``judge_models`` list (in the
+    ``citation_engine.ensemble_verification`` block) is configured; it
+    defaults to empty, which disables Stage 4
+    regardless of this flag."""
 
     minimum_inference_tier: int | None = Field(
         default=None,
         ge=1,
         le=5,
         description="Per-column tier floor (1-5). Overrides the skill-level "
-        "tier floor when both are set. High-stakes columns can demand Tier 4+ "
-        "while routine columns route Tier 1.",
+        "tier floor when both are set. Lower numbers are stricter (PRD "
+        "§1.5.2): a floor of N allows Tier N and any lower-numbered tier and "
+        "refuses higher-numbered ones. High-stakes columns can demand Tier 1 "
+        "or 2 while routine columns leave the floor unset.",
     )
 
 
@@ -145,7 +151,10 @@ class LQAIFrontmatter(BaseModel):
         "verification) for citations produced from chats using this skill. "
         "Per M2-D1, OR'd against the chat's project ensemble flag and the "
         "gateway's deployment default. None means 'no opinion' (treated as "
-        "false at the OR site).",
+        "false at the OR site). Stage 4 only runs when the gateway's "
+        "judge_models list (in the citation_engine.ensemble_verification "
+        "block) is configured; it defaults to empty, which disables Stage 4 even when "
+        "this flag is true.",
     )
 
     use_organization_profile: bool | None = None
@@ -240,6 +249,15 @@ class SkillFile(BaseModel):
     content: str
 
 
+class SkillFileRef(BaseModel):
+    """A file the skill ships that is read on request, not sent with the prompt."""
+
+    path: str
+    """Path relative to the skill folder, e.g. ``references/checklist.md``."""
+
+    size_bytes: int
+
+
 class Skill(SkillSummary):
     """The shape ``GET /api/v1/skills/{name}`` returns.
 
@@ -269,6 +287,17 @@ class Skill(SkillSummary):
     reference_files: list[SkillFile] = Field(default_factory=list)
     example_files: list[SkillFile] = Field(default_factory=list)
     script_files: list[SkillFile] = Field(default_factory=list)
+    on_demand_files: list[SkillFileRef] = Field(default_factory=list)
+    """The skill's ``references/`` files. Listed, never inlined: the model
+    reads one with ``skill_reference_read`` when the task calls for it."""
+    reference_read_enabled: bool = True
+    """Effective host runtime-read policy; independent of human inspection."""
+
+
+class SkillInspection(Skill):
+    """Human-only inspection response; never used by the gateway resolver."""
+
+    on_demand_contents: list[ReferenceReadResult] = Field(default_factory=list)
 
 
 # --- Skill inputs (PRD §3.4 skill-input-form pattern) -----------------------
@@ -456,6 +485,7 @@ __all__ = [
     "LQAIFrontmatter",
     "Skill",
     "SkillFile",
+    "SkillFileRef",
     "SkillFrontmatter",
     "SkillInputDef",
     "SkillInputs",

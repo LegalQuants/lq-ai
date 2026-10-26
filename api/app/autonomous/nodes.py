@@ -41,7 +41,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.audit import autonomous_audit
+from app.autonomous.audit import AuditedRetrievalOwnershipDenied, autonomous_audit
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import guarded_tool_call
 from app.autonomous.phases import run_phase_transition
@@ -210,28 +210,47 @@ async def _run_analysis_loop(
         available_sources = []
 
     from app.config import get_settings
-    from app.skills.binding import bind_record
+    from app.errors import ToolNotGranted
+    from app.skills.binding import resolve_binding
     from app.skills.tools import SKILL_TOOL_MODELS, SkillTools, current_registry
 
     allowed = PLANNER_ALLOWLIST
     skill_tool_schemas = None
+    binding = None
     settings = get_settings()
-    if settings.skill_workspaces_enabled or settings.skill_script_runner_url:
+    optional_enabled = bool(settings.skill_workspaces_enabled or settings.skill_script_runner_url)
+    try:
         registry = current_registry()
-        record = registry.current().get(str(params.get("skill_ref") or ""))
-        if record is not None:
-            binding = bind_record(record)
-            optional = SkillTools(registry, settings).available(binding)
-            allowed = frozenset((*allowed, *optional))
-            if optional:
-                skill_tool_schemas = {
-                    "instructions": record.body,
-                    "helpers": [s.model_dump() for s in binding.capabilities.scripts],
-                    "tools": {
-                        intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
-                        for intent in optional
-                    },
-                }
+    except ToolNotGranted:
+        # Only the operator-enabled tools require a registry to be present.
+        if optional_enabled:
+            raise
+        registry = None
+    record = (
+        registry.current().get(str(params.get("skill_ref") or "")) if registry is not None else None
+    )
+    if (
+        registry is not None
+        and record is not None
+        and (optional_enabled or (settings.skill_reference_read_enabled and record.on_demand_paths))
+    ):
+        binding = await resolve_binding(db, session.user_id, record.name, registry)
+        optional = SkillTools(registry, settings).available(binding) if binding else ()
+        allowed = frozenset((*allowed, *optional))
+        if optional:
+            assert binding is not None
+            skill_tool_schemas = {
+                "instructions": binding.instructions,
+                "helpers": [s.model_dump() for s in binding.capabilities.scripts],
+                "reference_files": [
+                    {"path": path, "size_bytes": snap.size_bytes}
+                    for path, snap in binding.reference_snapshots
+                ],
+                "tools": {
+                    intent.value: SKILL_TOOL_MODELS[intent].model_json_schema()
+                    for intent in optional
+                },
+            }
 
     while steps < max_steps:
         plan_res = await guarded_tool_call(
@@ -265,17 +284,53 @@ async def _run_analysis_loop(
             break
         try:
             validate_action_args(decision.next_intent, decision.args)
-            act = await guarded_tool_call(session, decision.next_intent, decision.args, db, gateway)
-            observations.append(
-                summarize_observation(decision.next_intent, decision.rationale, act)
+            act = await guarded_tool_call(
+                session,
+                decision.next_intent,
+                decision.args,
+                db,
+                gateway,
+                expected_skill_binding=binding,
             )
-            evidence.extend(collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1))
         except AutonomousBrake:
             raise  # brakes (SessionHalted/CostCapReached/ToolNotGranted) propagate
-        except (
-            Exception
-        ) as exc:  # invariant #5 / C1: bad arg → non-fatal failed observation, no DB poison
+        except AuditedRetrievalOwnershipDenied:
+            # The ownership gate already flushed the closing refusal. Keep
+            # the established nonfatal observation without double-counting it.
+            observations.append(f"{decision.next_intent.value} → failed ({ValueError.__name__})")
+        except Exception as exc:  # validation/dispatch failure is a non-fatal observation
             observations.append(f"{decision.next_intent.value} → failed ({type(exc).__name__})")
+            # Close the attempt in the audit trail. The chokepoint writes a
+            # ``started`` row before it dispatches and its closing row only
+            # after the handler returns, so a handler that raises left
+            # ``started`` with nothing after it, and an argument rejected by
+            # validate_action_args left no row at all. Either way the receipt
+            # could not tell a failed call from one still in flight. Counts
+            # and types only (P3): the exception class name, never its text.
+            await autonomous_audit(
+                db,
+                session,
+                "tool_call",
+                tool=str(decision.next_intent),
+                outcome="error",
+                error_type=type(exc).__name__,
+            )
+        else:
+            try:
+                observations.append(
+                    summarize_observation(decision.next_intent, decision.rationale, act)
+                )
+                evidence.extend(
+                    collect_evidence(decision.next_intent, act, start_n=len(evidence) + 1)
+                )
+            except AutonomousBrake:
+                raise
+            except Exception as exc:
+                # Dispatch already succeeded and has its closing audit row.
+                # Keep postprocessing failures non-fatal for the planner.
+                observations.append(
+                    f"{decision.next_intent.value} → postprocessing failed ({type(exc).__name__})"
+                )
         trace.append(
             {
                 "step": str(steps),

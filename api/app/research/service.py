@@ -73,26 +73,40 @@ def reset_provider_cache() -> None:
     _resolved_provider = None
 
 
-async def verify_citations(text: str, *, request_id: str | None = None) -> dict[str, Any]:
+async def verify_citations(
+    text: str, *, request_id: str | None = None, max_allowed_tier: int | None = None
+) -> dict[str, Any]:
     provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        provider, "verify_citations", {"text": text}, request_id=request_id
+        provider,
+        "verify_citations",
+        {"text": text},
+        request_id=request_id,
+        max_allowed_tier=max_allowed_tier,
     )
     return result["payload"]
 
 
-async def search_case_law(args: dict[str, Any], *, request_id: str | None = None) -> dict[str, Any]:
+async def search_case_law(
+    args: dict[str, Any], *, request_id: str | None = None, max_allowed_tier: int | None = None
+) -> dict[str, Any]:
     provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        provider, "search_case_law", args, request_id=request_id
+        provider, "search_case_law", args, request_id=request_id, max_allowed_tier=max_allowed_tier
     )
     return result["payload"]
 
 
-async def get_citing_opinions(opinion_id: int, *, request_id: str | None = None) -> dict[str, Any]:
+async def get_citing_opinions(
+    opinion_id: int, *, request_id: str | None = None, max_allowed_tier: int | None = None
+) -> dict[str, Any]:
     provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        provider, "get_citing_opinions", {"opinion_id": opinion_id}, request_id=request_id
+        provider,
+        "get_citing_opinions",
+        {"opinion_id": opinion_id},
+        request_id=request_id,
+        max_allowed_tier=max_allowed_tier,
     )
     return result["payload"]
 
@@ -124,7 +138,11 @@ def _cluster_view(
 
 
 async def get_cluster(
-    db: AsyncSession, *, cluster_id: int, request_id: str | None = None
+    db: AsyncSession,
+    *,
+    cluster_id: int,
+    request_id: str | None = None,
+    max_allowed_tier: int | None = None,
 ) -> dict[str, Any]:
     cached = (
         await db.execute(
@@ -147,7 +165,11 @@ async def get_cluster(
 
     provider = await _resolve_provider(request_id=request_id)
     result = await get_gateway_client().call_tool(
-        provider, "get_cases", {"cluster_id": cluster_id}, request_id=request_id
+        provider,
+        "get_cases",
+        {"cluster_id": cluster_id},
+        request_id=request_id,
+        max_allowed_tier=max_allowed_tier,
     )
     payload = result["payload"]
     cluster = payload["cluster"]

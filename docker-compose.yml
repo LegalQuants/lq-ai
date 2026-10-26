@@ -175,6 +175,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_RESOURCE: ${AZURE_OPENAI_RESOURCE:-}
       # Tool-provider keys (legal-research + MCP milestone). Forwarded so an
@@ -257,9 +258,20 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       # Inference Gateway
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Shared with arq-worker —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
+      # Shared with arq-worker so chat and autonomous calls apply one default.
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       # JWT (auth — per ADR 0002 the backend owns auth)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Ordinary reference reads have an independent host switch, shared with workers.
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
       JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
       # Observability
@@ -283,6 +295,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
       LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
       LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}
@@ -355,6 +377,7 @@ services:
       # work with even on KBs configured for hybrid retrieval
       # (`hybrid_alpha < 1.0`).
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Persist Docling's Hugging Face model cache and EasyOCR's detection
@@ -421,8 +444,22 @@ services:
       # extractor which calls the inference gateway. Pre-wired now so
       # Phase 5 doesn't need a second docker-compose edit.
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Same value as the api service —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Observability. The worker executes governed runs, so it exports spans
+      # like the api does; a run's trace then connects the request, this worker,
+      # the gateway and the provider (ADR 0038 D2). Empty disables export.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME:-lq-ai-arq-worker}
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       # Skills loader — the worker's on_startup installs the skill
       # registry via the shared bootstrap (app/skills/bootstrap.py) so
       # skill_ref autonomous sessions resolve on this process. Mounted
@@ -438,6 +475,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       LQ_AI_SKILL_WORKSPACES_ENABLED: ${LQ_AI_SKILL_WORKSPACES_ENABLED:-false}
       LQ_AI_SKILL_SCRIPT_RUNNER_URL: ${LQ_AI_SKILL_SCRIPT_RUNNER_URL:-}
       LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN: ${LQ_AI_SKILL_SCRIPT_RUNNER_TOKEN:-}

@@ -55,6 +55,9 @@ class ToolIntent(StrEnum):
     skill_workspace_read = "skill_workspace_read"
     skill_workspace_write = "skill_workspace_write"
     run_bundled_script = "run_bundled_script"
+    # Read one of the installed skill's own ``references/`` files. Read-only,
+    # no egress, and the content is covered by the skill's pinned digest.
+    skill_reference_read = "skill_reference_read"
     # WS-D PR1: the planner's next-step decision call (a gateway inference).
     # Granted only in analysis; the agentic loop dispatches it each iteration.
     plan = "plan"
@@ -95,6 +98,7 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.skill_workspace_read,
             ToolIntent.skill_workspace_write,
             ToolIntent.run_bundled_script,
+            ToolIntent.skill_reference_read,
         }
     ),
     Phase.drafting: frozenset(
@@ -115,6 +119,7 @@ PHASE_GRANTS: dict[Phase, frozenset[ToolIntent]] = {
             ToolIntent.skill_workspace_read,
             ToolIntent.skill_workspace_write,
             ToolIntent.run_bundled_script,
+            ToolIntent.skill_reference_read,
         }
     ),
     Phase.ethics_review: frozenset({ToolIntent.emit_finding}),

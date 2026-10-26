@@ -1,0 +1,42 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "Explain payment, renewal and termination questions independently.",
+    "cost_estimate": null,
+    "created_at": "2026-10-09T23:51:03.933208Z",
+    "error_code": null,
+    "id": "78657ff5-9f28-4a96-8a8b-ce9e8c508021",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [],
+    "autonomous_session_id": "7621e084-35d2-4aac-a0b1-c1267aa71083",
+    "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
+    "citations": [],
+    "completion_tokens": 180,
+    "content": "## Payment and breach notice\n\nFees are due \"within thirty (30) days of the invoice date\" (Source: [1]). Breach notice is due \"within seventy-two (72) hours of becoming aware of a Personal Data Breach\" (Source: [2]). The liability cap is \"twelve months of fees\" (Source: [1]).",
+    "cost_estimate": 0.4128,
+    "created_at": "2026-10-09T23:51:03.933209Z",
+    "error_code": null,
+    "id": "424147c6-4e55-4b4d-a036-e78c188cdcda",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": 120,
+    "requested_model": "selected/native",
+    "role": "assistant",
+    "routed_inference_tier": 1,
+    "routed_model": "native",
+    "routed_provider": "selected"
+  }
+]

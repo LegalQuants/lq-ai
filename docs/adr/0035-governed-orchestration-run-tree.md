@@ -4,6 +4,16 @@
 **Date:** 2026-09-12 · **Updated:** 2026-09-20
 **Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
+**Proposed follow-on:** [ADR 0038](0038-governed-runs-in-chat.md) proposes
+an experimental orchestrator model in the main chat, tool calls for approved children,
+and runs on the owner's documents and knowledge bases.
+
+**Proposed amendment (2026-10-09, widened 2026-10-12):** [ADR 0038 D1](0038-governed-runs-in-chat.md#d1--a-run-is-a-turn-in-the-chat-thread-started-by-choosing-new-harness)
+would change D1 and D2 so that a root may answer without a batch and may belong to no
+project, and D3 so that a file a keyword search finds counts as selected once the owner
+approves a plan that grants the search. It gives the words. It is not in force until ADR
+0038 is ratified; until then the decision below stands as written.
+
 ## Context
 
 LQ.AI needs parallel agent work that can pause for approval, survive interruption
@@ -165,6 +175,20 @@ Provide plan inspection, approval/rejection, concurrent progress, budgets, halt
 and retained-result inspection. Only approved profiles can create children.
 Capabilities start disabled and require operator enablement. Disabling execution
 preserves read/halt access; rollback requires draining or halting retained work.
+
+**Adopted clarification for #658 (maintainer-directed 2026-10-06;
+adopted by the maintainer 2026-10-17).** Ordinary bundled-reference reads belong to activation
+of an enabled, trusted skill and are enabled by default under host policy. The
+exact installed/pinned resource index is their declaration; no proprietary
+`lq_ai.capabilities`, tier declaration or experimental `allowed-tools` field is
+required solely for these reads. Operators can disable model reference reading
+independently while retaining authorized human inspection. Current policy,
+selected skill scope and pin checks remain load-bearing on every invocation.
+Resource text cannot expand grants. Reads use governed invocation and
+metadata-only audit. Script execution, persistence, external access and
+delegation retain their separate enablement and approval controls. This narrow
+amendment records the adopted maintainer direction; it does not change this
+ADR's original committee acceptance record.
 
 ## Alternatives considered
 

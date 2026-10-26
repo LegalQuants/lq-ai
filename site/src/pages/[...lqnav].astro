@@ -1,0 +1,72 @@
+---
+/**
+ * The pathways layout's own navigation pages: the landing (`/`), one page per
+ * pathway (`/pathways/<id>/`) and the sitemap (`/all/`).
+ *
+ * They exist only when `SITE_LAYOUT=pathways`; in the classic layout
+ * `getStaticPaths` returns nothing, so this file builds no page and `/` stays
+ * the entry hub from docs/site/index.mdx.
+ *
+ * Every link is built from `src/pathways.mjs` and every label is the linked
+ * page's own title, read from the content collection — nothing here restates a
+ * page name. They are left out of search (`pagefind: false`): they are lists
+ * of the pages search already finds.
+ */
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { getCollection } from 'astro:content';
+
+import Landing from '../components/pathways/Landing.astro';
+import CardsLanding from '../components/pathways/CardsLanding.astro';
+import PathwayGroups from '../components/pathways/PathwayGroups.astro';
+import AllDocs from '../components/pathways/AllDocs.astro';
+import { SITE_EXPERIENCE, SITE_LAYOUT } from '../../scripts/lib/paths.mjs';
+import { NAV_ROUTES, PATHWAYS, expandPathways } from '../pathways.mjs';
+
+export function getStaticPaths() {
+  if (SITE_LAYOUT !== 'pathways') return [];
+  return [
+    { params: { lqnav: undefined }, props: { view: 'landing' } },
+    { params: { lqnav: NAV_ROUTES.all }, props: { view: 'all' } },
+    ...PATHWAYS.map((p) => ({
+      params: { lqnav: NAV_ROUTES.pathway(p.id) },
+      props: { view: 'pathway', pathwayId: p.id },
+    })),
+  ];
+}
+
+const { view, pathwayId } = Astro.props;
+
+const entries = await getCollection('docs');
+const titleByRoute = new Map(entries.map((entry) => [entry.id, entry.data.title]));
+const pathways = expandPathways([...titleByRoute.keys()]).map((p) => ({
+  ...p,
+  groups: p.groups.map((g) => ({
+    title: g.title,
+    pages: g.pages
+      .filter((route) => titleByRoute.has(route))
+      .map((route) => ({ route, title: titleByRoute.get(route) })),
+  })),
+}));
+
+const pathway = pathways.find((p) => p.id === pathwayId);
+
+const frontmatter =
+  view === 'landing'
+    ? {
+        title: SITE_EXPERIENCE === 'cards' ? 'Getting started' : 'Explore LQ.AI',
+        description:
+          'LQ.AI documentation: what LQ.AI is, how to install it, security and privacy, and how to contribute.',
+      }
+    : view === 'all'
+      ? { title: 'All documentation', description: 'Every page, organised into four pathways.' }
+      : { title: pathway.title, description: `${pathway.title}: every page in this pathway.` };
+---
+
+<StarlightPage
+  frontmatter={{ ...frontmatter, template: 'splash', pagefind: false, editUrl: false }}
+  headings={[]}
+>
+  {view === 'landing' && (SITE_EXPERIENCE === 'cards' ? <CardsLanding pathways={pathways} /> : <Landing pathways={pathways} />)}
+  {view === 'pathway' && <PathwayGroups pathway={pathway} />}
+  {view === 'all' && <AllDocs pathways={pathways} />}
+</StarlightPage>

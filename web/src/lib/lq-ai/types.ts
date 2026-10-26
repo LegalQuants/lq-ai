@@ -289,12 +289,17 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
  * `MessageBubble.svelte` keys off `kind === 'refusal'`. Optional on the
  * canonical Message type because pre-T4 rows + the streaming draft path
  * don't populate it; consumers default to the role-driven path when missing.
+ *
+ * `run` (ADR 0038 D1) is the assistant reply to a governed run: it is bound to
+ * the run's root autonomous session, has no content until the run delivers an
+ * answer, and is presented by the run components rather than as a plain bubble.
  */
-export type MessageKind = 'user' | 'ai' | 'refusal' | 'system';
+export type MessageKind = 'user' | 'ai' | 'refusal' | 'system' | 'run';
 
 export interface Message {
 	id: string;
 	chat_id: string;
+	directed_by_user_id?: string | null;
 	role: MessageRole;
 	content: string;
 	/**
@@ -304,6 +309,11 @@ export interface Message {
 	 * missing `kind` as equivalent to the role-driven path.
 	 */
 	kind?: MessageKind;
+	/**
+	 * The root autonomous session this message is bound to (ADR 0038 D1). Set on
+	 * `kind: 'run'` messages; null on ordinary turns.
+	 */
+	autonomous_session_id?: string | null;
 	applied_skills?: string[];
 	routed_inference_tier?: 1 | 2 | 3 | 4 | 5 | null;
 	routed_provider?: string | null;
@@ -386,6 +396,7 @@ export interface MessagePostResponse {
 	routed_provider?: string | null;
 	cost_estimate?: number | null;
 	applied_skills?: string[];
+	applied_file_ids?: string[];
 }
 
 // ----- SSE message-stream events -----
@@ -410,6 +421,7 @@ export interface MessageCompleteFrame {
 	message: Message;
 	citations?: Citation[];
 	applied_skills?: string[];
+	applied_file_ids?: string[];
 	routed_inference_tier?: 1 | 2 | 3 | 4 | 5 | null;
 	routed_provider?: string | null;
 }
@@ -454,10 +466,18 @@ export type MessageStreamEvent =
 
 export interface SkillInputDef {
 	name: string;
-	type?: 'string' | 'enum' | 'boolean' | 'integer';
+	/**
+	 * Free-form per the corpus (mirrors `SkillInputDef.type` in
+	 * `api/app/skills/schema.py`): `text`, `document`, `enum`, `boolean`,
+	 * `integer`, `structured`, `file`. The form renders a text field for
+	 * anything it does not special-case.
+	 */
+	type?: string | null;
 	required?: boolean;
-	description?: string;
-	enum?: string[];
+	description?: string | null;
+	enum?: string[] | null;
+	/** The authoring guide's spelling of an enum's options; passed through by the api. */
+	values?: string[] | null;
 	default?: unknown;
 }
 
@@ -495,6 +515,21 @@ export interface SkillReferenceFile {
 	content: string;
 }
 
+export interface SkillReferencePage extends SkillReferenceFile {
+	size_bytes: number;
+	offset_bytes: number;
+	end_offset_bytes: number;
+	returned_bytes: number;
+	has_more: boolean;
+	next_offset_bytes: number | null;
+	sha256: string;
+}
+
+export interface SkillResourceFile {
+	path: string;
+	size_bytes: number;
+}
+
 export interface Skill extends SkillSummary {
 	/**
 	 * Wave D.2 — underlying ``user_skills.id`` row UUID for user/team scope;
@@ -509,13 +544,15 @@ export interface Skill extends SkillSummary {
 	reference_files?: SkillReferenceFile[];
 	example_files?: SkillReferenceFile[];
 	script_files?: SkillReferenceFile[];
+	/** Available on-demand references; file contents are fetched only for human inspection. */
+	on_demand_files?: SkillResourceFile[];
+	reference_read_enabled?: boolean;
+	/** Present on the human-facing /contents response, never model-facing metadata. */
+	on_demand_contents?: SkillReferencePage[];
 	/**
-	 * Parsed inputs from the frontmatter. The OpenAPI sketch surfaces only
-	 * `content_yaml` (the raw frontmatter); we parse it client-side to drive
-	 * the input form. The shape mirrors `docs/skill-authoring-guide.md`.
-	 *
-	 * The backend MAY surface `inputs` as a top-level field in a future
-	 * iteration; for now the LQ.AI shell parses YAML.
+	 * Declared inputs driving the composer's input form: required first,
+	 * then optional. Not part of the `GET /skills/{name}` payload — the chat
+	 * panel fills it from `GET /skills/{name}/inputs` when a skill is attached.
 	 */
 	inputs?: SkillInputDef[];
 	/**
@@ -695,6 +732,8 @@ export interface UserSkill {
 	 * spawned the row. Null for from-scratch creates.
 	 */
 	forked_from: string | null;
+	/** Original community installation record; read-only even after edits. */
+	installation_provenance?: Record<string, unknown> | null;
 	archived_at: string | null;
 	created_at: string;
 	updated_at: string;
@@ -810,6 +849,29 @@ export interface UsageQuery {
 }
 
 // ----- Admin users -----
+
+export interface AdminUserCreateRequest {
+	email: string;
+	display_name?: string | null;
+	role?: UserRole | 'auditor';
+}
+
+export interface AdminUserCreatedResponse {
+	user_id: string;
+	email: string;
+	display_name: string | null;
+	role: UserRole | 'auditor';
+	is_admin: boolean;
+	must_change_password: boolean;
+	initial_password: string;
+}
+
+export interface AdminPasswordResetResponse {
+	user_id: string;
+	email: string;
+	initial_password: string;
+	sessions_revoked: number;
+}
 
 export interface AdminUserRow {
 	id: string;
@@ -1125,14 +1187,20 @@ export interface TabularColumnSpec {
 /**
  * Lightweight citation projection used inside `TabularCellResult`.
  * Distinct from the existing `Citation` interface above — the
- * grid-cell surface only needs the IDs + confidence to render the chip
- * and route a click to the existing M2-C2 citation drawer.
+ * Includes source passages and chunk-local offsets for the cell dialog.
  */
 export interface TabularCitation {
 	citation_id: string;
 	document_id: string;
 	chunk_id?: string | null;
 	confidence: TabularCellConfidence;
+	source_file_id?: string | null;
+	source_page?: number | null;
+	source_text?: string | null;
+	source_offset_start?: number | null;
+	source_offset_end?: number | null;
+	verification_method?: string | null;
+	verification_confidence?: number | null;
 }
 
 /**
@@ -1171,6 +1239,10 @@ export interface TabularRow {
  */
 export interface TabularResults {
 	rows: TabularRow[];
+	/** Absent on older results; defaults to false. Estimated backstop only. */
+	ensemble_halted_at_ceiling?: boolean;
+	/** Absent on older results; defaults to zero. */
+	ensemble_halted_cells?: number;
 }
 
 /**
@@ -1206,6 +1278,12 @@ export interface TabularExecution {
 	created_at: string;
 	started_at: string | null;
 	completed_at: string | null;
+	/**
+	 * Bulk operations run over this execution, recent-first (DE-304 /
+	 * ADR 0040). Optional so responses predating the field parse
+	 * unchanged.
+	 */
+	bulk_ops?: TabularBulkOp[];
 }
 
 /**
@@ -1267,6 +1345,112 @@ export interface TabularPreviewCostResponse {
 	estimated_tokens: number;
 	estimated_cost_usd: string;
 	per_tier_breakdown: Record<string, number>;
+}
+
+// ----- Tabular bulk operations (DE-304 / ADR 0040) -----
+
+/**
+ * The two v1 bulk operations over a completed execution:
+ * `redline_rows` (one redline-style review memo per grid row,
+ * combined into a redline report) and `summarize_column` (one memo
+ * synthesizing a chosen column across all rows).
+ */
+export type TabularBulkOpKind = 'redline_rows' | 'summarize_column';
+
+/**
+ * Lifecycle of a bulk op. `completed` includes batches with per-item
+ * failures (ADR 0040 D4) — failed items live inside `results.items`
+ * and MUST render as failures; `failed` is whole-batch crashes only
+ * (`error_text` populated).
+ */
+export type TabularBulkOpStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+/**
+ * One item of a bulk op's results. `document_id`/`document_name` are
+ * null on the summarize-column memo (it spans the whole grid).
+ * Decimal-typed `cost_usd` comes over the wire as a JSON string.
+ */
+export interface TabularBulkOpItem {
+	document_id: string | null;
+	document_name: string | null;
+	status: 'completed' | 'failed';
+	output_text: string | null;
+	error: string | null;
+	cost_usd: string | null;
+	finish_reason?: string | null;
+	source_rows?: {
+		document_name: string;
+		value: string | null;
+		status: 'available' | 'missing';
+	}[];
+}
+
+export interface TabularBulkOpResults {
+	schema_version: string;
+	items: TabularBulkOpItem[];
+	summary: {
+		total_items: number;
+		failed_items: number;
+	};
+}
+
+/**
+ * One row from `tabular_bulk_ops`, embedded in
+ * `TabularExecution.bulk_ops` (the detail endpoint the page already
+ * polls is the read-side — ADR 0040 D2).
+ */
+export interface TabularBulkOp {
+	id: string;
+	execution_id: string | null;
+	source_execution_id: string;
+	provenance: Record<string, unknown>;
+	user_id: string | null;
+	kind: TabularBulkOpKind;
+	status: TabularBulkOpStatus;
+	params: Record<string, string | null>;
+	results: TabularBulkOpResults | null;
+	confirmed_cost_usd: string | null;
+	cost_actual_usd: string | null;
+	error_text: string | null;
+	created_at: string;
+	started_at: string | null;
+	completed_at: string | null;
+}
+
+/**
+ * Request body for
+ * `POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost`.
+ * `column_name` is required for `summarize_column`.
+ */
+export interface TabularBulkOpPreviewRequest {
+	kind: TabularBulkOpKind;
+	column_name: string;
+	skill_name: string;
+	skill_inputs?: Record<string, unknown>;
+}
+
+export interface TabularBulkOpPreviewResponse {
+	skill_name: string;
+	skill_version: string;
+	skill_content_hash: string;
+	kind: TabularBulkOpKind;
+	calls_count: number;
+	per_call_cost_usd: string;
+	estimated_cost_usd: string;
+}
+
+/**
+ * Request body for `POST /api/v1/tabular/executions/{id}/bulk-ops`.
+ * `confirmed_cost_usd` echoes the preview value (audit trail; the
+ * $1.00 confirmation gate is UI-side, per Decision C-5).
+ */
+export interface TabularBulkOpCreateRequest {
+	kind: TabularBulkOpKind;
+	column_name: string;
+	skill_name: string;
+	skill_inputs?: Record<string, unknown>;
+	skill_content_hash: string;
+	confirmed_cost_usd?: string | null;
 }
 
 // ----- Citation Ledger (P1-A3 / P1-C1) -----

@@ -16,10 +16,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 import pytest
+from sqlalchemy import Result, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.citation import cost as cost_module
 from app.citation.cost import (
     DEFAULT_PER_JUDGE_USD,
     estimate_judge_call_cost_usd,
@@ -395,3 +399,99 @@ async def test_resolve_ensemble_uses_per_model_calibration(
         db=db_session,
     )
     assert result_calibrated is None  # calibrated estimate exceeded budget
+
+
+def _fail_first_execute_with_pg_error(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Make the first ``db.execute`` raise a REAL PostgreSQL statement error
+    (division_by_zero), then behave normally."""
+
+    real_execute = db_session.execute
+    calls = {"n": 0}
+
+    async def flaky(stmt: Any, *args: Any, **kwargs: Any) -> Result[Any]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return await real_execute(text("SELECT 1/0"))
+        return await real_execute(stmt, *args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", flaky)
+
+
+@pytest.mark.unit
+async def test_failed_calibration_query_does_not_poison_session(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A recoverable PG statement error must leave the session usable, and
+    earlier writes in the same transaction must survive."""
+
+    db_session.add(_judge_row(routed_model="m-before", cost_estimate=Decimal("0.01")))
+    await db_session.flush()
+
+    _fail_first_execute_with_pg_error(db_session, monkeypatch)
+
+    estimate = await estimate_judge_call_cost_usd(db_session, judge_model="claude-haiku-4-5")
+    assert estimate == DEFAULT_PER_JUDGE_USD
+
+    # Session must still accept writes after the failed lookup...
+    db_session.add(_judge_row(routed_model="m-after", cost_estimate=Decimal("0.02")))
+    await db_session.flush()
+    await db_session.commit()
+
+    # ...and BOTH the pre-failure and post-failure rows are present.
+    found = (
+        (
+            await db_session.execute(
+                select(InferenceRoutingLog.routed_model).where(
+                    InferenceRoutingLog.routed_model.in_(["m-before", "m-after"])
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert sorted(found) == ["m-after", "m-before"]
+
+
+@pytest.mark.unit
+async def test_failed_calibration_query_fallback_is_not_cached(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fail_first_execute_with_pg_error(db_session, monkeypatch)
+
+    await estimate_judge_call_cost_usd(db_session, judge_model="claude-haiku-4-5")
+    assert "claude-haiku-4-5:judge_paraphrase" not in cost_module._cache
+
+    # Next call re-queries (real statement now) and succeeds on a clean session.
+    again = await estimate_judge_call_cost_usd(db_session, judge_model="claude-haiku-4-5")
+    assert again == DEFAULT_PER_JUDGE_USD  # cold start, cached this time
+    assert "claude-haiku-4-5:judge_paraphrase" in cost_module._cache
+
+
+@pytest.mark.unit
+async def test_connection_invalidated_error_is_not_swallowed(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def boom(*args: Any, **kwargs: Any) -> None:
+        raise DBAPIError(
+            "SELECT 1", None, Exception("connection lost"), connection_invalidated=True
+        )
+
+    monkeypatch.setattr(db_session, "execute", boom)
+
+    with pytest.raises(DBAPIError):
+        await estimate_judge_call_cost_usd(db_session, judge_model="claude-haiku-4-5")
+
+
+@pytest.mark.unit
+async def test_unrelated_flush_failure_is_not_turned_into_fallback(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def bad_flush(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("caller state could not be flushed")
+
+    monkeypatch.setattr(db_session, "flush", bad_flush)
+
+    with pytest.raises(RuntimeError, match="could not be flushed"):
+        await estimate_judge_call_cost_usd(db_session, judge_model="claude-haiku-4-5")

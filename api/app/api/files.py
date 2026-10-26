@@ -44,12 +44,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import (
+    denied_file_ids,
+    file_matter_ids,
+    require_matter,
+    require_resource_write,
+)
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import NotFound, ValidationError
+from app.errors import Forbidden, NotFound, ValidationError
 from app.models.document import Document
 from app.models.file import File as FileModel
-from app.models.project import Project
+from app.models.user import User
 from app.schemas.files import FileMetadata
 from app.storage import (
     StreamUploadResult,
@@ -246,17 +252,19 @@ async def upload_file(
                 details={"project_id": project_id},
             ) from exc
 
-        stmt = select(Project.id).where(
-            Project.id == resolved_project_id,
-            Project.owner_id == user.id,
-            Project.archived_at.is_(None),
-        )
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none() is None:
+        # Uploading into a matter is contributing to it, so ``write`` —
+        # firm-wide read does not entitle a colleague to put documents in
+        # someone's matter file. Both the not-found and the not-permitted
+        # cases fold into the same 422 the create contract already
+        # documents, rather than leaking a 403/404 distinction on what is
+        # request input.
+        try:
+            await require_matter(db, resolved_project_id, user, need="write")
+        except (NotFound, Forbidden) as exc:
             raise ValidationError(
-                "project_id does not reference a project owned by the caller.",
+                "project_id does not reference a matter the caller can contribute to.",
                 details={"project_id": str(resolved_project_id)},
-            )
+            ) from exc
 
     file_id = uuid.uuid4()
     storage_path = str(file_id)
@@ -466,7 +474,7 @@ async def delete_file(
     """
 
     file_uuid = _validate_file_id(file_id)
-    row = await _load_visible_file(db, file_uuid, user.id)
+    row = await _load_visible_file(db, file_uuid, user.id, need_write=True)
 
     from datetime import UTC, datetime
 
@@ -508,6 +516,8 @@ async def _load_visible_file(
     db: AsyncSession,
     file_id: uuid.UUID,
     owner_id: uuid.UUID,
+    *,
+    need_write: bool = False,
 ) -> FileModel:
     """Load ``files`` row by id, scoped to the owner, excluding soft-deleted rows.
 
@@ -520,6 +530,7 @@ async def _load_visible_file(
     stmt = select(FileModel).where(
         FileModel.id == file_id,
         FileModel.owner_id == owner_id,
+        FileModel.id.not_in(denied_file_ids(owner_id)),
         FileModel.deleted_at.is_(None),
     )
     result = await db.execute(stmt)
@@ -528,6 +539,21 @@ async def _load_visible_file(
         raise NotFound(
             f"File {file_id} not found.",
             details={"file_id": str(file_id)},
+        )
+    if row.project_id is not None:
+        user = await db.get(User, owner_id)
+        if user is None:
+            raise NotFound("Resource not found.")
+        await require_matter(db, row.project_id, user, include_archived=True)
+    if need_write:
+        actor = await db.get(User, owner_id)
+        if actor is None:
+            raise NotFound("Resource not found.")
+        await require_resource_write(
+            db,
+            actor,
+            row.project_id,
+            file_matter_ids(row.id),
         )
     return row
 

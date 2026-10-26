@@ -86,15 +86,20 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.autonomous.audit import autonomous_audit
+from app.authz.matters import denied_file_ids, denied_kb_ids
+from app.autonomous.audit import (
+    AuditedRetrievalOwnershipDenied,
+    audit_retrieval_ownership_denial,
+    autonomous_audit,
+)
 from app.autonomous.cost import estimate_tool_cost
 from app.autonomous.enums import PHASE_GRANTS, HaltState, Phase, ToolIntent
 from app.autonomous.notify_email import send_notification_email
-from app.autonomous.orchestration.contracts import ExecutionScope
+from app.autonomous.orchestration.contracts import ExecutionScope, RunCorrelation
 from app.autonomous.orchestration.inference import InferenceBinding
 from app.autonomous.orchestration.sources import SourceBinding
 from app.autonomous.orchestration.workspace import WORKSPACE_INTENTS, WorkspaceAccess
-from app.errors import Conflict, CostCapReached, SessionHalted, ToolNotGranted
+from app.errors import Conflict, CostCapReached, Forbidden, SessionHalted, ToolNotGranted
 from app.models.autonomous import (
     AutonomousArtifact,
     AutonomousFinding,
@@ -106,8 +111,8 @@ from app.models.autonomous import (
 from app.models.file import File as FileModel
 from app.models.knowledge import KnowledgeBase
 from app.models.user import User
-from app.observability_helpers import get_tracer, record_attributes
-from app.skills.binding import bind_record
+from app.observability_helpers import get_tracer, quiet_span, record_attributes
+from app.skills.binding import SkillBinding, resolve_binding
 from app.skills.tools import SKILL_TOOL_INTENTS, SkillTools, current_registry, parse_skill_tool
 
 log = logging.getLogger(__name__)
@@ -194,6 +199,8 @@ async def guarded_tool_call(
     inference_binding: InferenceBinding | None = None,
     workspace_access: WorkspaceAccess | None = None,
     skill_tools: SkillTools | None = None,
+    expected_skill_binding: SkillBinding | None = None,
+    correlation: RunCorrelation | None = None,
 ) -> ToolResult:
     """Single chokepoint for every autonomous tool invocation.
 
@@ -221,6 +228,12 @@ async def guarded_tool_call(
             the legacy session cap for this path. No provider I/O in settlement.
         source_binding: Internal exact authority-source selection and pricing.
             Requires both a durable effect and approved scope. Never model params.
+        expected_skill_binding: The legacy planner's server-resolved skill snapshot.
+            Refuse a changed skill before dispatch; never accepted from model params.
+        correlation: The chat turn a governed run is bound to, resolved by the
+            adapter from server records. Labels the routing-log and
+            tool-call-log rows this call writes; never part of ``params`` or of
+            an effect's identity, and never authority (ADR 0038 D2).
 
     Returns:
         A :class:`ToolResult` on success.
@@ -233,11 +246,28 @@ async def guarded_tool_call(
         CostCapReached: If the projected cost would exceed
             ``max_cost_usd`` (R4).
     """
-    with _tracer.start_as_current_span("autonomous.tool_call") as span:
+    if session.project_id is not None:
+        from app.authz.matters import require_matter
+        from app.errors import NotFound
+        from app.models.user import User
+
+        user = await db.get(User, session.user_id)
+        if user is None:
+            raise SessionHalted("The session's user no longer exists.")
+        try:
+            await require_matter(db, session.project_id, user, need="write")
+        except (NotFound, Forbidden) as exc:
+            session.halt_state = str(HaltState.halted)
+            raise SessionHalted("Matter access was revoked.") from exc
+    # A failure is recorded by type only: an exception raised in here can
+    # quote SQL parameters, provider bodies or document text.
+    with quiet_span(_tracer, "autonomous.tool_call") as span:
         if source_binding is not None and (
             execution_scope is None or effect is None or intent != ToolIntent.retrieve_authority
         ):
             raise ToolNotGranted("source bindings require a durable scoped authority call")
+        if correlation is not None and (execution_scope is None or effect is None):
+            raise ToolNotGranted("chat correlation requires a durable scoped run call")
         # COUNTS + TYPES ONLY — never raw values or document text
         record_attributes(
             span,
@@ -302,6 +332,29 @@ async def guarded_tool_call(
                 record_attributes(span, **{"autonomous.outcome": "tool_not_granted"})
                 raise
 
+        if (
+            intent == ToolIntent.retrieve_chunks
+            and isinstance(params, dict)
+            and "kb_ids" in params
+            and (execution_scope is None or effect is None)
+        ):
+            # The search of several knowledge bases takes its matter from the
+            # orchestration boundary. Without an approved scope the request,
+            # matter included, would be whatever a model wrote.
+            raise ToolNotGranted("A search of several knowledge bases requires a governed run")
+
+        if (
+            intent == ToolIntent.retrieve_chunks
+            and isinstance(params, dict)
+            and "file_id" in params
+            and "max_chars" in params
+            and (execution_scope is None or effect is None)
+        ):
+            # The bounded read of a file's text is a step of a governed run
+            # (ADR 0038 D4/D5). The whole-file fetch stays open to a session
+            # that is not one, on its ownership check.
+            raise ToolNotGranted("A bounded document read requires a governed run")
+
         if intent in WORKSPACE_INTENTS and (
             execution_scope is None
             or effect is None
@@ -322,7 +375,18 @@ async def guarded_tool_call(
             record = skill_tools.registry.current().get(name) if isinstance(name, str) else None
             if record is None:
                 raise ToolNotGranted("A current installed skill is required")
-            skill_binding = bind_record(record)
+            try:
+                skill_binding = await resolve_binding(
+                    db, session.user_id, record.name, skill_tools.registry
+                )
+            except Forbidden:
+                if expected_skill_binding is None:
+                    raise
+                raise ToolNotGranted("Pinned skill artifact is unavailable or changed") from None
+            if skill_binding is None or intent not in skill_tools.available(skill_binding):
+                raise ToolNotGranted("Optional skill capability is not enabled")
+            if expected_skill_binding is not None and skill_binding != expected_skill_binding:
+                raise ToolNotGranted("Skill changed or access was revoked; start a new invocation")
             if execution_scope and (
                 effect is None or skill_binding.digest != execution_scope.skill.digest
             ):
@@ -389,6 +453,7 @@ async def guarded_tool_call(
                 maximum_egress_tier=(
                     execution_scope.maximum_egress_tier if execution_scope else None
                 ),
+                correlation=correlation,
             )
         elif intent in WORKSPACE_INTENTS:
             assert workspace_access is not None
@@ -416,6 +481,7 @@ async def guarded_tool_call(
                 gateway=gateway,
                 estimated_cost=estimate,
                 inference_binding=inference_binding,
+                correlation=correlation,
             )
         else:
             # Local writes (emit_finding/propose_memory/…) and local retrieval
@@ -516,6 +582,7 @@ async def _governed_external_dispatch(
     span: Any,
     source_binding: SourceBinding | None = None,
     maximum_egress_tier: int | None = None,
+    correlation: RunCorrelation | None = None,
 ) -> ToolResult:
     """Route an external-tool intent through ``governed_tool_invocation``.
 
@@ -524,14 +591,27 @@ async def _governed_external_dispatch(
     shared helper, annotating the caller-owned ``autonomous.tool_call`` span
     (D-a1).  The ``estimate`` from R4 is forwarded verbatim as
     ``estimated_cost`` (single-estimate invariant — the helper never
-    re-estimates). Bound orchestration sources use their fixed provider/tier
-    and approved ceiling through dispatch; legacy sessions retain a None ceiling.
-    ``origin="autonomous"`` and there is no
-    per-user OAuth token (D-a5).
+    re-estimates).
+
+    DE-358 item 6 / AG-03 (issue #593): the matter-scoped egress ceiling is
+    resolved once here as ``min(operator default, session project value,
+    execution-scope value)`` via
+    :func:`app.tools.governance.resolve_tool_egress_ceiling`.  The same
+    value reaches ``governed_tool_invocation`` and every governed gateway
+    ``call_tool`` in the dispatch closure, so API and gateway can never
+    disagree.  ``origin="autonomous"`` and there is no per-user OAuth token
+    (D-a5).
+
+    A scope ceiling of ``0`` refuses in the API and is never sent to the
+    gateway.
     """
     # Local import: governance.py imports ToolResult from this module, so a
     # top-level import here would be circular.
-    from app.tools.governance import governed_tool_invocation, resolve_provider_tier
+    from app.tools.governance import (
+        governed_tool_invocation,
+        resolve_provider_tier,
+        resolve_tool_egress_ceiling,
+    )
 
     if source_binding is None:
         provider, tool = await _resolve_external_call(intent, params, gateway)
@@ -540,6 +620,16 @@ async def _governed_external_dispatch(
         provider, tool = source_binding.source.name, source_binding.operation
         provider_tier = source_binding.source.egress_tier
 
+    # Issue #593: compose the matter-scoped ceiling from the operator
+    # default, the session's project, and the orchestration scope.  Bound
+    # orchestration sources keep their fixed provider/tier; the ceiling is
+    # still composed on top (min of everything that is set).
+    ceiling, ceiling_source = await resolve_tool_egress_ceiling(
+        db,
+        project_id=session.project_id,
+        scope_ceiling=maximum_egress_tier,
+    )
+
     async def _dispatch_closure() -> ToolResult:
         if source_binding is not None:
             return await _handle_retrieve_authority(
@@ -547,10 +637,16 @@ async def _governed_external_dispatch(
                 db=db,
                 gateway=gateway,
                 source_binding=source_binding,
-                maximum_egress_tier=maximum_egress_tier,
+                maximum_egress_tier=ceiling,
             )
         return await _dispatch(
-            intent, params, gateway=gateway, db=db, session=session, estimated_cost=estimate
+            intent,
+            params,
+            gateway=gateway,
+            db=db,
+            session=session,
+            estimated_cost=estimate,
+            maximum_egress_tier=ceiling,
         )
 
     return await governed_tool_invocation(
@@ -560,11 +656,16 @@ async def _governed_external_dispatch(
         tool=tool,
         intent=intent,
         provider_tier=provider_tier,
-        max_allowed_tier=maximum_egress_tier,
+        max_allowed_tier=ceiling,
+        ceiling_source=ceiling_source,
         estimated_cost=estimate,  # single-estimate — forwarded, never re-estimated
         dispatch=_dispatch_closure,
         span=span,
         user_id=session.user_id,
+        # A run hosted in a chat labels its tool-call rows with that chat and
+        # message, beside the session, as an ordinary turn's rows are.
+        chat_id=correlation.chat_id if correlation else None,
+        message_id=correlation.message_id if correlation else None,
         session_id=session.id,
         args_digest=_args_digest(params),
         denied_on=(ToolNotGranted,),  # D4 policy refusals → outcome="denied", not "error"
@@ -579,6 +680,7 @@ async def _dispatch(
     db: AsyncSession,
     session: AutonomousSession,
     estimated_cost: Decimal,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Route a granted, in-budget tool intent to its handler.
 
@@ -601,6 +703,10 @@ async def _dispatch(
         estimated_cost: The cost projected by R4 for this call; inference
             handlers return this value as ``cost_usd`` so the session is
             charged exactly what R4 approved.
+        maximum_egress_tier: The resolved matter-scoped egress ceiling
+            (issue #593), forwarded to the external-call handlers so the
+            gateway enforces the same number the API applied. ``None``
+            means unconstrained.
 
     Returns:
         A :class:`ToolResult` with ``cost_usd`` and tool-specific ``data``.
@@ -733,7 +839,9 @@ async def _dispatch(
         return ToolResult(cost_usd=Decimal("0"), data={"notification_id": str(note.id)})
 
     if intent == ToolIntent.retrieve_chunks:
-        return await _handle_retrieve_chunks(params, db=db, owner_id=session.user_id)
+        return await _handle_retrieve_chunks(
+            params, db=db, owner_id=session.user_id, retrieval_session=session
+        )
 
     if intent in (ToolIntent.run_skill, ToolIntent.run_playbook, ToolIntent.plan):
         return await _handle_gateway_inference(
@@ -741,13 +849,17 @@ async def _dispatch(
         )
 
     if intent == ToolIntent.retrieve_caselaw:
-        return await _handle_retrieve_caselaw(params, db=db)
+        return await _handle_retrieve_caselaw(
+            params, db=db, maximum_egress_tier=maximum_egress_tier
+        )
 
     if intent == ToolIntent.call_mcp_tool:
-        return await _handle_call_mcp_tool(params, db=db)
+        return await _handle_call_mcp_tool(params, db=db, maximum_egress_tier=maximum_egress_tier)
 
     if intent == ToolIntent.retrieve_authority:
-        return await _handle_retrieve_authority(params, db=db, gateway=gateway)
+        return await _handle_retrieve_authority(
+            params, db=db, gateway=gateway, maximum_egress_tier=maximum_egress_tier
+        )
 
     # Should be unreachable: PHASE_GRANTS + R6 prevent unknown intents.
     raise ValueError(f"_dispatch: unhandled intent {intent!r}")
@@ -757,6 +869,7 @@ async def _handle_retrieve_caselaw(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_caselaw`` — gateway-brokered case-law research (PR5a).
 
@@ -769,6 +882,11 @@ async def _handle_retrieve_caselaw(
     - ``get_cluster``      → ``{cluster_id}``
     - ``read_opinion``     → ``{opinion_id}``
     - ``find_in_case``     → ``{opinion_id, query[, max_matches]}``
+
+    ``maximum_egress_tier`` is the resolved matter-scoped ceiling
+    (issue #593), forwarded so the gateway enforces the same number the API
+    applied. ``None`` means unconstrained. ``read_opinion``/``find_in_case``
+    only read the durable cache (no gateway egress) and ignore it.
 
     Realized cost is resolved via the per-provider cost model (DE-344);
     falls back to ``Decimal("0")`` if resolution fails (non-fatal).
@@ -783,14 +901,18 @@ async def _handle_retrieve_caselaw(
 
     op = str(params.get("op") or "")
     if op == "verify_citations":
-        data = await research_service.verify_citations(params["text"])
+        data = await research_service.verify_citations(
+            params["text"], max_allowed_tier=maximum_egress_tier
+        )
     elif op == "search_case_law":
         args = params.get("args")
         if args is None:
             args = {k: v for k, v in params.items() if k != "op"}
-        data = await research_service.search_case_law(args)
+        data = await research_service.search_case_law(args, max_allowed_tier=maximum_egress_tier)
     elif op == "get_cluster":
-        data = await research_service.get_cluster(db, cluster_id=int(params["cluster_id"]))
+        data = await research_service.get_cluster(
+            db, cluster_id=int(params["cluster_id"]), max_allowed_tier=maximum_egress_tier
+        )
     elif op == "read_opinion":
         data = await research_service.read_opinion(db, opinion_id=int(params["opinion_id"]))
     elif op == "find_in_case":
@@ -823,6 +945,7 @@ async def _handle_call_mcp_tool(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    maximum_egress_tier: int | None = None,
 ) -> ToolResult:
     """Handle ``call_mcp_tool`` — a gateway-brokered MCP tool call (PR5a).
 
@@ -841,8 +964,9 @@ async def _handle_call_mcp_tool(
     ``auth: oauth`` MCP server therefore raises
     :exc:`~app.errors.MCPAuthorizationRequired` from the gateway adapter,
     which is left to propagate — correct, autonomous cannot use per-user-OAuth
-    servers).  ``max_allowed_tier=None`` (no per-session ceiling in v1; the
-    gateway still enforces its configured ceiling).
+    servers).  ``maximum_egress_tier`` is the resolved matter-scoped ceiling
+    (issue #593): the same value the API applied is handed to the gateway,
+    so API and gateway can never disagree. ``None`` means unconstrained.
 
     Zero cost in v1 (D-a3 / DE-344).
 
@@ -881,7 +1005,9 @@ async def _handle_call_mcp_tool(
     # therefore fail at the gateway.
     from app.clients.gateway import get_gateway_client
 
-    result = await get_gateway_client().call_tool(provider, tool, args, max_allowed_tier=None)
+    result = await get_gateway_client().call_tool(
+        provider, tool, args, max_allowed_tier=maximum_egress_tier
+    )
 
     # ── DE-344: realized cost from per-provider cost model ──────────────────
     # Local import avoids circular: governance.py → guard.py → cost.py.
@@ -996,7 +1122,11 @@ async def _handle_retrieve_authority(
     # ── One egress (ADR 0014): call through gateway only ────────────────────
     result: dict[str, Any]
     if source_binding is None:
-        result = await gateway.call_tool(provider_name, op, args)
+        # Legacy (unbound) path: still a governed gateway call, so it gets
+        # the same resolved ceiling the API applied (issue #593).
+        result = await gateway.call_tool(
+            provider_name, op, args, max_allowed_tier=maximum_egress_tier
+        )
     else:
         result = await gateway.call_tool(
             provider_name,
@@ -1367,7 +1497,13 @@ async def _handle_emit_artifact(
     return ToolResult(cost_usd=Decimal("0"), data=data)
 
 
-async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+async def _assert_kb_owned(
+    db: AsyncSession,
+    kb_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    *,
+    retrieval_session: AutonomousSession | None = None,
+) -> None:
     """Reject a model-supplied ``kb_id`` the session owner does not own.
 
     :func:`hybrid_search` and the since-fetch scope only by ``kb_id`` and rely
@@ -1389,15 +1525,43 @@ async def _assert_kb_owned(db: AsyncSession, kb_id: uuid.UUID, owner_id: uuid.UU
             select(KnowledgeBase.id).where(
                 KnowledgeBase.id == kb_id,
                 KnowledgeBase.owner_id == owner_id,
+                KnowledgeBase.id.not_in(denied_kb_ids(owner_id)),
                 KnowledgeBase.archived_at.is_(None),
             )
         )
     ).scalar_one_or_none()
     if owned is None:
-        raise ValueError(f"knowledge base {kb_id} is not accessible to this session")
+        message = f"knowledge base {kb_id} is not accessible to this session"
+        if retrieval_session is not None:
+            await audit_retrieval_ownership_denial(db, retrieval_session)
+            raise AuditedRetrievalOwnershipDenied(message)
+        raise ValueError(message)
+
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden, NotFound
+    from app.models.user import User
+
+    project_id = await db.scalar(select(KnowledgeBase.project_id).where(KnowledgeBase.id == kb_id))
+    if project_id is not None:
+        actor = await db.get(User, owner_id)
+        try:
+            if actor is None:
+                raise NotFound("Resource not found.")
+            await require_matter(db, project_id, actor, include_archived=True)
+        except (NotFound, Forbidden) as exc:
+            if retrieval_session is not None:
+                await audit_retrieval_ownership_denial(db, retrieval_session)
+                raise AuditedRetrievalOwnershipDenied("Resource matter access denied.") from exc
+            raise ValueError("Resource matter access denied.") from exc
 
 
-async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uuid.UUID) -> None:
+async def _assert_file_owned(
+    db: AsyncSession,
+    file_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    *,
+    retrieval_session: AutonomousSession | None = None,
+) -> None:
     """Reject a model-supplied ``file_id`` the session owner does not own
     (#288, AG-01). See :func:`_assert_kb_owned` for the rationale.
 
@@ -1410,12 +1574,34 @@ async def _assert_file_owned(db: AsyncSession, file_id: uuid.UUID, owner_id: uui
             select(FileModel.id).where(
                 FileModel.id == file_id,
                 FileModel.owner_id == owner_id,
+                FileModel.id.not_in(denied_file_ids(owner_id)),
                 FileModel.deleted_at.is_(None),
             )
         )
     ).scalar_one_or_none()
     if owned is None:
-        raise ValueError(f"file {file_id} is not accessible to this session")
+        message = f"file {file_id} is not accessible to this session"
+        if retrieval_session is not None:
+            await audit_retrieval_ownership_denial(db, retrieval_session)
+            raise AuditedRetrievalOwnershipDenied(message)
+        raise ValueError(message)
+
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden, NotFound
+    from app.models.user import User
+
+    project_id = await db.scalar(select(FileModel.project_id).where(FileModel.id == file_id))
+    if project_id is not None:
+        actor = await db.get(User, owner_id)
+        try:
+            if actor is None:
+                raise NotFound("Resource not found.")
+            await require_matter(db, project_id, actor, include_archived=True)
+        except (NotFound, Forbidden) as exc:
+            if retrieval_session is not None:
+                await audit_retrieval_ownership_denial(db, retrieval_session)
+                raise AuditedRetrievalOwnershipDenied("Resource matter access denied.") from exc
+            raise ValueError("Resource matter access denied.") from exc
 
 
 async def _handle_retrieve_chunks(
@@ -1423,6 +1609,7 @@ async def _handle_retrieve_chunks(
     *,
     db: AsyncSession,
     owner_id: uuid.UUID,
+    retrieval_session: AutonomousSession | None = None,
 ) -> ToolResult:
     """Handle ``retrieve_chunks`` — hybrid KB search OR file-scoped OR
     since-scoped fetch.  Zero cost (local retrieval).
@@ -1466,11 +1653,20 @@ async def _handle_retrieve_chunks(
               of chunks whose owning file was attached after ``since``.
 
         db: Active async ORM session.
+        retrieval_session: Internal run context from the chokepoint. Ownership
+            refusals flush an audit row in this run's transaction before raising;
+            direct handler callers without run context retain the same refusal.
 
     Raises:
         ValueError: If no mode applies (none of ``query``, ``file_id``,
             or ``since``+``kb_id`` provided).
     """
+    if "kb_ids" in params:
+        # Mode 1b: a governed run's keyword search of several knowledge bases.
+        return await _handle_search_knowledge_bases(
+            params, db=db, owner_id=owner_id, retrieval_session=retrieval_session
+        )
+
     file_id_raw = params.get("file_id")
     since_raw = params.get("since")
     kb_id_raw = params.get("kb_id")
@@ -1478,13 +1674,29 @@ async def _handle_retrieve_chunks(
 
     # Mode 2: file-scoped fetch.
     if file_id_raw is not None:
-        await _assert_file_owned(db, uuid.UUID(str(file_id_raw)), owner_id)
+        await _assert_file_owned(
+            db, uuid.UUID(str(file_id_raw)), owner_id, retrieval_session=retrieval_session
+        )
+        if "max_chars" in params:
+            # Mode 2b: a bounded read of the file's canonical text (ADR 0038
+            # D4/D5). The chokepoint refuses it outside a governed run, and in
+            # one the orchestration boundary has already rechecked selection
+            # and project attachment. The ownership check above is a second
+            # check behind both.
+            return await _handle_read_document_text(
+                file_id_raw,
+                offset=int(params.get("offset", 0)),
+                max_chars=int(params["max_chars"]),
+                db=db,
+            )
         return await _handle_retrieve_chunks_by_file(file_id_raw, db=db)
 
     # Mode 3: since + kb_id scoped fetch.
     if since_raw is not None and kb_id_raw is not None:
-        await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
-        return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db)
+        await _assert_kb_owned(
+            db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
+        )
+        return await _handle_retrieve_chunks_since(since_raw, kb_id_raw, db=db, owner_id=owner_id)
 
     # Mode 1: query-based hybrid search (existing path — unchanged).
     if query is None:
@@ -1503,14 +1715,17 @@ async def _handle_retrieve_chunks(
             "_handle_retrieve_chunks: `query` mode requires `kb_id` so the "
             "search can be scoped to a knowledge base this session owns."
         )
-    await _assert_kb_owned(db, uuid.UUID(str(kb_id_raw)), owner_id)
-    return await _handle_retrieve_chunks_query(params, db=db)
+    await _assert_kb_owned(
+        db, uuid.UUID(str(kb_id_raw)), owner_id, retrieval_session=retrieval_session
+    )
+    return await _handle_retrieve_chunks_query(params, db=db, owner_id=owner_id)
 
 
 async def _handle_retrieve_chunks_query(
     params: dict[str, Any],
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID | None = None,
 ) -> ToolResult:
     """Mode 1: hybrid semantic+FTS search via :func:`hybrid_search`.
 
@@ -1536,6 +1751,7 @@ async def _handle_retrieve_chunks_query(
     results = await hybrid_search(
         db,
         kb_id=kb_id,
+        user_id=owner_id,
         query=query,
         query_embedding=query_embedding,
         top_k=top_k,
@@ -1558,6 +1774,200 @@ async def _handle_retrieve_chunks_query(
             }
             for r in results
         ]
+    )
+
+
+async def _handle_search_knowledge_bases(
+    params: dict[str, Any],
+    *,
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    retrieval_session: AutonomousSession | None = None,
+) -> ToolResult:
+    """Mode 1b: keyword search over the knowledge bases a run's plan lists.
+
+    Reached through the orchestration boundary, which has checked that every
+    id is in the approved plan and supplied the run's own ``project_id``
+    (ADR 0038 D5). Zero cost and local: full-text search only. No query
+    embedding is requested, so nothing is sent to a model.
+
+    Checked here, before anything is read:
+
+    * each knowledge base is still the owner's, not archived and still
+      attached to the run's matter. One that is not is not searched, and the
+      result says how many were. One the owner archived or detached has lapsed
+      by the owner's own act and leaves no audit row; one that belongs to
+      someone else, or no longer exists, is what the ownership predicates are
+      for, so the call writes one ``ownership_denied`` row and goes on with the
+      rest;
+    * a passage is withheld, and counted, unless its file is the owner's own
+      and not deleted, and when its file is held by another matter and not by
+      this one (:mod:`app.autonomous.orchestration.reading`).
+
+    A knowledge base whose search fails is counted and skipped. The call still
+    completes, so a failed search is reported to the model and never ends the
+    run.
+
+    ``data["passages"]`` holds the text for the calling task. ``data["summary"]``
+    holds identifiers and counts only.
+    """
+    from sqlalchemy import select
+
+    from app.autonomous.orchestration.reading import (
+        file_access_filter,
+        filed_in_another_matter,
+        filed_in_matter,
+        searchable_knowledge_bases,
+    )
+    from app.knowledge.retrieval import hybrid_search
+    from app.models.file import File as FileModel
+    from app.models.knowledge import KnowledgeBase
+    from app.models.project_knowledge_base import ProjectKnowledgeBase
+
+    try:
+        listed = [uuid.UUID(str(value)) for value in params["kb_ids"]]
+        project_id = uuid.UUID(str(params["project_id"]))
+        query, top_k, max_chars = params["query"], int(params["top_k"]), int(params["max_chars"])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise ValueError("_handle_search_knowledge_bases: malformed request") from None
+    if (
+        not isinstance(query, str)
+        or not query.strip()
+        or not 1 <= len(listed) <= 16
+        or not 1 <= top_k <= 10
+        or not 1 <= max_chars <= 65_536
+    ):
+        raise ValueError("_handle_search_knowledge_bases: request out of bounds")
+    current = [
+        row.id
+        for row in (
+            await db.execute(
+                searchable_knowledge_bases(
+                    owner_id=owner_id, project_id=project_id, knowledge_base_ids=listed
+                )
+                .order_by(KnowledgeBase.id)
+                .with_for_update(read=True, of=(KnowledgeBase, ProjectKnowledgeBase))
+            )
+        ).all()
+    ]
+    left_out = set(listed) - set(current)
+    if left_out and retrieval_session is not None:
+        theirs = left_out - set(
+            (
+                await db.scalars(
+                    select(KnowledgeBase.id).where(
+                        KnowledgeBase.id.in_(left_out), KnowledgeBase.owner_id == owner_id
+                    )
+                )
+            ).all()
+        )
+        if theirs:
+            # The cross-tenant tripwire the other retrieval modes give. No id and no
+            # query goes in the row.
+            await audit_retrieval_ownership_denial(db, retrieval_session)
+    found: list[tuple[uuid.UUID, Any]] = []
+    failed = 0
+    for kb_id in current:
+        try:
+            # A savepoint: a failed query must not abort the run's transaction.
+            async with db.begin_nested():
+                results = await hybrid_search(
+                    db, kb_id=kb_id, query=query, query_embedding=None, top_k=top_k, alpha=1.0
+                )
+        except Exception:
+            # No exception text: it can carry the query.
+            log.warning(
+                "run knowledge search failed for one knowledge base; skipped",
+                extra={"event": "run_knowledge_search_failed", "kb_id": str(kb_id)},
+            )
+            failed += 1
+            continue
+        found.extend((kb_id, result) for result in results)
+    # Best first. A file attached to two knowledge bases is found twice; keep one.
+    found.sort(key=lambda pair: pair[1].hybrid_score, reverse=True)
+    seen: set[uuid.UUID] = set()
+    ranked: list[tuple[uuid.UUID, Any]] = []
+    for pair in found:
+        if pair[1].chunk_id not in seen:
+            seen.add(pair[1].chunk_id)
+            ranked.append(pair)
+    # The files whose passages this run may be shown: the owner's own,
+    # undeleted, and not held by another matter unless this matter holds them
+    # too. Both matter predicates are never NULL, so they can be negated.
+    showable = (
+        set(
+            (
+                await db.scalars(
+                    select(FileModel.id).where(
+                        FileModel.id.in_({result.file_id for _, result in ranked}),
+                        FileModel.owner_id == owner_id,
+                        FileModel.deleted_at.is_(None),
+                        file_access_filter(owner_id),
+                        ~(filed_in_another_matter(project_id) & ~filed_in_matter(project_id)),
+                    )
+                )
+            ).all()
+        )
+        if ranked
+        else set()
+    )
+    passages: list[dict[str, Any]] = []
+    withheld = 0
+    # Two bounds: the characters the calling task has room for, and the bytes
+    # the step's receipt may hold. Text that is mostly multi-byte reaches the
+    # second first. Same byte bound as a document read.
+    room, room_bytes = max_chars, _READ_TEXT_MAX_BYTES
+    for kb_id, result in ranked:
+        if result.file_id not in showable:
+            withheld += 1
+            continue
+        if len(passages) >= top_k:
+            break
+        content = result.content or ""
+        if len(content) > room or len(content.encode("utf-8")) > room_bytes:
+            if passages:
+                # It does not fit beside what is already kept.
+                withheld += 1
+                continue
+            content = content[:room]
+            while len(content.encode("utf-8")) > room_bytes:
+                content = content[: max(1, len(content) * 3 // 4)]
+        room -= len(content)
+        room_bytes -= len(content.encode("utf-8"))
+        passages.append(
+            {
+                "kb_id": str(kb_id),
+                "chunk_id": str(result.chunk_id),
+                "document_id": str(result.document_id),
+                "file_id": str(result.file_id),
+                # A file name has no length bound of its own, and this result
+                # is kept as the step's receipt, which has one.
+                "file_name": (result.file_name or "")[:256],
+                "page_start": result.page_start,
+                "page_end": result.page_end,
+                "char_offset_start": result.char_offset_start,
+                "char_offset_end": result.char_offset_end,
+                "content": content,
+            }
+        )
+    summary = {
+        "listed": len(listed),
+        "searched": len(current),
+        "failed": failed,
+        "withheld": withheld,
+        "chunk_count": len(passages),
+        "chunk_ids": [passage["chunk_id"] for passage in passages],
+    }
+    return ToolResult(
+        cost_usd=Decimal("0"),
+        data={
+            "passages": passages,
+            "listed": len(listed),
+            "searched": len(current),
+            "failed": failed,
+            "withheld": withheld,
+            "summary": summary,
+        },
     )
 
 
@@ -1617,11 +2027,71 @@ async def _handle_retrieve_chunks_by_file(
     return _format_chunks_result([dict(row) for row in rows])
 
 
+_READ_TEXT_MAX_BYTES: int = 98_304
+"""Ceiling on one document read. A read is retained as its effect's result,
+which the store bounds; a multi-byte script reaches it before ``max_chars``."""
+
+
+async def _handle_read_document_text(
+    file_id_raw: Any,
+    *,
+    offset: int,
+    max_chars: int,
+    db: AsyncSession,
+) -> ToolResult:
+    """Mode 2b: return one bounded span of a file's canonical text.
+
+    Reads ``documents.normalized_content``, the same string the Citation Engine
+    verifies quotations against, so a quotation a child copies from this result
+    can be checked later. ``truncated`` says the document continues past
+    ``end``; a caller reads on from there. Nothing is silently dropped.
+
+    ``data["summary"]`` carries identifiers, offsets and counts only.
+    """
+    from sqlalchemy import select
+
+    from app.models.document import Document
+    from app.models.file import File as FileModel
+
+    file_id = uuid.UUID(str(file_id_raw))
+    if offset < 0 or not 1 <= max_chars <= 65_536:
+        raise ValueError("_handle_read_document_text: offset or max_chars out of bounds")
+    row = (
+        await db.execute(
+            select(Document.id, Document.normalized_content, FileModel.filename)
+            .join(FileModel, FileModel.id == Document.file_id)
+            .where(FileModel.id == file_id, FileModel.deleted_at.is_(None))
+        )
+    ).one_or_none()
+    if row is None:
+        raise ValueError(f"file {file_id} has no readable document")
+    content: str = row.normalized_content or ""
+    total = len(content)
+    start = min(offset, total)
+    text_part = content[start : start + max_chars]
+    while len(text_part.encode("utf-8")) > _READ_TEXT_MAX_BYTES:
+        text_part = text_part[: max(1, len(text_part) * 3 // 4)]
+    end = start + len(text_part)
+    summary = {
+        "document_id": str(row.id),
+        "file_id": str(file_id),
+        "offset": start,
+        "end": end,
+        "total_chars": total,
+        "truncated": end < total,
+    }
+    return ToolResult(
+        cost_usd=Decimal("0"),
+        data={**summary, "file_name": row.filename, "text": text_part, "summary": summary},
+    )
+
+
 async def _handle_retrieve_chunks_since(
     since_raw: Any,
     kb_id_raw: Any,
     *,
     db: AsyncSession,
+    owner_id: uuid.UUID | None = None,
 ) -> ToolResult:
     """Mode 3: return chunks of files in KB ``kb_id`` attached after ``since``.
 
@@ -1695,6 +2165,11 @@ async def _handle_retrieve_chunks_since(
                 .where(KnowledgeBaseFile.kb_id == kb_id)
                 .where(KnowledgeBaseFile.attached_at > since_dt)
                 .where(FileModel.deleted_at.is_(None))
+                .where(
+                    FileModel.id.not_in(denied_file_ids(owner_id))
+                    if owner_id is not None
+                    else FileModel.id.is_not(None)
+                )
                 # Self-ingestion-echo guard: a prior run's emit_artifact memo
                 # is attached to this KB as a real file; "new since last run"
                 # must not feed it back into the next run (mode 1 / chat RAG
@@ -1777,6 +2252,7 @@ async def _handle_gateway_inference(
     gateway: Any,
     estimated_cost: Decimal,
     inference_binding: InferenceBinding | None = None,
+    correlation: RunCorrelation | None = None,
 ) -> ToolResult:
     """Handle ``run_skill`` and ``run_playbook`` via a gateway chat-completion.
 
@@ -1813,17 +2289,45 @@ async def _handle_gateway_inference(
     max_tokens: int | None = params.get("max_tokens")
     anonymize: bool = bool(params.get("anonymize", True))
 
-    messages = [ChatCompletionMessage(role=m["role"], content=m["content"]) for m in raw_messages]
+    # An approved run child's request may carry its own earlier tool turns and
+    # the function schemas its plan grants (ADR 0038 D4). The orchestration
+    # boundary has already matched both against the route binding. Without a
+    # binding this is a legacy session: role and content only, and no schema
+    # is ever forwarded, whatever ``params`` holds.
+    bound = inference_binding is not None
+    messages = [
+        ChatCompletionMessage(
+            role=m["role"],
+            content=m.get("content") if bound else m["content"],
+            tool_calls=m.get("tool_calls") if bound else None,
+            tool_call_id=m.get("tool_call_id") if bound else None,
+        )
+        for m in raw_messages
+    ]
 
     request = ChatCompletionRequest(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
+        tools=(params.get("tools") or None) if bound else None,
+        # Only a bound run call carries one, and the boundary has matched it
+        # against the route binding. A legacy session never sets it.
+        reasoning_effort=params.get("reasoning_effort") if bound else None,
         anonymize=anonymize,
-        lq_ai_purpose="autonomous_executor",
+        # A truthful label for the routing log: governed run traffic is not an
+        # ordinary chat completion, and is told apart from a legacy session.
+        lq_ai_purpose="orchestration_run" if inference_binding else "autonomous_executor",
+        lq_ai_chat_id=str(correlation.chat_id) if correlation else None,
+        lq_ai_message_id=str(correlation.message_id) if correlation else None,
         minimum_inference_tier=params.get("minimum_inference_tier"),
         lq_ai_project_minimum_inference_tier=params.get("lq_ai_project_minimum_inference_tier"),
         lq_ai_privileged=params.get("lq_ai_privileged", False),
+        # Only a bound run's call carries it; the boundary has matched it
+        # against the route binding. A legacy session never does. Left out of
+        # the request entirely unless asked for.
+        lq_ai_restore_tool_arguments=(
+            True if bound and params.get("lq_ai_restore_tool_arguments") is True else None
+        ),
     )
 
     try:

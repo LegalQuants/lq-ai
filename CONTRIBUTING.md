@@ -4,6 +4,16 @@ Thanks for your interest in contributing. This document covers contributions to 
 
 ---
 
+## In short
+
+- Read this file in full before your first change, then read the code and tests for the behavior you're changing — an accepted design decision isn't always fully implemented yet, so check the implementation too.
+- Run `make lint`, `make format-check`, and `make test` locally before opening a pull request; new behavior needs tests, and user-facing changes need updated docs.
+- Every commit needs a DCO sign-off (`git commit -s`) — pull requests with unsigned commits cannot be merged.
+- Changes touching authentication, authorization, audit logging, or cryptographic implementations get security review even when no path-based CODEOWNERS rule catches them automatically — say so in the PR description.
+- For anything beyond a small, well-scoped item, file an issue first to discuss the approach before you invest the work.
+
+---
+
 ## Quick start
 
 ```bash
@@ -97,12 +107,14 @@ For features not on the deferred-enhancements list, please file an issue describ
 
 1. **Fork the repository** and create a branch from `main`. Branch names should describe the work: `feat/saved-prompts`, `fix/citation-engine-empty-result`, `docs/clarify-tier-config`.
 2. **Make your changes** following the code style and testing requirements below.
-3. **Add or update tests** covering the change. Pytest coverage target is 80%, but
-   current PR CI does not enforce a coverage threshold or no-decrease rule.
+3. **Add or update tests** covering the change. PR CI enforces coverage as a
+   ratchet (`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and
+   `--cov-fail-under=88` for `gateway/`, each pinned at or below the measured
+   figure so a PR that lowers coverage fails.
 4. **Update documentation** — the PRD, README, skill-authoring guide, or capability docs as relevant. If your change affects user-facing behavior, the docs need to reflect it.
 5. **Sign your commits** per the DCO requirement (see [Sign-off](#sign-off-developer-certificate-of-origin) below). PRs without DCO sign-off cannot be merged.
 6. **Open the PR** with a description that explains what changed, why, and how to verify. Link to any relevant issue or DE-### entry in the PRD.
-7. **Respond to review** — maintainers will review within ~5 business days for most PRs, faster for security or bug fixes. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
+7. **Respond to review** — see [Review timelines](#review-timelines) for what to expect and how the queue is prioritized. Substantive review feedback usually requires changes; small style nits can be deferred to follow-ups.
 8. **Current PR CI must pass** — API runs `uv lock --check`, `ruff check`, and
    `ruff format --check` for `api/` and `scripts/`, `mypy app`, and
    `pytest -n auto -q` with pgvector Postgres (each xdist worker gets its own
@@ -172,7 +184,7 @@ git rebase --signoff main                 # all commits since main diverged
   files and is not the PR static-check contract.
 - **TypeScript:** required for new files; gradual migration of legacy `.js` files welcome but not required for unrelated changes.
 - **Framework:** SvelteKit. The `web/` codebase is a fork of OpenWebUI, which is a SvelteKit app — extensions and customizations stay in Svelte. Do **not** introduce React into `web/`. The Word add-in (`word-addin/`, M3) uses Office.js with React; the `web/` codebase does not.
-- **Component conventions:** match the OpenWebUI conventions for shared components; use the project's design system primitives rather than ad-hoc Tailwind.
+- **Component conventions:** match the OpenWebUI conventions for shared components (`web/src/lib/components/**`, untouched per ADR 0009). Within `web/src/lib/lq-ai/**`, prefer the `lq` primitives (`web/src/lib/lq-ai/components/shared/`) and their typed token vocabulary for new or changed components. See [ADR 0043](docs/adr/0043-lq-design-system-primitives.md) for the contract and bounded reference implementation; migration of the remaining shell is separate work.
 
 ### Configuration files
 
@@ -195,9 +207,11 @@ The project takes testing seriously because the substantive correctness of the l
 
 ### Coverage target
 
-Pytest coverage target is **80%** across `api/` and `gateway/`. Current PR CI does
-not enforce a coverage threshold or no-decrease rule. New code should be covered
-by tests; bug fixes should include a regression test that fails before the fix
+Pytest coverage target is **80%** for `api/` and **90%** for `gateway/` (`docs/PRD.md`, coverage gates). PR CI enforces it
+as a ratchet (`.github/workflows/ci.yml`): `--cov-fail-under=80` for `api/` and
+`--cov-fail-under=88` for `gateway/`, each pinned at or below the measured
+figure so a PR that lowers coverage fails. New code should be covered by
+tests; bug fixes should include a regression test that fails before the fix
 and passes after.
 
 ### Test categories
@@ -208,7 +222,9 @@ and passes after.
 - **Provider-integration tests** — marked `provider` and require provider API
   keys. They are not a separate current PR CI job; run them locally when a change
   specifically affects provider integration and credentials are available.
-- **End-to-end tests** — browser end-to-end coverage is not part of the current PR workflow.
+- **End-to-end tests** — the deterministic Cypress track runs nightly and on
+  manual dispatch (`.github/workflows/e2e.yml`), not on every PR; the
+  live-model track stays gated behind `CYPRESS_LLM=1`, which CI never sets.
 - **Fuzzing** — continuous fuzzing is not part of the current PR workflow.
 
 ### Release image skills-corpus check
@@ -239,7 +255,7 @@ CI runs it (`.github/workflows/stack-smoke.yml`) on PRs that touch dependency ma
 Notes for local runs:
 
 - **No provider API keys are needed** — nothing in the smoke performs inference. If you have no `.env`, the script writes one with dummy secrets; an existing `.env` is respected.
-- It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, MinIO objects, model caches) are untouched. As always, never `docker compose down -v`.
+- It operates on the same compose project as your dev stack and recreates the containers (`--force-recreate`) so the restart-count assertion starts from zero. Named volumes (Postgres data, object-store files, model caches) are untouched. As always, never `docker compose down -v`.
 - A cold build needs roughly 25 GB of free disk and 20–30 minutes (the api image pulls docling/torch); warm rebuilds are much faster.
 - Tune with `SOAK_SECONDS` (default 75) and `WAIT_TIMEOUT` (default 900) environment variables.
 - **On failure** the script reports which phase failed (build / boot / probes / soak), each container's state (exit code, OOM kill, restart count), the last healthcheck probe outputs, disk space, and the last 60 log lines per service; full compose logs land in `stack-smoke-logs/` (gitignored). CI additionally uploads that directory as a workflow artifact and writes the state dump to the job summary.
@@ -253,6 +269,7 @@ Locked-in choices so new tests don't drift across `api/` and `gateway/`. Changes
 - **Async tests:** `pytest-asyncio` with `asyncio_mode = "auto"` configured in `pyproject.toml`. Async test functions are written as `async def test_*(...)` without a per-test decorator. We picked `pytest-asyncio` over `anyio`'s test plugin because the project's runtime is asyncio-only — we never need trio compatibility, and `pytest-asyncio` has the larger ecosystem.
 - **HTTP client in tests:** `httpx.AsyncClient` with `ASGITransport` for in-process FastAPI tests; no `TestClient`. Real-network calls in tests are forbidden outside the `provider`-marked tests.
 - **Test database:** session-scoped fixture runs Alembic migrations once against a per-CI-run Postgres database; per-test fixture wraps each test in a transaction that rolls back on teardown. No truncation between tests; no test-specific migrations. Both subsystems share `tests/conftest.py` patterns.
+- **API test environment (`api/tests/conftest.py`):** arq's pool creation fails at once, since no Redis runs in tests; a test that needs a working queue patches the pool or the enqueue helper. bcrypt hashes at its minimum cost (`BCRYPT_ROUNDS=4`) unless the environment sets one. A test whose code commits through its own engine and reads global state takes `isolated_db_url`, a fresh copy of the migrated database, instead of the shared one.
 - **Test data:** factory pattern using `polyfactory` for Pydantic models; no hand-written fixture dictionaries except for canonical examples that stay readable inline.
 - **Provider mocking:** `respx` for httpx-level mocks; record-replay fixtures for end-to-end provider flows under `tests/fixtures/providers/`.
 - **Time and randomness:** `freezegun` for time, `random.seed(0)` at the top of any test that uses randomness. Flaky tests are not tolerated; if you find one, fix it or skip it with a tracked issue.
@@ -265,10 +282,10 @@ applicable, so `pytest --strict-markers` rejects typos:
 | Marker | Purpose | Default behavior |
 |---|---|---|
 | `unit` | Pure unit, no I/O | Included in current PR pytest jobs |
-| `integration` | Hits Postgres, Redis, MinIO, or the Gateway | Included in current PR pytest jobs; API CI supplies pgvector Postgres |
+| `integration` | Hits Postgres, Redis, the object store (RustFS), or the Gateway | Included in current PR pytest jobs; API CI supplies pgvector Postgres |
 | `provider` | Hits a real LLM provider; requires API key | Run intentionally with credentials; no dedicated current PR job |
 | `slow` | Takes > 5s; usually integration with realistic data | Skipped by `make test`; current PR pytest has no marker filter |
-| `e2e` | Browser end-to-end (currently declared for API only) | Not run by the current PR workflow |
+| `e2e` | Browser end-to-end (currently declared for API only) | Unused — no tests carry it; its "Playwright" label is stale and predates the actual E2E tool, Cypress (see `docs/test-strategy.md`) |
 
 `pytest -m "not provider and not slow"` is the local-loop default; `make test` runs this.
 
@@ -307,6 +324,8 @@ If you discover a security vulnerability, **please do not file a public GitHub i
 The project includes safe-harbor language committing not to pursue legal action against good-faith security researchers who follow the coordinated-disclosure process.
 
 For security-affecting *changes* (not vulnerabilities — changes you want to propose to the project that have security implications), file a normal PR but flag the security implications in the description and tag a maintainer for direct review. Examples: changes to authentication flows, audit logging, the Inference Gateway's tier-derivation logic, the Anonymization Layer, encryption configuration, supply-chain artifacts.
+
+[`.github/CODEOWNERS`](.github/CODEOWNERS) auto-routes four paths to the project's security reviewers in addition to the maintainer team, and a PR touching any of them is held until security review approves it: `gateway/**` (the Inference Gateway, the project's only component holding privileged provider API keys), `docs/security/**`, `.github/workflows/**`, and `SECURITY.md`. Routing is by path only — if your change touches authentication, authorization, audit logging, or cryptographic implementations somewhere else in the tree, say so in the PR description and request security review yourself; nothing routes those automatically.
 
 ---
 
@@ -389,10 +408,63 @@ Reviewers will look for:
 Reviewers are also expected to be:
 
 - **Constructive** — feedback is about the work, not the contributor. Suggest specific changes rather than abstract complaints.
-- **Timely** — initial review within 5 business days for most PRs; follow-up review within 2 days. Communicate if you cannot meet that timeline.
+- **Timely** — work the queue in the published order and communicate when you cannot meet the current target. See [Review timelines](#review-timelines); the target is stated alongside the measured median rather than on its own.
 - **Decisive** — approve, request changes, or comment with a specific question. Do not leave PRs in limbo.
 
-If a PR has been waiting for review longer than the timeline above, please ping a maintainer in the PR or in `#contributors` on Discord.
+If a PR has been waiting longer than the current target, ping a maintainer on the PR itself, or raise it in GitHub Discussions.
+
+---
+
+## Review timelines
+
+Review capacity is this project's binding constraint, and this section states it honestly rather
+than publishing a target the project does not meet. Adopted by
+[ADR 0034](docs/adr/0034-review-capacity-and-reviewer-roles.md).
+
+**The target.** First substantive maintainer response within **7 days** of a PR being opened,
+faster for security fixes and small bug fixes with regression tests.
+
+**The measurement.** The median time to first response is measured over all PRs opened in the
+period, excluding automated dependency bumps, and published at the committee's checkpoints
+alongside the target. When the measured median exceeds the target, the number is published anyway
+— that is the point of measuring it. Sustaining a median under 7 days for a quarter is one of the
+three preconditions for setting a 1.0 date
+([ADR 0030](docs/adr/0030-pacing-1.0-preconditions-and-named-trains.md)).
+
+The figure comes from `scripts/pr_response_time.py`, which needs only Python 3.12+ and a
+read-only GitHub token (`GITHUB_TOKEN`, or whatever `gh auth token` returns):
+
+```bash
+python scripts/pr_response_time.py --quarter 2026-Q3                      # one quarter
+python scripts/pr_response_time.py --month 2026-09                        # one month
+python scripts/pr_response_time.py --since 2026-07-01 --until 2026-09-30  # any range
+python scripts/pr_response_time.py --quarter 2026-Q3 --json               # machine-readable
+```
+
+It prints the median over answered PRs, the count of PRs opened, how many were excluded as
+automated dependency bumps, every PR still waiting with how long it has waited, and the exact
+rule it applied for "substantive maintainer response" together with what that rule gets wrong.
+Reading the maintainer team needs the `read:org` scope; without it, pass `--maintainer LOGIN`.
+The cadence is the maintainers' call: a quarterly run matches the ADR 0030 checkpoint, and a
+monthly run surfaces a bad stretch while it can still be corrected. Automating the publication
+is DE-406.
+
+**Review slots.** Maintainers work the open queue in a recurring weekly block, in this priority
+order:
+
+1. Ratification documents (ADRs and governance amendments awaiting the committee).
+2. PRs on the 1.0 gate, labelled `road-to-1.0`.
+3. Follow-ups for contributors who have volunteered for a lane, and attorney acceptance runs.
+4. Everything else, oldest first.
+
+If your PR sits outside these and has waited, say so on the thread — an unreviewed PR that nobody
+has flagged is easy to lose.
+
+**Helping with the constraint.** Review help is the most valuable contribution to this project
+right now. [GOVERNANCE.md](GOVERNANCE.md#roles) describes the **trusted reviewer** rung — review
+authority without merge authority — and
+[GOVERNANCE.md](GOVERNANCE.md#becoming-a-maintainer) publishes the criteria for promotion to
+maintainer. Both are open; nominations go through any maintainer.
 
 ---
 
@@ -412,7 +484,7 @@ By contributing to LQ.AI, you agree that your contributions will be licensed und
 
 ## Questions?
 
-- **General questions** → GitHub Discussions or `#contributors` on Discord.
+- **General questions** → GitHub Discussions.
 - **Bug reports** → GitHub Issues with the `bug` label and a reproduction case.
 - **Feature requests** → GitHub Issues with the `enhancement` label; reference the [PRD §9 Deferred Enhancements](docs/PRD.md#9-deferred-enhancements-and-identified-future-work) entry if one exists.
 - **Security** → security@legalquants.com (see [`SECURITY.md`](SECURITY.md)).

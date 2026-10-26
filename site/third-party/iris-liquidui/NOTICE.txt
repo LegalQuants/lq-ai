@@ -1,0 +1,17 @@
+LiquidUI design and interaction attribution
+
+The pathways shell, guided-conversation presentation, search composer,
+preserved search state, and playback interaction are adapted from Iris's
+LiquidUI standalone edition of 4 October 2026, supplied in
+lq-ai-liquidui-chat-standalone.zip. Its adjacent/modal reader was adapted too,
+and retired on 22 October 2026 in favour of a contextual right sidebar.
+
+The contributed application is licensed under Apache License 2.0; its license
+is retained in this directory. The original captured documentation corpus,
+copied pathway map, search ranking, and fixed answer strings are not shipped
+by this integration. Current repository documents, the existing pathway map,
+Pagefind, and the shared Astro rendering pipeline supply those functions.
+
+The site's visual design is the proposed LQ.AI interface redesign, which uses
+the reader's own system fonts. No font from the contributed archive, and no
+webfont of any kind, is shipped.

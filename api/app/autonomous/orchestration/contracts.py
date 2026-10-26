@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, Self
@@ -113,8 +114,28 @@ def parse_research_proposal(content: str) -> ResearchProposal:
 
 
 class SkillPin(Snapshot):
+    """Pinned instructions for one session: a name and the digest of its bytes.
+
+    ``kind`` says where the name resolves: an installed skill, or one of the
+    engine's own versioned prompt files (ADR 0038 D3). A prompt name is never
+    looked up in the skill library, and a skill name never among the prompts.
+    A skill pin serializes without ``kind``, as it did before prompts existed,
+    so a retained plan keeps the hash its approval is bound to.
+    """
+
     name: ShortText
     digest: Digest
+    kind: Literal["skill", "prompt"] = "skill"
+
+    @model_serializer(mode="wrap")
+    def serialize_pin(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if self.kind == "skill":
+            value.pop("kind", None)
+        return value
+
+
+MAX_KNOWLEDGE_BASES = 16
 
 
 class ResourceScope(Snapshot):
@@ -122,21 +143,38 @@ class ResourceScope(Snapshot):
 
     The resolver must check adapter-specific operations at call time; a source
     name never grants every operation offered by that provider.
+
+    ``knowledge_base_ids`` are the knowledge bases a run may search (ADR 0038
+    D5): the ones attached to its matter when the request was accepted. Being
+    listed grants no search. Each call rechecks that the knowledge base is
+    still the owner's, not archived and still attached to the run's matter.
     """
 
     document_ids: Annotated[tuple[UUID, ...], Field(max_length=128)]
     source_names: Annotated[tuple[ShortText, ...], Field(max_length=32)]
+    knowledge_base_ids: Annotated[tuple[UUID, ...], Field(max_length=MAX_KNOWLEDGE_BASES)] = ()
 
-    @field_validator("document_ids", "source_names")
+    @field_validator("document_ids", "source_names", "knowledge_base_ids")
     @classmethod
     def unique_selections(cls, value: tuple) -> tuple:
         if len(set(value)) != len(value):
             raise ValueError("duplicate selected resource")
         return tuple(sorted(value))
 
+    @model_serializer(mode="wrap")
+    def serialize_scope(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        value = handler(self)
+        if not self.knowledge_base_ids:
+            # A scope without knowledge bases keeps the form it had before they
+            # existed. This dump is part of every plan's and intake's hash.
+            value.pop("knowledge_base_ids", None)
+        return value
+
     def contains(self, other: ResourceScope) -> bool:
-        return set(other.document_ids) <= set(self.document_ids) and set(other.source_names) <= set(
-            self.source_names
+        return (
+            set(other.document_ids) <= set(self.document_ids)
+            and set(other.source_names) <= set(self.source_names)
+            and set(other.knowledge_base_ids) <= set(self.knowledge_base_ids)
         )
 
 
@@ -170,6 +208,81 @@ class PhaseGrants(Snapshot):
         return all(set(other.for_phase(p)) <= set(self.for_phase(p)) for p in Phase)
 
 
+class PhaseTools(Snapshot):
+    """Registry tool names a model may be offered in each phase (ADR 0038 D3, D4).
+
+    Names, not authority. Every call still needs the matching intent in
+    ``PhaseGrants``, current operator policy and durable effect admission. The
+    plan carries this list so approval of the exact plan is consent for it.
+    """
+
+    intake: tuple[ShortText, ...] = ()
+    analysis: tuple[ShortText, ...] = ()
+    drafting: tuple[ShortText, ...] = ()
+    ethics_review: tuple[ShortText, ...] = ()
+    delivery: tuple[ShortText, ...] = ()
+
+    @field_validator("*")
+    @classmethod
+    def unique_tools(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("duplicate tool")
+        return tuple(sorted(value))
+
+    def for_phase(self, phase: Phase) -> tuple[str, ...]:
+        return getattr(self, phase.value)
+
+    def contains(self, other: PhaseTools) -> bool:
+        return all(set(other.for_phase(p)) <= set(self.for_phase(p)) for p in Phase)
+
+    def names(self) -> frozenset[str]:
+        return frozenset(name for p in Phase for name in self.for_phase(p))
+
+
+class DocumentRef(Snapshot):
+    """One owner-selected document, numbered in selection order (ADR 0038 D5).
+
+    The number is what a child cites and what the read tool accepts. The file
+    name is display data from the owner's own record. Neither grants a read:
+    the boundary rechecks selection, ownership and project attachment.
+    """
+
+    number: Annotated[int, Field(ge=1, le=128)]
+    document_id: UUID
+    file_id: UUID
+    filename: ShortText
+    attached_for_run: bool = False
+
+
+class KnowledgeBaseRef(Snapshot):
+    """One knowledge base a run's tasks may search, as the plan lists it (ADR 0038 D5).
+
+    The name is display data from the owner's own record, taken when the
+    request was accepted. Neither field grants a search: the boundary rechecks
+    ownership, archival and attachment to the run's matter at every call.
+    """
+
+    knowledge_base_id: UUID
+    name: ShortText
+
+
+def _numbered_selection(documents: tuple[DocumentRef, ...], resources: ResourceScope) -> None:
+    if [d.number for d in documents] != list(range(1, len(documents) + 1)):
+        raise ValueError("selected documents must be numbered in order")
+    if len({d.file_id for d in documents}) != len(documents) or {
+        d.document_id for d in documents
+    } != set(resources.document_ids):
+        raise ValueError("selected documents differ from the root resource scope")
+
+
+def _listed_knowledge_bases(
+    knowledge_bases: tuple[KnowledgeBaseRef, ...], resources: ResourceScope
+) -> None:
+    ids = [k.knowledge_base_id for k in knowledge_bases]
+    if len(set(ids)) != len(ids) or set(ids) != set(resources.knowledge_base_ids):
+        raise ValueError("listed knowledge bases differ from the root resource scope")
+
+
 class ExecutionScope(Snapshot):
     resources: ResourceScope
     grants: PhaseGrants
@@ -188,6 +301,10 @@ class ChildAssignment(Snapshot):
     task: ResearchTask
     execution: ExecutionScope
     budget_usd: Money
+    # Contract version 3 (ADR 0038 D4). Omitted from earlier plans' canonical
+    # form by PreparedPlan's serializer, so retained approvals keep their hash.
+    tools: PhaseTools = PhaseTools()
+    turn_limit: Annotated[int, Field(ge=0, le=16)] = 0
 
     @model_validator(mode="after")
     def internal_delivery_only(self) -> Self:
@@ -209,12 +326,24 @@ class ChildAssignment(Snapshot):
 class PreparedPlan(Snapshot):
     """Canonical executable plan built from resolved server policy, never an LLM."""
 
-    contract_version: Literal[1, 2] = 1
+    contract_version: Literal[1, 2, 3] = 1
     planning_digest: Digest | None = None
+    # Contract version 3 (ADR 0038): the registry profile and the numbered
+    # document selection are part of what the owner approves.
+    profile: ShortText | None = None
+    documents: Annotated[tuple[DocumentRef, ...], Field(max_length=128)] = ()
+    # The knowledge bases the tasks may search, named so that approving the
+    # plan is consent to it. Version 3 only; left out of the canonical form
+    # when there are none.
+    knowledge_bases: Annotated[
+        tuple[KnowledgeBaseRef, ...], Field(max_length=MAX_KNOWLEDGE_BASES)
+    ] = ()
     plan_id: UUID
     revision: Annotated[int, Field(ge=1)]
     root_id: UUID
-    project_id: UUID
+    # None for a run started from a chat outside any matter (ADR 0038 D1).
+    # Required, never defaulted: a plan always states which it is.
+    project_id: UUID | None
     owner_id: UUID
     goal: TaskText
     policy_version: ShortText
@@ -245,8 +374,25 @@ class PreparedPlan(Snapshot):
 
     @model_validator(mode="after")
     def bounded_delegation(self) -> Self:
-        if (self.contract_version == 2) != (self.planning_digest is not None):
+        if (self.contract_version >= 2) != (self.planning_digest is not None):
             raise ValueError("model plans require their planning scope digest")
+        if self.project_id is None and self.contract_version != 3:
+            raise ValueError("only a registry plan can run outside a matter")
+        if self.contract_version == 3:
+            if self.profile is None:
+                raise ValueError("registry plans name their profile")
+            _numbered_selection(self.documents, self.root.resources)
+            _listed_knowledge_bases(self.knowledge_bases, self.root.resources)
+            if self.knowledge_bases and self.project_id is None:
+                raise ValueError("a run outside a matter searches no knowledge base")
+        elif (
+            self.profile is not None
+            or self.documents
+            or self.knowledge_bases
+            or self.root.resources.knowledge_base_ids
+            or any(child.tools.names() or child.turn_limit for child in self.children)
+        ):
+            raise ValueError("profiles, documents and tools require contract version 3")
         if len({child.dispatch_id for child in self.children}) != len(self.children):
             raise ValueError("duplicate dispatch identity")
         if self.root_allowance_usd + sum(c.budget_usd for c in self.children) > self.budget_usd:
@@ -265,6 +411,8 @@ class PreparedPlan(Snapshot):
                 raise ValueError("child drops privileged classification")
             if self.root.anonymize and not scope.anonymize:
                 raise ValueError("child disables required anonymization")
+            if bool(child.tools.names()) != bool(child.turn_limit):
+                raise ValueError("a tool grant and a turn limit are set together")
         return self
 
     @model_serializer(mode="wrap")
@@ -272,6 +420,17 @@ class PreparedPlan(Snapshot):
         value = handler(self)
         if self.contract_version == 1:
             value.pop("planning_digest", None)
+        if self.contract_version < 3:
+            # Fields added for version 3 must not enter an earlier plan's
+            # canonical form: its stored hash is the owner's consent binding.
+            value.pop("profile", None)
+            value.pop("documents", None)
+            for child in value["children"]:
+                child.pop("tools", None)
+                child.pop("turn_limit", None)
+        if not self.knowledge_bases:
+            # Likewise a plan with no knowledge bases, of any version.
+            value.pop("knowledge_bases", None)
         return value
 
     def approval_hash(self) -> str:
@@ -290,12 +449,26 @@ class PreparedPlan(Snapshot):
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class RunCorrelation:
+    """The chat turn a run is bound to (ADR 0038 D1, D2).
+
+    Resolved by the server from the message's link to the run's root session,
+    never from model output. It labels routing-log and tool-call-log rows so a
+    run is found through the same channels as an ordinary chat turn. It is not
+    part of an effect's identity and grants nothing.
+    """
+
+    chat_id: UUID
+    message_id: UUID
+
+
 class ApprovalBinding(Snapshot):
     """Consent evidence read from server-owned storage; never a bearer token."""
 
     plan_id: UUID
     root_id: UUID
-    project_id: UUID
+    project_id: UUID | None
     revision: Annotated[int, Field(ge=1)]
     plan_hash: Digest
     approving_user_id: UUID
