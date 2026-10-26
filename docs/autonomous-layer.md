@@ -159,6 +159,14 @@ precedents were produced."* — then proceeds to a normal `completed`
 terminal state. The session does **not** fabricate analysis it could
 not perform; it tells the user the gateway failed and stops cleanly.
 
+If the gateway rejects the *model itself* — a deployment whose routing
+table does not resolve the analysis fallback answers HTTP 400, logged
+as "does not resolve to any configured alias or provider-native model
+name" — point ``LQ_AI_AUTONOMOUS_DEFAULT_MODEL`` at a model id or alias
+the gateway routes (``.env.example`` documents it). The default is the
+``smart`` alias, the same one the playbook and tabular executors use,
+so a deployment that routes ``smart`` needs no extra setting.
+
 ---
 
 ## Single-chokepoint security model
@@ -222,7 +230,19 @@ context).
 every model-supplied `kb_id`/`file_id` must belong to the session's
 owner (archived and soft-deleted targets excluded), and query mode
 requires `kb_id`; foreign or unknown ids fail closed with a
-not-found-shaped error (#288, AG-01). `emit_artifact` applies the same
+not-found-shaped error (#288, AG-01).
+Retrieval ownership refusals add a payload-free `tool_call` audit row with
+`outcome='ownership_denied'` (#494). This is the one closing row for the attempt,
+after its initial `started` row. An explicit internal refusal signal lets the
+analysis loop keep its existing nonfatal `ValueError` observation without
+adding the generic `error` row introduced by #656. Ordinary validation and
+dispatch failures retain their generic error audit. The label covers
+foreign, unknown, archived, and deleted targets rejected by those predicates;
+it does not establish that an injection occurred. Rows are flushed in the
+caller's transaction and persist only if that transaction commits; a fatal
+executor rollback discards them. Ordinary argument errors do not get this label.
+
+`emit_artifact` applies the same
 ownership predicate on the **write** path: the session's target KB
 (`session.params["kb_id"]`) must belong to the session owner and not be
 archived, checked before any byte is uploaded — a foreign target fails

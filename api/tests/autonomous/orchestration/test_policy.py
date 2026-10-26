@@ -16,7 +16,7 @@ from sqlalchemy import delete, select, update
 
 from app.autonomous.enums import ToolIntent
 from app.autonomous.guard import ToolResult, guarded_tool_call
-from app.autonomous.orchestration.contracts import ResourceScope
+from app.autonomous.orchestration.contracts import PhaseTools, ResourceScope
 from app.autonomous.orchestration.policy import (
     SourcePolicy,
 )
@@ -88,12 +88,18 @@ async def test_optional_demo_allowlist_preserves_legacy_policy_hash(
     policy_env: SimpleNamespace,
 ) -> None:
     policy = policy_env.config.current
-    legacy = policy.model_dump(mode="json", exclude={"demo_project_id"})
+    # A policy that sets neither the project allowlist nor a tool grant keeps
+    # the canonical form, and so the version, that retained approvals bind.
+    legacy = policy.model_dump(mode="json", exclude={"demo_project_id", "tools", "turn_limit"})
     expected = hashlib.sha256(
         json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     assert policy.version() == expected
     assert policy.model_copy(update={"demo_project_id": uuid4()}).version() != expected
+    tooled = policy.model_copy(
+        update={"tools": PhaseTools(analysis=("read_document",)), "turn_limit": 2}
+    )
+    assert tooled.version() != expected
 
 
 @pytest.mark.parametrize("mutation", ["delete", "detach", "missing", "unattached"])

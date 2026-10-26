@@ -1,4 +1,7 @@
 import { defineConfig } from 'cypress';
+import { checkSpecInventory, DETERMINISTIC_SPECS, LLM_SPECS } from './cypress/spec-tracks';
+
+checkSpecInventory();
 
 // ---------------------------------------------------------------------------
 // Spec tracks (roadmap 4.2 — Cypress in CI)
@@ -19,41 +22,9 @@ import { defineConfig } from 'cypress';
 //   configured provider keys, so they are gated behind CYPRESS_LLM=1 until
 //   a mock/echo provider exists (see DE-232 sequencing in docs).
 //
-// - Anything in neither list is quarantined and never runs:
-//     chat.cy.ts          — upstream OpenWebUI; needs an Ollama model + LLM
-//     registration.cy.ts  — upstream OpenWebUI signup flow; LQ.AI stacks
-//                           disable open signup (403) so the flow 404s/fails
-//     settings.cy.ts      — upstream OpenWebUI; depends on the
-//                           admin@example.com bootstrap the LQ.AI stack blocks
-//     wave-a-chrome.cy.ts — stale: asserts Matters opens ComingSoonModal,
-//                           superseded by Wave C (tabs.ts: matters available)
-//     documents.cy.ts     — empty spec (reference comment only)
-//   Un-quarantine by fixing the spec and moving it into a track list.
+// Every checked-in spec must be selected or explicitly excluded in
+// cypress/spec-tracks.ts. Missing and unclassified paths fail config loading.
 // ---------------------------------------------------------------------------
-
-const DETERMINISTIC_SPECS = [
-	// Fully cy.intercept-mocked — no real backend writes, no seeded admin needed.
-	'cypress/e2e/m3-0-fresh-install-login.cy.ts',
-	'cypress/e2e/m3-a4-playbook-execution.cy.ts',
-	'cypress/e2e/m3-a6-easy-playbook-wizard.cy.ts',
-	'cypress/e2e/m3-b2-word-addin-oauth.cy.ts',
-	'cypress/e2e/m3-c-tabular-review.cy.ts',
-	'cypress/e2e/m4-autonomous.cy.ts',
-	'cypress/e2e/lq-ai-orchestration-demo.cy.ts',
-	'cypress/e2e/lq-ai-skill-workspaces.cy.ts',
-	'cypress/e2e/matter-intake.cy.ts',
-	// Live-backend but LLM-free — real login as the seeded admin; create
-	// throwaway matters/chats; message/citation payloads are mocked.
-	'cypress/e2e/m2-c2-citation-states.cy.ts',
-	'cypress/e2e/wave-b-surfaces.cy.ts',
-	'cypress/e2e/wave-c-matters.cy.ts'
-];
-
-const LLM_SPECS = [
-	'cypress/e2e/wave-d1-power-features.cy.ts',
-	'cypress/e2e/wave-d2-skill-creator.cy.ts',
-	'cypress/e2e/wave-m1-final-surfaces.cy.ts'
-];
 
 // CYPRESS_LLM=1 widens the run to include the live-LLM specs (requires
 // provider keys in the stack's .env). Default is the deterministic track.

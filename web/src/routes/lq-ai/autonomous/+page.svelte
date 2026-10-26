@@ -24,6 +24,7 @@
 
 	import { autonomousApi, skillsApi, knowledgeBasesApi, projectsApi } from '$lib/lq-ai/api';
 	import { orchestrationChatApi } from '$lib/lq-ai/api/orchestration';
+	import { receiptHrefForSession } from '$lib/lq-ai/run/links';
 	import * as playbooksApi from '$lib/lq-ai/api/playbooks';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousSessionRead } from '$lib/lq-ai/api/autonomous';
@@ -274,9 +275,7 @@
 						<td class="date-cell">{formatCreatedAt(session.created_at)}</td>
 						<td class="sessions-table-actions">
 							<a
-								href={session.params.orchestration_profile === 'model_demo_v1'
-									? `/lq-ai/autonomous/orchestration/chat/${session.id}`
-									: `/lq-ai/autonomous/sessions/${session.id}`}
+								href={receiptHrefForSession(session) ?? `/lq-ai/autonomous/sessions/${session.id}`}
 								class="action-link">View</a
 							>
 							{#if isHaltable(session.status)}

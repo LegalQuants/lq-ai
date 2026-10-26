@@ -218,6 +218,7 @@ async def test_per_column_ensemble_gating_end_to_end(db_session: AsyncSession) -
     ]
 
     execution = TabularExecution(
+        user_id=owner.id,
         document_ids=[doc.id],
         columns=columns,
         status="pending",

@@ -535,3 +535,43 @@ async def test_binding_cannot_drop_required_anonymization(
     assert not env.gateway.calls
     async with env.factory.begin() as db:
         assert await db.get(Effect, (env.root_id, "source:one")) is None
+
+
+async def test_a_run_hosted_in_a_chat_labels_its_tool_call_rows_with_that_turn(
+    source_env: SimpleNamespace,
+) -> None:
+    """ADR 0038 D2: a tool-call-log row carries the chat and message, beside the session."""
+    from app.models.chat import Chat, Message
+
+    env = source_env
+    await start(env)
+    # Before the run is bound to a chat turn, a row has the session only.
+    await search(env, key="source:unbound")
+    async with env.factory.begin() as db:
+        chat = Chat(owner_id=env.owner_id, project_id=env.project_id, title="Hosted run")
+        db.add(chat)
+        await db.flush()
+        message = Message(
+            chat_id=chat.id,
+            role="assistant",
+            kind="run",
+            content="",
+            autonomous_session_id=env.root_id,
+        )
+        db.add(message)
+        await db.flush()
+        chat_id, message_id = chat.id, message.id
+    await search(env, key="source:bound")
+    async with env.factory() as db:
+        rows = (
+            await db.scalars(
+                select(ToolCallLog)
+                .where(ToolCallLog.session_id == env.root_id)
+                .order_by(ToolCallLog.created_at)
+            )
+        ).all()
+    assert [(row.chat_id, row.message_id) for row in rows] == [
+        (None, None),
+        (chat_id, message_id),
+    ]
+    assert all(row.session_id == env.root_id and row.origin == "autonomous" for row in rows)

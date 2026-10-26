@@ -522,9 +522,11 @@ async def test_routing_log_purpose_defaults_to_chat(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("purpose", ["judge_paraphrase", "tabular_bulk_op"])
 @respx.mock
 async def test_routing_log_purpose_judge_paraphrase_propagates(
     client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter],
+    purpose: str,
 ) -> None:
     """M2-E2: ``lq_ai_purpose='judge_paraphrase'`` on the request lands on the row.
 
@@ -551,12 +553,81 @@ async def test_routing_log_purpose_judge_paraphrase_propagates(
         json={
             "model": "smart",
             "messages": [{"role": "user", "content": "judge this"}],
-            "lq_ai_purpose": "judge_paraphrase",
+            "lq_ai_purpose": purpose,
         },
     )
     assert response.status_code == 200
     assert len(recorder.rows) == 1
-    assert recorder.rows[0].purpose == "judge_paraphrase"
+    assert recorder.rows[0].purpose == purpose
+
+
+# Every label the backend sends on ``lq_ai_purpose``. Kept as literals:
+# the services share no code, so this list is the contract between them.
+_BACKEND_PURPOSES = (
+    "judge_paraphrase",
+    "judge_case_content",
+    "judge_authority_content",
+    "judge_treatment",
+    "tabular_extraction",
+    "tabular_bulk_op",
+    "playbook_executor",
+    "playbook_easy_extract",
+    "autonomous_executor",
+    "orchestration_run",
+)
+
+
+@pytest.mark.integration
+@respx.mock
+@pytest.mark.parametrize("purpose", _BACKEND_PURPOSES)
+async def test_routing_log_records_each_backend_purpose_as_sent(
+    client_with_recorder: tuple[AsyncClient, RecordingRoutingLogWriter], purpose: str
+) -> None:
+    """ADR 0038 D2: traffic is recorded as what it is, not as ``'chat'``.
+
+    A governed run sends ``orchestration_run`` and a legacy autonomous
+    session ``autonomous_executor``; both used to be recorded as ``chat``.
+    """
+
+    client, recorder = client_with_recorder
+    respx.post("https://api.anthropic.com/v1/messages").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "msg_purpose_known",
+                "model": "claude-opus-4-7",
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 3, "output_tokens": 1},
+            },
+        )
+    )
+
+    response = await client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "smart",
+            "messages": [{"role": "user", "content": "hi"}],
+            "lq_ai_purpose": f"  {purpose} ",
+            # A run labels its calls with the chat turn it is hosted in.
+            "lq_ai_chat_id": "11111111-1111-4111-8111-111111111111",
+            "lq_ai_message_id": "22222222-2222-4222-8222-222222222222",
+        },
+    )
+    assert response.status_code == 200
+    assert len(recorder.rows) == 1
+    assert recorder.rows[0].purpose == purpose
+    assert str(recorder.rows[0].chat_id) == "11111111-1111-4111-8111-111111111111"
+    assert str(recorder.rows[0].message_id) == "22222222-2222-4222-8222-222222222222"
+
+
+@pytest.mark.unit
+def test_every_known_purpose_fits_the_routing_log_column() -> None:
+    """The column is ``varchar(32)``; an over-long label would fail the insert."""
+    from app.api.inference import _KNOWN_PURPOSES
+
+    assert set(_BACKEND_PURPOSES) | {"chat", "embedding"} == set(_KNOWN_PURPOSES)
+    assert all(1 <= len(label) <= 32 and label == label.strip() for label in _KNOWN_PURPOSES)
 
 
 @pytest.mark.integration

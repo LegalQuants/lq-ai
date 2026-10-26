@@ -2,24 +2,30 @@
 
 > **Depth:** Summary-level. STRIDE-by-component for the 5 production services. Named threats + named mitigations with cross-references. Detailed design intent lives in PRD §5 and the ADR series.
 
+## In short
+
+- This page is LQ.AI's threat model: a STRIDE-by-component table covering each of the five production services (`api`, `gateway`, `web`, `postgres`, `rustfs`). "STRIDE" is impersonation, unauthorized changes, missing evidence, disclosure, service disruption, and gaining higher privileges — read the table cell-by-cell for the service and category you're checking.
+- The Inference Gateway, holding the only plaintext provider API keys, is the primary trust boundary — see "Trust boundaries" below for the three trust zones.
+- Most mitigations cite the code, ADR, or PRD section behind them, so you can usually verify the claim yourself rather than take it on trust.
+- Host administration, OS patching, and secret storage are out of scope here and stay the operator's responsibility — a compromised host isn't something this table, or an application setting, fixes.
+
 ## Trust boundaries
 
 LQ.AI runs as 7 services on a single operator-controlled deployment (Docker Compose for dev; Helm/Kubernetes for production per `deploy/helm/lq-ai/`). The Inference Gateway is the only component holding plaintext provider API keys per PRD §4; this defines the primary trust boundary. Everything internal to the operator's deployment is one trust zone; the LLM providers (Anthropic, OpenAI, etc.) are another; the operator's IdP (if integrated) is a third.
 
-```
-┌────────────────────────────────────────────────────────────┐
-│ Operator deployment                                        │
-│  ┌──────┐   ┌─────────┐   ┌──────────┐   ┌────────────┐   │
-│  │ web  │──>│   api   │──>│ gateway  │──>│ providers  │   │
-│  └──────┘   └────┬────┘   └────┬─────┘   └────────────┘   │
-│                  ▼             ▼                          │
-│              ┌────────┐    ┌─────────┐                    │
-│              │postgres│    │ rustfs  │                    │
-│              └────────┘    └─────────┘                    │
-│              ┌────────┐                                   │
-│              │ redis  │                                   │
-│              └────────┘                                   │
-└────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    accTitle: Trust boundaries in an LQ.AI deployment
+    accDescr: The services sit inside one operator deployment; the model providers sit outside it, a separate trust zone. Requests run from web to api to gateway, and only the gateway calls out to the providers; api also connects to postgres, redis and rustfs, and the gateway writes its routing log to postgres.
+    subgraph deployment["Operator deployment"]
+        direction LR
+        web["web"] --> api["api"] --> gateway["gateway"]
+        api --> postgres["postgres"]
+        api --> redis["redis"]
+        api --> rustfs["rustfs"]
+        gateway --> postgres
+    end
+    gateway --> providers["providers"]
 ```
 
 The five rows in the STRIDE table below cover the production-facing services (`api`, `gateway`, `web`, `postgres`, `rustfs`). Redis and the ingest-worker are cluster-internal and inherit `postgres`-tier mitigations (least-privilege role, no external listener, operator-managed secret); they do not add a distinct row.
@@ -31,6 +37,16 @@ The boundary the STRIDE table below does not draw is the one between the operato
 **Threat (Tampering / Elevation of Privilege at the model boundary):** instructions embedded in untrusted content steer the analysis presented as skill output, influence tool selection, or impersonate the operator's own instruction block. **Mitigations shipped:** unconsumed skill inputs are JSON-encoded on one line into a source-labelled block under an explicit data-not-instructions policy, so a value cannot start a new prompt line, close a fence, or reproduce the assembler's `## Operator system instructions` / `# Skill:` markers (ADR 0007, amendment of 2026-09-02). Placeholder-consumed inputs remain in the skill text; input-created assembler headings are backslash-escaped, including headings formed across template boundaries. Tool calls require a persisted, human-confirmed lifecycle state before they execute; the Citation Engine's verifier rejects quotes that do not match the source byte-for-byte; and the operator's human-in-the-loop review is the last line. **Residual risk, stated plainly:** the envelope preserves structure but does not reduce the authority of those bytes — a model can still follow well-formed instructions it reads under an "untrusted" label in the system message, and the retrieval / attachment blocks have not received even the envelope treatment. Relocating the remaining system-message content into a data channel the model is told to distrust is [DE-388](../PRD.md#9-deferred-enhancements-and-identified-future-work), ADR-gated, and depends on an adversarial evaluation corpus (DE-110) that does not exist yet. There are no "skill-prompt isolation conventions" in the skill-authoring guide; a previous version of Appendix E said there were.
 
 ## STRIDE-by-component
+
+**Local account recovery.** Trusted admins can provision accounts or reset any live
+account, including admins. Password responses carry `Cache-Control: no-store`; only
+bcrypt hashes are stored and audit details exclude passwords. A password reset or
+change increments the user's credential version and revokes refresh sessions atomically.
+Access tokens and MFA challenges issued under an earlier version are rejected on later
+requests. Token issuance and password mutation serialize on the user row, and refresh
+rechecks revocation after taking the lock. Existing MFA enrollment is preserved.
+Already authorized requests/streams are not interrupted. See [ADR 0002](../adr/0002-backend-owned-auth.md)
+and [token lifecycle](cryptography.md#per-user-credential-invalidation).
 
 | Component | Spoofing | Tampering | Repudiation | Info Disclosure | DoS | Elevation of Privilege |
 |---|---|---|---|---|---|---|
@@ -57,6 +73,7 @@ The boundary the STRIDE table below does not draw is the one between the operato
 - [ADR 0007 Skill prompt assembly](../adr/0007-skill-prompt-assembly.md) — the untrusted-input envelope (amendment of 2026-09-02) and what it does not do.
 - [Encrypted-at-rest provider keys workflow](encrypted-keys.md) — master-key bootstrap and rotation.
 - [Vulnerability disclosure policy](../../SECURITY.md) — coordinated disclosure process.
+- [Boundary registers](boundary-registers.md) — a separate, orthogonal catalog that restrains *autonomous work* (economic, temporal, contextual limits, and how each is enforced) rather than the STRIDE threats above, which cover the five production services as they exist today.
 
 ## Update cadence
 

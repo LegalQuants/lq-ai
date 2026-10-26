@@ -19,6 +19,7 @@ import {
 	writePersistedModel,
 	readAvailablePersistedModel
 } from '../components/ChatPanel.svelte';
+import { NEW_HARNESS_ID } from '../run/composer';
 
 class MockStorage implements Storage {
 	private map = new Map<string, string>();
@@ -153,5 +154,14 @@ describe('readAvailablePersistedModel', () => {
 		expect(
 			readAvailablePersistedModel('c1', ['smart', 'anthropic-prod/claude-opus-4-8'], s)
 		).toBeNull();
+	});
+
+	it('keeps New harness, which the run-profiles read offers and the catalog never lists', () => {
+		// ChatPanel passes the catalog's ids plus this one. Whether New harness can
+		// be used in the chat is decided separately, by `composerMode`.
+		const s = new MockStorage();
+		s.setItem(modelStorageKeyForChat('c1'), NEW_HARNESS_ID);
+		expect(readAvailablePersistedModel('c1', ['smart', NEW_HARNESS_ID], s)).toBe(NEW_HARNESS_ID);
+		expect(readAvailablePersistedModel('c1', ['smart'], s)).toBeNull();
 	});
 });

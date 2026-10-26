@@ -152,7 +152,7 @@ The procedure is the same in all cases:
 
 4. **Swap `LQ_AI_GATEWAY_MASTER_KEY`** in the gateway's deployment environment to the new value.
 
-5. **Restart the gateway** (or trigger config reload). Verify with `curl http://gateway/admin/v1/providers/health` that each provider's adapter built successfully — a stale master key would surface as `DecryptError` at adapter-build time and the provider would not register.
+5. **Restart the gateway** (a config reload re-reads `gateway.yaml` but does not rebuild adapters; only a start does). Verify with `GET /admin/v1/provider-keys` (gateway key header) that each provider reports `configured: true` — a stale master key surfaces as `DecryptError` at adapter-build time and the provider does not register, so it shows `configured: false`. (`GET /admin/v1/providers/health` is a `501` stub as of this writing; do not rely on it.)
 
 6. **Revoke the old master key** in your secrets vault (or mark superseded with an audit-log entry — your vault's convention). The gateway never reads it again; nothing in the deployment will accept it.
 
@@ -189,9 +189,12 @@ After bootstrap or rotation, a quick smoke:
 python -m app.cli encrypt-key --provider test < <(echo "round-trip-canary")
 # → gAAAAAB...token...
 
-# 2. Gateway adapter health — confirms decryption succeeded at startup.
-curl -s http://localhost:8001/admin/v1/providers/health | jq '.providers[] | {name, ok}'
-# → each provider you've configured should report ok: true
+# 2. Gateway adapter status — confirms decryption succeeded at startup.
+#    (GET /admin/v1/providers/health is a 501 stub; use the provider-keys list.)
+curl -s http://localhost:8001/admin/v1/provider-keys \
+  -H "X-LQ-AI-Gateway-Key: ${LQ_AI_GATEWAY_KEY}" | jq '.provider_keys[] | {provider, configured, source}'
+# → each provider you've configured should report configured: true
+#    (presence of a decryptable key, not upstream acceptance — step 3 checks that)
 
 # 3. End-to-end dispatch — confirms the decrypted key reaches the upstream provider.
 curl -sX POST http://localhost:8001/v1/chat/completions \

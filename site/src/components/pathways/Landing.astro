@@ -1,0 +1,170 @@
+---
+/**
+ * Iris's pathways with a source-backed three-question introduction, told as a
+ * conversation: three questions and answers, then "Where do I go from here?",
+ * answered with the next steps and the pathways. The reader's own searches are
+ * appended after that as further turns (DocsSearch.astro).
+ * Guide content is selected at sync time; this component only renders navigation.
+ *
+ * Drawn in the interface redesign: the next steps are pills (C4), and the
+ * pathway cards are hairline boxes on the raised ground with the 16px
+ * rounding, ink titles and a round arrow — no fills. The trust centre's card
+ * carries the orange mark (C15).
+ */
+import { withBase } from '../../namespaces.mjs';
+import { NAV_ROUTES } from '../../pathways.mjs';
+import GuidedIntro from './GuidedIntro.astro';
+import DocsSearch from './DocsSearch.astro';
+import GuideDetails from './GuideDetails.astro';
+import '../../styles/explore.css';
+
+const { pathways } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<div data-lq-explore class="lq-explore">
+<GuidedIntro />
+
+<!-- The introduction's last turn, and the tour's last step: what to read
+     next. The reader's own searches join the conversation after it
+     (DocsSearch.astro). -->
+<section class="lq-answer lq-read-next" data-lq-tour-step aria-labelledby="question-next">
+<h2 id="question-next" class="lq-ask">Where do I go from here?</h2>
+<div class="lq-answer-reply"><span class="lq-docs-avatar" aria-hidden="true">LQ</span><div class="lq-answer-body">
+<p>Pick the path that fits what you're doing, or ask your own question below.</p>
+
+<div class="lq-landing-next">
+  <a href={withBase(base, 'start/quickstart')}>Try a fictional document</a>
+  <a href={withBase(base, 'start/is-it-for-you')}>Decide whether it fits</a>
+  <a href={`${base}llms.txt`}>Docs for agents</a>
+</div>
+
+<nav class="lq-landing-grid" aria-label="Documentation pathways">
+  {
+    pathways.map((p) => (
+      <a class="lq-landing-card" data-tone={p.tone} href={withBase(base, NAV_ROUTES.pathway(p.id))}>
+        <strong class:list={{ 'lq-mark': p.governance }}>{p.title}</strong>
+        <span class="lq-landing-arrow" aria-hidden="true">
+          ↗
+        </span>
+      </a>
+    ))
+  }
+</nav>
+</div></div>
+</section>
+
+<DocsSearch />
+<GuideDetails />
+</div>
+<script>
+  import '../../scripts/explore';
+</script>
+
+<style>
+  /* Unlayered on purpose: these render inside .sl-markdown-content, and
+     theme.css's unlayered prose rules would beat any layered style. */
+  .lq-landing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .lq-landing-next { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 2rem; }
+  .lq-landing-next a {
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-pill);
+    padding: 0.5rem 1rem;
+    font-size: 0.9375rem;
+    color: var(--sl-color-white);
+    text-decoration: none;
+  }
+  .lq-landing-next a:hover { background: var(--lq-color-hover); }
+
+  .lq-landing-card {
+    min-height: 120px;
+    padding: 22px 24px;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: var(--lq-radius-2xl);
+    background: var(--lq-color-surface-raised);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: var(--sl-color-white);
+    text-decoration: none;
+    /* The card's own pressed state below replaces the browser's square tap flash. */
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .lq-landing-card strong {
+    max-width: 90%;
+    font-size: clamp(1.25rem, 2vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  .lq-landing-arrow {
+    align-self: flex-end;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 50%;
+    color: var(--sl-color-gray-3);
+    font-size: 1.25rem;
+    line-height: 1;
+    transition: transform 180ms ease;
+  }
+
+  .lq-landing-card:is(:hover, :focus-visible),
+  .lq-landing-card:is(:hover, :focus-visible) * {
+    text-decoration: none;
+    color: var(--sl-color-white);
+  }
+
+  .lq-landing-card:active {
+    background: var(--sl-color-bg-sidebar);
+  }
+
+  .lq-landing-card:hover {
+    border-color: var(--lq-color-hairline-strong);
+    background: var(--sl-color-bg-sidebar);
+  }
+
+  @media (hover: hover) {
+    .lq-landing-card:hover .lq-landing-arrow {
+      transform: rotate(45deg);
+    }
+  }
+
+  .lq-landing-card:focus-visible {
+    outline: 2px solid var(--lq-accent);
+    outline-offset: 3px;
+  }
+
+  @media (max-width: 50rem) {
+    .lq-landing-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .lq-landing-card {
+      min-height: 84px;
+      padding: 18px 20px;
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .lq-landing-arrow {
+      align-self: center;
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+    }
+  }
+</style>

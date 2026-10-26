@@ -151,6 +151,9 @@ class AnthropicAdapter(ProviderAdapter):
         self._api_key = api_key
         self._timeout = timeout_s
         self._default_max_tokens = default_max_tokens
+        # Bedrock opts in when composing this translator; existing providers
+        # retain their permissive SSE behavior.
+        self.strict_stream: bool = False
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
@@ -283,6 +286,7 @@ class AnthropicAdapter(ProviderAdapter):
                 headers=self._auth_headers(),
                 provider_name=self.name,
                 requested_model=model,
+                strict_stream=self.strict_stream,
             )
         return await self._chat_completion_unary(anthropic_body, model=model)
 
@@ -619,6 +623,7 @@ async def _anthropic_stream_iter(
     headers: dict[str, str],
     provider_name: str,
     requested_model: str,
+    strict_stream: bool = False,
 ) -> AsyncIterator[ChatCompletionChunk]:
     """Stream Anthropic Messages SSE and translate to OpenAI chunks.
 
@@ -672,6 +677,7 @@ async def _anthropic_stream_iter(
     prompt_tokens = 0
     completion_tokens = 0
     role_emitted = False
+    terminal_seen = False
     # DE-358 item 1: accumulate streamed ``tool_use`` blocks. Anthropic
     # streams a tool call as ``content_block_start`` (id + name), then
     # ``input_json_delta`` fragments of the arguments JSON, closed by
@@ -700,11 +706,19 @@ async def _anthropic_stream_iter(
                 try:
                     parsed = json.loads(data)
                 except json.JSONDecodeError:
+                    if strict_stream:
+                        raise ProviderHTTPError(
+                            "Malformed Bedrock Messages event", upstream_status=502
+                        ) from None
                     continue
+                if strict_stream and not isinstance(parsed, dict):
+                    raise ProviderHTTPError("Malformed Bedrock Messages event", upstream_status=502)
 
                 # Anthropic includes ``type`` inside data; some events
                 # rely on the ``event:`` line — we accept either.
                 kind = parsed.get("type") or event_type
+                if strict_stream and kind == "error":
+                    raise ProviderHTTPError("Bedrock Messages stream failed", upstream_status=502)
 
                 if kind == "message_start":
                     message = parsed.get("message") or {}
@@ -796,12 +810,17 @@ async def _anthropic_stream_iter(
                     continue
 
                 if kind == "message_stop":
+                    terminal_seen = True
                     # We emit the final chunk after the loop so we can
                     # incorporate the message_delta's usage even if a
                     # different ordering ever appears.
                     continue
 
                 # ping / unknown -> ignore
+            if strict_stream and (not terminal_seen or finish_reason is None or tool_blocks):
+                raise ProviderHTTPError(
+                    "Bedrock Messages stream ended before message_stop", upstream_status=502
+                )
     except httpx.TimeoutException as exc:
         # Our own timeout elapsed mid-stream — not an upstream failure.
         # See the unary path for the rationale behind the distinct class.

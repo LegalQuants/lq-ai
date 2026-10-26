@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.config import get_settings
 from app.workers import arq_setup
 from app.workers.arq_setup import M3A6_QUEUE_NAME, WorkerSettings, noop_job
 
@@ -50,20 +51,23 @@ def test_worker_settings_class_shape() -> None:
 
 @pytest.mark.unit
 def test_orchestration_cron_is_registered_only_when_enabled() -> None:
-    def jobs(enabled: bool) -> set[str]:
-        settings = type(
-            "Settings",
-            (),
-            {
-                "orchestration_chat_enabled": enabled,
-            },
-        )()
+    def jobs(**switches: bool) -> set[str]:
+        # Real settings, so the test follows whichever profile switches exist.
+        settings = get_settings().model_copy(
+            update={
+                "orchestration_chat_enabled": False,
+                "new_harness_enabled": False,
+                **switches,
+            }
+        )
         with patch("app.workers.arq_setup.get_settings", return_value=settings):
             return {job.coroutine.__name__ for job in arq_setup._build_cron_jobs()}
 
-    assert "orchestration_watchdog" not in jobs(False)
-    assert "orchestration_watchdog" in jobs(True)
-    assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs(False)
+    assert "orchestration_watchdog" not in jobs()
+    assert "orchestration_watchdog" in jobs(orchestration_chat_enabled=True)
+    # ADR 0038: any enabled run profile needs the recovery sweep, not only the first.
+    assert "orchestration_watchdog" in jobs(new_harness_enabled=True)
+    assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs()
 
 
 @pytest.mark.unit

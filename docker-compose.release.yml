@@ -50,7 +50,7 @@ services:
   postgres:
     # Digest-pinned for reproducible boots (matches the pin in
     # docker-compose.yml). Bump the tag and digest together.
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -98,7 +98,7 @@ services:
       - ${LQ_AI_OPS_SOURCE:-lq-ai-ops}:/lq-ai/ops:ro
 
   rustfs:
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
     restart: unless-stopped
     depends_on:
       rustfs-init:
@@ -113,7 +113,13 @@ services:
       RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
       RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
     volumes:
-      - miniodata:/data
+      # RustFS seeds /data/.rustfs in its image. Container creation happens
+      # before rustfs-init runs; copy-up would make a fresh volume look unknown.
+      - type: volume
+        source: miniodata
+        target: /data
+        volume:
+          nocopy: true
     ports:
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_API_HOST_PORT:-${MINIO_API_HOST_PORT:-9000}}:9000"
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_CONSOLE_HOST_PORT:-${MINIO_CONSOLE_HOST_PORT:-9001}}:9001"
@@ -184,6 +190,7 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
       AZURE_OPENAI_RESOURCE: ${AZURE_OPENAI_RESOURCE:-}
       # Ollama is NOT part of the release stack (core-8, no local-inference
@@ -232,8 +239,19 @@ services:
       S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
       S3_REGION: ${S3_REGION:-us-east-1}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Shared with arq-worker —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      # Apply the same independent reference-read switch to API and worker.
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
+      # Shared with arq-worker so chat and autonomous calls apply one default.
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
       JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
@@ -254,6 +272,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       # Bridge secrets — bridges are excluded from the release stack, but the
       # api reads these (optional, default empty) so leaving them unset is fine.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
@@ -301,6 +329,7 @@ services:
       LQ_AI_CHUNK_TARGET_CHARS: ${LQ_AI_CHUNK_TARGET_CHARS:-2000}
       LQ_AI_CHUNK_OVERLAP_CHARS: ${LQ_AI_CHUNK_OVERLAP_CHARS:-200}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
@@ -333,8 +362,22 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LQ_AI_SKIP_MIGRATIONS: "1"
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
+      LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      # Autonomous sessions (#681): fallback model the analysis node passes to
+      # the gateway when a watch/schedule trigger pins none. Defaults to the
+      # ``smart`` alias so it follows the gateway routing table; set it when
+      # the gateway does not route that alias. Same value as the api service —
+      # recreate both services after changing it.
+      LQ_AI_AUTONOMOUS_DEFAULT_MODEL: ${LQ_AI_AUTONOMOUS_DEFAULT_MODEL:-smart}
+      LQ_AI_TOOL_MAX_EGRESS_TIER: ${LQ_AI_TOOL_MAX_EGRESS_TIER:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Observability. The worker executes governed runs, so it exports spans
+      # like the api does; a run's trace then connects the request, this worker,
+      # the gateway and the provider (ADR 0038 D2). Empty disables export.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${LQ_AI_ARQ_WORKER_OTEL_SERVICE_NAME:-lq-ai-arq-worker}
+      LQ_AI_SKILL_REFERENCE_READ_ENABLED: ${LQ_AI_SKILL_REFERENCE_READ_ENABLED:-true}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}
       LQ_AI_ORCHESTRATION_CHAT_ENABLED: ${LQ_AI_ORCHESTRATION_CHAT_ENABLED:-false}
@@ -345,6 +388,16 @@ services:
       LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER: ${LQ_AI_ORCHESTRATION_CHAT_MINIMUM_TIER:-1}
       LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS: ${LQ_AI_ORCHESTRATION_CHAT_TIMEOUT_SECONDS:-120}
       LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN: ${LQ_AI_ORCHESTRATION_DEPLOYMENT_CHILDREN:-2}
+      # ADR 0038 D1, D3: New harness, the run profile the chat composer offers as
+      # an experimental model. Its own switch and its own pinned route; nothing is
+      # inherited from the fictional one.
+      LQ_AI_NEW_HARNESS_ENABLED: ${LQ_AI_NEW_HARNESS_ENABLED:-false}
+      LQ_AI_NEW_HARNESS_PROVIDER: ${LQ_AI_NEW_HARNESS_PROVIDER:-}
+      LQ_AI_NEW_HARNESS_MODEL: ${LQ_AI_NEW_HARNESS_MODEL:-}
+      LQ_AI_NEW_HARNESS_BUDGET_USD: ${LQ_AI_NEW_HARNESS_BUDGET_USD:-5.0000}
+      LQ_AI_NEW_HARNESS_MINIMUM_TIER: ${LQ_AI_NEW_HARNESS_MINIMUM_TIER:-1}
+      LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS: ${LQ_AI_NEW_HARNESS_TIMEOUT_SECONDS:-300}
+      LQ_AI_NEW_HARNESS_REASONING_EFFORT: ${LQ_AI_NEW_HARNESS_REASONING_EFFORT:-}
       # Same key as the api service — worker code paths that touch
       # envelope-encrypted payloads (DE-358 item 5) or per-user MCP OAuth
       # tokens need it to decrypt/encrypt.

@@ -11,8 +11,8 @@ requires-python = ">=3.12"
 license = { text = "Apache-2.0" }
 authors = [{ name = "LegalQuants" }]
 dependencies = [
-    "fastapi>=0.141.1,<0.142",
-    "uvicorn[standard]>=0.52.1,<0.53",
+    "fastapi>=0.141.1,<0.146",
+    "uvicorn[standard]>=0.52.1,<0.55",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
     "pyyaml>=6.0",
@@ -28,7 +28,7 @@ dependencies = [
     # transitive that pip resolves automatically; pinned here so the
     # SBOM is honest about it.
     "sqlalchemy[asyncio]>=2.0.51,<2.2",
-    "asyncpg>=0.31.0,<0.32",
+    "asyncpg>=0.31.0,<0.33",
     "greenlet>=3.0,<4",
     # ADR 0011: encrypted-at-rest provider keys via Fernet (AES-128-CBC +
     # HMAC-SHA256). The cryptography library is the standard Python AEAD
@@ -71,7 +71,11 @@ dependencies = [
     # sessions are stateful, so the connection holder must speak MCP. This is
     # the official MCP SDK — not reasonably hand-rollable (it implements the
     # full JSON-RPC-over-SSE session + auth handshake). Client-only use here.
-    "mcp>=1.28,<2",
+    # Floor 1.30: earlier 1.x follows a server's cross-origin redirect
+    # (GHSA-5h93-6whr-6q8j) and fetches server-chosen $ref URLs while
+    # validating tool output (GHSA-rwrf-2pqf-9j8j). <2: 2.x replaces the HTTP
+    # stack and the TLS trust store, a migration still to be decided.
+    "mcp>=1.30,<2",
     # starlette is pinned explicitly rather than left to fastapi's resolver.
     # History: this cap was originally <1.4 because mcp pulls sse-starlette,
     # whose 3.4.x line requires starlette 1.x, which conflicted with the
@@ -80,7 +84,7 @@ dependencies = [
     # have been running starlette 1.x since 1.3.1. We use only the MCP
     # *client* (ClientSession + streamablehttp_client), never the server.
     # Moves in lockstep with api/pyproject.toml's pin — bump both together.
-    "starlette>=1.4.1,<1.7",
+    "starlette>=1.4.1,<1.9",
 ]
 
 [project.optional-dependencies]
@@ -96,9 +100,15 @@ dev = [
     # unpinned floor let CI (which resolves latest) drift ahead of dev venvs
     # and fail `ruff format --check` on code that was clean locally. Pin so
     # local == CI. Bump deliberately (and reformat) when upgrading.
-    "ruff==0.16.8",
+    "ruff==0.17.1",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
+    # DE-230 — property-based testing of the anonymization round-trip,
+    # streaming rehydrator, and tier-floor invariants (tests/property/).
+    # MPL-2.0, test-only: never ships in the product image, so the
+    # file-level copyleft has no distribution consequence. Profiles
+    # (dev/ci/thorough) are registered in tests/property/conftest.py.
+    "hypothesis>=6.161",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -114,7 +124,44 @@ markers = [
     "slow: tests that take longer than 5s",
 ]
 
+# DE-229 — mutation testing (mutmut 3.x reads this section from pyproject.toml).
+#
+# Scope is a deliberate critical-module allowlist: the routing/policy
+# choke points and the Anonymization Layer — the gateway code whose test
+# suites must catch real defects (PRD §5.8). Rationale and score history:
+# docs/quality/mutation-scores.md.
+#
+# Runs nightly in .github/workflows/mutation.yml (never as a PR gate).
+# Local run after `uv sync --frozen --extra dev --group mutation`: `mutmut run` from gateway/. The test selection below excludes
+# suites that resolve gateway.yaml.example via the repo root (e.g.
+# tests/test_inference_tier_floor.py): mutmut executes tests from its
+# mutants/ sandbox copy, where that repo-root-relative path breaks.
+[tool.mutmut]
+source_paths = ["app"]
+# First wave is keyless/model-free; slow NLP integration remains DE-229 work.
+pytest_add_cli_args = ["-m", "not slow and not provider"]
+only_mutate = [
+    # Tier-Derivation + routing policy enforcement (PRD §3.13 / §4.4).
+    "app/router.py",
+    "app/tier_floor.py",
+    # Routing-log writer — the per-request audit choke point (PRD §1.5.2).
+    "app/routing_log.py",
+    # Anonymization Layer (PRD §4.7), incl. recognizers/.
+    "app/anonymization/*",
+]
+pytest_add_cli_args_test_selection = [
+    "tests/test_tier_floor.py",
+    "tests/test_router.py",
+    "tests/test_route_tool_call.py",
+    "tests/test_routing_log.py",
+    "tests/anonymization",
+]
+
 [tool.mypy]
 strict = true
 warn_unused_ignores = true
 disallow_untyped_defs = true
+
+[dependency-groups]
+# DE-229: opt-in only; normal dev/runtime installs exclude mutation tooling.
+mutation = ["mutmut==3.8.0"]

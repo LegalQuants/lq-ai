@@ -36,6 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.authz.documents import DocumentWorkflowGateway
 from app.clients.gateway import GatewayClient
 from app.models.document import Document
 from app.models.playbook import Playbook, PlaybookExecution
@@ -95,7 +96,15 @@ async def run_playbook_execution(
     execution.status = "running"
     await db.commit()
 
+    gateway = DocumentWorkflowGateway(
+        gateway,
+        db,
+        execution.user_id,
+        [execution.target_document_id],
+        project_ids=[execution.project_id] if execution.project_id is not None else (),
+    )
     try:
+        await gateway.authorize()
         playbook = await _load_playbook_with_positions(db, execution.playbook_id)
         if playbook is None:
             raise PlaybookExecutorError(

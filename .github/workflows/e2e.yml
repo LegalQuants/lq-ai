@@ -38,6 +38,9 @@ jobs:
     name: Deterministic Cypress track against the compose stack
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      PUBLIC_LQ_AI_API_BASE_URL: http://localhost:8000/api/v1
+      LQ_AI_CORS_ORIGINS: http://localhost:3000
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,7 +104,7 @@ jobs:
 
       - name: Upload Cypress artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cypress-artifacts
           path: |
@@ -120,7 +123,7 @@ jobs:
 
       - name: Upload compose logs
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: e2e-compose-logs
           path: e2e-compose-logs/

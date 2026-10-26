@@ -61,7 +61,8 @@ fi
 
 if [[ "${USE_CUDA_DOCKER,,}" == "true" ]]; then
   echo "CUDA enabled — extending LD_LIBRARY_PATH for torch/cudnn libraries."
-  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/usr/local/lib/python3.11/site-packages/torch/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib"
+  PYTHON_SITE_PACKAGES=$(python -c 'import sysconfig; print(sysconfig.get_path("platlib"))')
+  export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:${PYTHON_SITE_PACKAGES}/torch/lib:${PYTHON_SITE_PACKAGES}/nvidia/cudnn/lib"
 fi
 
 # ── HuggingFace Space deployment ─────────────────────────────────────────────

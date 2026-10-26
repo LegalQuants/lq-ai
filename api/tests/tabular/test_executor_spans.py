@@ -185,6 +185,7 @@ async def test_executor_emits_tabular_execute_and_cell_spans(
     }
 
     execution = TabularExecution(
+        user_id=owner.id,
         document_ids=[doc.id],
         columns=[column_spec],
         status="pending",

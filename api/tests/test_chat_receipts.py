@@ -24,6 +24,7 @@ from app.main import app
 from app.models.audit import AuditLog
 from app.models.chat import Chat, Message
 from app.models.inference import InferenceRoutingLog
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -185,6 +186,58 @@ async def test_receipts_merges_all_sources(
     assert "inference" in kinds
     assert "audit" in kinds
     assert "skill" in kinds
+
+
+async def test_reference_read_receipt_is_scoped_metadata_not_citation_evidence(
+    client: AsyncClient, owner_user: User, populated_chat: Chat, db_session: AsyncSession
+) -> None:
+    message = await db_session.scalar(
+        select(Message).where(Message.chat_id == populated_chat.id, Message.role == "assistant")
+    )
+    assert message is not None
+    for chat_id, tool, provider in (
+        (populated_chat.id, "skill_reference_read", "built-in:fixture-skill"),
+        (uuid.uuid4(), "skill_reference_read", "other-chat-provider"),
+        (populated_chat.id, "skill_workspace_read", "other-capability"),
+    ):
+        db_session.add(
+            ToolCallLog(
+                user_id=owner_user.id,
+                origin="chat",
+                chat_id=chat_id,
+                message_id=message.id,
+                provider=provider,
+                tool=tool,
+                tier=0,
+                outcome="executed",
+                cost_usd=0,
+                args_digest="private-reference-arguments-must-not-be-projected",
+            )
+        )
+    await db_session.flush()
+    response = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts?event_kinds=audit", headers=_h(owner_user)
+    )
+    assert response.status_code == 200
+    reads = [e for e in response.json() if e["detail"].get("action") == "skill.reference_read"]
+    assert len(reads) == 1
+    assert reads[0]["kind"] == "audit"
+    assert reads[0]["detail"] == {
+        "action": "skill.reference_read",
+        "provider": "built-in:fixture-skill",
+        "tool": "skill_reference_read",
+        "outcome": "executed",
+        "tier": 0,
+        "cost_usd": "0.000000",
+        "message_id": str(message.id),
+    }
+    assert "private-reference-arguments" not in response.text
+    assert "other-chat-provider" not in response.text
+    assert "other-capability" not in response.text
+    filtered = await client.get(
+        f"/api/v1/chats/{populated_chat.id}/receipts?event_kinds=inference", headers=_h(owner_user)
+    )
+    assert "skill.reference_read" not in filtered.text
 
 
 async def test_receipts_chronological_ascending(

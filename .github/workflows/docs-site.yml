@@ -1,0 +1,176 @@
+name: Docs site
+
+# Builds the public documentation site (ADR 0028) and deploys it to GitHub Pages.
+#
+#   - On a pull request: build and run every gate, then upload the built site as
+#     an artifact. Pages refuses deploys from branches and PRs (the github-pages
+#     environment allows `main` only), so a PR build is a check plus a downloadable
+#     artifact until preview hosting is decided — ADR 0028, "Explicitly not decided".
+#   - On a push to main: the same build, then deploy.
+#   - When the Release workflow finishes: rebuild main and deploy. A release's
+#     notes (docs/releases/vX.Y.Z.md) merge to main before its tag is cut
+#     (docs/BUILD-AND-RELEASE.md §3b), so the deploy at that merge runs before
+#     the tag exists, and the changelog index would say "Release notes exist for
+#     vX.Y.Z without a matching tag" until some later docs change reached main.
+#     Pushing the tag starts Release, not this workflow; Release finishing now
+#     brings the docs up to date. `workflow_run` runs in main's context, so the
+#     github-pages rule (main only) is unchanged, and it builds main's own code —
+#     nothing from the Release run is downloaded or trusted.
+#   - On demand (`workflow_dispatch`, repository write access): rebuild and, if
+#     run on main, deploy — e.g. after a tag is added or moved by hand.
+#
+# The site is a curated façade over files that live all over the repository, so
+# the path filter is wide: a change to README.md or to a skill's frontmatter can
+# change a page as surely as a change under site/.
+#
+# Every action is pinned to a full commit SHA with the version in a trailing
+# comment, matching ci.yml. This workflow lives under .github/workflows/, so
+# CODEOWNERS routes it to security review.
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "skills/**"
+      - "deploy/**"
+      # The generated `/reference/` pages are parsed out of these at build time.
+      # Without them a settings change ships while the published reference still
+      # describes the previous release — a stale page nothing would announce.
+      - "api/app/config.py"
+      - "api/app/skills/schema.py"
+      - "gateway/app/config.py"
+      - "gateway.yaml.example"
+      - "mcp.yaml.example"
+      - "docker-compose.yml"
+      - "README.md"
+      - "SECURITY.md"
+      - "GOVERNANCE.md"
+      - "CONTRIBUTING.md"
+      - "CODE_OF_CONDUCT.md"
+      - "NOTICES.md"
+      - ".github/workflows/docs-site.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "skills/**"
+      - "deploy/**"
+      # The generated `/reference/` pages are parsed out of these at build time.
+      # Without them a settings change ships while the published reference still
+      # describes the previous release — a stale page nothing would announce.
+      - "api/app/config.py"
+      - "api/app/skills/schema.py"
+      - "gateway/app/config.py"
+      - "gateway.yaml.example"
+      - "mcp.yaml.example"
+      - "docker-compose.yml"
+      - "README.md"
+      - "SECURITY.md"
+      - "GOVERNANCE.md"
+      - "CONTRIBUTING.md"
+      - "CODE_OF_CONDUCT.md"
+      - "NOTICES.md"
+      - ".github/workflows/docs-site.yml"
+  # A finished release: its tag now exists, so the changelog index can list it.
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One Pages deployment at a time. `cancel-in-progress: false` because cancelling
+# a deploy mid-flight can leave the live site part-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Checkout
+        # fetch-depth: 0 — every page is stamped with the newest commit touching
+        # it or any of its sources, which the transform reads out of git history.
+        # A shallow clone silently produces wrong stamps rather than failing.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Set up Python
+        # For `check:docs-links`, which runs docs/audits/check_doc_links.py.
+        # Standard library only, so there is nothing to install or cache.
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and run every gate
+        # `check` = build + internal links + orphans + palette contrast +
+        # WCAG 2.1 AA (pa11y-ci over the built pages) + repo link audit.
+        run: npm run check
+
+      - name: Explore, guide-page and quality-rule checks
+        # Version C's own contracts, on the build `check` just made:
+        # `check:explore` reads dist/ (no draft chips, the Explore button on
+        # every page, a release beside every stamp, the sidebar's guide index
+        # and Explore's conversation order); `check:e2e` drives the built site
+        # in the Chrome pa11y-ci already installs (searches appended as turns,
+        # the selected-result sidebar, Back/reload/hand-off, phone widths).
+        # `check:rules` is launch gate 2's mechanical part: Annex A's rules
+        # 10–12 (an onward route from every page; menu, breadcrumb and lookup
+        # agree; no command runs a tool its page never names).
+        # Its own step so a failure here is named apart from the gates above.
+        run: npm run check:explore && npm run check:rules && npm run check:e2e
+
+      - name: Configure Pages
+        # Reads the repository's Pages settings so the deploy step has them.
+        # Not on pull_request: it calls the Pages API, which a pull_request
+        # token from a fork cannot reach, and nothing in the build depends on
+        # its output — the base path comes from SITE_BASE in astro.config.mjs.
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # A push to main, a finished release (workflow_run runs on main), or a
+    # manual run on main. Never a pull request, and never any other ref — the
+    # github-pages environment would refuse it anyway.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      # Narrower than the job needs elsewhere: `pages: write` to publish and
+      # `id-token: write` for the OIDC token the deploy action exchanges.
+      # `contents` stays read-only from the top-level default.
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

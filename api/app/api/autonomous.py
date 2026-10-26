@@ -51,6 +51,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser, is_privileged_reader
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
+from app.authz.matters import (
+    denied_kb_ids,
+    matter_scope_filter,
+    readable_autonomous_session_ids,
+    require_autonomous_source,
+    require_matter,
+)
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
@@ -152,6 +159,7 @@ async def _load_owned_memory(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous memory entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -183,6 +191,7 @@ async def _load_owned_precedent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="precedent entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -192,32 +201,53 @@ async def _load_owned_project(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Project:
-    """Fetch a Project by id; 404 if missing OR not owned by the caller.
+    """Fetch a matter the caller may act on; 404 if missing OR out of reach.
 
-    Conflates "doesn't exist" and "belongs to someone else" to avoid
-    existence disclosure — same idiom as the autonomous loaders. The
-    autonomous layer never reveals another user's Projects.
+    Conflates "doesn't exist" and "you have no access" to avoid existence
+    disclosure — same idiom as the autonomous loaders. The autonomous layer
+    never reveals a matter the caller cannot reach.
+
+    Access is resolved by :func:`app.authz.matters.require_matter` at
+    ``write``, because everything reached through here *spends* against the
+    matter — spawning a session, scheduling a watch, accepting a context
+    proposal. Reading a shared matter does not entitle a colleague to run
+    autonomous work under it and bill the firm for it.
 
     ``archived_at IS NULL`` matches :func:`app.api.projects._load_visible_project`,
     which excludes archived rows by default: a matter the caller has deleted is
     gone from their UI and must not be re-attachable as an autonomous target.
 
     Raises:
-        HTTPException: 404 if the row is absent, archived, or owned by a
-        different user.
+        HTTPException: 404 if the row is absent or unreachable; 403 if the
+        caller can read the matter but not contribute to it.
     """
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == user_id,
-        Project.archived_at.is_(None),
-    )
-    row = (await db.execute(stmt)).scalar_one_or_none()
-    if row is None:
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden as _Forbidden, NotFound as _NotFound
+
+    # The caller is identified by id at several of these call sites, so
+    # re-load the row rather than threading a User object through seven
+    # signatures; it is normally already in the session identity map.
+    user = await db.get(User, user_id)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project not found",
         )
-    return row
+
+    try:
+        return await require_matter(db, project_id, user, need="write")
+    except _NotFound:
+        # Re-raise in this module's plain shape so the autonomous surface's
+        # error contract does not shift underneath its callers.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project not found",
+        ) from None
+    except _Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="project requires contributor access",
+        ) from None
 
 
 async def _load_owned_kb(
@@ -246,6 +276,7 @@ async def _load_owned_kb(
     stmt = select(KnowledgeBase).where(
         KnowledgeBase.id == kb_id,
         KnowledgeBase.owner_id == user_id,
+        KnowledgeBase.id.not_in(denied_kb_ids(user_id)),
         KnowledgeBase.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
@@ -254,6 +285,11 @@ async def _load_owned_kb(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="knowledge base not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="knowledge base not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -317,6 +353,11 @@ async def _load_owned_proposal(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project-context proposal not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -352,6 +393,13 @@ async def _load_owned_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous session not found",
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        caller = await db.get(User, user_id)
+        if caller is None:
+            raise HTTPException(status_code=404, detail="autonomous session not found")
+        await require_matter(db, row.project_id, caller, include_archived=True)
     return row
 
 
@@ -374,6 +422,11 @@ async def _load_session_for_reader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="autonomous session not found"
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        await require_matter(db, row.project_id, user, include_archived=True)
+        return row, row.user_id != user.id and is_privileged_reader(user)
     if row.user_id == user.id:
         return row, False
     if is_privileged_reader(user):
@@ -411,6 +464,11 @@ async def _load_owned_schedule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous schedule not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -442,6 +500,11 @@ async def _load_owned_watch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous watch not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -472,6 +535,7 @@ async def _load_owned_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous notification not found",
         )
+    await require_autonomous_source(db, row.session_id, user_id)
     return row
 
 
@@ -540,6 +604,7 @@ async def halt_session(
         action="autonomous_session.halt_requested",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()
@@ -574,13 +639,21 @@ async def list_sessions(
     count_stmt = (
         select(func.count())
         .select_from(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
     )
     total_count: int = (await db.execute(count_stmt)).scalar_one()
 
     rows_stmt = (
         select(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
         .order_by(AutonomousSession.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -879,6 +952,8 @@ async def list_memory(
     base_where = [
         AutonomousMemory.user_id == user.id,
         AutonomousMemory.deleted_at.is_(None),
+        AutonomousMemory.source_session_id.is_(None)
+        | AutonomousMemory.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if state is not None:
         base_where.append(AutonomousMemory.state == str(state))
@@ -1077,6 +1152,8 @@ async def list_precedents(
     base_where = [
         PrecedentEntry.user_id == user.id,
         PrecedentEntry.dismissed_at.is_(None),
+        PrecedentEntry.source_session_id.is_(None)
+        | PrecedentEntry.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if pattern_kind is not None:
         base_where.append(PrecedentEntry.pattern_kind == pattern_kind)
@@ -1237,7 +1314,10 @@ async def list_project_context_proposals(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [ProjectContextProposal.user_id == user.id]
+    base_where = [
+        ProjectContextProposal.user_id == user.id,
+        ProjectContextProposal.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+    ]
     if state is not None:
         base_where.append(ProjectContextProposal.state == str(state))
     if project_id is not None:
@@ -1573,6 +1653,7 @@ async def run_now(
         action="autonomous_session.run_now",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()
@@ -1608,6 +1689,8 @@ async def list_schedules(
     base_where = [
         AutonomousSchedule.user_id == user.id,
         AutonomousSchedule.deleted_at.is_(None),
+        AutonomousSchedule.project_id.is_(None)
+        | AutonomousSchedule.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousSchedule.enabled.is_(enabled))
@@ -1874,6 +1957,8 @@ async def list_watches(
     base_where = [
         AutonomousWatch.user_id == user.id,
         AutonomousWatch.deleted_at.is_(None),
+        AutonomousWatch.project_id.is_(None)
+        | AutonomousWatch.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousWatch.enabled.is_(enabled))
@@ -2047,7 +2132,11 @@ async def list_notifications(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [AutonomousNotification.user_id == user.id]
+    base_where = [
+        AutonomousNotification.user_id == user.id,
+        AutonomousNotification.session_id.is_(None)
+        | AutonomousNotification.session_id.in_(readable_autonomous_session_ids(user)),
+    ]
     if unread:
         base_where.append(AutonomousNotification.read_at.is_(None))
 
