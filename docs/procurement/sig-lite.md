@@ -1,8 +1,14 @@
-# SIG Lite — Privileged-Matter Handling (M2-D3 starter) + M3 External Trust Boundaries
+# Security Assessment Response Pack — Privileged-Matter Handling and External Trust Boundaries
 
-> **Scope of this file**: a **focused starter** covering (1) the SIG Lite questions whose answers depend on the privileged-project handling implemented in M2-B3 / verified in M2-D3, and (2) the questions raised by the **M3 external trust boundaries** — the Word add-in OAuth flow and the Slack / Teams light intake bridges. The **full Procurement-Readiness Pack** (every SIG Lite domain, plus CAIQ, plus cover letter) is **out of scope here** and tracked as [DE-086](../PRD.md#de-086--procurement-readiness-pack); this file is the starter for that work.
+> **Status:** AI-drafted, pending professional review.
 >
-> Operators reviewing this file for their own procurement cycle should treat it as a complement to (not a substitute for) the full SIG Lite questionnaire. Items not covered here either don't bear on these surfaces or belong to a SIG Lite domain DE-086 will fill in.
+> Per [`docs/procurement/README.md` §Contributing](README.md#contributing), procurement responses are counsel-review-gated: this document is reviewed for legal accuracy before an operator should hand it to a procurement team as-is. The licensing position in the next paragraph is additionally flagged for counsel confirmation per the project's compliance-documentation research memo.
+
+> **Why this is not a "pre-filled SIG Lite."** This file began as the M2-D3 "SIG Lite starter" (hence the filename, retained so existing links keep resolving). The SIG and SIG Lite questionnaires are proprietary work product of Shared Assessments, available only under a paid membership or subscription license; there is no public license to reproduce SIG question text, and even answer tables keyed to SIG question IDs sit in derivative-work gray territory. The project therefore does not ship SIG-keyed content. Instead, this document is a **self-authored Security Assessment Response Pack**: the project's own question taxonomy, written to cover the ground a security assessor's questionnaire covers, without deriving from any licensed questionnaire. An operator whose assessment program licenses the SIG (or any other proprietary questionnaire) can complete it from this pack — see [`cover-letter.md`](cover-letter.md) for the standing offer to assist.
+
+> **Scope of this file**: a **focused pack** covering (1) the assessment topics whose answers depend on the privileged-project handling implemented in M2-B3 / verified in M2-D3, and (2) the topics raised by the **M3 external trust boundaries** — the Word add-in OAuth flow and the Slack / Teams light intake bridges. Broader domain coverage (governance, SDLC, supply chain, cryptography inventory, incident response, and the rest) lives in the CAIQ-style assessment at [`caiq.md`](caiq.md); the **full Procurement-Readiness Pack** is tracked as [DE-086](../PRD.md#de-086--procurement-readiness-pack).
+>
+> Operators reviewing this file for their own procurement cycle should treat it as a complement to (not a substitute for) their assessor's full questionnaire. Topics not covered here either don't bear on these surfaces or are covered by [`caiq.md`](caiq.md) / belong to a domain DE-086 will fill in.
 
 ---
 
@@ -10,16 +16,19 @@
 
 Each question below follows the format established in [`docs/procurement/README.md`](README.md):
 
-- **Question** — text from the SIG Lite questionnaire (paraphrased where the source uses domain-specific shorthand).
+- **Question** — the project's own formulation of a standard assessment topic (self-authored; not reproduced from any licensed questionnaire).
 - **Project response** — the answer applicable to a standard LQ.AI deployment with privileged matters configured per the recommended posture.
+- **Ownership** — one of **structural-in-code** (the codebase enforces it), **operator-configured** (the deployment must supply it), **shared** (code provides the mechanism, the operator provides policy/config), **residual** (a known gap, stated as such), or **out-of-scope** (not a property of the software).
 - **`[OPERATOR-CONFIGURABLE]`** — where the answer depends on operator-specific deployment choices.
 - **References** — relevant PRD sections, security artifacts, and code-side enforcement points.
 
 ---
 
-## Data Protection & Privacy Domain (D — selected questions)
+## Domain: Data classification and privileged-matter handling
 
-### D.1.3 — How is sensitive data classified, and what controls apply to each classification?
+### Q1 — How is sensitive data classified, and what controls apply to each classification?
+
+**Ownership:** shared — the classification mechanism and its enforcement are structural-in-code; which matters are classified privileged, and at what tier floor, is operator-configured.
 
 **Project response.** LQ.AI provides a two-tier classification mechanism at the application layer:
 
@@ -43,9 +52,11 @@ The control set differs by classification:
 
 ---
 
-### D.2.7 — Are any controls applied to data classified as attorney work-product or covered by attorney-client privilege?
+### Q2 — What controls apply to data classified as attorney work-product or covered by attorney-client privilege?
 
-**Project response.** Yes. The application provides a first-class **privileged-project** designation that:
+**Ownership:** shared — the privileged-project mechanism (bypass, audit columns, tier floor) is structural-in-code; designation and tier-floor policy are operator-configured; contractual controls for Tier 2+ routing are the operator's.
+
+**Project response.** The application provides a first-class **privileged-project** designation that:
 
 1. **Bypasses pseudonymization end-to-end.** The pre-anonymization middleware short-circuits when the incoming request carries `lq_ai_privileged=true` (`gateway/app/anonymization/middleware.py`); the response-path rehydrator is a no-op because nothing was substituted on the request path. The content reaches the inference provider exactly as the user composed it.
 
@@ -59,31 +70,35 @@ The control set differs by classification:
 
 **`[OPERATOR-CONFIGURABLE]`** — For privileged matters routed at Tier 2 (enterprise ZDR upstream) rather than Tier 1 (local), the operator's procurement agreement / DPA / BAA with that provider is the binding contractual control covering the unsubstituted content. The application surfaces what tier was used per request via `inference_routing_log.routed_inference_tier`; the contractual control is the operator's responsibility to negotiate and maintain with the upstream.
 
-**References:** [`docs/security/anonymization.md` §Privileged chats](../security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §3.11 (Projects), PRD §4.4 (Tier-Floor Enforcement), PRD §5.3 (Audit Log); `api/app/audit.py::_resolve_project_privilege`; `gateway/app/anonymization/middleware.py` skip conditions.
+**References:** [`docs/security/anonymization.md` §Privileged chats](../security/anonymization.md#privileged-chats--why-we-skip-m2-b3--m2-d3); PRD §3.11 (Projects), PRD §4.4 (Tier-Floor Enforcement), PRD §5.3 (Audit Log); `api/app/audit.py::_resolve_project_privilege`; `gateway/app/anonymization/middleware.py` skip conditions; `gateway/app/tier_floor.py`.
 
 ---
 
-## Audit & Logging Domain (L — selected questions)
+## Domain: Audit and logging
 
-### L.2.5 — Are administrative actions on customer data logged in a tamper-evident manner?
+### Q3 — Are administrative actions on customer data logged, and is the log tamper-evident?
 
-**Project response.** Yes, with the following posture:
+**Ownership:** shared — append-only application-layer logging is structural-in-code; DB-level tamper-evidence and retention are operator-configured; cryptographic tamper-evidence is a stated residual gap ([DE-100](../PRD.md#de-100--tamper-evident-audit-log)).
+
+**Project response.** Actions are logged, with the following posture:
 
 - **Append-only at the application layer.** The `audit_log` table has no UPDATE or DELETE paths exposed through the API; every state-changing action writes one row at the time of the action. The audit-log writer (`api/app/audit.py::audit_action`) is the only authorized writer; the row is added to the request's outer transaction so the audit row commits atomically with the underlying state change (no audit row without a state change; no state change without an audit row).
 
-- **First-class privilege + tier columns.** The privilege fields (`privilege_marked`, `privilege_basis`) and the routing fields (`routed_inference_tier`, `routed_provider`) are first-class columns rather than JSONB so audit queries can filter on them efficiently. The CHECK constraint `chk_audit_log_privileged_with_basis` prevents writing `privilege_marked=true` without a `privilege_basis`.
+- **First-class privilege + tier columns.** The privilege fields (`privilege_marked`, `privilege_basis`) and the routing fields (`routed_inference_tier`, `routed_provider`) are first-class columns rather than JSONB so audit queries can filter on them efficiently (`api/app/models/audit.py`). The CHECK constraint `chk_audit_log_privileged_with_basis` prevents writing `privilege_marked=true` without a `privilege_basis`.
 
 - **Request correlation.** Each row carries a `request_id` (the X-Request-ID header value) so audit-log entries cross-reference to gateway `inference_routing_log` rows and application logs.
 
-**`[OPERATOR-CONFIGURABLE]`** — Tamper-evidence at the **DB level** (e.g., row-level signatures, append-only Postgres extensions, periodic snapshot hashes) is the operator's responsibility per their deployment posture. The application does not implement cryptographic tamper-evidence on `audit_log` rows in v0.2; operators with that requirement typically address it via Postgres-level controls (immutable schemas, role-restricted writes, WAL archiving with integrity checking).
+**`[OPERATOR-CONFIGURABLE]`** — Tamper-evidence at the **DB level** (e.g., row-level signatures, append-only Postgres extensions, periodic snapshot hashes) is the operator's responsibility per their deployment posture. The application does not implement cryptographic tamper-evidence on `audit_log` rows today — that is tracked as [DE-100](../PRD.md#de-100--tamper-evident-audit-log) and must be treated as a **residual** item, not a shipped control; operators with that requirement typically address it via Postgres-level controls (immutable schemas, role-restricted writes, WAL archiving with integrity checking).
 
-**`[OPERATOR-CONFIGURABLE]`** — Retention policy for `audit_log` is operator-controlled. The application writes rows indefinitely; operators with retention-period requirements run a periodic `DELETE FROM audit_log WHERE timestamp < ...` job sized to their policy.
+**`[OPERATOR-CONFIGURABLE]`** — Retention policy for `audit_log` is operator-controlled. The application writes rows indefinitely; configurable retention policies are tracked as [DE-106](../PRD.md#de-106--configurable-retention-policies) and are **not shipped** — operators with retention-period requirements run a periodic `DELETE FROM audit_log WHERE timestamp < ...` job sized to their policy.
 
-**References:** [`docs/db-schema.md` `audit_log` table](../db-schema.md#audit_log); PRD §5.3 (Audit Log).
+**References:** [`docs/db-schema.md` `audit_log` table](../db-schema.md#audit_log); [`docs/security/audit-logging.md`](../security/audit-logging.md); PRD §5.3 (Audit Log).
 
 ---
 
-### L.3.2 — Can administrators surface every action taken on a customer's data within a defined time window?
+### Q4 — Can administrators surface every action taken on a given user's or matter's data within a defined time window?
+
+**Ownership:** structural-in-code (the query surface); interpretation and evidence-handling procedures are the operator's.
 
 **Project response.** Yes, via the `GET /admin/audit-log` endpoint (admin-gated). Query parameters include `user_id`, `resource_type`, `resource_id`, `action`, `privilege_marked`, `routed_inference_tier`, `from_timestamp`, `to_timestamp`. The response is paginated (default 100 rows; max 500) so large windows can be walked with cursor-style pagination.
 
@@ -93,19 +108,21 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-## Third-Party / Supplier Management Domain (G — selected questions, M3 external trust boundaries)
+## Domain: Third-party integrations and credential custody (M3 external trust boundaries)
 
 > The questions in this domain and the next cover the **M3 external trust boundaries**: the Word add-in (Office.js task pane authenticating against the deployment) and the Slack / Teams light intake bridges (OAuth install + identity binding). These surfaces accept inbound traffic from, or run inside, third-party platforms (Microsoft Word, Slack, Microsoft 365). They are **opt-in and operator-controlled**: the operator holds every credential, and LQ.AI remains a self-hosted product — **not** a SaaS intermediary that brokers data between the operator and the third-party platform. See [`docs/word-addin.md`](../word-addin.md) and [`docs/intake-bridges.md`](../intake-bridges.md) for the authoritative implementation state.
 
-### G.1.4 — Does the product integrate with third-party platforms, and if so, who holds the credentials for those integrations?
+### Q5 — Does the product integrate with third-party platforms, and if so, who holds the credentials for those integrations?
+
+**Ownership:** structural-in-code (credential model: no project-held credentials exist); which integrations are enabled, and the third-party app registrations behind them, are operator-configured.
 
 **Project response.** Three optional third-party integrations exist as of M3; all are operator-controlled, and in every case the operator holds the credentials — LQ.AI does not mediate access through any project-held account.
 
 1. **Word add-in (Microsoft Word / Office.js)** — an Office.js task pane installed into the operator's Word clients via an XML manifest the operator generates from their own admin UI and sideloads through their Microsoft 365 Admin Center. The add-in authenticates against the **deployment's own JWT issuer** (the same one the web app uses), not a third-party IdP, MSAL, or WAM (Word Add-In Decision B-3). There is no LQ.AI-held credential and no third-party OAuth app registration required for the add-in's authentication path.
 
-2. **Slack intake bridge** — an OAuth install to a Slack workspace the operator administers. The operator registers their **own** Slack App (supplying `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_SIGNING_SECRET`), and the resulting per-workspace bot token is stored **encrypted at rest** inside the operator's own deployment (see G.2.2 and the Access-Control domain below). LQ.AI holds no Slack credential centrally; each operator's deployment holds only its own.
+2. **Slack intake bridge** — an OAuth install to a Slack workspace the operator administers. The operator registers their **own** Slack App (supplying `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` / `SLACK_SIGNING_SECRET`), and the resulting per-workspace bot token is stored **encrypted at rest** inside the operator's own deployment (see Q6 and the authentication domain below). LQ.AI holds no Slack credential centrally; each operator's deployment holds only its own.
 
-3. **Teams intake bridge** — an OAuth admin-consent install against a Microsoft 365 tenant, backed by an Azure AD **multi-tenant** app the operator registers (`MICROSOFT_APP_ID` / `MICROSOFT_APP_PASSWORD`). The credentials are **app-level**, held by the operator's deployment; **no per-tenant token is stored** (see G.2.2).
+3. **Teams intake bridge** — an OAuth admin-consent install against a Microsoft 365 tenant, backed by an Azure AD **multi-tenant** app the operator registers (`MICROSOFT_APP_ID` / `MICROSOFT_APP_PASSWORD`). The credentials are **app-level**, held by the operator's deployment; **no per-tenant token is stored** (see Q6).
 
 **`[OPERATOR-CONFIGURABLE]`** — All three integrations are off by default. The bridges ship behind Docker Compose `slack` / `teams` profiles; an operator who does not enable a profile runs none of that service's code and carries none of its SBOM cost. The Word add-in is distributed only when the operator generates and sideloads the manifest. The operator decides which (if any) to enable and registers the corresponding third-party app(s) under accounts they own.
 
@@ -115,7 +132,9 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-### G.2.2 — Are third-party integration secrets (OAuth tokens, API keys) encrypted at rest?
+### Q6 — Are third-party integration secrets (OAuth tokens, API keys) encrypted at rest?
+
+**Ownership:** structural-in-code (the encryption mechanism and the no-plaintext-persistence invariant); master-key generation and custody are operator-configured.
 
 **Project response.** The posture differs by integration because the integrations have different credential models:
 
@@ -131,9 +150,11 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-## Access Control & Application Security Domain (I — selected questions, M3 external trust boundaries)
+## Domain: Service and platform authentication (M3 external trust boundaries)
 
-### I.3.1 — How are service-to-service and external-platform callbacks authenticated and authorized?
+### Q7 — How are service-to-service and external-platform callbacks authenticated and authorized?
+
+**Ownership:** structural-in-code (bearer matching, admin gating, CSRF state, webhook signatures); live-provider round-trip verification is a stated residual gap ([DE-312](../intake-bridges.md#references)).
 
 **Project response.** Each M3 external surface uses an authentication model scoped to its trust relationship:
 
@@ -153,7 +174,9 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-### I.4.2 — What identity and permission scope do the third-party integrations carry, and do their stored identity claims grant any application authority?
+### Q8 — What identity and permission scope do the third-party integrations carry, and do their stored identity claims grant any application authority?
+
+**Ownership:** structural-in-code (scope declarations, audit-only identity claims); the Word add-in's declared-but-unused `ReadWriteDocument` permission is a stated residual gap pending [DE-287](../word-addin.md#references).
 
 **Project response.** The integrations request narrow scopes and store identity claims for audit only — no stored identity claim grants any LQ.AI permission.
 
@@ -167,7 +190,11 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-### I.5.3 — How is software from this product distributed and verified at install time (supply-chain integrity at the install boundary)?
+## Domain: Software distribution and install integrity (M3 external trust boundaries)
+
+### Q9 — How is software from this product distributed and verified at install time (supply-chain integrity at the install boundary)?
+
+**Ownership:** shared — the manifest-generation and version-handshake integrity properties are structural-in-code; the sideload trust decision is the operator's admin's; the signed-distribution path is a stated residual gap ([DE-295](../word-addin.md#references)). For container-image distribution (SBOM, cosign signatures, SLSA provenance), see [`caiq.md`](caiq.md) §STA and [`cover-letter.md`](cover-letter.md).
 
 **Project response.** Relevant to the Word add-in specifically. At v0.3.0 the add-in ships **only the unsigned-manifest sideload path**: the operator generates an XML manifest from their own admin UI and uploads it through their Microsoft 365 Admin Center. **M365 will warn the admin that the add-in is unsigned during upload** — this warning is expected and correct at v0.3.0, because the project does not yet hold a code-signing certificate. Two properties bound the residual risk:
 
@@ -181,8 +208,12 @@ For privileged-matter compliance evidence specifically: `GET /admin/audit-log?pr
 
 ---
 
-## Out of scope for this file
+## Coverage beyond this file
 
-The full SIG Lite questionnaire covers 18 domains spanning data protection, access controls, network security, vulnerability management, incident response, business continuity, supplier management, and more. This starter file covers only the questions whose responses materially differ depending on the privileged-project handling (D, L) or the M3 external trust boundaries — the Word add-in and the Slack / Teams intake bridges (G, I).
+A security assessor's full questionnaire spans domains this focused pack does not cover — governance, human resources, business continuity, infrastructure security, vulnerability management, supply chain, and more. For those domains:
 
-For the full procurement-readiness pack — pre-filled responses across every SIG Lite domain plus CAIQ Lite plus a cover letter template — see [DE-086](../PRD.md#de-086--procurement-readiness-pack). Community contributions to that work are explicitly welcomed; see [`docs/procurement/README.md` §Contributing](README.md#contributing) for the contribution path.
+- [`caiq.md`](caiq.md) — the completed CAIQ-style self-assessment covers all seventeen CSA Cloud Controls Matrix domains plus an AI-specific supplement, each row with the same ownership taxonomy and repo-path evidence used here.
+- [PRD Appendix E](../PRD.md#appendix-e--pre-empted-procurement-objections) — seventeen pre-empted procurement objections with substantive answers.
+- [`docs/HONEST-STATE.md`](../HONEST-STATE.md) — the canonical shipped-vs-deferred catalog every claim in this pack is calibrated against.
+
+For the full procurement-readiness pack roadmap, see [DE-086](../PRD.md#de-086--procurement-readiness-pack). Community contributions are explicitly welcomed; see [`docs/procurement/README.md` §Contributing](README.md#contributing) for the contribution path.
