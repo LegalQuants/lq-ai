@@ -10,7 +10,7 @@
  * `"type": "module"` and pa11y-ci `require()`s its config.
  *
  * `urls` is deliberately empty: the list is generated from `dist/` by
- * `scripts/a11y-urls.mjs` and passed on the command line by `scripts/a11y.mjs`,
+ * `scripts/a11y-urls.mjs` and passed directly to the API by `scripts/a11y.mjs`,
  * so the gate covers exactly the routes that were built — generated pages
  * included — and keeps working when the site's base path changes.
  *
