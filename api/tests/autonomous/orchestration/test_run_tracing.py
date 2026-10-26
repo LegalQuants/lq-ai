@@ -26,6 +26,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from opentelemetry import trace
 from opentelemetry.propagate import inject
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
@@ -44,6 +45,7 @@ from tests.autonomous.orchestration.model_harness import (
     tool_call,
 )
 
+from app.main import app
 from app.workers import queue
 from app.workers.orchestration_worker import orchestration_session_job
 
@@ -123,6 +125,16 @@ def span_exporter(_module_exporter: InMemorySpanExporter) -> Iterator[InMemorySp
     _module_exporter.clear()
     yield _module_exporter
     _module_exporter.clear()
+
+
+async def test_an_sdk_provider_alone_does_not_enable_http_tracing(
+    span_exporter: InMemorySpanExporter,
+) -> None:
+    """Native FastAPI telemetry must not bypass the app's explicit opt-in."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/health")
+    assert response.status_code == 200
+    assert span_exporter.get_finished_spans() == ()
 
 
 class RecordingPool:
