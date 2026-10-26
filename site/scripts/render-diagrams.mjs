@@ -40,12 +40,17 @@ async function renderSvg(source, theme, portrait = false) {
     const svg = await page.evaluate(async ({ source, key, colors, portrait }) => {
       document.body.replaceChildren();
       globalThis.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
+        // Mermaid 12 defaults to ELK/neo; retain the site's existing rendering.
+        layout: 'dagre', look: 'classic',
         theme: 'base', themeVariables: { ...colors, fontFamily: 'Arial, sans-serif', fontSize: '18px' },
         fontFamily: 'Arial, sans-serif', htmlLabels: false,
         // The base theme draws edge-label backgrounds at half opacity, so a
         // line shows straight through its own label.
         themeCSS: '.edgeLabel rect { opacity: 1; }',
-        flowchart: { htmlLabels: false, nodeSpacing: portrait ? 12 : 50, rankSpacing: portrait ? 36 : 50 },
+        // v12 also narrows wrappingWidth and adds a minimum node width.
+        // Keep v11's wrapping and content-sized nodes, including phone views.
+        flowchart: { htmlLabels: false, wrappingWidth: 200, minNodeWidth: 0,
+          nodeSpacing: portrait ? 12 : 50, rankSpacing: portrait ? 36 : 50 },
         deterministicIds: true, deterministicIDSeed: key, maxTextSize: 20000, maxEdges: 200,
       });
       const result = await globalThis.mermaid.render(`diagram-${key}`, source);
