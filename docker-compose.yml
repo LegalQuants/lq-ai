@@ -24,7 +24,7 @@ services:
   postgres:
     # Digest-pinned for reproducible boots (matches the pin in
     # .github/workflows/ci.yml). Bump the tag and digest together.
-    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-lq_ai}
@@ -75,7 +75,7 @@ services:
 
   rustfs:
     # ADR 0036: pin the GA multi-arch index, not a floating tag.
-    image: rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff
+    image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
     restart: unless-stopped
     depends_on:
       rustfs-init:
@@ -90,7 +90,13 @@ services:
       RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
       RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
     volumes:
-      - miniodata:/data
+      # RustFS seeds /data/.rustfs in its image. Container creation happens
+      # before rustfs-init runs; copy-up would make a fresh volume look unknown.
+      - type: volume
+        source: miniodata
+        target: /data
+        volume:
+          nocopy: true
     ports:
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_API_HOST_PORT:-${MINIO_API_HOST_PORT:-9000}}:9000"
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_CONSOLE_HOST_PORT:-${MINIO_CONSOLE_HOST_PORT:-9001}}:9001"

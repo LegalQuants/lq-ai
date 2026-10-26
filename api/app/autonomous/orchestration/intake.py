@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_FLOOR, Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -451,6 +452,8 @@ async def thread_excerpt(
     ).all()
     newest_first: list[ThreadMessage] = []
     for role, content, session_id in rows:
+        # The query restricts roles; preserve that literal type for ThreadMessage.
+        message_role: Literal["user", "assistant"] = "user" if role == "user" else "assistant"
         text = (content or "").strip()
         if not text:
             # A run that produced no answer leaves its message empty.
@@ -468,7 +471,7 @@ async def thread_excerpt(
         cut = len(text) > MAX_THREAD_MESSAGE_CHARS
         if cut:
             text = text[:MAX_THREAD_MESSAGE_CHARS].rstrip()
-        newest_first.append(ThreadMessage(role=role, content=text, cut=cut))
+        newest_first.append(ThreadMessage(role=message_role, content=text, cut=cut))
         if len(newest_first) == MAX_THREAD_MESSAGES:
             break
     while newest_first and sum(len(m.content.encode()) for m in newest_first) > MAX_THREAD_BYTES:

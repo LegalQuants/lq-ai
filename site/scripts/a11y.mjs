@@ -14,13 +14,14 @@
  * rather than a shell one-liner keeps the behaviour identical on macOS and on
  * the Linux CI runner — no `&`, no `wait-on`, no `lsof`, no shell-specific trap.
  *
- * Violations are reported, never suppressed — the exit code is pa11y-ci's.
+ * Violations and incomplete route coverage fail the gate.
  */
 
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditRoutes } from './lib/a11y.mjs';
 
 const require = createRequire(import.meta.url);
 const SITE_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -34,7 +35,7 @@ const ORIGIN = `http://localhost:${PORT}`;
 const READY_URL = ORIGIN + (BASE.endsWith('/') ? BASE : `${BASE}/`);
 
 // Astro's `exports` map does not expose its bin, so it is located from the
-// package root. Both binaries are run through `process.execPath` rather than
+// package root. The binary is run through `process.execPath` rather than
 // through `node_modules/.bin`, whose extensionless symlink would be loaded as
 // CommonJS and fail on the ESM entry point.
 const astroBin = path.join(
@@ -42,7 +43,8 @@ const astroBin = path.join(
   'bin',
   'astro.mjs'
 );
-const pa11yCiBin = require.resolve('pa11y-ci/bin/pa11y-ci.js', { paths: [SITE_ROOT] });
+const pa11yCi = require('pa11y-ci');
+const pa11yConfig = require('../.pa11yci.cjs');
 
 /** Run a node script and resolve with its exit code. */
 function run(script, args, { quiet = false } = {}) {
@@ -103,7 +105,13 @@ try {
   const started = await run(astroBin, ['preview', '--background', '--port', PORT]);
   if (started !== 0) throw new Error('a11y: could not start the preview server.');
   await waitForServer(READY_URL);
-  code = await run(pa11yCiBin, urls);
+  // The CLI expands positional arguments as filesystem globs. In pa11y-ci 5
+  // that drops our trailing-slash routes; the API accepts literal URLs.
+  code = await auditRoutes(urls, {
+    ...pa11yConfig.defaults,
+    log: console,
+    wrapWidth: process.stdout.columns ?? 80,
+  }, pa11yCi);
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   code = 1;

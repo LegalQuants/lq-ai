@@ -10,6 +10,9 @@ MinIO to RustFS. Migration `0001` supports releases from v0.3.0 onward and the
 MinIO `xl` / `xl-single` layouts. External, multi-drive, or distributed stores
 use the copy path below instead.
 
+For later RustFS patch updates and the separate pgvector extension update, see
+[Bundled storage image updates](storage-image-updates.md).
+
 ## Time, prerequisites, and safety
 
 - Allow about 15 minutes plus snapshot time. Snapshot duration is approximately

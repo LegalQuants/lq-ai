@@ -64,6 +64,36 @@ export function frontendFingerprint(ref: string, cwd?: string): string {
 		)
 		.digest('hex');
 }
+
+type BaselineEvent = {
+	pull_request?: { head: { sha: string }; base: { sha: string } };
+	before?: string;
+};
+
+/** Use the base actually tested by checkout's PR merge, even if the event is older. */
+export function baselineComparisonBase(
+	event: BaselineEvent,
+	sourceSha: string,
+	cwd?: string
+): string {
+	if (!/^[a-f0-9]{40}$/.test(sourceSha)) throw new Error('Invalid checkout SHA');
+	let base = event.before;
+	if (event.pull_request) {
+		const head = event.pull_request.head.sha;
+		if (!/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid PR head SHA');
+		const parents = git(['rev-list', '--parents', '-n', '1', sourceSha], cwd).trim().split(/\s+/);
+		// Default pull_request checkout is a two-parent merge: base first, PR head second.
+		// Reject a head-only checkout or another merge rather than trusting an arbitrary ref.
+		if (parents.length !== 3 || parents[0] !== sourceSha || parents[2] !== head)
+			throw new Error('Expected the tested PR merge with the event head as its second parent');
+		base = parents[1];
+	}
+	if (!base || !/^[a-f0-9]{40}$/.test(base) || /^0+$/.test(base))
+		throw new Error('Cannot establish baseline comparison base');
+	git(['cat-file', '-e', `${base}^{commit}`], cwd);
+	return base;
+}
+
 export function assertBaselineSource(measured: string, base: string, cwd?: string): void {
 	// Measurement must come from adopted base history, never an arbitrary PR commit.
 	if (!/^[a-f0-9]{40}$/.test(measured) || !/^[a-f0-9]{40}$/.test(base))

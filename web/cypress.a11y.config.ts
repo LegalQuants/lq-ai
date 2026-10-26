@@ -9,7 +9,11 @@ import {
 	type Baseline,
 	type Finding
 } from './cypress/support/a11y-gate';
-import { assertBaselineSource, assertCaptureSource } from './cypress/support/a11y-source';
+import {
+	assertBaselineSource,
+	assertCaptureSource,
+	baselineComparisonBase
+} from './cypress/support/a11y-source';
 import { stateIds } from './cypress/support/a11y-states';
 
 const baselinePath = 'cypress/fixtures/a11y-baseline.json';
@@ -43,10 +47,7 @@ export default defineConfig({
 					throw new Error('Baseline scanner/state matrix mismatch');
 				if (process.env.GITHUB_EVENT_PATH && process.env.CI) {
 					const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-					const base = event.pull_request?.base?.sha ?? event.before;
-					if (!/^[a-f0-9]{40}$/.test(base) || /^0+$/.test(base))
-						throw new Error('Cannot establish baseline comparison base');
-					execFileSync('git', ['cat-file', '-e', `${base}^{commit}`]);
+					const base = baselineComparisonBase(event, sourceSha);
 					const path = 'web/' + baselinePath;
 					const existing = execFileSync(
 						'git',

@@ -122,7 +122,7 @@ def file_access_filter(owner_id: UUID) -> Any:
 
 def readable_documents(
     *, owner_id: UUID, project_id: UUID | None, document_ids: Collection[UUID]
-) -> Select[tuple[UUID]]:
+) -> Select[UUID]:
     """The subset of ``document_ids`` this owner's run may read in this scope.
 
     Callers add their own row locks. In a matter the query joins the attachment
@@ -188,7 +188,7 @@ def written_under_stricter_terms(snapshot: object, terms: MatterTerms) -> bool:
 
 def holding_matters(
     document_ids: Collection[UUID],
-) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
+) -> Select[UUID, UUID, str, UUID, int | None, bool]:
     """Each matter that holds the file of one of these documents.
 
     A matter holds a file by upload, by attachment, or through a knowledge base
@@ -211,7 +211,7 @@ def holding_matters(
 
 def lending_matters(
     project_id: UUID, document_ids: Collection[UUID]
-) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
+) -> Select[UUID, UUID, str, UUID, int | None, bool]:
     """Each other matter that holds the file of one of these documents through a knowledge base.
 
     What a run in the matter ``project_id`` borrows from. The rows are those of
@@ -228,7 +228,7 @@ def lending_matters(
 
 def _matters(
     document_ids: Collection[UUID], holds: Any
-) -> Select[tuple[UUID, UUID, str, UUID, int | None, bool]]:
+) -> Select[UUID, UUID, str, UUID, int | None, bool]:
     return (
         select(
             File.id,
@@ -393,7 +393,7 @@ def read_locks(project_id: UUID | None) -> tuple[Any, ...]:
 
 def searchable_knowledge_bases(
     *, owner_id: UUID, project_id: UUID, knowledge_base_ids: Collection[UUID]
-) -> Select[tuple[UUID, str]]:
+) -> Select[UUID, str]:
     """The subset of ``knowledge_base_ids`` this owner's run may search now.
 
     The owner's own, not archived, and attached to the run's matter. Used when
@@ -417,7 +417,7 @@ def searchable_knowledge_bases(
     )
 
 
-def attached_knowledge_bases(*, owner_id: UUID, project_id: UUID) -> Select[tuple[UUID, str]]:
+def attached_knowledge_bases(*, owner_id: UUID, project_id: UUID) -> Select[UUID, str]:
     """Every knowledge base a run in this matter could search, oldest attachment first."""
     return (
         select(KnowledgeBase.id, KnowledgeBase.name)

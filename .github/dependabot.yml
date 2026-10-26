@@ -204,6 +204,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 4
     labels: ["dependencies", "web"]
+    # Keep Python on 3.12: web/pyproject.toml excludes 3.13+, and the native
+    # dependency pins need a separate compatibility review for newer runtimes.
+    # Allow patch and digest updates within 3.12.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
   # docker-compose.yml and docker-compose.release.yml (same #301 posture as the
   # docker block above: digest refreshes and patch tags only, 7-day cooldown).
