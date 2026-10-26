@@ -113,7 +113,13 @@ services:
       RUSTFS_ACCESS_KEY: ${OBJECT_STORE_ACCESS_KEY:-${MINIO_ROOT_USER:-lq_ai}}
       RUSTFS_SECRET_KEY: ${OBJECT_STORE_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-}}
     volumes:
-      - miniodata:/data
+      # RustFS seeds /data/.rustfs in its image. Container creation happens
+      # before rustfs-init runs; copy-up would make a fresh volume look unknown.
+      - type: volume
+        source: miniodata
+        target: /data
+        volume:
+          nocopy: true
     ports:
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_API_HOST_PORT:-${MINIO_API_HOST_PORT:-9000}}:9000"
       - "${OBJECT_STORE_BIND_ADDR:-${MINIO_BIND_ADDR:-127.0.0.1}}:${OBJECT_STORE_CONSOLE_HOST_PORT:-${MINIO_CONSOLE_HOST_PORT:-9001}}:9001"
