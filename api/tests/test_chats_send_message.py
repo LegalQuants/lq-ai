@@ -700,7 +700,7 @@ async def test_send_message_does_not_write_inference_routing_log_on_backend(
 
     # Snapshot row count before.
     rows_before = await db_session.execute(text("SELECT count(*) FROM inference_routing_log"))
-    count_before = rows_before.scalar_one()
+    count_before: int = rows_before.scalar_one()
 
     response = await client.post(
         f"/api/v1/chats/{db_chat.id}/messages",
@@ -710,7 +710,7 @@ async def test_send_message_does_not_write_inference_routing_log_on_backend(
     assert response.status_code == 200
 
     rows_after = await db_session.execute(text("SELECT count(*) FROM inference_routing_log"))
-    count_after = rows_after.scalar_one()
+    count_after: int = rows_after.scalar_one()
     assert count_after == count_before, (
         "C3 must not write to inference_routing_log — the gateway does (B4)."
     )

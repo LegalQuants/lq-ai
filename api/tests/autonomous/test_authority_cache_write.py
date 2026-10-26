@@ -261,7 +261,7 @@ async def test_cache_write_db_error_does_not_poison_session(
 
     # ── 2. session is NOT poisoned: a follow-up DB op must succeed ──────────
     follow_up = await db_session.execute(sa.text("SELECT 1"))
-    val = follow_up.scalar_one()
+    val: int = follow_up.scalar_one()
     assert val == 1, "db_session must be usable after a cache write DB error"
 
     # ── 3. no AuthorityTextCache row was committed for this ref ─────────────

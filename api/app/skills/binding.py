@@ -62,7 +62,7 @@ def _bind_row(row: UserSkill) -> SkillBinding:
     return SkillBinding(row.slug, f"{row.scope}:{row.id}", digest, capabilities)
 
 
-def _visible_rows(owner_id: UUID) -> Select[tuple[UserSkill]]:
+def _visible_rows(owner_id: UUID) -> Select[UserSkill]:
     return (
         select(UserSkill)
         .where(
