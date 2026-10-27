@@ -16,11 +16,11 @@ Back up before you touch anything: take a Postgres dump and a `gateway-config` s
 
 ## Choose the release and installation method
 
-For prebuilt images, set `LQ_AI_IMAGE_TAG` in `.env` to the target release tag — not `latest`:
+For prebuilt images, set `LQ_AI_IMAGE_TAG` in `.env` to the target release tag — not `latest`. The examples on this page use `v0.9.1`; put the tag you are moving to in its place:
 
 ```bash
 # .env
-LQ_AI_IMAGE_TAG=v0.8.0
+LQ_AI_IMAGE_TAG=v0.9.1
 ```
 
 then pull:
@@ -32,7 +32,7 @@ docker compose -f docker-compose.release.yml pull
 For a source installation, fetch the tag with `git` and check it out instead:
 
 ```bash
-git fetch --tags && git checkout v0.8.0
+git fetch --tags && git checkout v0.9.1
 ```
 
 then rebuild in the next step — a source build only picks up new code on `--build`.
@@ -43,7 +43,7 @@ A locally-built desktop launcher still defaults to the floating `latest` tag ([R
 
 Some releases need more than a pull and rebuild. Read the target release's own notes under [`docs/releases/`](../releases/) before you upgrade, not after something fails to start — every release states plainly whether it needs operator action. `v0.7.0` is the worked example the [Release versioning](../adr/0025-release-versioning-and-pipeline-ordering.md) ADR itself uses: three of its changes required action, called out in an explicit "Operator note" — the gateway started requiring a key on every inference call, an install still on the published dev `JWT_SECRET` would refuse to boot, and a provider `base_url` over plaintext HTTP to a non-local host became a fatal startup error.
 
-The most recent release as of the checked commit, [`v0.8.0`](../releases/v0.8.0.md), is squarely this kind: it replaces the bundled MinIO image (which became unavailable) with RustFS, and existing bundled-store installations must snapshot and migrate their object-store volume before RustFS starts — the ordinary pull-and-rebuild steps on this page are not sufficient for that release on their own. Follow the dedicated [MinIO to RustFS migration runbook](../runbooks/minio-to-rustfs.md) instead of those steps if you are moving a bundled-store deployment across that boundary; it covers prerequisites, the `pg_dump` and free-space checks, the exact Compose commands, the macOS launcher's own migration path (the old launcher cannot perform it and must be replaced), Helm and external/multi-drive paths, and rollback. `docker compose down -v` must not be run during that migration, same as everywhere else on this page. Legacy `MINIO_*` environment variables are accepted as a fallback for the new `OBJECT_STORE_*` names through at least v0.10.0, so an existing `.env` does not need to be renamed to take the release.
+[`v0.8.0`](../releases/v0.8.0.md) is squarely this kind, and any upgrade from v0.7.x or earlier crosses it: it replaces the bundled MinIO image (which became unavailable) with RustFS, and existing bundled-store installations must snapshot and migrate their object-store volume before RustFS starts — the ordinary pull-and-rebuild steps on this page are not sufficient for that release on their own. Follow the dedicated [MinIO to RustFS migration runbook](../runbooks/minio-to-rustfs.md) instead of those steps if you are moving a bundled-store deployment across that boundary; it covers prerequisites, the `pg_dump` and free-space checks, the exact Compose commands, the macOS launcher's own migration path (the old launcher cannot perform it and must be replaced), Helm and external/multi-drive paths, and rollback. `docker compose down -v` must not be run during that migration, same as everywhere else on this page. Legacy `MINIO_*` environment variables are accepted as a fallback for the new `OBJECT_STORE_*` names through at least v0.10.0, so an existing `.env` does not need to be renamed to take the release.
 
 For any other release, read its own notes for an "Operator action" section before assuming the ordinary steps on this page are enough.
 

@@ -27,6 +27,7 @@
     - docs/releases/v0.7.0.md
     - docs/releases/v0.7.1.md
     - docs/releases/v0.8.0.md
+    - docs/releases/v0.9.1.md
     - docs/runbooks/minio-to-rustfs.md
     - docker-compose.yml
     - docker-compose.release.yml
