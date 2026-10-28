@@ -9,7 +9,7 @@
  */
 import { writable } from 'svelte/store';
 
-import { authApi } from '../api';
+import { refreshSession } from '../api';
 import { getRefreshToken } from '../auth/store';
 
 export const IDLE_WARN_AT_MS = 25 * 60 * 1000; // 25 minutes
@@ -35,15 +35,13 @@ export function noteActivity(): void {
 	sessionActivity.update(() => ({ lastActivityMs: now, showWarning: false }));
 	if (now - lastRefreshMs > REFRESH_DEBOUNCE_MS) {
 		lastRefreshMs = now;
-		const token = getRefreshToken();
-		if (token) {
-			authApi
-				.refresh(token)
-				.catch(() => {
-					// Silent — a 401 here means the session is already gone.
-					// The client.ts refresh-and-retry will kick the user to login
-					// on the next API call.
-				});
+		if (getRefreshToken()) {
+			// Shares the client's refresh, so it never spends the refresh token
+			// a 401 retry is already spending.
+			refreshSession().catch(() => {
+				// Silent — a network error here is retried on the next API call,
+				// and a refused token has already cleared the session.
+			});
 		}
 	}
 }

@@ -1,14 +1,14 @@
 /**
  * Unit tests for the session-activity tracker.
  *
- * Uses vi.useFakeTimers() for time-based assertions. Mocks authApi.refresh
+ * Uses vi.useFakeTimers() for time-based assertions. Mocks refreshSession
  * and getRefreshToken to keep tests hermetic.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { get } from 'svelte/store';
 
 vi.mock('../api', () => ({
-	authApi: { refresh: vi.fn().mockResolvedValue(undefined) }
+	refreshSession: vi.fn().mockResolvedValue(true)
 }));
 
 vi.mock('../auth/store', () => ({
@@ -27,12 +27,12 @@ import {
 	CHECK_INTERVAL_MS
 } from '../stores/sessionActivity';
 import { getRefreshToken } from '../auth/store';
-import { authApi } from '../api';
+import { refreshSession } from '../api';
 
 describe('sessionActivity', () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
-		vi.mocked(authApi.refresh).mockClear();
+		vi.mocked(refreshSession).mockClear();
 		vi.mocked(getRefreshToken).mockReturnValue('rtoken');
 		_resetTracker();
 	});
@@ -51,31 +51,30 @@ describe('sessionActivity', () => {
 		expect(s.showWarning).toBe(false);
 	});
 
-	it('noteActivity calls authApi.refresh with the token when REFRESH_DEBOUNCE_MS has elapsed', () => {
+	it('noteActivity calls refreshSession when REFRESH_DEBOUNCE_MS has elapsed', () => {
 		// Advance time past the debounce window so the first call fires a refresh.
 		vi.advanceTimersByTime(REFRESH_DEBOUNCE_MS + 1);
 		noteActivity();
-		expect(authApi.refresh).toHaveBeenCalledOnce();
-		expect(authApi.refresh).toHaveBeenCalledWith('rtoken');
+		expect(refreshSession).toHaveBeenCalledOnce();
 	});
 
-	it('noteActivity does NOT call authApi.refresh when called again within REFRESH_DEBOUNCE_MS', () => {
+	it('noteActivity does NOT call refreshSession when called again within REFRESH_DEBOUNCE_MS', () => {
 		// First call (after debounce elapsed) — fires refresh.
 		vi.advanceTimersByTime(REFRESH_DEBOUNCE_MS + 1);
 		noteActivity();
-		expect(authApi.refresh).toHaveBeenCalledOnce();
+		expect(refreshSession).toHaveBeenCalledOnce();
 
 		// Second call shortly after — still within debounce window.
 		vi.advanceTimersByTime(1000);
 		noteActivity();
-		expect(authApi.refresh).toHaveBeenCalledOnce(); // still only one call
+		expect(refreshSession).toHaveBeenCalledOnce(); // still only one call
 	});
 
 	it('noteActivity skips refresh entirely when getRefreshToken() returns null', () => {
 		vi.mocked(getRefreshToken).mockReturnValue(null);
 		vi.advanceTimersByTime(REFRESH_DEBOUNCE_MS + 1);
 		noteActivity();
-		expect(authApi.refresh).not.toHaveBeenCalled();
+		expect(refreshSession).not.toHaveBeenCalled();
 	});
 
 	it('startTracker fires onLogout after IDLE_LOGOUT_AT_MS elapses', () => {
