@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "measurement_origin": "github-actions",
+  "status": "valid",
+  "package": "api",
+  "commit": "7ce0bb400380caed84944928b1be90cfd876ba77",
+  "run_url": "https://github.com/LegalQuants/lq-ai/actions/runs/40626059899",
+  "run_utc": "2026-10-28T03:22:05+00:00",
+  "tool": "mutmut",
+  "tool_version": "3.8.0",
+  "duration_seconds": "91",
+  "mutation_score_percent": 50.64,
+  "score_definition": "killed / (total - skipped)",
+  "counts": {
+    "killed": 629,
+    "survived": 200,
+    "total": 1242,
+    "no_tests": 412,
+    "skipped": 0,
+    "suspicious": 0,
+    "timeout": 1,
+    "check_was_interrupted_by_user": 0,
+    "segfault": 0
+  },
+  "modules": [
+    "app/security/encryption.py",
+    "app/citation/normalization.py",
+    "app/citation/extraction.py",
+    "app/citation/verification.py",
+    "app/citation/caselaw.py",
+    "app/citation/judge_prompts.py",
+    "app/citation/authority_content_judge.py"
+  ],
+  "test_selection": [
+    "tests/citation/test_normalization.py",
+    "tests/citation/test_extraction.py",
+    "tests/citation/test_exact_match.py",
+    "tests/citation/test_tolerant_match.py",
+    "tests/citation/test_verify_cascade.py",
+    "tests/citation/test_verification_spans.py",
+    "tests/citation/test_ensemble.py",
+    "tests/citation/test_chunk_boundary.py",
+    "tests/citation/test_paraphrase_judge.py",
+    "tests/citation/test_caselaw_extraction.py",
+    "tests/citation/test_caselaw_matching.py",
+    "tests/citation/test_caselaw_verify.py",
+    "tests/citation/test_judge_prompts.py",
+    "tests/citation/test_authority_content_judge.py",
+    "tests/test_encryption.py",
+    "tests/test_mcp_encryption.py"
+  ],
+  "pytest_args": [
+    "-m",
+    "not slow and not provider"
+  ],
+  "config_sha256": "e13f8ed666c10ff7d4352cee956fb861ef00318a3d6fa92fab1195f3e918b8f5",
+  "lock_sha256": "f52c0007d83723df1e24ede6614afab8d43ea2e05a97109ba3d5bff3cd956c06",
+  "tests_recorded": 177
+}

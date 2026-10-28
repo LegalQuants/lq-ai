@@ -1,7 +1,7 @@
 # Mutation testing (DE-229)
 
-> **Status:** scoped Python workflow proposed in PR #434; **no CI baseline recorded**.
-> The first valid run after merge establishes the baseline. DE-229 remains partial.
+> **Status:** scoped Python workflow running nightly since PR #434. The first valid CI
+> baseline is recorded for v0.9.1 (see *Score history* below). DE-229 remains partial.
 
 Mutation testing measures whether the selected tests detect small changes in the
 selected source modules. It complements coverage; it is not a security certification
@@ -100,7 +100,7 @@ diagnostics, not the permanent publication endpoint.
 
 | Date (UTC) | Release | Measured commit | API scoped score | Gateway scoped score | Evidence |
 |---|---|---|---|---|---|
-| — | — | — | No valid CI baseline recorded | — | — |
+| 2026-10-28 | v0.9.1 | `7ce0bb400` (run [40626059899](https://github.com/LegalQuants/lq-ai/actions/runs/40626059899), mutmut 3.8.0) | 50.64% (629 / 1,242) | 46.47% (756 / 1,627) | [API](mutation-baselines/v0.9.1/api/mutation-score.json), [gateway](mutation-baselines/v0.9.1/gateway/mutation-score.json) |
 
 Only validated CI reports (`status: valid` and `measurement_origin: github-actions`)
 enter this table; local validation runs do not establish a published baseline.
@@ -116,7 +116,7 @@ the older number. See [the release procedure](../BUILD-AND-RELEASE.md).
 ## Remaining DE-229 work
 
 The full outstanding checklist lives in [PRD DE-229](../PRD.md#de-229--mutation-testing-in-ci-with-per-release-scores-published):
-first valid CI baseline and review of runtime, seed-path reproduction/repair,
+review of the v0.9.1 baseline's runtime, seed-path reproduction/repair,
 DB-backed auth/audit/citation coverage, the excluded gateway integration suites,
 TypeScript/Stryker, the durable badge/feed publication path, and follow-up tests
 for meaningful survivors. Issue #380 closes with the scoped Python first wave;
