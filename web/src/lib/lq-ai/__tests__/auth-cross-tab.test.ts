@@ -86,6 +86,37 @@ function backend(onRefresh: () => Response) {
 	return { fetchImpl, refreshes: () => refreshes };
 }
 
+/**
+ * Accepts only `a2`. `live` is the one refresh token it renews (to `a2`/`r2`);
+ * it refuses every other with a 401, after calling `onRefused` (what another
+ * tab does meanwhile). Records each refresh token it was sent.
+ */
+function rotating(live: string, onRefused: () => void = () => undefined) {
+	const refreshedWith: string[] = [];
+	const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+		const path = String(url).replace(LQ_AI_API_BASE_URL, '');
+		if (path === '/auth/refresh') {
+			const { refresh_token } = JSON.parse(String(init?.body)) as { refresh_token: string };
+			refreshedWith.push(refresh_token);
+			if (refresh_token !== live) {
+				onRefused();
+				return json(401, { detail: 'Invalid refresh token' });
+			}
+			return json(200, {
+				access_token: 'a2',
+				refresh_token: 'r2',
+				token_type: 'Bearer',
+				expires_in: 900
+			});
+		}
+		const bearer = (init?.headers as Record<string, string> | undefined)?.Authorization;
+		return bearer === 'Bearer a2'
+			? json(200, { path })
+			: json(401, { detail: { code: 'unauthorized', message: 'expired' } });
+	});
+	return { fetchImpl, refreshedWith };
+}
+
 describe('refresh across tabs', () => {
 	beforeEach(() => {
 		clearSession();
@@ -124,6 +155,69 @@ describe('refresh across tabs', () => {
 		expect(out.path).toBe('/projects');
 		expect(server.refreshes()).toBe(1);
 		expect(getAccessToken()).toBe('a1');
+	});
+
+	it('renews a newer stored session whose access token has also expired', async () => {
+		// Back from idle: this tab's access token expired two minutes ago, and the
+		// session another tab stored expired one minute ago. Its refresh token is
+		// still live, so it is spent rather than the expired access token retried.
+		setSession({ access_token: 'a0', refresh_token: 'r0', expires_in: -120, user: user('u') });
+		anotherTabStores('a1', 'r1', user('u'), -960_000);
+		const server = rotating('r1');
+		global.fetch = server.fetchImpl as unknown as typeof fetch;
+
+		const out = await apiRequest<{ path: string }>('/projects');
+
+		expect(out.path).toBe('/projects');
+		expect(server.refreshedWith).toEqual(['r1']);
+		expect(getRefreshToken()).toBe('r2');
+	});
+
+	it('renews the session another tab stored after a refused refresh when it has expired', async () => {
+		setSession({ access_token: 'a0', refresh_token: 'r0', expires_in: -120, user: user('u') });
+		const server = rotating('r1', () => anotherTabStores('a1', 'r1', user('u'), -960_000));
+		global.fetch = server.fetchImpl as unknown as typeof fetch;
+
+		const out = await apiRequest<{ path: string }>('/projects');
+
+		expect(out.path).toBe('/projects');
+		expect(server.refreshedWith).toEqual(['r0', 'r1']);
+		expect(getRefreshToken()).toBe('r2');
+	});
+
+	it('holds a 401 that lands while an expired stored session is being renewed', async () => {
+		// The first 401 takes the stored session, whose access token has expired,
+		// and starts renewing it. A second 401 landing meanwhile must wait for that
+		// renewal, not retry with the expired token it now finds in the store.
+		setSession({ access_token: 'a0', refresh_token: 'r0', expires_in: -120, user: user('u') });
+		anotherTabStores('a1', 'r1', user('u'), -960_000);
+		const server = rotating('r1');
+		global.fetch = server.fetchImpl as unknown as typeof fetch;
+
+		const [projects, chats] = await Promise.all([
+			apiRequest<{ path: string }>('/projects'),
+			apiRequest<{ path: string }>('/chats')
+		]);
+
+		expect([projects.path, chats.path]).toEqual(['/projects', '/chats']);
+		expect(server.refreshedWith).toEqual(['r1']);
+		expect(getRefreshToken()).toBe('r2');
+	});
+
+	it('keeps the stored session it took when renewing it fails and a late 401 arrives', async () => {
+		setSession({ access_token: 'a0', refresh_token: 'r0', expires_in: -120, user: user('u') });
+		anotherTabStores('a1', 'r1', user('u'), -960_000);
+		global.fetch = (async (url: string | URL | Request) =>
+			String(url).endsWith('/auth/refresh')
+				? json(503, { detail: 'upstream unavailable' })
+				: json(401, { detail: { code: 'unauthorized', message: 'expired' } })) as typeof fetch;
+
+		const outcomes = await Promise.allSettled([apiRequest('/projects'), apiRequest('/chats')]);
+
+		for (const outcome of outcomes) {
+			expect((outcome as PromiseRejectedResult).reason).toMatchObject({ status: 503 });
+		}
+		expect(getRefreshToken()).toBe('r1');
 	});
 
 	it('never takes an older session a stale tab wrote back', async () => {

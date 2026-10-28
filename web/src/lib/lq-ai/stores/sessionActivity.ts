@@ -39,8 +39,8 @@ export function noteActivity(): void {
 			// Shares the client's refresh, so it never spends the refresh token
 			// a 401 retry is already spending.
 			refreshSession().catch(() => {
-				// Silent — a network error here is retried on the next API call,
-				// and a refused token has already cleared the session.
+				// Silent — a network or server error leaves the session as it is,
+				// and the next API call or activity refresh tries again.
 			});
 		}
 	}

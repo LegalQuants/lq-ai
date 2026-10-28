@@ -325,6 +325,34 @@ describe('shared refresh', () => {
 		expect(getAccessToken()).toBeNull();
 	});
 
+	it('keeps the session and reports the failure when the activity refresh gets a 503', async () => {
+		// /auth/refresh refuses a token only with a 401. A 503 says nothing
+		// about the session, so a click during an outage must not sign out.
+		setSession({ access_token: 'tok', refresh_token: 'r0', expires_in: 900 });
+		global.fetch = (async () =>
+			mockResponse(503, { detail: 'upstream unavailable' })) as unknown as typeof fetch;
+
+		await expect(refreshSession()).rejects.toMatchObject({ status: 503 });
+
+		expect(getAccessToken()).toBe('tok');
+		expect(getRefreshToken()).toBe('r0');
+	});
+
+	it('surfaces a 429 from the refresh after a 401 and keeps the session', async () => {
+		setSession({ access_token: 'old', refresh_token: 'r0', expires_in: 900 });
+		global.fetch = (async (url: string | URL | Request) =>
+			String(url).endsWith('/auth/refresh')
+				? mockResponse(429, { detail: 'slow down' })
+				: mockResponse(401, {
+						detail: { code: 'unauthorized', message: 'expired' }
+					})) as unknown as typeof fetch;
+
+		await expect(apiRequest('/projects')).rejects.toMatchObject({ status: 429 });
+
+		expect(getAccessToken()).toBe('old');
+		expect(getRefreshToken()).toBe('r0');
+	});
+
 	it('queues the refresh behind other tabs with the Web Locks API when the browser has it', async () => {
 		setSession({ access_token: 'old', refresh_token: 'r0', expires_in: 900 });
 		const backend = rotatingBackend('r0');

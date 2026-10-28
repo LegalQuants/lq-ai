@@ -17,7 +17,8 @@ import {
 	clearSession,
 	getAccessToken,
 	getRefreshToken,
-	setSession
+	setSession,
+	tokenIsStale
 } from '../auth/store';
 import type { TokenResponse, ErrorBody } from '../types';
 import { get } from 'svelte/store';
@@ -136,14 +137,15 @@ async function rawRequest(path: string, options: RequestOptions): Promise<Respon
 	return fetch(`${LQ_AI_API_BASE_URL}${path}`, init);
 }
 
-async function refreshOnce(): Promise<boolean> {
-	// Another tab may already have spent the refresh token this tab holds.
-	if (adoptStoredSession()) {
-		return true;
-	}
+/**
+ * POST /auth/refresh with the refresh token in the store. Resolves `true` when
+ * a new session is stored and `false` when the server refuses the token, which
+ * it does only with a 401. Any other failure throws and leaves the session as
+ * it is: a 502, 503 or 429 says nothing about whether the session is good.
+ */
+async function postRefresh(): Promise<boolean> {
 	const refresh_token = getRefreshToken();
 	if (!refresh_token) {
-		clearSession();
 		return false;
 	}
 	const res = await rawRequest('/auth/refresh', {
@@ -152,14 +154,11 @@ async function refreshOnce(): Promise<boolean> {
 		skipAuth: true,
 		skipRefresh: true
 	});
-	if (!res.ok) {
-		// Without Web Locks another tab can spend the same token first; its
-		// session is then the one to keep, not a reason to sign out.
-		if (adoptStoredSession()) {
-			return true;
-		}
-		clearSession();
+	if (res.status === 401) {
 		return false;
+	}
+	if (!res.ok) {
+		throw errorFor(res.status, await parseErrorBody(res));
 	}
 	const data = (await res.json()) as TokenResponse;
 	setSession({
@@ -170,10 +169,29 @@ async function refreshOnce(): Promise<boolean> {
 	return true;
 }
 
+async function refreshOnce(): Promise<boolean> {
+	// Another tab may already have spent the refresh token this tab holds.
+	// Its newer session replaces this one. If that session's access token has
+	// expired too, the refresh below spends its refresh token instead.
+	if (adoptStoredSession() && !tokenIsStale()) {
+		return true;
+	}
+	if (await postRefresh()) {
+		return true;
+	}
+	// Refused. Without Web Locks another tab can spend the same token first;
+	// its session is then the one to keep, not a reason to sign out.
+	if (adoptStoredSession() && (!tokenIsStale() || (await postRefresh()))) {
+		return true;
+	}
+	clearSession();
+	return false;
+}
+
 /**
  * The refresh in flight, if any. Refresh tokens rotate (PRD §5.1): the server
  * revokes a refresh token once it is spent and refuses it after that, so two
- * refreshes with the same token always leave one failed. A failed refresh
+ * refreshes with the same token always leave one refused. A refused refresh
  * clears the session, so every caller waits on this one instead.
  */
 let refreshInFlight: Promise<boolean> | null = null;
@@ -181,8 +199,9 @@ let refreshInFlight: Promise<boolean> | null = null;
 /**
  * Renew the access token, sharing one refresh among every caller in this tab
  * and, where the browser has the Web Locks API, queueing behind a refresh in
- * another tab. Clears the session when the refresh token is refused. Resolves
- * `true` when a renewed session is in the store.
+ * another tab. Clears the session when the refresh token is refused and
+ * resolves `true` when a renewed session is in the store. Any other failure
+ * rejects and leaves the session as it is.
  */
 export function refreshSession(): Promise<boolean> {
 	if (!refreshInFlight) {
@@ -201,11 +220,13 @@ export function refreshSession(): Promise<boolean> {
 
 /**
  * After a 401, put a newer access token in the store: one a refresh stored
- * while this request was in flight, or else a shared refresh's.
+ * while this request was in flight, or else a shared refresh's. A different
+ * token that is already stale is one taken from another tab and still being
+ * renewed, so the request waits for that renewal instead of retrying with it.
  */
 async function renewAfter401(sentToken: string | null): Promise<boolean> {
 	const current = getAccessToken();
-	if (current && current !== sentToken) {
+	if (current && current !== sentToken && !tokenIsStale()) {
 		return true;
 	}
 	return refreshSession();
