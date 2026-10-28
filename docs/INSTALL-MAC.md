@@ -248,7 +248,10 @@ login.
 If you outgrow the app — you want to run on Linux, put a real domain in front of it, or edit
 `gateway.yaml` directly — you can skip the app and run the same stack directly with
 [`docker-compose.release.yml`](../docker-compose.release.yml) and
-[`.env.release.example`](../.env.release.example) — see the
-[Quick Start](../README.md#quick-start) in the README. See also
+[`.env.release.example`](../.env.release.example). The comment at the top of
+`docker-compose.release.yml` lists the commands, and
+[Update LQ.AI](operate/upgrade.md#choose-the-release-and-installation-method) shows how to pin a
+release tag; the README's [Quick Start](../README.md#quick-start) covers building from source
+instead. See also
 [docs/operate/reverse-proxy-tls.md](operate/reverse-proxy-tls.md) for putting a stable URL in front
 of either install path.

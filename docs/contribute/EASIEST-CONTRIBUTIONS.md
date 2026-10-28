@@ -34,7 +34,7 @@ The mini-PRD's "Definition of merged" section is the contract. If the acceptance
 | 5 | [Air-gap install verification CI test](mini-prds/air-gap-install-verification.md) | Mid engineer w/ Docker networking | S-M | Medium-High |
 | 6 | [NIST AI RMF 1.0 Profile mapping](mini-prds/nist-ai-rmf-profile.md) | AI-governance / compliance professional | M | High |
 | 7 | [Reverse-proxy + TLS deployment recipes](mini-prds/reverse-proxy-tls-deployment-recipes.md) | Junior-to-mid DevOps | S | High |
-| 8 | [Community skill installer (admin UI)](mini-prds/community-skill-installer-ui.md) | Mid-level engineer (Svelte + FastAPI) | M | High |
+| 8 | ~~[Community skill installer (admin UI)](mini-prds/community-skill-installer-ui.md)~~ **Shipped in v0.9.1 (#710); not open for pickup** | Mid-level engineer (Svelte + FastAPI) | M | Shipped |
 
 **Effort key:** S = under a day; M = a few days; L = more than a week.
 
@@ -44,8 +44,8 @@ and 6 (Procurement-Readiness Pack, NIST AI RMF mapping) read closer to a complia
 procurement, or AI-governance background than an engineering one. Rows 2, 4, 5, and 7
 assume an engineering background at S-to-M effort — the OWASP LLM Top 10 mapping, the
 OpenSSF Scorecard badges, the air-gap install verification test, and the reverse-proxy and
-TLS recipes. Row 8, the community skill installer UI, is a mid-level Svelte + FastAPI
-engineering item. This list only carries S and M items by design; anything larger goes
+TLS recipes. Row 8, the community skill installer UI, shipped in v0.9.1 and stays listed
+for reference only. This list only carries S and M items by design; anything larger goes
 through a discussion first rather than sitting on a public board.
 
 **Foundation readiness** reflects how much of the supporting code, documentation, or convention is already shipped. **High** means you read existing source, fill the gap, and submit the PR. **Medium-High** means one or two ancillary decisions are still open and the maintainer resolves them during review.

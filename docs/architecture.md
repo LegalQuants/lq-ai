@@ -89,7 +89,7 @@ flowchart TB
     %% =========================================
     subgraph PROVIDERS["🌐 LLM Providers (operator's choice; configured per-deployment)"]
         direction LR
-        cloud["<b>Cloud Providers</b><br/>Anthropic · OpenAI · Azure OpenAI<br/><i>Vertex · Bedrock deferred — DE-034/035</i><br/><i>Tier 2–4 depending on configuration</i>"]
+        cloud["<b>Cloud Providers</b><br/>Anthropic · OpenAI · Azure OpenAI · Bedrock (live AWS check pending)<br/><i>Vertex deferred — DE-034</i><br/><i>Tier 2–4 depending on configuration</i>"]
         local["<b>Local Providers</b><br/>Ollama · vLLM · llama.cpp<br/>any OpenAI-compatible endpoint<br/><i>Tier 1 — air-gap-capable</i>"]
     end
 
@@ -285,7 +285,7 @@ M1 is the foundation release: a self-hostable deployment that delivers conversat
 **Adds (all shipped in M3; fresh-install-verified at M3-E1):**
 - Playbook Service with LangGraph executor and the Easy Playbook auto-generation wizard. Per-position assessments carry verbatim `matched_text` + `cited_chunk_ids` (lexical-FTS anchoring), **not** the M2 Citation Engine verification cascade — Citation Engine integration for the playbook/tabular executors is deferred. See [docs/playbooks.md](playbooks.md).
 - Word Add-In **plumbing** — scaffold + OAuth (M3-B2) + self-served JS bundle + version handshake (M3-B8). The task pane is installable via the **unsigned-manifest** path (Microsoft 365 Admin Center) and authenticated against the operator's deployment. The in-Word feature surface inside each tab (chat against the open document, skills with tracked changes, playbook execution, Inference Tier badge) is deferred to M4 / community per [PRD §9 DE-287](PRD.md#9-deferred-enhancements-and-identified-future-work); the **signed manifest + enterprise distribution package (M3-B7)** is descoped to a community-led effort per [PRD §9 DE-295](PRD.md#9-deferred-enhancements-and-identified-future-work) — only the unsigned-manifest sideload path ships at v0.3.0. See [docs/word-addin.md](word-addin.md).
-- Tabular Review surface and `output_format: table` skill mode (M3-C1/C2) + XLSX/CSV export (M3-C4a). Per-cell citations are navigable: the read-side resolves each cell's grounding chunk to `source_file_id`/`source_page`/`source_text` (post-v0.4.0, #125), though the executor still does not mint real Citation-Engine rows ([DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)); per-column ensemble verification is now honored at execution (#127). See [docs/tabular-review.md](tabular-review.md).
+- Tabular Review surface and `output_format: table` skill mode (M3-C1/C2) + XLSX/CSV export (M3-C4a). Per-cell citations are real: the executor locates each grounded cell's value verbatim in its cited chunks and stores offset-bearing rows (`tabular_cell_citations`, migration 0079; [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work)), and a cell whose value cannot be located shows no citation. Each cell records its routed tier and reported cost ([DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work)); per-column ensemble verification is now honored at execution (#127). See [docs/tabular-review.md](tabular-review.md).
 - Slack/Teams Light Intake Bridge **plumbing** — `slack-bridge` + `teams-bridge` services with OAuth install + admin UI shell. The `/lq` slash-command surface is deferred to M4 / community per [PRD §9 DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work). The plumbing was verified **in isolation only** — a real OAuth round-trip against a public-URL tunnel has not been exercised ([DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work), P1). See [docs/intake-bridges.md](intake-bridges.md).
 - Second `arq` worker process (`arq-worker`) for long-running Playbook + Tabular jobs (the `arq:m3a6` queue) — the Easy Playbook generation and tabular extraction pipelines run there to keep within the PRD §3.7 <10-minute NFR without competing with document ingest jobs on the existing `ingest-worker` queue.
 
@@ -333,7 +333,7 @@ annotates request with routed_inference_tier 1–5; refuses if below skill or Pr
     anonpre["`**Anonymization — pre**
 M2; pseudonymizes sensitive entities; stable mapping for the request lifetime`"] --> adapter
     adapter["`**Provider Adapter**
-HTTP/gRPC to Anthropic / OpenAI / Azure / Ollama / vLLM; Vertex + Bedrock deferred — DE-034/035`"] -->|response| anonpost
+HTTP/gRPC to Anthropic / OpenAI / Azure / Bedrock / Ollama / vLLM; Vertex deferred — DE-034`"] -->|response| anonpost
     anonpost["`**Anonymization — post**
 M2; rehydrates pseudonyms in response and inside cited chunks; mapping discarded`"] --> cost
     cost["`**Cost Tracker**

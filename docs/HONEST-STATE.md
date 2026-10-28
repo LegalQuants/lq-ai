@@ -1,6 +1,6 @@
 # Honest State
 
-> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Current as of the fiduciary-grade agentic legal work milestone close (ADRs [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)); migration head `0064`.** (Prior baselines: the legal-research + connectors (MCP) milestone close, #158–#193, head `0055`; before that, the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
+> Catalog of what LQ.AI ships today, what is deferred, and how to verify each. Maintained per release. **Last reconciled as a whole at the fiduciary-grade agentic legal work milestone close (ADRs [0018](adr/0018-citation-ledger-and-fiduciary-grade-output.md)–[0021](adr/0021-content-source-registry-and-free-source-expansion.md)); migration head `0064`. Rows for later work, up to v0.9.1 (migration head `0079`), were updated one at a time; the catalog as a whole has not been re-audited since.** (Prior baselines: the legal-research + connectors (MCP) milestone close, #158–#193, head `0055`; before that, the M4 close plus the post-v0.4.0 "Donna" run, #115–#139, head `0047`.)
 
 ## In short
 
@@ -23,7 +23,7 @@ Each table has three columns:
 
 Status markers reference the roadmap milestones (M1 → M4) documented in [README.md](../README.md#project-status) and [PRD §8](PRD.md#8-roadmap).
 
-## #658 installed-reference increment (design adopted; release pending)
+## #658 installed-reference reads (first released in v0.9.1)
 
 On-demand model reads are default-on for enabled, trusted filesystem skills,
 with an independent host-disable policy and retained authorized human supporting-
@@ -32,15 +32,15 @@ file inspection. The initial profile supports admitted `references/` UTF-8 text:
 Large files stay discoverable and expose size/range/continuation metadata. Streamed
 validation and hashing retain only one bounded range in memory. Legacy
 `reference/` prompt loading is unchanged. Assets, broader paths, Unicode names,
-complete-list discovery remain compatibility follow-up work. This
-entry claims neither a released capability nor complete Agent Skills support.
+complete-list discovery remain compatibility follow-up work. First released in
+v0.9.1; `LQ_AI_SKILL_REFERENCE_READ_ENABLED=false` turns it off. This entry does
+not claim complete Agent Skills support.
 
 Verification targets include `api/tests/skills/test_reference_read.py`, skill
 API/chat and autonomous policy regressions, and supporting-file UI tests.
 The October 17 PR review records agent-run U-1–U-7 workflow checks and final
 maintainer/security review findings, including the durable-result boundary
-correction. These are implementation evidence, not a claim that the PR is
-merged or released. See the [operator notes](deploy/skill-capabilities.md).
+correction. See the [operator notes](deploy/skill-capabilities.md).
 The D9/D5 policy clarifications record the maintainer's adopted direction as
 of October 17; no further design-ratification round is required.
 
@@ -182,7 +182,7 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 | Cost preview · execute · list · get · cancel · soft-delete | M3 | `api/app/api/tabular.py`; arq job `api/app/workers/tabular_worker.py`; table `tabular_executions` (migration `0036`) |
 | Export to XLSX (cell comments) / CSV (citation links) | M3 | `GET /api/v1/tabular/executions/{id}/export` |
 | Column-spec snapshot at execution start (auditable invariant) | M3 | `api/app/models/tabular.py` (columns JSONB snapshot) |
-| Per-cell provenance (DE-309): deterministic verbatim matches mint real ids/offsets in `tabular_cell_citations` (migration 0079); GET/cancel select minted rows by persisted `m3-c2-v2` even with zero matches. Legacy-v1 and exports keep bridge ids; read-side source enrichment remains batched. Untyped in gen:api — [DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work) | DE-309 (#420) | `api/app/tabular/nodes.py`; `api/app/api/tabular.py`; `api/tests/tabular/test_cell_citations.py`; `api/tests/test_tabular_endpoints.py` |
+| Per-cell provenance (DE-309): deterministic verbatim matches mint real ids/offsets in `tabular_cell_citations` (migration 0079); GET/cancel select minted rows by persisted `m3-c2-v2` even with zero matches. Legacy-v1 and exports keep bridge ids; read-side source enrichment remains batched. The OpenAPI sketch names the result components since #422 ([DE-330](PRD.md#9-deferred-enhancements-and-identified-future-work)) | DE-309 (#420) | `api/app/tabular/nodes.py`; `api/app/api/tabular.py`; `api/tests/tabular/test_cell_citations.py`; `api/tests/test_tabular_endpoints.py` |
 | Per-column ensemble verification honored at execution (ensemble cells run one Stage-4 ensemble pass over cited chunks; `verification_method` `ensemble_strict`/`ensemble_majority`/None persisted on cells + mirrored onto citations; preview adds `ensemble_cells_count` + `ensemble_premium_usd`, included in `estimated_cost_usd`; precedence column > skill snapshot > deployment default; no mid-run ceiling — [DE-331](PRD.md#9-deferred-enhancements-and-identified-future-work)) | post-v0.4.0 (#127) | `api/app/tabular/nodes.py` (`_verify_cell_ensemble`), `api/app/tabular/cost.py`; `api/app/schemas/tabular.py` |
 | Learn viz | M3 | `web/static/learn/playgrounds/tabular-review.html` |
 
@@ -384,4 +384,4 @@ If a claim does not check out, the codebase is canonical — please [open an iss
 
 ## 12. Maintenance note
 
-Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), reconciled against the post-v0.4.0 "Donna" run (#115–#139; head `0047`), then reconciled against the **legal-research + connectors (MCP) milestone** (#158–#193; migration head `0055`; the release-readiness verification pass for v0.5.0), then reconciled a third time against the **fiduciary-grade agentic legal work milestone** (ADRs 0018–0021; migration head `0064`) as part of the DE-365 docs-honesty audit (`docs/audits/2026-07-01-claims-vs-reality.md`), which added [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) and refreshed the header, the M4 cross-reference, and the §8 test-file counts. Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`, the ADRs `docs/adr/0014`/`0015` + `docs/proposals/legal-research-and-mcp.md` for the tool-egress/MCP milestone, and ADRs `docs/adr/0018`–`0021` for the fiduciary-grade milestone).
+Maintained per release. Last rewritten at the **M4 close** (Autonomous Layer shipped end-to-end; fresh-install acceptance passed), reconciled against the post-v0.4.0 "Donna" run (#115–#139; head `0047`), then reconciled against the **legal-research + connectors (MCP) milestone** (#158–#193; migration head `0055`; the release-readiness verification pass for v0.5.0), then reconciled a third time against the **fiduciary-grade agentic legal work milestone** (ADRs 0018–0021; migration head `0064`) as part of the DE-365 docs-honesty audit (`docs/audits/2026-07-01-claims-vs-reality.md`), which added [§5.6](#56-fiduciary-grade-agentic-legal-work-gateway-brokered-shipped-after-legal-research--mcp) and refreshed the header, the M4 cross-reference, and the §8 test-file counts. Rows for later work, up to v0.9.1 (migration head `0079`), have been updated one at a time since; no whole-catalog reconciliation has been done after that third pass. Substantive content drivers: [PRD §3](PRD.md#3-capability-specifications) (capabilities), [PRD §8](PRD.md#8-roadmap) (roadmap), [PRD §9](PRD.md#9-deferred-enhancements-and-identified-future-work) (deferrals), and the per-feature docs (`docs/citation-engine.md`, `docs/playbooks.md`, `docs/tabular-review.md`, `docs/word-addin.md`, `docs/intake-bridges.md`, `docs/autonomous-layer.md`, the ADRs `docs/adr/0014`/`0015` + `docs/proposals/legal-research-and-mcp.md` for the tool-egress/MCP milestone, and ADRs `docs/adr/0018`–`0021` for the fiduciary-grade milestone).

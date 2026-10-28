@@ -132,7 +132,7 @@ Open **Matters** in the sidebar (`/lq-ai/matters`) — the shell calls Projects 
 
 ## 6. Connect an AI model
 
-LQ.AI has connections for Anthropic, OpenAI (or any OpenAI-compatible endpoint), Azure OpenAI, and Ollama (for a fully local setup). Choose a configured model name in the app. Ollama lets you run a model on your own computer — starting its Docker profile doesn't by itself switch the app to that model: check the chat model, its backup choices, and the document-search (embedding) model too.
+LQ.AI has connections for Anthropic, OpenAI (or any OpenAI-compatible endpoint), Azure OpenAI, AWS Bedrock (not yet checked against a real AWS account) and Ollama (for a fully local setup). Choose a configured model name in the app. Ollama lets you run a model on your own computer — starting its Docker profile doesn't by itself switch the app to that model: check the chat model, its backup choices, and the document-search (embedding) model too.
 
 ### Details: a cloud provider key (Mode 1)
 
@@ -150,7 +150,7 @@ ANTHROPIC_API_KEY=sk-ant-...your-key-here...
 
 - There's no `.env` switch for the default model: chats default to the `smart` alias (`claude-opus-4-7` in the shipped `gateway.yaml.example`). Choose another model or alias in the chat's model picker, or repoint the alias under **Settings → Models** once signed in.
 - The starter skills are model-agnostic but were drafted and calibrated against Anthropic's Claude family; a different provider's output will be similar in shape but may differ in calibration nuance.
-- `gateway.yaml.example` also carries example entries for Google Vertex and AWS Bedrock, but no adapter ships for those provider types yet — a key for them won't route anything.
+- `gateway.yaml.example` also carries an example entry for Google Vertex, for which no adapter ships yet, so a Vertex key won't route anything. Its AWS Bedrock entry works through Bedrock's compatible APIs with a key in `AWS_BEARER_TOKEN_BEDROCK`. That adapter has not been verified against a real AWS account ([Bedrock verification](bedrock-verification.md)), and a `type: bedrock` entry without `bedrock_protocol` is skipped at startup.
 
 <a id="details-local-ollama-mode-2-offline-once-set-up"></a>
 
@@ -326,7 +326,7 @@ You should see ten healthy services: `api`, `gateway`, `web`, `postgres`, `redis
 Confirm the migration head is current:
 
 ```bash
-docker compose exec api alembic current   # expect 0045 (head)
+docker compose exec api alembic current   # expect a revision marked (head)
 ```
 
 ### Attach the synthetic corpus
@@ -343,7 +343,7 @@ Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA*
 
 ### Run a Tabular Review across the five NDAs
 
-Open **Tabular Review**, select the five NDAs, and define a few columns (or pick a `output_format: table` skill). Confirm the cost preview, run, then click any cell to open the citation drawer. Export to **XLSX** or **CSV**. See [docs/tabular-review.md](tabular-review.md). *(Per-cell citations are display-only chunk references — [DE-309](PRD.md#9-deferred-enhancements-and-identified-future-work); per-cell cost/tier read 0 — [DE-310](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+Open **Tabular Review**, select the five NDAs, and define a few columns (or pick a `output_format: table` skill). Confirm the cost preview, run, then click any cell to open the citation drawer. Export to **XLSX** or **CSV**. See [docs/tabular-review.md](tabular-review.md). *(A cell whose value is found verbatim in its cited passage carries a citation, and the citation drawer highlights the source; a cell whose value cannot be found shows no citation. Each cell records its routed tier and reported cost.)*
 
 ### Install the Word add-in (unsigned-manifest path)
 
