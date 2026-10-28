@@ -1,9 +1,11 @@
 Thanks for installing LQ.AI {{ .Chart.AppVersion }}.
 
-Verification of release artifacts (per docs/security/README.md):
+Verification of release artifacts (per docs/security/releases/README.md;
+with cosign 2.4 or earlier, leave out --new-bundle-format=false):
 
   cosign verify \
-    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
+    --new-bundle-format=false \
+    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/\.github/workflows/release\.yml@refs/tags/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     ghcr.io/legalquants/lq-ai-api:{{ .Values.image.tag | default .Chart.AppVersion }}
 
