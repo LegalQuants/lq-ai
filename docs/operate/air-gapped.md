@@ -112,16 +112,19 @@ A local chat model changes only one part of that list. Prepare required model ca
 before disconnecting, and test with outside access actually blocked.
 
 > [!CAUTION]
-> **Silent failure** — No CI job in this repository measures what "Mode 2 makes zero
-> outbound calls" actually does on the wire. [PRD §6.4](../PRD.md#64-air-gapped-deployment)
-> states "No outbound calls in Mode 2 (verified by integration test)" as a property
-> of air-gapped deployment; that verification has not been built, tracked as
-> [PRD §9 DE-032](../PRD.md#de-032--air-gap-install-verification) /
-> [DE-233](../PRD.md#de-233--air-gap-install-verification-ci-test) (design sketched
-> in [`docs/contribute/mini-prds/air-gap-install-verification.md`](../contribute/mini-prds/air-gap-install-verification.md)).
-> If your deployment needs zero outbound calls as a *proven* property rather than a
-> documented intent, this repository does not yet give you that proof — you would
-> need to run your own network capture against the stack.
+> **Silent failure** — A CI job checks part of "Mode 2 makes zero outbound calls", not
+> all of it. The `Air-gap verify` workflow (`.github/workflows/airgap-verify.yml`) runs
+> weekly and on changes to the Compose topology. It boots the Mode 2 stack from
+> `docker-compose.yml` with outbound traffic blocked and external DNS unavailable, signs
+> in, sends one chat message to local Ollama at Tier 1, and fails if it sees a direct DNS
+> query to the outside or a reply from a public address
+> ([what it proves and what it does not](../security/air-gap-verification.md)). It does
+> not exercise document ingestion or search under the block, and it says nothing about
+> your own network, your model choice or how you move images across. So
+> [PRD §6.4](../PRD.md#64-air-gapped-deployment)'s "No outbound calls in Mode 2" is shown
+> for sign-in and local chat on the project's test stack, not for every feature. If your
+> deployment needs zero outbound calls as a *proven* property, run your own network
+> capture against the stack.
 
 There are two concrete gaps worth planning around directly. First: the first
 document you upload still triggers Docling to download roughly 700 MB of layout and

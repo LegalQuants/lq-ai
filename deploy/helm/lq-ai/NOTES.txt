@@ -3,7 +3,7 @@ Thanks for installing LQ.AI {{ .Chart.AppVersion }}.
 Verification of release artifacts (per docs/security/README.md):
 
   cosign verify \
-    --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \
+    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     ghcr.io/legalquants/lq-ai-api:{{ .Values.image.tag | default .Chart.AppVersion }}
 

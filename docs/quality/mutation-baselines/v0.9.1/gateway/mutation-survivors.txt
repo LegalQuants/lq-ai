@@ -1,0 +1,871 @@
+    app.tier_floor.x_resolve_tier_floor__mutmut_5: survived
+    app.tier_floor.x_resolve_tier_floor__mutmut_11: survived
+    app.tier_floor.x_resolve_tier_floor__mutmut_20: survived
+    app.tier_floor.x_resolve_tier_floor__mutmut_28: survived
+    app.router.x_outcome_label_from_error__mutmut_1: survived
+    app.router.x_outcome_label_from_error__mutmut_2: survived
+    app.router.x_outcome_label_from_error__mutmut_3: survived
+    app.router.x_outcome_label_from_error__mutmut_4: survived
+    app.router.x_outcome_label_from_error__mutmut_5: survived
+    app.router.x_outcome_label_from_error__mutmut_6: survived
+    app.router.x__record_inference_outcome__mutmut_1: survived
+    app.router.x__record_inference_outcome__mutmut_2: survived
+    app.router.x__record_inference_outcome__mutmut_3: survived
+    app.router.x__record_inference_outcome__mutmut_7: survived
+    app.router.xǁNoAdapterAvailableErrorǁ__init____mutmut_1: survived
+    app.router.xǁNoAdapterAvailableErrorǁ__init____mutmut_2: survived
+    app.router.xǁNoAdapterAvailableErrorǁ__init____mutmut_3: survived
+    app.router.xǁToolEgressRefusedǁ__init____mutmut_2: survived
+    app.router.xǁRoutedProviderErrorǁ__init____mutmut_1: survived
+    app.router.xǁRoutedProviderErrorǁ__init____mutmut_4: survived
+    app.router.xǁRoutedProviderErrorǁ__init____mutmut_5: survived
+    app.router.x_resolve_alias_chain__mutmut_3: survived
+    app.router.x_resolve_alias_chain__mutmut_4: survived
+    app.router.x_resolve_alias_chain__mutmut_6: survived
+    app.router.x_resolve_alias_chain__mutmut_7: survived
+    app.router.x_resolve_alias_chain__mutmut_8: survived
+    app.router.x_resolve_alias_chain__mutmut_9: survived
+    app.router.x_resolve_alias_chain__mutmut_10: survived
+    app.router.x_resolve_alias_chain__mutmut_11: survived
+    app.router.x_resolve_alias_chain__mutmut_12: survived
+    app.router.x_resolve_alias_chain__mutmut_13: survived
+    app.router.x_resolve_alias_chain__mutmut_14: survived
+    app.router.x_resolve_alias_chain__mutmut_15: survived
+    app.router.x_resolve_alias_chain__mutmut_16: survived
+    app.router.x_resolve_alias_chain__mutmut_17: survived
+    app.router.x_resolve_alias_chain__mutmut_18: survived
+    app.router.x_resolve_alias_chain__mutmut_19: survived
+    app.router.x_resolve_alias_chain__mutmut_20: survived
+    app.router.x_resolve_alias_chain__mutmut_21: survived
+    app.router.x_resolve_alias_chain__mutmut_22: survived
+    app.router.x_resolve_alias_chain__mutmut_23: survived
+    app.router.x_resolve_alias_chain__mutmut_24: survived
+    app.router.x_resolve_alias_chain__mutmut_25: survived
+    app.router.x_resolve_alias_chain__mutmut_26: survived
+    app.router.x_resolve_alias_chain__mutmut_27: survived
+    app.router.x_resolve_alias_chain__mutmut_28: survived
+    app.router.x_resolve_alias_chain__mutmut_29: survived
+    app.router.x_resolve_alias_chain__mutmut_30: survived
+    app.router.x_resolve_alias_chain__mutmut_31: survived
+    app.router.x_resolve_alias_chain__mutmut_32: survived
+    app.router.x_resolve_alias_chain__mutmut_33: survived
+    app.router.x_resolve_alias_chain__mutmut_34: survived
+    app.router.x_resolve_alias_chain__mutmut_35: survived
+    app.router.x_resolve_alias_chain__mutmut_36: survived
+    app.router.x_resolve_alias_chain__mutmut_37: survived
+    app.router.x_resolve_alias_chain__mutmut_38: survived
+    app.router.x_resolve_alias_chain__mutmut_39: survived
+    app.router.x_resolve_alias_chain__mutmut_40: survived
+    app.router.x_resolve_alias_chain__mutmut_51: survived
+    app.router.x_resolve_alias_chain__mutmut_52: survived
+    app.router.x_resolve_alias_chain__mutmut_53: survived
+    app.router.x_resolve_alias_chain__mutmut_56: survived
+    app.router.x_resolve_alias_chain__mutmut_75: survived
+    app.router.x_resolve_alias_chain__mutmut_81: survived
+    app.router.x_resolve_alias_chain__mutmut_83: survived
+    app.router.x_resolve_alias_chain__mutmut_91: survived
+    app.router.x_resolve_alias_chain__mutmut_108: survived
+    app.router.x_resolve_alias_chain__mutmut_124: survived
+    app.router.x_resolve_alias_chain__mutmut_125: survived
+    app.router.x__walk_alias_chain__mutmut_3: survived
+    app.router.x__walk_alias_chain__mutmut_4: survived
+    app.router.x__walk_alias_chain__mutmut_8: survived
+    app.router.x__walk_alias_chain__mutmut_12: survived
+    app.router.x__walk_model_to_native__mutmut_2: survived
+    app.router.x__walk_model_to_native__mutmut_3: survived
+    app.router.x__walk_model_to_native__mutmut_4: survived
+    app.router.x__walk_model_to_native__mutmut_5: survived
+    app.router.x__walk_model_to_native__mutmut_6: survived
+    app.router.x__is_duplicate__mutmut_2: survived
+    app.router.x_is_fallback_eligible__mutmut_4: survived
+    app.router.x_is_fallback_eligible__mutmut_5: survived
+    app.router.xǁRouterǁ__init____mutmut_3: survived
+    app.router.xǁRouterǁ__init____mutmut_6: survived
+    app.router.xǁRouterǁ__init____mutmut_10: survived
+    app.router.xǁRouterǁ__init____mutmut_12: survived
+    app.router.xǁRouterǁ__init____mutmut_14: survived
+    app.router.xǁRouterǁ__init____mutmut_17: survived
+    app.router.xǁRouterǁ__init____mutmut_18: survived
+    app.router.xǁRouterǁ__init____mutmut_19: survived
+    app.router.xǁRouterǁpin__mutmut_1: no tests
+    app.router.xǁRouterǁpin__mutmut_2: no tests
+    app.router.xǁRouterǁpin__mutmut_3: no tests
+    app.router.xǁRouterǁpin__mutmut_4: no tests
+    app.router.xǁRouterǁpin__mutmut_5: no tests
+    app.router.xǁRouterǁpin__mutmut_6: no tests
+    app.router.xǁRouterǁpin__mutmut_7: no tests
+    app.router.xǁRouterǁpin__mutmut_8: no tests
+    app.router.xǁRouterǁpin__mutmut_9: no tests
+    app.router.xǁRouterǁpin__mutmut_10: no tests
+    app.router.xǁRouterǁpin__mutmut_11: no tests
+    app.router.xǁRouterǁpin__mutmut_12: no tests
+    app.router.xǁRouterǁpin__mutmut_13: no tests
+    app.router.xǁRouterǁpin__mutmut_14: no tests
+    app.router.xǁRouterǁpin__mutmut_15: no tests
+    app.router.xǁRouterǁpin__mutmut_16: no tests
+    app.router.xǁRouterǁpin__mutmut_17: no tests
+    app.router.xǁRouterǁpin__mutmut_18: no tests
+    app.router.xǁRouterǁpin__mutmut_19: no tests
+    app.router.xǁRouterǁpin__mutmut_20: no tests
+    app.router.xǁRouterǁpin__mutmut_21: no tests
+    app.router.xǁRouterǁpin__mutmut_22: no tests
+    app.router.xǁRouterǁpin__mutmut_23: no tests
+    app.router.xǁRouterǁpin__mutmut_24: no tests
+    app.router.xǁRouterǁpin__mutmut_25: no tests
+    app.router.xǁRouterǁpin__mutmut_26: no tests
+    app.router.xǁRouterǁpin__mutmut_27: no tests
+    app.router.xǁRouterǁpin__mutmut_28: no tests
+    app.router.xǁRouterǁpin__mutmut_29: no tests
+    app.router.xǁRouterǁpin__mutmut_30: no tests
+    app.router.xǁRouterǁpin__mutmut_31: no tests
+    app.router.xǁRouterǁpin__mutmut_32: no tests
+    app.router.xǁRouterǁpin__mutmut_33: no tests
+    app.router.xǁRouterǁpin__mutmut_34: no tests
+    app.router.xǁRouterǁpin__mutmut_35: no tests
+    app.router.xǁRouterǁpin__mutmut_36: no tests
+    app.router.xǁRouterǁpin__mutmut_37: no tests
+    app.router.xǁRouterǁpin__mutmut_38: no tests
+    app.router.xǁRouterǁpin__mutmut_39: no tests
+    app.router.xǁRouterǁpin__mutmut_40: no tests
+    app.router.xǁRouterǁpin__mutmut_41: no tests
+    app.router.xǁRouterǁpin__mutmut_42: no tests
+    app.router.xǁRouterǁpin__mutmut_43: no tests
+    app.router.xǁRouterǁchat_completion__mutmut_3: survived
+    app.router.xǁRouterǁchat_completion__mutmut_4: survived
+    app.router.xǁRouterǁchat_completion__mutmut_5: survived
+    app.router.xǁRouterǁchat_completion__mutmut_6: survived
+    app.router.xǁRouterǁchat_completion__mutmut_12: survived
+    app.router.xǁRouterǁchat_completion__mutmut_13: survived
+    app.router.xǁRouterǁchat_completion__mutmut_17: survived
+    app.router.xǁRouterǁchat_completion__mutmut_23: survived
+    app.router.xǁRouterǁchat_completion__mutmut_30: survived
+    app.router.xǁRouterǁchat_completion__mutmut_32: survived
+    app.router.xǁRouterǁchat_completion__mutmut_33: survived
+    app.router.xǁRouterǁchat_completion__mutmut_34: survived
+    app.router.xǁRouterǁchat_completion__mutmut_35: survived
+    app.router.xǁRouterǁchat_completion__mutmut_36: survived
+    app.router.xǁRouterǁchat_completion__mutmut_37: survived
+    app.router.xǁRouterǁchat_completion__mutmut_38: survived
+    app.router.xǁRouterǁchat_completion__mutmut_39: survived
+    app.router.xǁRouterǁchat_completion__mutmut_40: survived
+    app.router.xǁRouterǁchat_completion__mutmut_41: survived
+    app.router.xǁRouterǁchat_completion__mutmut_42: survived
+    app.router.xǁRouterǁchat_completion__mutmut_43: survived
+    app.router.xǁRouterǁchat_completion__mutmut_44: survived
+    app.router.xǁRouterǁchat_completion__mutmut_45: survived
+    app.router.xǁRouterǁchat_completion__mutmut_46: survived
+    app.router.xǁRouterǁchat_completion__mutmut_47: survived
+    app.router.xǁRouterǁchat_completion__mutmut_48: survived
+    app.router.xǁRouterǁchat_completion__mutmut_49: survived
+    app.router.xǁRouterǁchat_completion__mutmut_50: survived
+    app.router.xǁRouterǁchat_completion__mutmut_55: survived
+    app.router.xǁRouterǁchat_completion__mutmut_58: survived
+    app.router.xǁRouterǁchat_completion__mutmut_61: survived
+    app.router.xǁRouterǁchat_completion__mutmut_62: survived
+    app.router.xǁRouterǁchat_completion__mutmut_70: survived
+    app.router.xǁRouterǁchat_completion__mutmut_71: survived
+    app.router.xǁRouterǁchat_completion__mutmut_72: survived
+    app.router.xǁRouterǁchat_completion__mutmut_74: survived
+    app.router.xǁRouterǁchat_completion__mutmut_75: survived
+    app.router.xǁRouterǁchat_completion__mutmut_76: survived
+    app.router.xǁRouterǁchat_completion__mutmut_78: survived
+    app.router.xǁRouterǁchat_completion__mutmut_81: survived
+    app.router.xǁRouterǁchat_completion__mutmut_82: survived
+    app.router.xǁRouterǁchat_completion__mutmut_83: survived
+    app.router.xǁRouterǁchat_completion__mutmut_85: survived
+    app.router.xǁRouterǁchat_completion__mutmut_91: survived
+    app.router.xǁRouterǁchat_completion__mutmut_92: survived
+    app.router.xǁRouterǁchat_completion__mutmut_93: survived
+    app.router.xǁRouterǁchat_completion__mutmut_94: survived
+    app.router.xǁRouterǁchat_completion__mutmut_95: survived
+    app.router.xǁRouterǁchat_completion__mutmut_96: survived
+    app.router.xǁRouterǁchat_completion__mutmut_97: survived
+    app.router.xǁRouterǁchat_completion__mutmut_98: survived
+    app.router.xǁRouterǁchat_completion__mutmut_99: survived
+    app.router.xǁRouterǁchat_completion__mutmut_100: survived
+    app.router.xǁRouterǁchat_completion__mutmut_101: survived
+    app.router.xǁRouterǁchat_completion__mutmut_102: survived
+    app.router.xǁRouterǁchat_completion__mutmut_103: survived
+    app.router.xǁRouterǁchat_completion__mutmut_104: survived
+    app.router.xǁRouterǁchat_completion__mutmut_105: survived
+    app.router.xǁRouterǁchat_completion__mutmut_106: survived
+    app.router.xǁRouterǁchat_completion__mutmut_107: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_7: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_10: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_11: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_12: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_13: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_14: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_15: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_16: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_20: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_21: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_22: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_23: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_24: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_25: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_26: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_28: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_30: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_31: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_32: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_34: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_35: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_40: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_41: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_43: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_44: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_51: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_52: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_53: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_56: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_62: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_64: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_65: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_67: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_68: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_69: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_70: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_71: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_72: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_73: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_74: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_75: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_76: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_77: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_78: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_79: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_80: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_81: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_82: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_83: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_84: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_85: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_86: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_87: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_88: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_89: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_90: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_91: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_92: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_93: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_94: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_95: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_96: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_97: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_98: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_99: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_100: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_101: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_102: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_103: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_104: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_105: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_109: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_115: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_116: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_117: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_118: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_119: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_120: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_121: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_122: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_123: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_124: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_125: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_126: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_127: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_128: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_129: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_131: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_132: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_134: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_135: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_136: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_138: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_142: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_143: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_144: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_145: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_146: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_148: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_149: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_151: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_152: survived
+    app.router.xǁRouterǁroute_tool_call__mutmut_157: survived
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_1: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_2: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_3: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_4: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_5: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_6: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_7: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_8: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_9: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_10: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_11: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_12: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_13: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_14: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_15: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_16: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_17: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_18: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_19: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_20: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_21: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_22: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_23: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_24: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_25: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_26: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_27: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_28: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_29: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_30: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_31: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_32: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_33: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_34: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_35: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_36: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_37: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_38: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_39: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_40: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_41: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_42: no tests
+    app.router.xǁRouterǁ_resolve_oauth_provider__mutmut_43: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_1: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_2: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_3: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_4: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_5: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_6: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_7: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_8: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_9: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_10: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_11: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_12: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_13: no tests
+    app.router.xǁRouterǁ_oauth_refusal_row__mutmut_14: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_1: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_2: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_3: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_4: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_5: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_6: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_7: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_8: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_9: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_10: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_11: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_12: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_13: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_14: no tests
+    app.router.xǁRouterǁ_oauth_rate_limit_check__mutmut_15: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_1: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_2: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_3: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_4: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_5: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_6: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_7: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_8: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_9: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_10: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_11: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_12: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_13: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_14: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_15: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_16: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_17: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_18: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_19: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_20: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_21: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_22: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_23: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_24: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_25: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_26: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_27: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_28: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_29: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_30: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_31: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_32: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_33: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_34: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_35: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_36: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_37: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_38: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_39: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_40: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_41: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_42: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_43: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_44: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_45: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_46: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_47: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_48: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_49: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_50: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_51: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_52: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_53: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_54: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_55: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_56: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_57: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_58: no tests
+    app.router.xǁRouterǁroute_oauth_discover__mutmut_59: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_1: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_2: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_3: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_4: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_5: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_6: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_7: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_8: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_9: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_10: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_11: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_12: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_13: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_14: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_15: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_16: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_17: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_18: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_19: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_20: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_21: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_22: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_23: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_24: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_25: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_26: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_27: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_28: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_29: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_30: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_31: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_32: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_33: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_34: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_35: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_36: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_37: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_38: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_39: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_40: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_41: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_42: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_43: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_44: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_45: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_46: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_47: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_48: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_49: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_50: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_51: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_52: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_53: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_54: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_55: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_56: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_57: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_58: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_59: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_60: no tests
+    app.router.xǁRouterǁroute_oauth_token__mutmut_61: no tests
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_7: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_8: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_9: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_10: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_11: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_12: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_14: survived
+    app.routing_log.xǁSQLRoutingLogWriterǁwrite__mutmut_15: survived
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_1: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_2: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_3: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_4: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_5: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_6: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_7: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_8: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_9: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_10: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_11: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_12: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_13: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_14: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_15: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_16: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_17: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_18: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_19: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_20: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_21: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_22: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_23: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_24: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_25: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_26: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_27: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_28: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_29: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_30: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_31: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_32: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_33: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_34: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_35: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_36: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_37: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_38: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_39: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_40: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_41: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_42: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_43: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_44: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_45: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_46: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_47: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_48: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_49: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_50: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_51: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_52: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_53: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_54: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_55: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_56: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_57: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_58: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_59: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_60: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_61: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_62: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_63: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_64: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_65: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_66: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_67: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_68: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_69: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_70: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_71: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_72: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_73: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_74: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_75: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_76: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_77: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_78: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_79: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_80: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_81: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_82: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_83: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_84: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_85: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_86: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_87: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_88: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_89: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_90: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_91: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_92: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_93: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_94: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_95: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_96: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_97: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_98: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_99: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_100: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_101: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_102: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_103: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_104: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_105: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_106: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_107: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_108: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_109: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_110: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_111: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_112: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_113: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_114: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_115: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_116: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_117: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_118: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_119: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_120: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_121: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_122: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_123: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_124: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_125: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_126: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_127: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_128: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_129: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_130: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_131: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_132: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_133: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_134: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_135: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_136: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_137: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_138: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_139: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_140: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_141: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_142: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_143: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_144: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_145: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_146: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_147: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_148: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_149: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_150: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_151: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_152: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_153: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_154: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_155: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_156: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_157: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_158: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_159: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_160: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_161: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_162: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_163: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_164: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_165: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_166: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_167: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_168: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_169: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_170: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_171: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_172: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_173: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_174: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_175: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_176: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_177: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_178: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_179: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_180: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_181: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_182: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_183: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_184: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_185: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_186: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_187: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_188: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_189: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_190: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_191: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_192: no tests
+    app.anonymization.authority.x_anonymize_authority_args__mutmut_193: no tests
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_2: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_3: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_4: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_7: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_8: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_9: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_10: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_11: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_15: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_16: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_19: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_20: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_22: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_23: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_26: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_27: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_31: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_32: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_33: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_34: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_35: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_36: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_37: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_42: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_45: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_48: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_75: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_80: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_95: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_96: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_105: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_107: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_110: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_111: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_112: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_113: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_114: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_128: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_133: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_143: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_144: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_156: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_157: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_158: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_160: survived
+    app.anonymization.middleware.x_pre_anonymize_request__mutmut_161: survived
+    app.anonymization.middleware.xǁStreamingRehydratorǁflush__mutmut_8: survived
+    app.anonymization.middleware.xǁStreamingRehydratorǁflush__mutmut_9: survived
+    app.anonymization.middleware.x__unique_members__mutmut_3: survived
+    app.anonymization.middleware.x__unique_members__mutmut_4: survived
+    app.anonymization.middleware.x__unique_members__mutmut_5: survived
+    app.anonymization.middleware.x__not_a_number__mutmut_1: survived
+    app.anonymization.middleware.x__not_a_number__mutmut_2: survived
+    app.anonymization.middleware.x__not_a_number__mutmut_3: survived
+    app.anonymization.middleware.x__not_a_number__mutmut_4: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_3: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_4: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_6: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_7: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_8: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_14: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_19: survived
+    app.anonymization.middleware.x__whole_pseudonyms__mutmut_20: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_1: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_2: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_3: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_4: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_5: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_20: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_21: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_22: survived
+    app.anonymization.middleware.x__restore_strings__mutmut_32: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_2: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_5: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_9: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_12: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_25: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_26: survived
+    app.anonymization.middleware.x__restore_arguments__mutmut_34: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_4: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_7: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_11: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_12: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_14: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_17: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_18: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_29: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_30: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_32: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_33: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_34: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_35: survived
+    app.anonymization.middleware.x__pseudonymize_document__mutmut_38: survived
+    app.anonymization.middleware.x__count_strings__mutmut_2: survived
+    app.anonymization.middleware.x__count_strings__mutmut_3: timeout
+    app.anonymization.middleware.x__count_strings__mutmut_6: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_3: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_9: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_10: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_12: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_13: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_14: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_22: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_23: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁ__init____mutmut_25: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_4: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_5: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_7: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_8: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_10: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_16: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_17: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_18: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_19: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_20: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_21: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_22: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_23: survived
+    app.anonymization.middleware.xǁ_KnownOriginalsǁin_document__mutmut_25: survived
+    app.anonymization.engine.xǁ_AnalyzerProtocolǁanalyze__mutmut_1: no tests
+    app.anonymization.engine.xǁ_AnalyzerProtocolǁanalyze__mutmut_2: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_1: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_2: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_3: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_4: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_5: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_6: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_7: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_8: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_9: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_10: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_11: no tests
+    app.anonymization.engine.x_get_analyzer_engine__mutmut_12: no tests
+    app.anonymization.engine.x__reset_analyzer_engine_for_tests__mutmut_1: no tests
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_3: survived
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_4: survived
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_5: survived
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_6: survived
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_7: survived
+    app.anonymization.engine.xǁAnonymizerǁ_resolve_analyzer__mutmut_8: survived
+    app.anonymization.engine.xǁAnonymizerǁpseudonymize_into__mutmut_5: survived
+    app.anonymization.engine.xǁAnonymizerǁpseudonymize_into__mutmut_7: survived
+    app.anonymization.engine.xǁAnonymizerǁpseudonymize_into__mutmut_8: survived
+    app.anonymization.engine.xǁAnonymizerǁpseudonymize_into__mutmut_9: survived
+    app.anonymization.engine.xǁAnonymizerǁrehydrate__mutmut_3: survived
+    app.anonymization.engine.xǁAnonymizerǁrehydrate__mutmut_6: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_10: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_11: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_13: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_16: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_17: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_18: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_19: survived
+    app.anonymization.engine.x__resolve_overlaps__mutmut_27: survived
+    app.anonymization.engine.x__overlaps__mutmut_3: survived
+    app.anonymization.engine.x__overlaps__mutmut_4: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_2: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_8: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_9: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_11: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_17: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_18: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_21: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_24: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_26: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_27: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_28: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_29: survived
+    app.anonymization.recognizers.matter_number.xǁMatterNumberRecognizerǁ__init____mutmut_30: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_2: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_8: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_9: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_11: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_17: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_18: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_20: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_26: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_27: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_30: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_33: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_37: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_38: survived
+    app.anonymization.recognizers.case_number.xǁCaseNumberRecognizerǁ__init____mutmut_39: survived

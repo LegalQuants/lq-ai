@@ -26,8 +26,9 @@ shapes:
     recipe: air-gapped/
     source: README.md
     notes: >-
-      the compose stack brings this up; no CI job in this repository yet
-      measures its network behavior — see the page for the egress-inventory gap.
+      the compose stack brings this up; a weekly CI job (airgap-verify.yml) boots
+      it with outbound traffic blocked and checks sign-in and local chat; ingestion
+      and search are not covered — see the page.
 
   - topology: Kubernetes via the in-repo Helm chart
     status: recipe published

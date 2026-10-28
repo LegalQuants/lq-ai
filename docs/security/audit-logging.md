@@ -35,7 +35,7 @@ Logged events (verified against `action=` literals emitted by `api/app/`; the li
 - **MFA lifecycle:** `user.mfa_setup_initiated`, `user.mfa_enabled`, `user.mfa_enable_failed`, `user.mfa_disabled`, `user.mfa_disable_failed`, `user.mfa_verify_failed`.
 - **Password & credentials:** `user.password_changed`, `user.password_change_failed`.
 - **Account lifecycle:** `user.role_updated`, `user.preferences_updated`, `user.deletion_scheduled`, `user.deletion_cancelled`, `user.export_requested`.
-- **Project:** `project.knowledge_base_attached`, `project.knowledge_base_detached`. Project creation itself is **not** audited: the create handler commits the row and writes a structured service log line (`event=project_created`) but does not call `audit_action()`; `project.create` appears only as the docstring example in `api/app/audit.py`.
+- **Project:** `project.create` (`details`: `share_scope`, `privileged`), `project.update`, `project.archive`, `project.knowledge_base_attached`, `project.knowledge_base_detached` and, when a governed run adds a file to the matter, `project.file_attached`. Before v0.9.1, project creation, update and archiving were not audited.
 - **Chat:** `chat.message_sent`.
 - **Skills (user-scoped):** `user_skill.created`, `user_skill.updated`, `user_skill.deleted`.
 - **Files:** `file.uploaded`, `file.deleted`.

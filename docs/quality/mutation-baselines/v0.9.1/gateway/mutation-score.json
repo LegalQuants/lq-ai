@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "measurement_origin": "github-actions",
+  "status": "valid",
+  "package": "gateway",
+  "commit": "7ce0bb400380caed84944928b1be90cfd876ba77",
+  "run_url": "https://github.com/LegalQuants/lq-ai/actions/runs/40626059899",
+  "run_utc": "2026-10-28T03:21:26+00:00",
+  "tool": "mutmut",
+  "tool_version": "3.8.0",
+  "duration_seconds": "76",
+  "mutation_score_percent": 46.47,
+  "score_definition": "killed / (total - skipped)",
+  "counts": {
+    "killed": 756,
+    "survived": 427,
+    "total": 1627,
+    "no_tests": 443,
+    "skipped": 0,
+    "suspicious": 0,
+    "timeout": 1,
+    "check_was_interrupted_by_user": 0,
+    "segfault": 0
+  },
+  "modules": [
+    "app/router.py",
+    "app/tier_floor.py",
+    "app/routing_log.py",
+    "app/anonymization/*"
+  ],
+  "test_selection": [
+    "tests/test_tier_floor.py",
+    "tests/test_router.py",
+    "tests/test_route_tool_call.py",
+    "tests/test_routing_log.py",
+    "tests/anonymization"
+  ],
+  "pytest_args": [
+    "-m",
+    "not slow and not provider"
+  ],
+  "config_sha256": "6eb75ab855dc6f21a4812aa3ae43f4855752b4d8bddab06a991e5790ad3e9c13",
+  "lock_sha256": "8052cbe070530cddcf261f59531b1d7b91d089d734427fa38e4de8c5d89d7d56",
+  "tests_recorded": 194
+}

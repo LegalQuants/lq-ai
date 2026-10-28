@@ -59,11 +59,13 @@ Tear down with `down -v` (the throwaway project only — never the dev stack).
 
 ```bash
 # 1. Confirm the images are anonymously pullable (200 = public). NOTE the proxy image:
+#    The images are OCI indexes: without the Accept header GHCR answers 404 even for a public image.
+ACCEPT='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json'
 for img in lq-ai-api lq-ai-gateway lq-ai-web lq-ai-proxy; do
   TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:legalquants/$img:pull" \
     | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
   curl -s -o /dev/null -w "$img -> %{http_code}\n" -H "Authorization: Bearer $TOKEN" \
-    "https://ghcr.io/v2/legalquants/$img/manifests/vX.Y.Z"
+    -H "Accept: $ACCEPT" "https://ghcr.io/v2/legalquants/$img/manifests/vX.Y.Z"
 done
 
 # 2. Bring the stack up under a throwaway project + shifted ports (LQ_AI_IMAGE_TAG pins the version):

@@ -9,7 +9,7 @@
 >
 > The governed-run spans, the worker tracing and the routing-log purpose labels
 > for runs (ADR 0038, proposed) are implemented and are
-> marked as such where they appear. They are in no release.
+> marked as such where they appear. They were first released in v0.9.1.
 
 ## In short
 
@@ -254,7 +254,7 @@ The autonomous spans also write audit rows — see [§2.4 — Audit actions](#au
 
 #### `orchestration.job` / `orchestration.run` / `orchestration.effect`
 
-**ADR 0038 D2, proposed; implemented and in no release.** A
+**ADR 0038 D2, proposed; implemented, first released in v0.9.1.** A
 governed run executes on the arq worker, not in the API request that accepted or
 approved it. These spans put the worker's part of a run in the same trace as that
 request. Attributes are **identifiers and labels only — never prompt, document or

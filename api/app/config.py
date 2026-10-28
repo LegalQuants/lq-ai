@@ -194,7 +194,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # ----- Matter access control (migration 0067) -----
+    # ----- Matter access control (migration 0078) -----
     lq_ai_matter_default_share_scope: str = Field(
         default="personal",
         pattern="^(personal|members|org)$",
@@ -544,6 +544,7 @@ class Settings(BaseSettings):
         # Only that blank means unset; invalid nonblank values still fail.
         return None if value == "" else value
 
+    # ----- Skill references, data and tools -----
     # Optional skill data/tools. Bundled execution is confined to a separately
     # configured local broker; no command or host-process fallback exists.
     skill_reference_read_enabled: bool = Field(
