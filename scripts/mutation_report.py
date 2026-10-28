@@ -40,6 +40,15 @@ def validate_stats(stats: dict[str, Any]) -> None:
             raise ValueError(f"run contains {key} outcomes")
 
 
+def locked_version(lock_bytes: bytes, name: str = "mutmut") -> str:
+    """Return the single version of ``name`` that a uv.lock pins."""
+    packages = tomllib.loads(lock_bytes.decode()).get("package", [])
+    versions = {entry.get("version") for entry in packages if entry.get("name") == name}
+    if len(versions) != 1 or not all(isinstance(v, str) and v for v in versions):
+        raise ValueError(f"uv.lock must pin exactly one {name} version")
+    return versions.pop()
+
+
 def build_report(
     *,
     package: str,
@@ -72,11 +81,13 @@ def build_report(
     try:
         if run_outcome != "success":
             raise ValueError(f"mutation execution did not succeed: {run_outcome}")
-        if tool_version != "3.6.0":
-            raise ValueError("expected locked mutmut 3.6.0")
+        lock_bytes = lock_path.read_bytes()
+        # The installed tool must be the one the reviewed lock pins.
+        locked = locked_version(lock_bytes)
+        if tool_version != locked:
+            raise ValueError(f"expected locked mutmut {locked}, found {tool_version}")
         config_bytes = config_path.read_bytes()
         config = tomllib.loads(config_bytes.decode())["tool"]["mutmut"]
-        lock_bytes = lock_path.read_bytes()
         stats = json.loads(stats_path.read_text())
         if not isinstance(stats, dict):
             raise ValueError("mutation stats must be an object")
