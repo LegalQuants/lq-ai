@@ -37,7 +37,7 @@ When a release ships, verify with cosign:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:vX.Y.Z
 ```

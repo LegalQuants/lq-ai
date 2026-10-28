@@ -313,8 +313,8 @@ own build moves `:latest`.
 2. The anonymous-pull loop in step 2: four 200s.
 3. Signatures, the SBOM attestation and provenance for all four images, with the commands in
    [`docs/security/releases/README.md`](security/releases/README.md). Run those once against the
-   previous release before relying on them: their `--certificate-identity-regexp` is lowercase, the
-   certificates name `LegalQuants/lq-ai`, and the match is likely case-sensitive.
+   previous release before relying on them; nobody has run cosign with their current
+   `--certificate-identity-regexp` yet.
 4. Bring the stack up from the published `vX.Y.Z` images under its own project name
    ([`desktop/VERIFICATION.md`](../desktop/VERIFICATION.md) Protocol 1), and repeat the upgrade
    check from the previous release on them.

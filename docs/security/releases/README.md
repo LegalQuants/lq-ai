@@ -18,7 +18,7 @@ LQ.AI uses [sigstore keyless signing](https://docs.sigstore.dev/) (cosign + Fulc
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:v0.1.0
 ```
@@ -32,7 +32,7 @@ TAG=v0.1.0
 for service in api gateway web proxy; do
   echo "=== ${service} ==="
   cosign verify \
-    --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \
+    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     "ghcr.io/legalquants/lq-ai-${service}:${TAG}"
 done
@@ -46,7 +46,7 @@ needs `cosign`, `jq`, and an SBOM scanner (`grype` below; use your own):
 ```bash
 cosign verify-attestation \
   --type spdxjson \
-  --certificate-identity-regexp "https://github.com/legalquants/lq-ai" \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:v0.1.0 | jq -r '.payload' | base64 -d | jq '.predicate' > api.spdx.json
 
