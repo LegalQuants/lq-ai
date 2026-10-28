@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
-from scripts.mutation_report import build_report, write_summary
+from scripts.mutation_report import build_report, locked_version, write_summary
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+LOCK = 'version = 1\n\n[[package]]\nname = "mutmut"\nversion = "3.8.0"\n'
 
 
 class MutationReportTests(unittest.TestCase):
@@ -21,7 +26,7 @@ class MutationReportTests(unittest.TestCase):
             'pytest_add_cli_args_test_selection = ["tests/test_example.py"]\n'
         )
         self.lock = self.root / "uv.lock"
-        self.lock.write_text("version = 1\n")
+        self.lock.write_text(LOCK)
         self.stats = self.root / "stats.json"
         self.test_stats = self.root / "test-stats.json"
         self.test_stats.write_text(json.dumps({"duration_by_test": {"test_example": 0.1}}))
@@ -37,7 +42,7 @@ class MutationReportTests(unittest.TestCase):
             "segfault": 0,
         }
 
-    def report(self, outcome: str = "success") -> dict:
+    def report(self, outcome: str = "success", tool_version: str = "3.8.0") -> dict:
         self.stats.write_text(json.dumps(self.counts))
         return build_report(
             package="gateway",
@@ -48,7 +53,7 @@ class MutationReportTests(unittest.TestCase):
             commit="abc123",
             run_url="https://example.invalid/run/1",
             run_outcome=outcome,
-            tool_version="3.6.0",
+            tool_version=tool_version,
             duration_seconds="12",
         )
 
@@ -100,10 +105,38 @@ class MutationReportTests(unittest.TestCase):
             commit="abc123",
             run_url="",
             run_outcome="success",
-            tool_version="3.6.0",
+            tool_version="3.8.0",
             duration_seconds="",
         )
         self.assertEqual(report["status"], "unavailable")
+
+    def test_installed_tool_must_match_the_lock(self) -> None:
+        report = self.report(tool_version="3.6.0")
+        self.assertEqual(report["status"], "unavailable")
+        self.assertEqual(report["reason"], "expected locked mutmut 3.8.0, found 3.6.0")
+        self.assertIsNone(report["mutation_score_percent"])
+
+    def test_lock_must_pin_exactly_one_mutmut(self) -> None:
+        for lock in (
+            "version = 1\n",
+            LOCK + '\n[[package]]\nname = "mutmut"\nversion = "3.6.0"\n',
+            'version = 1\n\n[[package]]\nname = "mutmut"\n',
+            "not toml [",
+        ):
+            with self.subTest(lock=lock):
+                self.lock.write_text(lock)
+                self.assertEqual(self.report()["status"], "unavailable")
+
+    def test_repository_locks_match_the_mutation_group_pins(self) -> None:
+        # The validator reads the version from these exact files in CI.
+        for package in ("api", "gateway"):
+            with self.subTest(package=package):
+                pyproject = tomllib.loads((REPO_ROOT / package / "pyproject.toml").read_text())
+                (pin,) = pyproject["dependency-groups"]["mutation"]
+                match = re.fullmatch(r"mutmut==(\S+)", pin)
+                assert match is not None, pin
+                lock_bytes = (REPO_ROOT / package / "uv.lock").read_bytes()
+                self.assertEqual(locked_version(lock_bytes), match.group(1))
 
     def test_invalid_counts_are_rejected(self) -> None:
         for value in (-1, True, "6", 6.5):

@@ -14,6 +14,7 @@ authlib==1.7.2
 joserfc==1.7.4
 
 requests==2.34.2
+certifi>=2026.10.19 # LQ.AI: drops eMudhra's emSign ECC Root CA - G3 after the October 2026 key compromise
 regex==2026.5.9 # supports a per-search timeout, which `re` does not
 aiohttp==3.13.5 # do not update to 3.13.3 - broken
 aiodns==4.0.4 # makes aiohttp resolve DNS on the event loop instead of the threadpool

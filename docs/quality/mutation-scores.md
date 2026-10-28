@@ -10,11 +10,12 @@ are credited to @SaifAlYounan (PR #434, replacing #381).
 
 ## Frozen tooling
 
-Each Python subsystem declares `mutmut==3.6.0` in the opt-in `mutation` dependency
-group of its existing `uv.lock`. The normal dev and production installs do not
-select this group. Mutation jobs install application, dev and mutation dependencies
-together from that same reviewed lock, so the tool cannot silently replace the
-application's locked transitive dependencies.
+Each Python subsystem pins an exact mutmut version (3.8.0 at the time of writing)
+in the opt-in `mutation` dependency group of its existing `uv.lock`. The normal dev
+and production installs do not select this group. Mutation jobs install
+application, dev and mutation dependencies together from that same reviewed lock,
+so the tool cannot silently replace the application's locked transitive
+dependencies.
 
 ```bash
 # From api/ or gateway/, in a disposable test environment:
@@ -69,8 +70,12 @@ a release score. Result and diagnostic artifacts are uploaded even on failures
 when the runner remains available; a hard cancellation cannot guarantee upload.
 
 The report validator (`scripts/mutation_report.py`) requires complete raw
-counts plus evidence that tests were recorded. Its isolated regression tests run
-in normal PR CI. Failed measurements are never represented as 0% or 100%.
+counts plus evidence that tests were recorded. It also requires the installed
+mutmut to be the version the package's `uv.lock` pins, reading that version from
+the lock, so a reviewed tool upgrade needs no change to the validator. Its
+isolated regression tests run in normal PR CI; one of them checks that each lock
+matches its `mutation` group pin. Failed measurements are never represented as
+0% or 100%.
 
 ## Measurement contract
 
