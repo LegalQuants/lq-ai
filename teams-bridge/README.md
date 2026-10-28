@@ -33,6 +33,24 @@ contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-com
   there's nothing per-tenant to encrypt. Contrast `slack-bridge`
   which stores `bot_token_encrypted` per workspace.
 
+## Trust boundary of the install id_token
+
+The bridge does not verify the id_token's signature. It trusts the
+token only because the token comes directly from Microsoft's token
+endpoint over TLS, in reply to the bridge's own
+`client_secret`-authenticated request; it is never read from anything a
+third party could have sent. Before any claim is used, the callback
+checks `iss`, `aud`, `exp`, `nbf`, `tid` and `oid` and fails closed if
+any is missing or wrong. The decoded claims only record which tenant
+and which admin completed the install (`tid` and `oid` in the tenant
+record) and grant no LQ.AI user or session permission. The decode
+helper is private to the install callback and must not be reused for
+inbound Bot Framework activities, which need JWKS signature
+verification; a test in `tests/test_oauth.py` fails if it is reused.
+Token endpoint, backend and Graph response bodies are redacted before
+they reach the bridge log. Background: audit finding D-03 (#288),
+tracked in #587.
+
 ## Configuration
 
 | Env var | Required | Purpose |

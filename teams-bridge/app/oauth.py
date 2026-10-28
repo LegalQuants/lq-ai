@@ -17,8 +17,11 @@ The flow:
    ``GET /teams/oauth/callback?code=...&state=...``.
 4. **Bridge verifies the state**, exchanges the code for tokens via
    the multi-tenant ``/common/oauth2/v2.0/token`` endpoint, decodes
-   the id_token's ``tid`` (tenant id) + ``oid`` (admin's object id)
-   claims, optionally calls Microsoft Graph ``/organization`` to
+   the id_token **without verifying its signature** (see "Trust
+   boundary" below), checks its ``iss`` / ``aud`` / ``exp`` / ``nbf``
+   / ``tid`` / ``oid`` claims and fails closed on any of them, keeps
+   only ``tid`` (tenant id) + ``oid`` (admin's object id),
+   optionally calls Microsoft Graph ``/organization`` to
    fetch the tenant display name, and POSTs the resulting tenant
    record to the LQ.AI api at
    ``POST /api/v1/integrations/teams/tenants``.
@@ -38,6 +41,17 @@ multi-tenant app registration.
 State tokens live in-memory in the bridge with a 10-minute TTL.
 Single-instance per deployment so an in-memory store is sufficient
 (matches the slack-bridge posture; same DE candidate).
+
+Trust boundary of the install id_token (D-03, #587): the id_token's
+signature is **not** verified. The token is trusted only because it
+comes directly from Microsoft's token endpoint over TLS, in reply to
+the bridge's own ``client_secret``-authenticated POST; it is never
+read from a request a third party could have sent. The decoded claims
+only label which tenant and admin completed the install and grant no
+LQ.AI user or session permission. :func:`_decode_id_token_unverified`
+is private to this install callback and must not be reused for
+inbound Bot Framework activities, which need JWKS signature
+verification; ``tests/test_oauth.py`` guards against that reuse.
 """
 
 from __future__ import annotations
@@ -92,14 +106,23 @@ SCOPES = [
 ]
 
 
-def _decode_id_token_unverified(id_token: str) -> dict[str, Any]:
-    """Base64-decode the id_token payload without signature verification.
+# Seconds of clock skew tolerated on ``exp`` / ``nbf``. Microsoft's own
+# guidance for validating its tokens allows a few minutes; the bridge is
+# stricter because the token is consumed within seconds of being minted.
+_INSTALL_CLAIM_SKEW_SECONDS: Final[int] = 60
 
-    Safe in this context because the token arrived over TLS from the
-    Microsoft token endpoint via our client_secret-authenticated POST.
-    The bridge doesn't grant any LQ.AI-side permissions based on
-    these claims — they're only used to identify which tenant + admin
-    completed the install.
+
+def _decode_id_token_unverified(id_token: str) -> dict[str, Any]:
+    """Base64-decode the id_token payload **without** signature verification.
+
+    Install-labeling only. The token is trusted because it arrived over
+    TLS from Microsoft's token endpoint in reply to our own
+    client_secret-authenticated POST, not because anything here proves
+    who signed it. Every caller must pass the result through
+    :func:`_validate_install_claims` before using a single claim, and
+    the bridge grants no LQ.AI user or session permission from these
+    claims either way. Do not import this into any inbound-auth path
+    (D-03, #587); ``tests/test_oauth.py`` fails if it is.
     """
 
     try:
@@ -113,6 +136,49 @@ def _decode_id_token_unverified(id_token: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("id_token payload did not decode to a JSON object")
     return parsed
+
+
+def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float) -> tuple[str, str]:
+    """Check the claims the install flow relies on and return ``(tid, oid)``.
+
+    Fails closed: any missing, mistyped or mismatched claim raises
+    :class:`ValueError`. The message names the claim and never its value,
+    so it is safe to log. Checked, in order: ``tid`` and ``oid`` are
+    non-empty strings; ``iss`` is the identity platform v2.0 issuer for
+    that tenant; ``aud`` is this bridge's app id; ``exp`` is an integer
+    in the future; ``nbf``, when present, is an integer not in the
+    future. A small skew (:data:`_INSTALL_CLAIM_SKEW_SECONDS`) is
+    tolerated on ``exp`` and ``nbf``.
+    """
+
+    tid = claims.get("tid")
+    oid = claims.get("oid")
+    if not isinstance(tid, str) or not tid:
+        raise ValueError("tid claim missing or not a non-empty string")
+    if not isinstance(oid, str) or not oid:
+        raise ValueError("oid claim missing or not a non-empty string")
+
+    expected_iss = f"https://login.microsoftonline.com/{tid}/v2.0"
+    if claims.get("iss") != expected_iss:
+        raise ValueError("iss claim missing or not the v2.0 issuer for the token's tid")
+
+    if claims.get("aud") != app_id:
+        raise ValueError("aud claim missing or not this bridge's app id")
+
+    exp = claims.get("exp")
+    if isinstance(exp, bool) or not isinstance(exp, int):
+        raise ValueError("exp claim missing or not an integer")
+    if now >= exp + _INSTALL_CLAIM_SKEW_SECONDS:
+        raise ValueError("exp claim is in the past")
+
+    nbf = claims.get("nbf")
+    if nbf is not None:
+        if isinstance(nbf, bool) or not isinstance(nbf, int):
+            raise ValueError("nbf claim present but not an integer")
+        if now < nbf - _INSTALL_CLAIM_SKEW_SECONDS:
+            raise ValueError("nbf claim is in the future")
+
+    return tid, oid
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +259,34 @@ def _log_safe(value: object) -> str:
     return repr(str(value)[:_LOG_MAX_CHARS])
 
 
+# Token-shaped content that must never reach a log line, whatever the
+# upstream body looks like: JSON members and form fields named like a
+# token, and any JWT-shaped run (three base64url segments, the first
+# starting with ``eyJ`` as every JSON header does).
+_TOKEN_MEMBER_RE: Final[re.Pattern[str]] = re.compile(
+    r'("(?:access_token|refresh_token|id_token)"\s*:\s*)"[^"]*"'
+)
+_TOKEN_FIELD_RE: Final[re.Pattern[str]] = re.compile(
+    r"((?:^|[&?\s])(?:access_token|refresh_token|id_token)=)[^&\s]*"
+)
+_JWT_RE: Final[re.Pattern[str]] = re.compile(r"eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*")
+
+
+def _redact_tokens(value: object) -> str:
+    """Redact token values in an upstream body, then bound and ``repr`` it.
+
+    Truncation alone is not enough: the first 200 characters of a token
+    endpoint body can carry the start of a token. Redaction runs on the
+    full text before the bound is applied.
+    """
+
+    text = str(value)
+    text = _TOKEN_MEMBER_RE.sub(r'\1"[redacted]"', text)
+    text = _TOKEN_FIELD_RE.sub(r"\1[redacted]", text)
+    text = _JWT_RE.sub("[redacted]", text)
+    return repr(text[:_LOG_MAX_CHARS])
+
+
 def _shown_error_code(value: object) -> str:
     """Return a provider error code if it is token-shaped, else ``"unknown"``."""
 
@@ -255,8 +349,11 @@ async def oauth_callback(
     3. POST to the multi-tenant token endpoint with
        ``grant_type=authorization_code`` to exchange ``code`` for an
        ``id_token`` + ``access_token`` + ``refresh_token``.
-    4. Decode the id_token (no signature verify needed — TLS + our
-       client_secret authenticated us to Microsoft).
+    4. Decode the id_token without signature verification (it came
+       straight from Microsoft over TLS in reply to our
+       client_secret-authenticated POST; see the module docstring) and
+       check ``iss`` / ``aud`` / ``exp`` / ``nbf`` / ``tid`` / ``oid``,
+       failing closed on any of them.
     5. Best-effort: call Microsoft Graph ``/organization`` to fetch
        the tenant display name; falls back to ``tid`` if Graph errors.
     6. POST the tenant record to the LQ.AI api with the shared
@@ -337,7 +434,7 @@ async def oauth_callback(
             "teams.oauth.token_endpoint_rejected correlation=%s status=%s body=%s",
             correlation,
             tok_res.status_code,
-            _log_safe(tok_res.text),
+            _redact_tokens(tok_res.text),
         )
         # Surface the RFC 6749 error code if the body carries one; the
         # body itself is never rendered.
@@ -384,17 +481,20 @@ async def oauth_callback(
             correlation=correlation,
         )
 
-    tenant_id = claims.get("tid")
-    installer_oid = claims.get("oid")
-    if not tenant_id or not installer_oid:
+    try:
+        tenant_id, installer_oid = _validate_install_claims(
+            claims, app_id=settings.microsoft_app_id, now=time.time()
+        )
+    except ValueError as exc:
+        # ``exc`` names the claim, never its value (see the validator).
         log.error(
-            "teams.oauth.id_token_missing_claims correlation=%s claims_keys=%s",
+            "teams.oauth.id_token_claims_rejected correlation=%s reason=%s",
             correlation,
-            list(claims.keys()),
+            exc,
         )
         return _page(
             "Install failed",
-            ["The id_token did not carry the required tid + oid claims."],
+            ["The id_token from Microsoft did not pass the install checks."],
             status_code=502,
             correlation=correlation,
         )
@@ -434,7 +534,7 @@ async def oauth_callback(
             "teams.oauth.api_persist_rejected correlation=%s status=%s body=%s",
             correlation,
             persist_res.status_code,
-            _log_safe(persist_res.text),
+            _redact_tokens(persist_res.text),
         )
         return _page(
             "Install failed",
@@ -484,7 +584,7 @@ async def _fetch_tenant_display_name(access_token: str) -> str | None:
         log.info(
             "teams.oauth.graph_org_lookup_rejected status=%s body=%s",
             res.status_code,
-            res.text[:200],
+            _redact_tokens(res.text),
         )
         return None
 
