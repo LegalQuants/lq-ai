@@ -21,6 +21,10 @@ Covers:
 * Microsoft token endpoint returning non-200 → 502.
 * api persistence returning non-2xx → 502.
 * Graph display-name lookup failure falls back to tid (does NOT 502).
+* Install-only id_token constraints (D-03, #587): iss/aud/exp/nbf/tid/oid
+  fail closed, the unverified decode stays confined to this module, claims
+  grant nothing beyond the tenant record, and token-bearing upstream bodies
+  are redacted in logs.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
@@ -144,8 +149,16 @@ def _add_token_endpoint_success(
     installer_oid: str = "00000000-0000-0000-0000-111111111111",
     access_token: str = "graph-access-token",
 ) -> None:
+    now = int(time.time())
     id_token = _make_id_token(
-        {"tid": tenant_id, "oid": installer_oid, "iss": "https://login.microsoftonline.com/x/v2.0"}
+        {
+            "tid": tenant_id,
+            "oid": installer_oid,
+            "iss": f"https://login.microsoftonline.com/{tenant_id}/v2.0",
+            "aud": "ms-app-id-fixture",
+            "exp": now + 3600,
+            "nbf": now - 60,
+        }
     )
     httpx_mock.add_response(
         url="https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -331,7 +344,7 @@ def test_callback_with_id_token_missing_claims_returns_502(
     )
     res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
     assert res.status_code == 502
-    assert "tid + oid" in res.text
+    assert "did not pass the install checks" in res.text
 
 
 # ---------------------------------------------------------------------------
@@ -489,3 +502,270 @@ def test_api_persist_rejection_body_is_not_reflected(
     assert res.status_code == 502
     assert "Backend rejected with HTTP 500" in res.text
     _assert_hardened_html(res)
+
+
+# ---------------------------------------------------------------------------
+# Install-only id_token constraints (D-03, #587)
+# ---------------------------------------------------------------------------
+#
+# The bridge never verifies the id_token signature: the token is trusted only
+# because it arrives straight from Microsoft's token endpoint over TLS, in
+# reply to the bridge's own client_secret-authenticated POST. These tests pin
+# the compensating controls: every required claim is checked and fails closed,
+# the decode helper stays confined to the install callback, the claims never
+# grant anything beyond the three-field tenant record, and no token or full
+# token response reaches a log line or a page.
+
+_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+
+def _valid_claims(**overrides: Any) -> dict[str, Any]:
+    """Claims Microsoft puts in a v2.0 id_token for the install flow."""
+
+    now = int(time.time())
+    claims: dict[str, Any] = {
+        "tid": "00000000-0000-0000-0000-aaaaaaaaaaaa",
+        "oid": "00000000-0000-0000-0000-111111111111",
+        "iss": "https://login.microsoftonline.com/00000000-0000-0000-0000-aaaaaaaaaaaa/v2.0",
+        "aud": "ms-app-id-fixture",
+        "exp": now + 3600,
+        "nbf": now - 60,
+        "iat": now - 60,
+    }
+    claims.update(overrides)
+    return {k: v for k, v in claims.items() if v is not _ABSENT}
+
+
+_ABSENT = object()
+
+
+def _add_token_endpoint_with_claims(httpx_mock: HTTPXMock, claims: dict[str, Any]) -> None:
+    httpx_mock.add_response(
+        url=_TOKEN_URL,
+        method="POST",
+        status_code=200,
+        json={
+            "token_type": "Bearer",
+            "id_token": _make_id_token(claims),
+            "access_token": "graph-access-token",
+            "refresh_token": "refresh-token-fixture",
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "overrides"),
+    [
+        ("wrong-issuer", {"iss": "https://evil.example/v2.0"}),
+        ("issuer-tenant-mismatch", {"iss": "https://login.microsoftonline.com/other-tid/v2.0"}),
+        ("missing-issuer", {"iss": _ABSENT}),
+        ("wrong-audience", {"aud": "some-other-app-id"}),
+        ("missing-audience", {"aud": _ABSENT}),
+        ("expired", {"exp": int(time.time()) - 3600}),
+        ("missing-exp", {"exp": _ABSENT}),
+        ("exp-not-int", {"exp": "soon"}),
+        ("not-yet-valid", {"nbf": int(time.time()) + 3600}),
+        ("missing-tid", {"tid": _ABSENT}),
+        ("missing-oid", {"oid": _ABSENT}),
+        ("empty-oid", {"oid": ""}),
+        ("tid-not-string", {"tid": 12345}),
+    ],
+)
+def test_callback_rejects_id_token_with_bad_claims(
+    client: TestClient,
+    httpx_mock: HTTPXMock,
+    caplog: pytest.LogCaptureFixture,
+    label: str,
+    overrides: dict[str, Any],
+) -> None:
+    """Every required claim fails closed: 502, state consumed, backend never called,
+    and neither the page nor the log carries a claim value or the token."""
+    state = _seed_state(f"state-{label}")
+    claims = _valid_claims(**overrides)
+    _add_token_endpoint_with_claims(httpx_mock, claims)
+
+    with caplog.at_level("WARNING", logger="app.oauth"):
+        res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+
+    assert res.status_code == 502, res.text
+    assert "did not pass the install checks" in res.text
+    _assert_hardened_html(res)
+    assert state not in oauth_module._STATE_STORE
+    assert [r for r in httpx_mock.get_requests() if r.url.host == "api.test"] == []
+
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "teams.oauth.id_token_claims_rejected" in logged
+    for leaked in ("evil.example", "other-tid", "some-other-app-id", "eyJ"):
+        assert leaked not in logged
+        assert leaked not in res.text
+
+
+def test_callback_accepts_valid_claims_and_persists_only_the_tenant_record(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+) -> None:
+    """Claims cannot grant anything: even extra privilege-looking claims produce
+    exactly the three-field tenant record and nothing else."""
+    state = _seed_state("state-valid")
+    claims = _valid_claims(
+        roles=["GlobalAdmin"], groups=["lq-ai-admins"], sub="user-sub", email="a@b.test"
+    )
+    _add_token_endpoint_with_claims(httpx_mock, claims)
+    _add_graph_org_success(httpx_mock)
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
+        method="POST",
+        status_code=201,
+        json={},
+    )
+
+    res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+    assert res.status_code == 200, res.text
+
+    persist = [r for r in httpx_mock.get_requests() if r.url.host == "api.test"]
+    assert len(persist) == 1
+    sent = json.loads(persist[0].content)
+    assert set(sent) == {"tenant_id", "tenant_name", "installer_oid"}
+    assert "roles" not in persist[0].content.decode()
+    assert persist[0].headers["authorization"] == f"Bearer {settings.lq_ai_bridge_token}"
+
+
+def test_validate_install_claims_is_pure_and_fails_closed() -> None:
+    """Unit coverage of the validator so the reason strings never carry values."""
+    now = 1_700_000_000
+    good = _valid_claims(exp=now + 10, nbf=now - 10)
+    assert oauth_module._validate_install_claims(good, app_id="ms-app-id-fixture", now=now) == (
+        "00000000-0000-0000-0000-aaaaaaaaaaaa",
+        "00000000-0000-0000-0000-111111111111",
+    )
+    with pytest.raises(ValueError, match="aud") as excinfo:
+        oauth_module._validate_install_claims(good, app_id="another-app", now=now)
+    assert "ms-app-id-fixture" not in str(excinfo.value)
+    assert "another-app" not in str(excinfo.value)
+    skew = oauth_module._INSTALL_CLAIM_SKEW_SECONDS
+    with pytest.raises(ValueError, match="exp"):
+        oauth_module._validate_install_claims(good, app_id="ms-app-id-fixture", now=now + 10 + skew)
+    # Clock skew allowance: one second past exp is still inside the window.
+    oauth_module._validate_install_claims(good, app_id="ms-app-id-fixture", now=now + 10 + 1)
+    with pytest.raises(ValueError, match="nbf"):
+        oauth_module._validate_install_claims(
+            good, app_id="ms-app-id-fixture", now=now - 10 - skew - 1
+        )
+    with pytest.raises(ValueError, match="exp"):
+        oauth_module._validate_install_claims(
+            _valid_claims(exp=True), app_id="ms-app-id-fixture", now=now
+        )
+
+
+def test_unverified_decode_is_confined_to_the_install_module() -> None:
+    """Regression guard for D-03: the unverified decode helper must not be
+    imported or re-exported anywhere else in the bridge."""
+    app_dir = Path(oauth_module.__file__).resolve().parent
+    offenders = [
+        p.name
+        for p in app_dir.rglob("*.py")
+        if p.name != "oauth.py" and "_decode_id_token_unverified" in p.read_text()
+    ]
+    assert offenders == []
+    assert not hasattr(oauth_module, "decode_id_token_unverified")
+    assert "_decode_id_token_unverified" not in getattr(oauth_module, "__all__", [])
+
+
+def test_token_endpoint_rejection_log_redacts_tokens(
+    client: TestClient,
+    httpx_mock: HTTPXMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A non-200 token endpoint body is logged redacted, not merely truncated."""
+    state = _seed_state("state-redact-token")
+    body = {
+        "error": "invalid_grant",
+        "access_token": "secret-access-value",
+        "refresh_token": "secret-refresh-value",
+        "id_token": "eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiJ4In0.sig",
+    }
+    httpx_mock.add_response(url=_TOKEN_URL, method="POST", status_code=400, json=body)
+
+    with caplog.at_level("WARNING", logger="app.oauth"):
+        res = client.get(f"/teams/oauth/callback?code=bad&state={state}")
+
+    assert res.status_code == 502
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "teams.oauth.token_endpoint_rejected" in logged
+    assert "[redacted]" in logged
+    for secret in ("secret-access-value", "secret-refresh-value", "eyJhbGci"):
+        assert secret not in logged
+        assert secret not in res.text
+
+
+def test_api_persist_rejection_log_redacts_tokens(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    state = _seed_state("state-redact-persist")
+    _add_token_endpoint_with_claims(httpx_mock, _valid_claims())
+    _add_graph_org_success(httpx_mock)
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
+        method="POST",
+        status_code=500,
+        text='{"detail": "boom", "access_token": "secret-echoed-back"}',
+    )
+
+    with caplog.at_level("WARNING", logger="app.oauth"):
+        res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+
+    assert res.status_code == 502
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "teams.oauth.api_persist_rejected" in logged
+    assert "secret-echoed-back" not in logged
+    assert "[redacted]" in logged
+
+
+def test_graph_lookup_rejection_log_redacts_tokens(
+    client: TestClient,
+    settings: Settings,
+    httpx_mock: HTTPXMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    state = _seed_state("state-redact-graph")
+    _add_token_endpoint_with_claims(httpx_mock, _valid_claims())
+    httpx_mock.add_response(
+        url="https://graph.microsoft.com/v1.0/organization",
+        method="GET",
+        status_code=401,
+        text='{"error": "x", "access_token": "secret-graph-echo"}',
+    )
+    httpx_mock.add_response(
+        url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
+        method="POST",
+        status_code=201,
+        json={},
+    )
+
+    with caplog.at_level("INFO", logger="app.oauth"):
+        res = client.get(f"/teams/oauth/callback?code=auth-code&state={state}")
+
+    assert res.status_code == 200
+    logged = "\n".join(r.getMessage() for r in caplog.records)
+    assert "teams.oauth.graph_org_lookup_rejected" in logged
+    assert "secret-graph-echo" not in logged
+
+
+@pytest.mark.parametrize(
+    ("raw", "must_hide"),
+    [
+        ('{"access_token": "abc123", "x": 1}', "abc123"),
+        ("access_token=abc123&token_type=Bearer", "abc123"),
+        ("prefix eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiJ4In0.c2ln tail", "eyJhbGci"),
+        ('{"refresh_token":"r-secret","id_token":"i-secret"}', "r-secret"),
+    ],
+)
+def test_redact_tokens_covers_json_form_and_jwt_shapes(raw: str, must_hide: str) -> None:
+    out = oauth_module._redact_tokens(raw)
+    assert must_hide not in out
+    assert "[redacted]" in out
+    assert len(out) <= oauth_module._LOG_MAX_CHARS + 2  # repr quotes
