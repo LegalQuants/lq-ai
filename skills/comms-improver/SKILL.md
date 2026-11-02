@@ -183,3 +183,7 @@ The output should be proportional to the input. A one-paragraph original produce
 - `examples/example_executive_briefing.md` — worked example: contract concern translated for CEO/CFO.
 - `examples/example_sales_team.md` — worked example: regulatory restriction translated for sales team.
 - `examples/example_customer_disclaimer.md` — worked example: legal disclaimer rewritten for customer-facing page.
+
+## Acceptance
+
+Attorney-reviewed acceptance results: `acceptance/results.md`.
