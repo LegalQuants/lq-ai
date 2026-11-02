@@ -24,6 +24,7 @@ The export bundle contains:
   ADR 0016 P9): each run's planning intake, plan revisions and approvals,
   child results, the root's combined result, per-step receipts and the
   contents of the run's working files.
+* ``workspace_events.json`` — owned internal signal metadata, without source bodies.
 * ``README.md`` — bundle manifest.
 
 A best-effort export: if a particular row family fails to serialize
@@ -61,7 +62,9 @@ from app.models import (
     Project,
     User,
     UserExportJob,
+    WorkspaceEvent,
 )
+from app.schemas.workspace_events import WorkspaceEventRead
 from app.storage import delete_object, stream_download, upload_bytes
 
 log = logging.getLogger(__name__)
@@ -375,6 +378,8 @@ original bytes for any files you uploaded.
                             of the run's working files. A run hosted in a
                             chat is linked from its message in
                             `messages.json`.
+- `workspace_events.json` — your retained internal signal metadata, without
+                            source bodies; not a Today projection.
 
 ## Validity
 
@@ -537,6 +542,19 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
 
         # Skills — empty under M1 (filesystem-canonical per ADR 0004).
         zf.writestr("skills.json", json.dumps([], indent=2))
+
+        events = await session.scalars(
+            select(WorkspaceEvent)
+            .where(WorkspaceEvent.user_id == user.id)
+            .order_by(WorkspaceEvent.id)
+        )
+        zf.writestr(
+            "workspace_events.json",
+            json.dumps(
+                [WorkspaceEventRead.model_validate(row).model_dump(mode="json") for row in events],
+                indent=2,
+            ),
+        )
 
         from app.models.skill_workspace import SkillWorkspace, SkillWorkspaceFile
         from app.skills.workspace import metadata
