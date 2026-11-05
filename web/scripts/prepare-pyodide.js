@@ -27,6 +27,9 @@ const pypiPackages = ['black', 'pathspec', 'mypy_extensions', 'pytokens'];
 import { loadPyodide } from 'pyodide';
 import { setGlobalDispatcher, ProxyAgent } from 'undici';
 import { writeFile, readFile, copyFile, readdir, rmdir, access } from 'fs/promises';
+import { pathToFileURL } from 'url';
+
+const lockFilePath = 'static/pyodide/pyodide-lock.json';
 
 /**
  * Loading network proxy configurations from the environment variables.
@@ -58,8 +61,125 @@ function initNetworkProxyFromEnv() {
 	console.log(`Initialized network proxy "${preferedProxy}" from env`);
 }
 
+/**
+ * The committed pyodide-lock.json is the source of truth for package
+ * versions (#675). Lock keys are not normalized consistently — most keep
+ * the PyPI spelling (`scikit-learn`) while entries injected by this script
+ * use underscores (`mypy_extensions`) — so lookups compare a normalized
+ * form of both sides.
+ */
+export function findLockedPackage(lockData, packageName) {
+	if (!lockData || !lockData.packages) return undefined;
+	const normalize = (name) => name.toLowerCase().replace(/[-_.]+/g, '_');
+	const wanted = normalize(packageName);
+	for (const [key, entry] of Object.entries(lockData.packages)) {
+		if (normalize(key) === wanted) return entry;
+	}
+	return undefined;
+}
+
+/**
+ * The micropip install spec for a package: pinned to the version recorded
+ * in the committed lock when there is one, the bare name otherwise.
+ */
+export function pinnedInstallSpec(lockData, packageName) {
+	const entry = findLockedPackage(lockData, packageName);
+	return entry && entry.version ? `${packageName}==${entry.version}` : packageName;
+}
+
+/**
+ * The PyPI metadata URL for a package: the version-specific endpoint for
+ * the locked version when the lock pins one, so a build never resolves
+ * whatever happens to be the latest release that day. The unversioned
+ * endpoint is only used for a package the lock does not record yet.
+ */
+export function pypiMetadataUrl(lockData, packageName) {
+	const entry = findLockedPackage(lockData, packageName);
+	return entry && entry.version
+		? `https://pypi.org/pypi/${packageName}/${entry.version}/json`
+		: `https://pypi.org/pypi/${packageName}/json`;
+}
+
+/**
+ * The `file_name`s recorded in the lock that are not in `presentFiles`
+ * (the current listing of static/pyodide/). When `packageNames` is given,
+ * only those packages are considered — the lock records the whole Pyodide
+ * distribution, but this script only ever downloads the packages it
+ * installs plus the PyPI wheels below, so only their files can be
+ * required to exist.
+ */
+export function missingLockFiles(lockData, presentFiles, packageNames) {
+	if (!lockData || !lockData.packages) return [];
+	const present = new Set(presentFiles);
+	const entries = packageNames
+		? packageNames
+				.map((name) => findLockedPackage(lockData, name))
+				.filter((entry) => entry !== undefined)
+		: Object.values(lockData.packages);
+	return entries
+		.map((entry) => entry.file_name)
+		.filter((fileName) => fileName && !present.has(fileName));
+}
+
+async function readLockFile() {
+	try {
+		return JSON.parse(await readFile(lockFilePath, 'utf-8'));
+	} catch {
+		return null;
+	}
+}
+
+async function fileExists(path) {
+	try {
+		await access(path);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function downloadPackages() {
 	console.log('Setting up pyodide + micropip');
+
+	// Read the committed lock before anything touches static/pyodide: it
+	// decides both whether a download is needed at all and which versions
+	// to ask for.
+	const committedLock = await readLockFile();
+
+	const packageJson = JSON.parse(await readFile('package.json'));
+	const pyodideVersion = packageJson.dependencies.pyodide.replace('^', '');
+
+	let lockUsable = committedLock !== null;
+	try {
+		const pyodidePackageJson = JSON.parse(await readFile('static/pyodide/package.json'));
+		const pyodidePackageVersion = pyodidePackageJson.version.replace('^', '');
+
+		if (pyodideVersion !== pyodidePackageVersion) {
+			console.log('Pyodide version mismatch, removing static/pyodide directory');
+			await rmdir('static/pyodide', { recursive: true });
+			// The cached files are gone, and with them the lock they were
+			// pinned by; the download below regenerates a fresh one.
+			lockUsable = false;
+		}
+	} catch (err) {
+		console.log('Pyodide package not found, proceeding with download.', err);
+	}
+
+	if (lockUsable) {
+		const presentFiles = await readdir('static/pyodide').catch(() => []);
+		const missing = missingLockFiles(committedLock, presentFiles, [...packages, ...pypiPackages]);
+		if (missing.length === 0) {
+			console.log(
+				'All files recorded in pyodide-lock.json for the build packages ' +
+					'are already present, skipping download'
+			);
+			return;
+		}
+		console.log(
+			`${missing.length} file(s) recorded in pyodide-lock.json are missing, ` +
+				'downloading the pinned versions'
+		);
+	}
 
 	let pyodide;
 	try {
@@ -71,21 +191,6 @@ async function downloadPackages() {
 		return;
 	}
 
-	const packageJson = JSON.parse(await readFile('package.json'));
-	const pyodideVersion = packageJson.dependencies.pyodide.replace('^', '');
-
-	try {
-		const pyodidePackageJson = JSON.parse(await readFile('static/pyodide/package.json'));
-		const pyodidePackageVersion = pyodidePackageJson.version.replace('^', '');
-
-		if (pyodideVersion !== pyodidePackageVersion) {
-			console.log('Pyodide version mismatch, removing static/pyodide directory');
-			await rmdir('static/pyodide', { recursive: true });
-		}
-	} catch (err) {
-		console.log('Pyodide package not found, proceeding with download.', err);
-	}
-
 	try {
 		console.log('Loading micropip package');
 		await pyodide.loadPackage('micropip');
@@ -95,8 +200,9 @@ async function downloadPackages() {
 
 		try {
 			for (const pkg of packages) {
-				console.log(`Installing package: ${pkg}`);
-				await micropip.install(pkg);
+				const spec = pinnedInstallSpec(lockUsable ? committedLock : null, pkg);
+				console.log(`Installing package: ${spec}`);
+				await micropip.install(spec);
 			}
 		} catch (err) {
 			console.error('Package installation failed:', err);
@@ -106,8 +212,16 @@ async function downloadPackages() {
 		console.log('Pyodide packages downloaded, freezing into lock file');
 
 		try {
-			const lockFile = await micropip.freeze();
-			await writeFile('static/pyodide/pyodide-lock.json', lockFile);
+			if (lockUsable) {
+				// The installs above were pinned by the committed lock, so a
+				// fresh freeze has nothing to add — and rewriting the tracked
+				// file from a live resolve is what made builds leave the
+				// working tree dirty (#675). Leave it byte-identical.
+				console.log('Keeping the committed pyodide-lock.json unchanged');
+			} else {
+				const lockFile = await micropip.freeze();
+				await writeFile(lockFilePath, lockFile);
+			}
 		} catch (err) {
 			console.error('Failed to write lock file:', err);
 		}
@@ -118,8 +232,11 @@ async function downloadPackages() {
 
 async function copyPyodide() {
 	console.log('Copying Pyodide files into static directory');
-	// Copy all files from node_modules/pyodide to static/pyodide
+	// Copy all files from node_modules/pyodide to static/pyodide — except the
+	// distribution's own lock file, which must never overwrite the committed
+	// one (#675).
 	for await (const entry of await readdir('node_modules/pyodide')) {
+		if (entry === 'pyodide-lock.json') continue;
 		await copyFile(`node_modules/pyodide/${entry}`, `static/pyodide/${entry}`);
 	}
 }
@@ -128,20 +245,38 @@ async function copyPyodide() {
  * Download pure-Python wheels from PyPI and save them into static/pyodide/.
  * Also injects entries into pyodide-lock.json so that micropip resolves these
  * packages from the local server instead of fetching them from the internet.
+ *
+ * Versions come from the committed lock, never from PyPI's latest release:
+ * a package the lock already pins is fetched (if its wheel is missing) via
+ * the version-specific metadata endpoint, and the lock file is only
+ * rewritten when a package is genuinely new to it (#675).
  */
 async function downloadPyPIWheels() {
-	const lockPath = 'static/pyodide/pyodide-lock.json';
 	let lockData;
 	try {
-		lockData = JSON.parse(await readFile(lockPath, 'utf-8'));
+		lockData = JSON.parse(await readFile(lockFilePath, 'utf-8'));
 	} catch {
 		console.warn('Could not read pyodide-lock.json, skipping PyPI wheel download');
 		return;
 	}
 
+	let lockChanged = false;
+
 	for (const pkg of pypiPackages) {
+		const lockedEntry = findLockedPackage(lockData, pkg);
+
+		// Locked and already downloaded: no network access at all.
+		if (
+			lockedEntry &&
+			lockedEntry.file_name &&
+			(await fileExists(`static/pyodide/${lockedEntry.file_name}`))
+		) {
+			console.log(`  Already exists: ${lockedEntry.file_name}`);
+			continue;
+		}
+
 		console.log(`Fetching PyPI metadata for: ${pkg}`);
-		const res = await fetch(`https://pypi.org/pypi/${pkg}/json`);
+		const res = await fetch(pypiMetadataUrl(lockData, pkg));
 		if (!res.ok) {
 			console.error(`Failed to fetch PyPI metadata for ${pkg}: ${res.status}`);
 			continue;
@@ -149,10 +284,11 @@ async function downloadPyPIWheels() {
 		const meta = await res.json();
 		const version = meta.info.version;
 		const files = meta.urls || [];
-		// Find the pure-Python wheel (py3-none-any)
-		const wheel = files.find(
-			(f) => f.filename.endsWith('.whl') && f.filename.includes('py3-none-any')
-		);
+		// Prefer the exact wheel the lock records; fall back to any
+		// pure-Python wheel (py3-none-any).
+		const wheel =
+			files.find((f) => lockedEntry && f.filename === lockedEntry.file_name) ||
+			files.find((f) => f.filename.endsWith('.whl') && f.filename.includes('py3-none-any'));
 		if (!wheel) {
 			console.warn(`No pure-Python wheel found for ${pkg}==${version}, skipping`);
 			continue;
@@ -187,15 +323,26 @@ async function downloadPyPIWheels() {
 				imports: [normalizedName],
 				depends: []
 			};
+			lockChanged = true;
 			console.log(`  Added ${normalizedName}==${version} to pyodide-lock.json`);
 		}
 	}
 
-	await writeFile(lockPath, JSON.stringify(lockData, null, 2));
-	console.log('Updated pyodide-lock.json with PyPI packages');
+	if (lockChanged) {
+		await writeFile(lockFilePath, JSON.stringify(lockData, null, 2));
+		console.log('Updated pyodide-lock.json with PyPI packages');
+	} else {
+		console.log('pyodide-lock.json unchanged');
+	}
 }
 
-initNetworkProxyFromEnv();
-await downloadPackages();
-await copyPyodide();
-await downloadPyPIWheels();
+// Run only when executed directly (`npm run pyodide:fetch`), not when the
+// module is imported by the unit tests in scripts/tests/.
+const isMainModule = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMainModule) {
+	initNetworkProxyFromEnv();
+	await downloadPackages();
+	await copyPyodide();
+	await downloadPyPIWheels();
+}
