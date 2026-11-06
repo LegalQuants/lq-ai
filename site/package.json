@@ -30,8 +30,8 @@
     "check:e2e": "node --test --test-concurrency=1 e2e/*.e2e.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.42.6",
-    "astro": "7.4.0",
+    "@astrojs/starlight": "0.42.8",
+    "astro": "7.4.4",
     "sharp": "0.35.5"
   },
   "devDependencies": {
