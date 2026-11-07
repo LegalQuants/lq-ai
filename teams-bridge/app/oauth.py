@@ -48,9 +48,9 @@ comes directly from Microsoft's token endpoint over TLS, in reply to
 the bridge's own ``client_secret``-authenticated POST; it is never
 read from a request a third party could have sent. The decoded claims
 only label which tenant and admin completed the install and grant no
-LQ.AI user or session permission. :func:`_decode_id_token_unverified`
-is private to this install callback and must not be reused for
-inbound Bot Framework activities, which need JWKS signature
+LQ.AI user or session permission. The decoder is nested inside the
+install callback and must not be reused for inbound Bot Framework
+activities, which need JWKS signature
 verification; ``tests/test_oauth.py`` guards against that reuse.
 """
 
@@ -112,30 +112,9 @@ SCOPES = [
 _INSTALL_CLAIM_SKEW_SECONDS: Final[int] = 60
 
 
-def _decode_id_token_unverified(id_token: str) -> dict[str, Any]:
-    """Base64-decode the id_token payload **without** signature verification.
-
-    Install-labeling only. The token is trusted because it arrived over
-    TLS from Microsoft's token endpoint in reply to our own
-    client_secret-authenticated POST, not because anything here proves
-    who signed it. Every caller must pass the result through
-    :func:`_validate_install_claims` before using a single claim, and
-    the bridge grants no LQ.AI user or session permission from these
-    claims either way. Do not import this into any inbound-auth path
-    (D-03, #587); ``tests/test_oauth.py`` fails if it is.
-    """
-
-    try:
-        _header, payload, _sig = id_token.split(".")
-    except ValueError as exc:
-        raise ValueError("id_token is not a JWT (expected three dot-separated segments)") from exc
-    # JWT base64url has no padding; rfill with '='s before decode.
-    pad = "=" * (-len(payload) % 4)
-    decoded = base64.urlsafe_b64decode(payload + pad)
-    parsed = json.loads(decoded)
-    if not isinstance(parsed, dict):
-        raise ValueError("id_token payload did not decode to a JSON object")
-    return parsed
+_GUID_RE: Final[re.Pattern[str]] = re.compile(
+    r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"
+)
 
 
 def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float) -> tuple[str, str]:
@@ -144,7 +123,7 @@ def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float)
     Fails closed: any missing, mistyped or mismatched claim raises
     :class:`ValueError`. The message names the claim and never its value,
     so it is safe to log. Checked, in order: ``tid`` and ``oid`` are
-    non-empty strings; ``iss`` is the identity platform v2.0 issuer for
+    GUID-shaped strings; ``iss`` is the identity platform v2.0 issuer for
     that tenant; ``aud`` is this bridge's app id; ``exp`` is an integer
     in the future; ``nbf``, when present, is an integer not in the
     future. A small skew (:data:`_INSTALL_CLAIM_SKEW_SECONDS`) is
@@ -153,10 +132,10 @@ def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float)
 
     tid = claims.get("tid")
     oid = claims.get("oid")
-    if not isinstance(tid, str) or not tid:
-        raise ValueError("tid claim missing or not a non-empty string")
-    if not isinstance(oid, str) or not oid:
-        raise ValueError("oid claim missing or not a non-empty string")
+    if not isinstance(tid, str) or not _GUID_RE.fullmatch(tid):
+        raise ValueError("tid claim missing or not a GUID")
+    if not isinstance(oid, str) or not _GUID_RE.fullmatch(oid):
+        raise ValueError("oid claim missing or not a GUID")
 
     expected_iss = f"https://login.microsoftonline.com/{tid}/v2.0"
     if claims.get("iss") != expected_iss:
@@ -172,7 +151,7 @@ def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float)
         raise ValueError("exp claim is in the past")
 
     nbf = claims.get("nbf")
-    if nbf is not None:
+    if "nbf" in claims:
         if isinstance(nbf, bool) or not isinstance(nbf, int):
             raise ValueError("nbf claim present but not an integer")
         if now < nbf - _INSTALL_CLAIM_SKEW_SECONDS:
@@ -193,12 +172,14 @@ def _validate_install_claims(claims: dict[str, Any], *, app_id: str, now: float)
 # them needs JavaScript.
 #
 # Detail that helps an operator debug a failed install (exception reprs,
-# upstream response bodies, provider error strings) goes to the server log
+# HTTP status codes, provider error strings) goes to the server log
 # keyed by a short correlation id that IS rendered, rather than being
 # reflected into the page. Reflecting provider- and attacker-controlled
 # strings into these pages was the vector for the reflected-XSS report on
 # the OAuth callbacks (2026-08); see the regression tests in
 # ``tests/test_oauth.py``.
+# Upstream response bodies are omitted from rejection logs because opaque
+# tokens may appear anywhere in those bodies.
 
 _CONTENT_SECURITY_POLICY: Final[str] = (
     "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
@@ -257,34 +238,6 @@ def _log_safe(value: object) -> str:
     """Bound and ``repr`` a caller- or upstream-controlled value for a log line."""
 
     return repr(str(value)[:_LOG_MAX_CHARS])
-
-
-# Token-shaped content that must never reach a log line, whatever the
-# upstream body looks like: JSON members and form fields named like a
-# token, and any JWT-shaped run (three base64url segments, the first
-# starting with ``eyJ`` as every JSON header does).
-_TOKEN_MEMBER_RE: Final[re.Pattern[str]] = re.compile(
-    r'("(?:access_token|refresh_token|id_token)"\s*:\s*)"[^"]*"'
-)
-_TOKEN_FIELD_RE: Final[re.Pattern[str]] = re.compile(
-    r"((?:^|[&?\s])(?:access_token|refresh_token|id_token)=)[^&\s]*"
-)
-_JWT_RE: Final[re.Pattern[str]] = re.compile(r"eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*")
-
-
-def _redact_tokens(value: object) -> str:
-    """Redact token values in an upstream body, then bound and ``repr`` it.
-
-    Truncation alone is not enough: the first 200 characters of a token
-    endpoint body can carry the start of a token. Redaction runs on the
-    full text before the bound is applied.
-    """
-
-    text = str(value)
-    text = _TOKEN_MEMBER_RE.sub(r'\1"[redacted]"', text)
-    text = _TOKEN_FIELD_RE.sub(r"\1[redacted]", text)
-    text = _JWT_RE.sub("[redacted]", text)
-    return repr(text[:_LOG_MAX_CHARS])
 
 
 def _shown_error_code(value: object) -> str:
@@ -431,10 +384,9 @@ async def oauth_callback(
 
     if tok_res.status_code != 200:
         log.warning(
-            "teams.oauth.token_endpoint_rejected correlation=%s status=%s body=%s",
+            "teams.oauth.token_endpoint_rejected correlation=%s status=%s",
             correlation,
             tok_res.status_code,
-            _redact_tokens(tok_res.text),
         )
         # Surface the RFC 6749 error code if the body carries one; the
         # body itself is never rendered.
@@ -470,6 +422,25 @@ async def oauth_callback(
             correlation=correlation,
         )
 
+    def _decode_id_token_unverified(id_token: str) -> dict[str, Any]:
+        """Decode only this install response, trusted via token-endpoint TLS.
+
+        Kept local to prevent reuse by another handler. The caller validates
+        every claim used in the tenant record before persisting it (D-03, #587).
+        """
+        try:
+            _header, payload, _sig = id_token.split(".")
+        except ValueError as exc:
+            raise ValueError(
+                "id_token is not a JWT (expected three dot-separated segments)"
+            ) from exc
+        pad = "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload + pad)
+        parsed = json.loads(decoded)
+        if not isinstance(parsed, dict):
+            raise ValueError("id_token payload did not decode to a JSON object")
+        return parsed
+
     try:
         claims = _decode_id_token_unverified(id_token)
     except ValueError as exc:
@@ -502,7 +473,9 @@ async def oauth_callback(
     # Best-effort tenant display name via Microsoft Graph. Falls back
     # to the tenant id if Graph errors — we'd rather persist with a
     # placeholder name than fail the whole install on a Graph hiccup.
-    tenant_name = await _fetch_tenant_display_name(access_token) or str(tenant_id)
+    tenant_name = (
+        await _fetch_tenant_display_name(access_token, correlation=correlation) or tenant_id
+    )
 
     tenant_record = {
         "tenant_id": str(tenant_id),
@@ -531,10 +504,9 @@ async def oauth_callback(
 
     if persist_res.status_code not in (200, 201, 204):
         log.warning(
-            "teams.oauth.api_persist_rejected correlation=%s status=%s body=%s",
+            "teams.oauth.api_persist_rejected correlation=%s status=%s",
             correlation,
             persist_res.status_code,
-            _redact_tokens(persist_res.text),
         )
         return _page(
             "Install failed",
@@ -563,7 +535,7 @@ async def oauth_callback(
     )
 
 
-async def _fetch_tenant_display_name(access_token: str) -> str | None:
+async def _fetch_tenant_display_name(access_token: str, *, correlation: str) -> str | None:
     """Best-effort Microsoft Graph lookup for the tenant displayName.
 
     Returns ``None`` on any failure path — the caller falls back to
@@ -582,9 +554,9 @@ async def _fetch_tenant_display_name(access_token: str) -> str | None:
 
     if res.status_code != 200:
         log.info(
-            "teams.oauth.graph_org_lookup_rejected status=%s body=%s",
+            "teams.oauth.graph_org_lookup_rejected correlation=%s status=%s",
+            correlation,
             res.status_code,
-            _redact_tokens(res.text),
         )
         return None
 

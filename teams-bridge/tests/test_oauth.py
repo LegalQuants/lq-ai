@@ -22,9 +22,8 @@ Covers:
 * api persistence returning non-2xx → 502.
 * Graph display-name lookup failure falls back to tid (does NOT 502).
 * Install-only id_token constraints (D-03, #587): iss/aud/exp/nbf/tid/oid
-  fail closed, the unverified decode stays confined to this module, claims
-  grant nothing beyond the tenant record, and token-bearing upstream bodies
-  are redacted in logs.
+  fail closed, the unverified decode stays confined to the callback, claims
+  grant nothing beyond the tenant record, and upstream bodies stay out of logs.
 """
 
 from __future__ import annotations
@@ -565,10 +564,27 @@ def _add_token_endpoint_with_claims(httpx_mock: HTTPXMock, claims: dict[str, Any
         ("missing-exp", {"exp": _ABSENT}),
         ("exp-not-int", {"exp": "soon"}),
         ("not-yet-valid", {"nbf": int(time.time()) + 3600}),
+        ("null-nbf", {"nbf": None}),
+        ("bool-nbf", {"nbf": True}),
+        ("string-nbf", {"nbf": "soon"}),
         ("missing-tid", {"tid": _ABSENT}),
         ("missing-oid", {"oid": _ABSENT}),
         ("empty-oid", {"oid": ""}),
         ("tid-not-string", {"tid": 12345}),
+        (
+            "tid-not-guid",
+            {"tid": "not-a-guid", "iss": "https://login.microsoftonline.com/not-a-guid/v2.0"},
+        ),
+        (
+            "tid-without-hyphens",
+            {
+                "tid": "00000000000000000000aaaaaaaaaaaa",
+                "iss": "https://login.microsoftonline.com/00000000000000000000aaaaaaaaaaaa/v2.0",
+            },
+        ),
+        ("oid-not-string", {"oid": 12345}),
+        ("oid-not-guid", {"oid": "not-a-guid"}),
+        ("oid-without-hyphens", {"oid": "00000000000000000000111111111111"}),
     ],
 )
 def test_callback_rejects_id_token_with_bad_claims(
@@ -600,16 +616,18 @@ def test_callback_rejects_id_token_with_bad_claims(
         assert leaked not in res.text
 
 
+@pytest.mark.parametrize("nbf", [_ABSENT, int(time.time()) - 60])
 def test_callback_accepts_valid_claims_and_persists_only_the_tenant_record(
     client: TestClient,
     settings: Settings,
     httpx_mock: HTTPXMock,
+    nbf: object,
 ) -> None:
     """Claims cannot grant anything: even extra privilege-looking claims produce
     exactly the three-field tenant record and nothing else."""
     state = _seed_state("state-valid")
     claims = _valid_claims(
-        roles=["GlobalAdmin"], groups=["lq-ai-admins"], sub="user-sub", email="a@b.test"
+        roles=["GlobalAdmin"], groups=["lq-ai-admins"], sub="user-sub", email="a@b.test", nbf=nbf
     )
     _add_token_endpoint_with_claims(httpx_mock, claims)
     _add_graph_org_success(httpx_mock)
@@ -658,9 +676,9 @@ def test_validate_install_claims_is_pure_and_fails_closed() -> None:
         )
 
 
-def test_unverified_decode_is_confined_to_the_install_module() -> None:
-    """Regression guard for D-03: the unverified decode helper must not be
-    imported or re-exported anywhere else in the bridge."""
+def test_unverified_decode_is_confined_to_the_install_callback() -> None:
+    """The decoder is callback-local, so even another handler in oauth.py
+    cannot access it as a module-level helper."""
     app_dir = Path(oauth_module.__file__).resolve().parent
     offenders = [
         p.name
@@ -668,42 +686,60 @@ def test_unverified_decode_is_confined_to_the_install_module() -> None:
         if p.name != "oauth.py" and "_decode_id_token_unverified" in p.read_text()
     ]
     assert offenders == []
+    assert not hasattr(oauth_module, "_decode_id_token_unverified")
     assert not hasattr(oauth_module, "decode_id_token_unverified")
     assert "_decode_id_token_unverified" not in getattr(oauth_module, "__all__", [])
 
 
-def test_token_endpoint_rejection_log_redacts_tokens(
+_UPSTREAM_ERROR_BODIES = [
+    '{"error":"invalid_grant","access_token":"secret-access-value",'
+    '"refresh_token":"secret-refresh-value",'
+    '"id_token":"eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiJ4In0.sig"}',
+    "request rejected with opaque credential secret-opaque-value",
+    '{"error_description":"secret-opaque-value"}',
+    '{"access_token":"secret-opaque-value',
+]
+
+
+@pytest.mark.parametrize("body", _UPSTREAM_ERROR_BODIES)
+def test_token_endpoint_rejection_log_omits_upstream_body(
     client: TestClient,
     httpx_mock: HTTPXMock,
     caplog: pytest.LogCaptureFixture,
+    body: str,
 ) -> None:
-    """A non-200 token endpoint body is logged redacted, not merely truncated."""
+    """Only status and correlation metadata may reach the rejection log."""
     state = _seed_state("state-redact-token")
-    body = {
-        "error": "invalid_grant",
-        "access_token": "secret-access-value",
-        "refresh_token": "secret-refresh-value",
-        "id_token": "eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiJ4In0.sig",
-    }
-    httpx_mock.add_response(url=_TOKEN_URL, method="POST", status_code=400, json=body)
+    httpx_mock.add_response(url=_TOKEN_URL, method="POST", status_code=400, text=body)
 
     with caplog.at_level("WARNING", logger="app.oauth"):
         res = client.get(f"/teams/oauth/callback?code=bad&state={state}")
 
     assert res.status_code == 502
     logged = "\n".join(r.getMessage() for r in caplog.records)
-    assert "teams.oauth.token_endpoint_rejected" in logged
-    assert "[redacted]" in logged
-    for secret in ("secret-access-value", "secret-refresh-value", "eyJhbGci"):
+    event = next(r for r in caplog.records if "teams.oauth.token_endpoint_rejected" in r.message)
+    assert (
+        event.message
+        == f"teams.oauth.token_endpoint_rejected correlation={event.args[0]} status=400"
+    )
+    assert f"<code>{event.args[0]}</code>" in res.text
+    for secret in (
+        "secret-access-value",
+        "secret-refresh-value",
+        "secret-opaque-value",
+        "eyJhbGci",
+    ):
         assert secret not in logged
         assert secret not in res.text
 
 
-def test_api_persist_rejection_log_redacts_tokens(
+@pytest.mark.parametrize("body", _UPSTREAM_ERROR_BODIES)
+def test_api_persist_rejection_log_omits_upstream_body(
     client: TestClient,
     settings: Settings,
     httpx_mock: HTTPXMock,
     caplog: pytest.LogCaptureFixture,
+    body: str,
 ) -> None:
     state = _seed_state("state-redact-persist")
     _add_token_endpoint_with_claims(httpx_mock, _valid_claims())
@@ -712,7 +748,7 @@ def test_api_persist_rejection_log_redacts_tokens(
         url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
         method="POST",
         status_code=500,
-        text='{"detail": "boom", "access_token": "secret-echoed-back"}',
+        text=body,
     )
 
     with caplog.at_level("WARNING", logger="app.oauth"):
@@ -720,16 +756,28 @@ def test_api_persist_rejection_log_redacts_tokens(
 
     assert res.status_code == 502
     logged = "\n".join(r.getMessage() for r in caplog.records)
-    assert "teams.oauth.api_persist_rejected" in logged
-    assert "secret-echoed-back" not in logged
-    assert "[redacted]" in logged
+    event = next(r for r in caplog.records if "teams.oauth.api_persist_rejected" in r.message)
+    assert (
+        event.message == f"teams.oauth.api_persist_rejected correlation={event.args[0]} status=500"
+    )
+    assert f"<code>{event.args[0]}</code>" in res.text
+    for secret in (
+        "secret-access-value",
+        "secret-refresh-value",
+        "secret-opaque-value",
+        "eyJhbGci",
+    ):
+        assert secret not in logged
+        assert secret not in res.text
 
 
-def test_graph_lookup_rejection_log_redacts_tokens(
+@pytest.mark.parametrize("body", _UPSTREAM_ERROR_BODIES)
+def test_graph_lookup_rejection_log_omits_upstream_body(
     client: TestClient,
     settings: Settings,
     httpx_mock: HTTPXMock,
     caplog: pytest.LogCaptureFixture,
+    body: str,
 ) -> None:
     state = _seed_state("state-redact-graph")
     _add_token_endpoint_with_claims(httpx_mock, _valid_claims())
@@ -737,7 +785,7 @@ def test_graph_lookup_rejection_log_redacts_tokens(
         url="https://graph.microsoft.com/v1.0/organization",
         method="GET",
         status_code=401,
-        text='{"error": "x", "access_token": "secret-graph-echo"}',
+        text=body,
     )
     httpx_mock.add_response(
         url=f"{settings.lq_ai_backend_url}/api/v1/integrations/teams/tenants",
@@ -751,21 +799,16 @@ def test_graph_lookup_rejection_log_redacts_tokens(
 
     assert res.status_code == 200
     logged = "\n".join(r.getMessage() for r in caplog.records)
-    assert "teams.oauth.graph_org_lookup_rejected" in logged
-    assert "secret-graph-echo" not in logged
-
-
-@pytest.mark.parametrize(
-    ("raw", "must_hide"),
-    [
-        ('{"access_token": "abc123", "x": 1}', "abc123"),
-        ("access_token=abc123&token_type=Bearer", "abc123"),
-        ("prefix eyJhbGciOiJSUzI1NiJ9.eyJ0aWQiOiJ4In0.c2ln tail", "eyJhbGci"),
-        ('{"refresh_token":"r-secret","id_token":"i-secret"}', "r-secret"),
-    ],
-)
-def test_redact_tokens_covers_json_form_and_jwt_shapes(raw: str, must_hide: str) -> None:
-    out = oauth_module._redact_tokens(raw)
-    assert must_hide not in out
-    assert "[redacted]" in out
-    assert len(out) <= oauth_module._LOG_MAX_CHARS + 2  # repr quotes
+    event = next(r for r in caplog.records if "teams.oauth.graph_org_lookup_rejected" in r.message)
+    assert event.message == (
+        f"teams.oauth.graph_org_lookup_rejected correlation={event.args[0]} status=401"
+    )
+    assert f"<code>{event.args[0]}</code>" in res.text
+    for secret in (
+        "secret-access-value",
+        "secret-refresh-value",
+        "secret-opaque-value",
+        "eyJhbGci",
+    ):
+        assert secret not in logged
+        assert secret not in res.text
