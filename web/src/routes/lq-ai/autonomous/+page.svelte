@@ -213,7 +213,7 @@
 					>Orchestration chat (experimental)</a
 				>
 			{:else}
-				<button type="button" disabled class="text-sm text-gray-500">
+				<button type="button" disabled class="text-sm lq-t-text2">
 					Orchestration chat (experimental) — {chatAvailability === 'disabled'
 						? 'disabled by operator'
 						: chatAvailability === 'checking'
@@ -874,5 +874,10 @@
 	.modal-btn-secondary:disabled {
 		opacity: 0.65;
 		cursor: not-allowed;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>
