@@ -45,8 +45,8 @@
 		gap: 0.625rem;
 		align-items: flex-start;
 		padding: 0.75rem 1rem;
-		border: 1px solid var(--lq-warn-border, var(--lq-border));
-		background: var(--lq-warn-soft, var(--lq-inset));
+		border: 1px solid var(--lq-warn-border);
+		background: var(--lq-warn-soft);
 		color: var(--lq-text-primary);
 		border-radius: 0.5rem;
 		font-size: 0.875rem;
@@ -55,7 +55,7 @@
 
 	.lq-playbook-disclaimer__icon {
 		flex-shrink: 0;
-		color: var(--lq-warn, var(--lq-text-secondary));
+		color: var(--lq-warn);
 		margin-top: 0.125rem;
 	}
 

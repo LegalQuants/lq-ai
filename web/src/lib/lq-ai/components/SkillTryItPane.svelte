@@ -207,18 +207,18 @@
 		align-items: center;
 	}
 	.badge {
-		background: var(--lq-accent-soft, #e8f4ec);
-		border: 1px solid var(--lq-accent-border, #c5e6d1);
+		background: var(--lq-accent-soft);
+		border: 1px solid var(--lq-accent-border);
 		padding: 2px 8px;
 		border-radius: 999px;
 		font-size: 11px;
-		color: var(--lq-accent, #1f7a6b);
+		color: var(--lq-accent);
 		font-weight: 500;
 	}
 	.reset {
 		margin-left: auto;
 		background: transparent;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		padding: 4px 10px;
 		font-size: 12px;
@@ -232,12 +232,12 @@
 		flex: 1;
 		overflow-y: auto;
 		padding: 8px;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		min-height: 120px;
 	}
 	.empty {
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		font-size: 13px;
 		padding: 8px;
 	}
@@ -250,7 +250,7 @@
 	}
 	.error {
 		padding: 12px;
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 		font-size: 13px;
 	}
 	.inline-error {
@@ -263,14 +263,14 @@
 	textarea {
 		flex: 1;
 		padding: 8px;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		font-family: inherit;
 		font-size: 14px;
 	}
 	.send {
 		padding: 0 16px;
-		background: var(--lq-accent, #1f7a6b);
+		background: var(--lq-accent);
 		color: white;
 		border-radius: 6px;
 		border: 0;
@@ -278,7 +278,7 @@
 		cursor: pointer;
 	}
 	.send:disabled {
-		background: var(--lq-text-tertiary, #9ca3af);
+		background: var(--lq-text-tertiary);
 		cursor: not-allowed;
 	}
 </style>

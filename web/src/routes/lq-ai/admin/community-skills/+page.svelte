@@ -420,18 +420,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.warn-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-warning-bg, #fff8e1);
-		color: var(--lq-warning-text, #7a5c00);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-warning-border, #f0d78c);
+		border: 1px solid var(--lq-warning-border);
 		font-size: 13px;
 	}
 
@@ -442,10 +442,10 @@
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -463,7 +463,7 @@
 		padding: var(--lq-space-2) var(--lq-space-3);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		font-size: 14px;
 	}
 
@@ -543,9 +543,9 @@
 		display: inline-block;
 		padding: 1px var(--lq-space-2);
 		border-radius: 999px;
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 		font-size: 11px;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -633,7 +633,7 @@
 		padding: var(--lq-space-3);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		font-size: 12.5px;
 		line-height: 1.5;
 		white-space: pre-wrap;

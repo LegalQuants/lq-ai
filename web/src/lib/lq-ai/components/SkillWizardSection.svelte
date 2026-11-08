@@ -26,7 +26,7 @@
 
 <style>
 	.lq-wiz-section {
-		border-bottom: 1px solid var(--lq-border, #e5e7eb);
+		border-bottom: 1px solid var(--lq-border);
 		padding: 24px 0;
 	}
 	header {
@@ -42,8 +42,8 @@
 		width: 28px;
 		height: 28px;
 		border-radius: 50%;
-		background: var(--lq-accent-soft, #e8f4ec);
-		color: var(--lq-accent, #1f7a6b);
+		background: var(--lq-accent-soft);
+		color: var(--lq-accent);
 		font-weight: 600;
 		font-size: 13px;
 	}
@@ -53,7 +53,7 @@
 		font-weight: 600;
 	}
 	.hint {
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		font-size: 13px;
 		margin: 0 0 12px 0;
 	}
