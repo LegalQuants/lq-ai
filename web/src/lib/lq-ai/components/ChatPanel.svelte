@@ -1544,6 +1544,23 @@
 				: null
 		);
 
+	// P1.3b, switch on only: the left sidebar links to `/lq-ai/chats?id=…`, which
+	// changes `initialChatId` while this page stays mounted. Open that chat. The
+	// matter page passes its own selection here and keeps today's behaviour.
+	let urlChatSeen = initialChatId;
+	$: if (sidebarShell && !projectIdFilter && initialChatId !== urlChatSeen) {
+		urlChatSeen = initialChatId;
+		if (initialChatId && initialChatId !== activeChat?.id) void openUrlChat(initialChatId);
+	}
+	async function openUrlChat(id: string): Promise<void> {
+		try {
+			const known = get(chatsStore).find((c) => c.id === id);
+			await selectChat(known ?? (await chatsApi.getChat(id)));
+		} catch (e) {
+			console.error('lq-ai: failed to open the chat from the address', e);
+		}
+	}
+
 	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
 	// active chat changes (and again after a run ends or a run is proposed). New
 	// harness is one of the chat's models: the choice is remembered per chat like any

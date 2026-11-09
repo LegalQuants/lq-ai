@@ -112,7 +112,12 @@
 {#if booted}
 	<div class="lq-shell" class:lq-shell-sidebar={sidebarChrome}>
 		{#if sidebarChrome}
-			<ShellSidebar user={$auth.user ?? null} {pathname} />
+			<ShellSidebar
+				user={$auth.user ?? null}
+				{pathname}
+				urlChatId={$page.url.searchParams.get('id')}
+				automations={$autonomousChromeEnabled}
+			/>
 			<PageHeader {pathname} />
 		{:else if !isAuthExempt(pathname)}
 			<header class="lq-topbar">

@@ -17,7 +17,7 @@
  * (open), and a failed write is ignored. On narrow screens the sidebar is a
  * sheet over the page: it starts closed and its state is not remembered.
  */
-import { get, writable } from 'svelte/store';
+import { derived, get, writable } from 'svelte/store';
 
 export const RIGHT_SIDEBAR_STORAGE_KEY = 'lq-ai.right-sidebar';
 /** The sidebar element's id; the header's toggle points at it. */
@@ -48,17 +48,71 @@ interface Owned<T> {
 	value: T;
 }
 
+interface Overlay {
+	value: RightSidebarContent;
+	/** The control that opened it; focus returns there when it closes. */
+	opener: HTMLElement | null;
+}
+
 const headerStore = writable<Owned<PageHeaderContent> | null>(null);
 const sidebarStore = writable<Owned<RightSidebarContent> | null>(null);
+/**
+ * Shell-level content shown over the page's own (the notification list,
+ * opened from the left sidebar). While it is set the sidebar shows it, open,
+ * whatever the page published or the person chose for the page; clearing it
+ * brings the page's content and remembered state back untouched.
+ */
+const overlayStore = writable<Overlay | null>(null);
 
 export const pageHeaderContent = {
 	subscribe: (run: (v: PageHeaderContent | null) => void) =>
 		headerStore.subscribe((o) => run(o?.value ?? null))
 };
-export const rightSidebarContent = {
-	subscribe: (run: (v: RightSidebarContent | null) => void) =>
-		sidebarStore.subscribe((o) => run(o?.value ?? null))
-};
+const shownContent = derived(
+	[overlayStore, sidebarStore],
+	([overlay, page]) => overlay?.value ?? page?.value ?? null
+);
+/** What the sidebar shows: the shell overlay when set, else the page's content. */
+export const rightSidebarContent = { subscribe: shownContent.subscribe };
+/** The label of the shell overlay being shown, or null when the page's content shows. */
+export const rightSidebarOverlayLabel = derived(
+	overlayStore,
+	(overlay) => overlay?.value.label ?? null
+);
+
+/** Show shell content over the page's own; `opener` gets focus back on close. */
+export function showRightSidebarOverlay(
+	content: RightSidebarContent,
+	opener: HTMLElement | null = null
+): void {
+	overlayStore.set({ value: content, opener });
+}
+
+/**
+ * Clear the shell overlay, if any. Returns the element that opened it so the
+ * caller can return focus there; nothing is written to storage.
+ */
+export function clearRightSidebarOverlay(): HTMLElement | null {
+	const overlay = get(overlayStore);
+	if (!overlay) return null;
+	overlayStore.set(null);
+	return overlay.opener;
+}
+
+/**
+ * Close what the sidebar shows. A shell overlay is only dismissed (the page's
+ * own state is neither changed nor remembered); otherwise the page's sidebar
+ * closes and, on a wide screen, that is remembered for the page.
+ */
+export function closeRightSidebar(
+	page: string,
+	narrow: boolean,
+	getStorage: GetStorage = defaultStorage
+): { overlay: boolean; opener: HTMLElement | null } {
+	if (get(overlayStore)) return { overlay: true, opener: clearRightSidebarOverlay() };
+	setRightSidebarOpen(page, false, narrow, getStorage);
+	return { overlay: false, opener: null };
+}
 /** Whether the sidebar is open on the current page (absent content wins). */
 export const rightSidebarOpen = writable(true);
 /** Whether the viewport is narrow, so the sidebar is a sheet. */
