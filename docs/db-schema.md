@@ -490,14 +490,13 @@ CREATE TABLE messages (
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 ```
 
-#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0074; ADR 0038 proposed)
+#### Runs in chat: `kind = 'run'` and `autonomous_session_id` (0074; ADR 0038)
 
 The sketch above does not show `messages.kind`. Migration 0020 added it, with
 `chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
 [0074](../api/alembic/versions/0074_runs_in_chat.py) changes `messages` as below.
 It is implemented, and
-[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not
-ratified.
+See [ADR 0038](adr/0038-governed-runs-in-chat.md) for the experimental design.
 
 ```sql
 ALTER TABLE messages DROP CONSTRAINT chk_messages_kind;
@@ -528,7 +527,7 @@ CREATE UNIQUE INDEX uq_messages_autonomous_session
   leaves `content` empty, and history replay skips assistant messages with no
   content.
 - Downgrade refuses while any message has `kind = 'run'` or a session link;
-  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
+  see [Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038).
 
 ### `inference_routing_log` FK closure (Task C3)
 
@@ -1469,7 +1468,7 @@ calibration reads as `chat`. The set is the gateway's `_KNOWN_PURPOSES`
 | `orchestration_run` | A governed run's model calls: planning, tasks and the combined answer |
 
 Only `chat`, `embedding`, `judge_paraphrase` and `tabular_bulk_op` were in the set
-before ADR 0038 (proposed). The other labels were already sent by the backend and
+before ADR 0038. The other labels were already sent by the backend and
 recorded as `chat`; recording them as themselves is implemented. Two
 Easy Playbook assembly labels, `playbook_easy_assemble_describe_position` and
 `playbook_easy_assemble_describe_tier`, are longer than the 32-character column
@@ -2040,7 +2039,7 @@ Sample roots continue to require a current prepared revision and no planning
 snapshot. A root in `planning` cannot reference a prepared revision. Migration 0074
 later replaces the enumerated `profile` check, 0075 adds the `closed` status, 0076
 lets `project_id` be null and 0077 lets a registry run complete without a plan; see
-[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038-proposed).
+[Governed runs in chat and closing a run](#governed-runs-in-chat-and-closing-a-run-0074-to-0077-adr-0038).
 
 The immutable intake snapshot pins owner/project, skill and packet digests,
 gateway revision, direct route, grants, deadlines, and root/planning allowances.
@@ -2191,16 +2190,16 @@ A scope ceiling of `0` refuses in the API and is never sent to the gateway.
 An unreadable policy fail-closes: no dispatch, refused audit row with
 `ceiling_source="unresolved"`.
 
-### Governed runs in chat and closing a run (0074 to 0077; ADR 0038 proposed)
+### Governed runs in chat and closing a run (0074 to 0077; ADR 0038)
 
 Implemented; [ADR 0038](adr/0038-governed-runs-in-chat.md)
-is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
+describes the experimental design shipped in v0.9.1. The four migrations are additive on a 0.8.0 database, which
 already carries the orchestration tables. The authoritative DDL for the first two is in
 [`0074_runs_in_chat.py`](../api/alembic/versions/0074_runs_in_chat.py) and
 [`0075_close_uncertain_runs.py`](../api/alembic/versions/0075_close_uncertain_runs.py);
 0076 and 0077 are described further down, each with its file.
 This section names the constraints they replace. The `messages` changes of 0074 are
-described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0074-adr-0038-proposed).
+described [with that table](#runs-in-chat-kind--run-and-autonomous_session_id-0074-adr-0038).
 
 **0074: registry profiles.** The profile is validated against the application's
 closed profile registry, so the database keeps only its shape.

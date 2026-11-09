@@ -1,16 +1,17 @@
 # ADR 0038 — Governed runs in chat: an orchestrator model
 
-**Status:** Proposed (2026-09-23; rewritten 2026-10-06; rewritten again 2026-10-09, after
-the maintainer redirected C1 on 2026-10-07 and 2026-10-08; D8 added 2026-10-09; the maintainer's
-rulings on the open questions recorded 2026-10-09; rulings 2, 4, 6 and 10 built
-2026-10-10; text brought to the code after the security review, 2026-10-12; five further
-rulings recorded 2026-10-13, two of them built). Nothing in it is ratified.
+**Status:** Accepted for the experimental C1 design as merged on 2026-10-14. The
+[merge receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3) records committee
+ratification on 2026-10-04. See [decision and review record](#decision-and-review-record)
+for the public minutes and the scope of the later revisions.
+**Draft history:** Proposed 2026-09-23, rewritten 2026-10-06 and 2026-10-09. D8 and
+the first set of rulings were added 2026-10-09. The text was updated after security
+review on 2026-10-12, followed by five further rulings on 2026-10-13.
 **Extends:** [ADR 0035](0035-governed-orchestration-run-tree.md); retains its run-tree,
 authority, budget, recovery and execution decisions.
 **Amends:** ADR 0035 D1, D2 and D3, in the words given in D1 below: a root may answer
 without a batch, a root may belong to no project, and a file a keyword search finds is
-selected by the plan's approval. ADR 0035 stays Accepted and its text is unchanged until
-this ADR is ratified.
+selected by the plan's approval.
 **Records, and does not amend:** [ADR 0020 D1](0020-governed-agentic-legal-matter-sessions.md)
 governs a matter session's closed-choice planner. It does not reach a run sub-agent,
 which D4 bounds by its plan's grants.
@@ -70,14 +71,12 @@ that run one general instruction set pinned by New harness; a planning call that
 recent thread; an orchestrator that may answer directly, with no sub-agents and no
 approval; sub-agents that may search the matter's knowledge bases; a plan handed over as a
 native tool call; pseudonymization where the operator's gateway setting says to for the
-routed tier; and thinking control in the gateway for Ollama. These are directions to the
-build. The design below is proposed, and none of it is ratified.
+routed tier; and thinking control in the gateway for Ollama.
 
-An implementation exists on an unmerged branch and has had no maintainer or security
-review. The build plan's
+New harness shipped as an experiment in v0.9.1. Both profile switches default to off.
+The build plan's
 [Implementation status](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status)
-records what was built, by increment, and what was not verified. Both profile switches
-default to off, and the implementation does not merge before this ADR is ratified.
+records the increments and verification limits.
 
 ## Decision
 
@@ -142,9 +141,8 @@ delivered whatever the planning call cost within the root's whole allocation; a 
 that halts the run when the call settles, as for any effect. Migration 0077 lets a run end
 `completed` with no plan revision.
 
-**The amendment to ADR 0035, in its words.** Ratifying this ADR makes the four changes
-below to ADR 0035 and no other. Until then ADR 0035 stands as written, and it carries a
-note that points here.
+**The amendment to ADR 0035.** The four changes below apply to the experimental
+design as merged. ADR 0035 links here for the operative wording.
 
 In ADR 0035 D1, "Permit one immutable batch of one to four children, one delegation
 level and no child delegation." becomes:
@@ -184,7 +182,7 @@ D5. The fourth, in D3, is what the knowledge-base search needs: it reads files t
 did not name one by one, and approving the plan, which names the knowledge bases, is the
 selection (D5).
 
-**A chat outside a matter.** *Authorization path; needs security review.* A chat need not
+**A chat outside a matter.** *Authorization path.* A chat need not
 be in a matter (the API calls a matter a project). ADR 0035 D1 gives every root an
 active project, so this amends it; the words are with the amendment above. Migration
 0076 lets
@@ -215,7 +213,7 @@ Chat adds an intake route and no second governance path (ADR 0016 P6). The bindi
 the autonomous session, not to the orchestration root, so other governed session kinds can
 later be hosted the same way without a new link.
 
-**Roles (ruling 10).** *Authorization path; needs security review.* Starting a run,
+**Roles (ruling 10).** *Authorization path.* Starting a run,
 approving a plan and rejecting one need a role that may change things: member or admin. A
 viewer and an auditor are refused (403), at the route and again in the store, so the rule
 does not depend on a route remembering it. The composer says so in place of offering New
@@ -385,7 +383,7 @@ one. That is track C2 and depends on ADR 0035 D3. It is not built.
 refuses a second, because which of two profiles a request would run is a decision the
 registry does not hold.
 
-**Thinking control.** *Gateway; security boundary; needs security review.* The gateway's
+**Thinking control.** *Gateway security path.* The gateway's
 chat-completion request accepts an optional `reasoning_effort` (`none`, `minimal`, `low`,
 `medium` or `high`). The Ollama adapter maps it to `think`. The OpenAI and Azure OpenAI
 adapters send it as it is, since it is OpenAI's own parameter. The Anthropic adapter sends
@@ -448,7 +446,7 @@ it does not: a run sub-agent uses native tool calls within the set its plan gran
 the server decides (ADR 0035 D3), in place of a closed-choice contract. The set stays
 closed, as in the chat tool loop (ADR 0015 D1). The orchestrator's combine step is one call that is offered no tool.
 
-**Two tool-calling changes in the gateway.** *Security boundary; needs security review.*
+**Two tool-calling changes in the gateway.** *Gateway security path.*
 The Ollama adapter names a tool result after the call it answers, taking the name from the
 earlier call that bears the same identifier, so that two results in one turn are each
 matched to their own call. It
@@ -519,8 +517,8 @@ ingests are selectable, currently PDF with text, plain text and Markdown. A file
 cannot be read is shown with its reason and is never silently omitted. The whole selection
 is refused if any file is missing, another owner's or unreadable.
 
-**The file rule: a matter's terms go with its files.** *Authorization path; needs
-security review.* One rule decides which files a run may read and on what terms. It is
+**The file rule: a matter's terms go with its files.** *Authorization path.*
+One rule decides which files a run may read and on what terms. It is
 applied at intake, at every admission while the run is live, and at each read.
 
 - A run in a matter reads the owner's own, undeleted files that are attached to that
@@ -657,7 +655,7 @@ marks are looked up as part of the quoted words. Until 2026-10-10 they said that
 emphasised quotation is not recognised, which this ruling had made untrue, and on a
 model run the orchestrator repeated it to the reader.
 
-**Knowledge-base search.** *Authorization path; needs security review.* A run in a matter
+**Knowledge-base search.** *Authorization path.* A run in a matter
 lists the knowledge bases attached to that matter when the request is accepted: the
 owner's own, not archived, oldest attachment first, at most 16. The composer says how many
 more are attached and not searched. The owner does not pick them. They are named in the
@@ -828,7 +826,7 @@ turns. These limits of the branch must close first.
   provider. The requirement below names a configured provider and does not say hosted.
 
 **The gateway restores the plan's placeholders, and a plan that still carries one is
-refused (ruling 6).** *Gateway; security boundary; needs security review.* On a route
+refused (ruling 6).** *Gateway security path.* On a route
 that pseudonymizes, the gateway replaces a name in message text with a placeholder such
 as `PERSON_0001` and puts it back in a reply's text, with a mapping that lasts for one
 request. By default it does not touch tool-call arguments, so a plan handed over as a
@@ -971,7 +969,7 @@ branch as it is, and the item is marked **not built**.
    wrapped in Markdown emphasis, for ordinary chat and for runs alike. **Built** as its own
    change: the pattern accepts up to three `*` or `_` after the closing quotation mark, in
    the API and in the web, with tests for ordinary chat's extractor and for a run's
-   delivered answer. It changes a contract ordinary chat shares and has had no review.
+   delivered answer. It changes a contract ordinary chat shares.
    Not changed: emphasis inside the quotation marks, and the underline in the prose (D5).
    Shown once on a local model and in a browser, after the two prompt files were
    corrected (build plan).
@@ -989,7 +987,6 @@ branch as it is, and the item is marked **not built**.
    matter holds. The maintainer ruled on the last two on 2026-10-13 (rulings 12 and 13
    below): the withholding stands and reaches ordinary turns, and a run in a matter may
    read a file another matter holds through a knowledge base, on the stricter terms.
-   Authorization path; no security review.
 5. **Reasoning effort** ships empty. Nothing is sent unless the operator sets a level.
 6. **The placeholder limit.** The gateway is to restore the plan tool's arguments, as it
    restores reply text. **Built** as its own change (D7): an opt-in request field, set by
@@ -1001,8 +998,8 @@ branch as it is, and the item is marked **not built**.
    one request, and data between the backend's own agents is not cleaned. On 2026-10-12
    the maintainer chose to scope it to a caller that holds its arguments as originals, a
    run, and to state ordinary chat's tool loop and retrieval context as a limit. It is a change
-   to the security boundary. It has had an independent read, described in the pull request, during the fixes to
-   this branch, and no security review. The refusal (`plan_has_placeholders`) is kept
+   to the security boundary. An independent read preceded the merge review. The refusal
+   (`plan_has_placeholders`) is kept
    as a second line, for a placeholder the gateway did not assign. Built on one choice the
    maintainer has not ruled on: the refusal looks for the shape anywhere in the plan,
    also inside a longer run of characters, so on a route that pseudonymizes it also
@@ -1040,11 +1037,10 @@ ratification.
 12. **A file that another matter holds only through a knowledge base.** A run in a matter
     may read it, on the stricter of the two matters' terms: the lower floor, and privileged
     if either is. The maintainer chose this over refusing the file, as in ruling 4.
-    **Built** as its own change (D5). Authorization path; no security review.
+    **Built** as its own change (D5).
 13. **A run's answer in an ordinary follow-up turn.** An answer written under stricter
     terms than the follow-up's chat has is withheld from an ordinary turn as it is from a
-    later run. **Built** as its own change (D5, D7). Authorization path; no security
-    review.
+    later run. **Built** as its own change (D5, D7).
 14. **`auditor.*` audit rows are not privilege-marked.** The gap is the base's for chat
     reads as well, so it is fixed for every auditor read together, outside this change. It
     stays a stated limit here (D1), and an issue records it.
@@ -1055,12 +1051,26 @@ ratification.
     granted any outside or public-source tool (D5, D7).
 16. **The deferred items** are numbered DE-410 to DE-420 in PRD §9.
 
-The maintainer also decided how this ADR goes forward: a security-path checklist is
-drafted first, as its own change, because ADR 0034 names one and no file defined it; a
-walkthrough of the present design is recorded on a local model (done on 2026-10-14; see
-"Supporting evidence"); and the ADR goes to the
-LQAI Committee call of 2026-10-18 for ratification. A run on a configured provider stays
-a condition for claiming live operation and is not a condition of ratification.
+## Decision and review record
+
+The [#599 merge receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3) records
+ratification by the LQAI Committee on 2026-10-04. The
+[public minutes for that date](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/2026-10-04-weekly/notes.md#decisions-and-agreed-follow-ups)
+record no formal ADR acceptances and give no text or revision for ADR 0038.
+
+The rewrites of 2026-10-06 and 2026-10-09, the 2026-10-12 updates, and the
+rulings of 2026-10-09 and 2026-10-13 postdate the ratification date in the receipt.
+The receipt is the evidence for accepting the experimental C1 design as merged,
+including the D1 amendment to ADR 0035 and the behavior shipped in #599. It does
+not establish that the committee separately ratified the later text or rulings.
+Whether any of that later scope needs separate confirmation remains open under
+[#726](https://github.com/LegalQuants/lq-ai/issues/726).
+
+The same receipt records @houfu's security-path review of `ca96056` against the
+checklist it names and 10 of 10 CI checks passing.
+That review applies to the implementation at the reviewed head. D8 and future
+run tools still require their own review. Human acceptance and a configured-provider
+run remain open under [#725](https://github.com/LegalQuants/lq-ai/issues/725).
 
 ## Alternatives
 
@@ -1137,9 +1147,8 @@ pull request, followed by one commit for each of the four rulings that needed co
 - D8 is not built. It is a change to authorization across the API, routed to security
   review, and it lands before any C2 to C7 run tool.
 - ADR 0011's model picker now holds one entry that is not a provider model (D1).
-- ADR 0035's text is unchanged until this ADR is ratified. D1 gives the words that then
-  change in its D1, D2 and D3, and ADR 0035 carries a note that points here. ADR 0020 D1
-  is not changed; its note records that it does not reach a run sub-agent (D4).
+- D1 gives the amendment to ADR 0035 D1, D2 and D3. The clarification in ADR 0020
+  records that its D1 applies to the matter-session planner. Run sub-agents follow D4.
 - PRD §3.1 and §3.10, the feature PRD, the OpenAPI sketches, the schema document,
   HONEST-STATE and the observability guide change with the code.
 - Not decided here, and recorded as DE-410 to DE-420: full prompt capture (DE-410);
@@ -1203,9 +1212,11 @@ written as text. Recovery across a worker restart reuses completed effects and r
 none.
 
 **What a run reads (D5).** Tests must reject unselected or revoked documents, for a run in
-a matter a file that only another matter holds, a chat attachment that was not attached
-to the matter, widened task grants, stale approval, and hostile handoff text including a
-hostile thread. For a run outside a matter, tests must show that a matter's file brings
+a matter a file held only by another matter outside the knowledge-base exception in
+ruling 12, a chat attachment that was not attached to the matter, widened task grants,
+stale approval, and hostile handoff text including a hostile thread. Tests must also
+show that an eligible file held by another matter through a knowledge base brings the
+stricter terms of both matters. For a run outside a matter, tests must show that a matter's file brings
 that matter's terms and that a route which does not meet them is refused (ruling 4). A
 knowledge-base search must show only the passages D5 allows and count those it withholds.
 A quotation from a found file must be checked against that file. A run in a matter must
@@ -1221,8 +1232,8 @@ has been run, on what, and what has not. Each profile's switch defaults to off. 
 and security review, including ADR 0035's helper-specific gates, remain release
 requirements. Security review, wherever this ADR asks for it, has the meaning ADR 0034
 gave it on 2026-10-04: maintainer review with the security-path checklist applied, the
-project having no separate security team. Ratification of this ADR precedes merging the
-implementation.
+project having no separate security team. See the
+[decision and review record](#decision-and-review-record) for the experimental merge.
 
 ## Supporting evidence
 
