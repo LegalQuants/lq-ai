@@ -26,7 +26,7 @@ const pypiPackages = ['black', 'pathspec', 'mypy_extensions', 'pytokens'];
 
 import { loadPyodide } from 'pyodide';
 import { setGlobalDispatcher, ProxyAgent } from 'undici';
-import { writeFile, readFile, copyFile, readdir, rmdir, access } from 'fs/promises';
+import { writeFile, readFile, copyFile, readdir, rm, access } from 'fs/promises';
 import { pathToFileURL } from 'url';
 
 const lockFilePath = 'static/pyodide/pyodide-lock.json';
@@ -155,11 +155,11 @@ async function downloadPackages() {
 		const pyodidePackageVersion = pyodidePackageJson.version.replace('^', '');
 
 		if (pyodideVersion !== pyodidePackageVersion) {
-			console.log('Pyodide version mismatch, removing static/pyodide directory');
-			await rmdir('static/pyodide', { recursive: true });
-			// The cached files are gone, and with them the lock they were
-			// pinned by; the download below regenerates a fresh one.
-			lockUsable = false;
+			console.log('Pyodide version mismatch, removing generated cache files');
+			for (const entry of await readdir('static/pyodide')) {
+				if (entry === 'pyodide-lock.json') continue;
+				await rm(`static/pyodide/${entry}`, { recursive: true, force: true });
+			}
 		}
 	} catch (err) {
 		console.log('Pyodide package not found, proceeding with download.', err);
