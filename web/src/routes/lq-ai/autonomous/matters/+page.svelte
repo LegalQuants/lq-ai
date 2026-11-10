@@ -395,7 +395,7 @@
 	.intake-select,
 	.intake-textarea {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -469,7 +469,7 @@
 		color: var(--lq-accent);
 		background: transparent;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-1) var(--lq-space-2);
 		cursor: pointer;
 	}
@@ -497,7 +497,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -505,7 +505,7 @@
 	}
 
 	.intake-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.intake-btn-primary:focus-visible {

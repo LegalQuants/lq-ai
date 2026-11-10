@@ -213,7 +213,7 @@
 	.lq-versions-error {
 		padding: 12px 16px;
 		margin: 12px 0;
-		background: rgba(181, 72, 72, 0.08);
+		background: var(--lq-danger-soft);
 		color: var(--lq-error);
 		border-radius: 6px;
 		font-size: 13px;

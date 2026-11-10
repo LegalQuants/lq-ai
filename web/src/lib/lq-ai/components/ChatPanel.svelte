@@ -2137,9 +2137,9 @@
 	.lq-composer {
 		background: var(--lq-canvas);
 		color: var(--lq-text);
-		border: 1.5px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg);
-		padding: 12px;
+		border: 1.5px solid var(--lq-border-strong);
+		border-radius: var(--lq-radius-composer);
+		padding: 12px 16px;
 	}
 	.lq-composer:focus {
 		border-color: var(--lq-accent);

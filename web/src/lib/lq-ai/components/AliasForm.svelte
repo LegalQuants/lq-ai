@@ -262,7 +262,7 @@
 		background-color: var(--lq-accent);
 	}
 	.lq-t-primary-hover:hover {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 	.lq-t-text {
 		color: var(--lq-text);

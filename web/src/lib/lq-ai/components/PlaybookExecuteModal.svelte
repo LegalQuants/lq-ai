@@ -287,7 +287,7 @@
 	.lq-modal__field select {
 		width: 100%;
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		color: var(--lq-text-primary);
@@ -339,7 +339,7 @@
 	}
 	.lq-modal__btn {
 		padding: 0.5rem 1rem;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		cursor: pointer;
 		border: 1px solid transparent;

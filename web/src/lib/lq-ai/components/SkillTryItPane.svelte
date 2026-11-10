@@ -219,7 +219,7 @@
 		margin-left: auto;
 		background: transparent;
 		border: 1px solid var(--lq-border);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 12px;
 		cursor: pointer;
@@ -263,7 +263,7 @@
 	textarea {
 		flex: 1;
 		padding: 8px;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		font-family: inherit;
 		font-size: 14px;
@@ -272,7 +272,7 @@
 		padding: 0 16px;
 		background: var(--lq-accent);
 		color: white;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		border: 0;
 		font-weight: 500;
 		cursor: pointer;

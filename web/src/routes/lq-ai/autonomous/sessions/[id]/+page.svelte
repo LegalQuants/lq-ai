@@ -332,7 +332,7 @@
 
 	.halt-button {
 		padding: var(--lq-space-1) var(--lq-space-4);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-error-border);

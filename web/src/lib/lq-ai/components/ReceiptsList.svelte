@@ -189,8 +189,8 @@
 		border-bottom: 1px solid var(--lq-border);
 	}
 	.chips button {
-		background: #f3f4f6;
-		color: #374151;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 		padding: 2px 6px;
 		border-radius: 9999px;
 		font-size: 9px;
@@ -198,32 +198,32 @@
 		cursor: pointer;
 	}
 	.chips button.active {
-		background: #4338ca;
-		color: var(--lq-canvas);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 	}
 	.row {
 		display: grid;
 		grid-template-columns: auto auto 1fr;
 		gap: 6px;
 		padding: 4px 0;
-		border-bottom: 1px solid #f3f4f6;
+		border-bottom: 1px solid var(--lq-border);
 		text-align: left;
 		background: transparent;
 		border: 0;
 		cursor: pointer;
 		font-size: 10px;
-		color: #374151;
+		color: var(--lq-text-secondary);
 	}
 	.ts {
-		color: #6b7280;
-		font-family: monospace;
+		color: var(--lq-text-tertiary);
+		font-family: var(--lq-font-mono);
 	}
 	.icon {
 		font-size: 12px;
 	}
 	.detail {
 		grid-column: 1 / -1;
-		background: #f9fafb;
+		background: var(--lq-inset);
 		padding: 6px;
 		border-radius: 4px;
 		font-size: 9px;

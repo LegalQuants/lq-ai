@@ -344,7 +344,7 @@
 		font-size: 0.8125rem;
 		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
-		border-radius: 0.25rem;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		color: var(--lq-text-primary);
 	}
@@ -368,7 +368,7 @@
 	.lq-playbook-editor-position__input,
 	.lq-playbook-editor-position__textarea {
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		color: var(--lq-text-primary);

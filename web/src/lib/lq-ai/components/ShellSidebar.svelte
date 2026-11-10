@@ -625,7 +625,7 @@
 		left: 0;
 		z-index: 41;
 		width: min(264px, calc(100vw - 48px));
-		border-right: 1px solid var(--lq-border-strong);
+		border-right: 1px solid var(--lq-border);
 	}
 	.lq-sidebar-backdrop {
 		position: fixed;
@@ -768,7 +768,7 @@
 		min-height: 32px;
 		padding: 0 10px;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		background: transparent;
 		color: var(--lq-text-secondary);
 		font: inherit;
@@ -791,7 +791,7 @@
 		font-weight: 600;
 	}
 	.lq-sidebar-row-current {
-		background: var(--lq-accent-soft);
+		background: var(--lq-selected);
 	}
 	.lq-sidebar-row-label {
 		flex: 1;

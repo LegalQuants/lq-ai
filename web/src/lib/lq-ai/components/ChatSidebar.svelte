@@ -164,14 +164,14 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 	}
 	.lq-btn-primary:hover {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 	.lq-btn-primary:focus-visible {
 		outline: 2px solid var(--lq-accent);
@@ -215,10 +215,9 @@
 		background: var(--lq-accent-soft);
 	}
 	.lq-chat-row--active {
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-		border-left: 2px solid var(--lq-accent);
-		padding-left: 18px;
+		background: var(--lq-selected);
+		color: var(--lq-text);
+		font-weight: 500;
 	}
 
 	.lq-empty-hint {

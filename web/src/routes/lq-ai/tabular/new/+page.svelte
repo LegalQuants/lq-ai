@@ -644,7 +644,7 @@
 	}
 	.lq-tabwiz__field select {
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -711,7 +711,7 @@
 	.lq-tabwiz__adhoc input {
 		width: 100%;
 		padding: 0.375rem 0.5rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.25rem;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -732,7 +732,7 @@
 		padding: 0.375rem 0.625rem;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		cursor: pointer;
 	}
@@ -803,7 +803,7 @@
 	.lq-tabwiz__next {
 		padding: 0.5rem 1rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		font-weight: 500;
 		cursor: pointer;

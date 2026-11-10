@@ -339,7 +339,7 @@
 	select,
 	textarea {
 		padding: 0.55rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -354,7 +354,7 @@
 		padding: 0.55rem 0.75rem;
 		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		color: var(--lq-text);
 	}
 	button:disabled {
