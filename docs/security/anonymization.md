@@ -79,8 +79,8 @@ The gateway's `AnalyzerEngine` runs with this configuration (`gateway/app/anonym
 | `ORGANIZATION` | Presidio default (spaCy NER) | Corporate entities, firms, agencies. | Surfaces under Presidio's `ORG` label internally. |
 | `EMAIL_ADDRESS` | Presidio default | Counsel email, party email in correspondence. | Requires a recognized TLD; `.example` test addresses won't match. |
 | `PHONE_NUMBER` | Presidio default | Contact numbers in correspondence. | US conventions catch best; international support varies. |
-| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Pseudonyms carry the detector label verbatim (`US_BANK_NUMBER_0001`); there is no rename to an `ACCOUNT_NUMBER` domain. |
-| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Pseudonyms carry the detector label verbatim (`LOCATION_0001`); there is no rename to an `ADDRESS` domain. |
+| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Substituted in the `ACCOUNT_NUMBER` pseudonym domain (for example, `ACCOUNT_NUMBER_0001`). |
+| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Substituted in the `ADDRESS` pseudonym domain (for example, `ADDRESS_0001`). |
 | `CASE_NUMBER` | **Custom** — `CaseNumberRecognizer` | Federal/state reporter cites (`Smith v. Jones, 123 F.3d 456 (9th Cir. 2024)`), `In re X` form, docket numbers (`Case No. 1:24-cv-00123`). | Requires structural anchoring; bare case captions intentionally not matched. |
 | `MATTER_NUMBER` | **Custom** — `MatterNumberRecognizer` | Alpha-year-sequence (`LQ-2026-0042`), dotted (`2026.0042`). | Deployment-specific; defaults are conservative — extend per the "Customizing" section below. |
 
