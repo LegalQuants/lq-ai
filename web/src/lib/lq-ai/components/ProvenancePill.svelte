@@ -44,10 +44,11 @@
 		return KIND_DESCRIPTION[kind];
 	}
 
-	export type ProvenanceTone = 'sage' | 'slate' | 'amber';
+	export type ProvenanceTone = 'sage' | 'slate' | 'governance';
 
+	/** A tier mismatch is a governance signal, drawn at least as loudly as a matching tier. */
 	export function toneFor(kind: ProvenanceKind, tierMismatch: boolean): ProvenanceTone {
-		if (kind === 'tier') return tierMismatch ? 'amber' : 'slate';
+		if (kind === 'tier') return tierMismatch ? 'governance' : 'slate';
 		return 'sage';
 	}
 </script>
@@ -108,10 +109,11 @@
 		background: var(--lq-governance);
 		flex: none;
 	}
-	.lq-prov-tone-amber {
-		background: var(--lq-warn-soft);
-		color: var(--lq-warn);
-		border-color: var(--lq-warn-border);
+	/* A tier mismatch: governance text and edge on the governance tint. */
+	.lq-prov-tone-governance {
+		background: var(--lq-governance-soft);
+		color: var(--lq-governance);
+		border-color: var(--lq-governance-border);
 	}
 	.lq-prov-pill:hover {
 		opacity: 0.85;

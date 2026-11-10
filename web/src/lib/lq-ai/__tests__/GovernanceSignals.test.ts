@@ -12,6 +12,7 @@ import { render } from 'svelte/server';
 import { TIER_DESCRIPTIONS } from '../chat/tierDescriptions';
 import { toneFor } from '../components/ProvenancePill.svelte';
 import MatterCard from '../components/MatterCard.svelte';
+import ProvenancePill from '../components/ProvenancePill.svelte';
 
 const components = join(resolve(dirname(fileURLToPath(import.meta.url)), '..'), 'components');
 const source = (name: string) => readFileSync(join(components, name), 'utf8');
@@ -60,6 +61,19 @@ describe('governance signals (ADR 0045 §1)', () => {
 		expect(rule(source('ProvenancePill.svelte'), '.lq-prov-tone-slate::before')).toContain(
 			'background: var(--lq-governance)'
 		);
+	});
+
+	it('draws a tier mismatch in the governance colour, a matching tier with the dot', () => {
+		const pill = (tierMismatch: boolean) =>
+			render(ProvenancePill, { props: { kind: 'tier', summary: 'Tier 2', tierMismatch } }).body;
+		expect(pill(true)).toContain('lq-prov-tone-governance');
+		expect(pill(true)).not.toContain('lq-prov-tone-slate');
+		expect(pill(false)).toContain('lq-prov-tone-slate');
+		expect(pill(false)).not.toContain('lq-prov-tone-governance');
+		const css = rule(source('ProvenancePill.svelte'), '.lq-prov-tone-governance');
+		expect(css).toContain('color: var(--lq-governance)');
+		expect(css).toContain('border-color: var(--lq-governance-border)');
+		expect(css).not.toMatch(/--lq-(warn|text)\b/);
 	});
 
 	it('draws the model picker as a neutral control with a governance tier chip', () => {
