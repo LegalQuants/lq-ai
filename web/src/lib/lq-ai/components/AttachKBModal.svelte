@@ -590,13 +590,13 @@
 	}
 
 	.akm-card--attached {
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 		cursor: default;
 	}
 
 	.akm-card--attached:hover {
 		border-color: var(--lq-border);
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 	}
 
 	.akm-card-name {
