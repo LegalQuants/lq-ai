@@ -24,7 +24,7 @@
 		"cy:inventory:test": "node --experimental-strip-types --test scripts/tests/cypress-inventory.test.ts",
 		"test:frontend": "vitest --passWithNoTests",
 		"pyodide:fetch": "node scripts/prepare-pyodide.js",
-		"pyodide:fetch:test": "node --experimental-strip-types --test scripts/tests/prepare-pyodide.test.ts",
+		"pyodide:fetch:test": "vitest run scripts/tests/prepare-pyodide.test.ts",
 		"cy:a11y": "node --experimental-strip-types scripts/run-a11y.ts gate",
 		"cy:a11y:baseline": "node --experimental-strip-types scripts/run-a11y.ts capture",
 		"cy:a11y:proof": "node --experimental-strip-types scripts/run-a11y.ts proof"

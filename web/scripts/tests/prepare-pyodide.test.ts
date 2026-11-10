@@ -1,112 +1,146 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import {
-	findLockedPackage,
-	missingLockFiles,
-	pinnedInstallSpec,
-	pypiMetadataUrl
-} from '../prepare-pyodide.js';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { preparePyodide } from '../prepare-pyodide.js';
+import committedLock from '../../static/pyodide/pyodide-lock.json';
+import installedLock from '../../node_modules/pyodide/pyodide-lock.json';
+import { version } from '../../node_modules/pyodide/package.json';
 
-// A trimmed stand-in for the committed web/static/pyodide/pyodide-lock.json.
-// The key spellings mirror the real file on purpose: most keys keep the PyPI
-// spelling (`scikit-learn`), while the entries prepare-pyodide.js injects
-// for PyPI-only packages use underscores (`mypy_extensions`).
-const lockData = {
-	info: {
-		abi_version: '2026_0',
-		arch: 'wasm32',
-		platform: 'emscripten_5_0_3',
-		python: '3.14.0'
-	},
-	packages: {
-		black: {
-			name: 'black',
-			version: '26.5.1',
-			file_name: 'black-26.5.1-py3-none-any.whl',
-			install_dir: 'site',
-			sha256: '0000000000000000000000000000000000000000000000000000000000000000',
-			package_type: 'package',
-			imports: ['black'],
-			depends: []
-		},
-		mypy_extensions: {
-			name: 'mypy_extensions',
-			version: '1.1.0',
-			file_name: 'mypy_extensions-1.1.0-py3-none-any.whl',
-			install_dir: 'site',
-			sha256: '1111111111111111111111111111111111111111111111111111111111111111',
-			package_type: 'package',
-			imports: ['mypy_extensions'],
-			depends: []
-		},
-		'scikit-learn': {
-			name: 'scikit-learn',
-			version: '1.8.0',
-			file_name: 'scikit_learn-1.8.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl',
-			install_dir: 'site',
-			sha256: '2222222222222222222222222222222222222222222222222222222222222222',
-			package_type: 'package',
-			imports: ['sklearn'],
-			depends: []
-		}
+const lockFilename = 'pyodide-lock.json';
+const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const packages = Object.fromEntries(
+	Object.entries(committedLock.packages).map(([name, entry]) => [
+		name,
+		{ ...entry, sha256: digest(entry.file_name) }
+	])
+);
+const bundledPackages = Object.fromEntries(
+	Object.keys(installedLock.packages).map((name) => [name, packages[name]])
+);
+const lockText = JSON.stringify({ ...committedLock, packages }, null, 2);
+
+const registry = new Map(
+	Object.entries(packages).map(([name, entry]) => [
+		`https://pypi.org/pypi/${name.replace(/_/g, '-')}/${entry.version}/json`,
+		entry
+	])
+);
+const transitiveWheel = packages['python-dateutil'].file_name;
+let directory: string;
+let runtimeDirectory: string;
+let outputDirectory: string;
+let outputLock: string;
+
+const fetchWheel = vi.fn(async (url: string) => {
+	const metadata = registry.get(url);
+	if (metadata) {
+		return Response.json({
+			urls: [
+				{
+					filename: metadata.file_name,
+					digests: { sha256: metadata.sha256 },
+					url: `https://files.pythonhosted.org/${metadata.file_name}`
+				}
+			]
+		});
 	}
-};
-
-test('findLockedPackage matches the lock key spellings used in the real file', () => {
-	assert.equal(findLockedPackage(lockData, 'black')?.version, '26.5.1');
-	assert.equal(findLockedPackage(lockData, 'scikit-learn')?.version, '1.8.0');
-	// The script lists this package as `mypy_extensions`, but a hyphenated
-	// lookup must find the same entry (and vice versa).
-	assert.equal(findLockedPackage(lockData, 'mypy-extensions')?.version, '1.1.0');
-	assert.equal(findLockedPackage(lockData, 'not-a-package'), undefined);
-	assert.equal(findLockedPackage(null, 'black'), undefined);
+	return new Response(url.split('/').at(-1));
 });
 
-test('pinnedInstallSpec pins installs to the locked version (#675)', () => {
-	assert.equal(pinnedInstallSpec(lockData, 'black'), 'black==26.5.1');
-	assert.equal(pinnedInstallSpec(lockData, 'scikit-learn'), 'scikit-learn==1.8.0');
-	// A package the lock does not record keeps the bare name.
-	assert.equal(pinnedInstallSpec(lockData, 'not-a-package'), 'not-a-package');
-	assert.equal(pinnedInstallSpec(null, 'black'), 'black');
-});
-
-test('pypiMetadataUrl asks PyPI for the locked version, not the latest (#675)', () => {
-	assert.equal(pypiMetadataUrl(lockData, 'black'), 'https://pypi.org/pypi/black/26.5.1/json');
-	assert.equal(
-		pypiMetadataUrl(lockData, 'mypy_extensions'),
-		'https://pypi.org/pypi/mypy_extensions/1.1.0/json'
+beforeEach(async () => {
+	directory = await mkdtemp(join(tmpdir(), 'pyodide-prepare-'));
+	runtimeDirectory = join(directory, 'runtime');
+	outputDirectory = join(directory, 'output');
+	outputLock = join(outputDirectory, lockFilename);
+	await mkdir(runtimeDirectory);
+	await mkdir(outputDirectory);
+	await writeFile(outputLock, lockText);
+	await writeFile(join(runtimeDirectory, 'package.json'), JSON.stringify({ version }));
+	await writeFile(
+		join(runtimeDirectory, lockFilename),
+		JSON.stringify({ ...installedLock, packages: bundledPackages })
 	);
-	// Only a package missing from the lock falls back to the latest endpoint.
-	assert.equal(
-		pypiMetadataUrl(lockData, 'not-a-package'),
-		'https://pypi.org/pypi/not-a-package/json'
-	);
+	fetchWheel.mockClear();
+	vi.stubGlobal('fetch', fetchWheel);
+	vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
-test('missingLockFiles reports exactly the locked files absent from disk', () => {
-	// Scoped to named packages: only their files are required to exist.
-	assert.deepEqual(missingLockFiles(lockData, [], ['black', 'mypy_extensions']), [
-		'black-26.5.1-py3-none-any.whl',
-		'mypy_extensions-1.1.0-py3-none-any.whl'
+afterEach(async () => {
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+	await rm(directory, { recursive: true, force: true });
+});
+
+test('preparation preserves the lock and restores an absent transitive wheel', async () => {
+	await preparePyodide({ runtimeDirectory, outputDirectory });
+	const inventory = await readdir(outputDirectory);
+	for (const name of ['seaborn', 'openpyxl', 'et-xmlfile', 'python-dateutil']) {
+		expect(inventory).toContain(packages[name].file_name);
+	}
+	expect(await readFile(outputLock, 'utf8')).toBe(lockText);
+
+	fetchWheel.mockClear();
+	await rm(join(outputDirectory, transitiveWheel));
+	await preparePyodide({ runtimeDirectory, outputDirectory });
+	expect(fetchWheel.mock.calls).toEqual([
+		[`https://cdn.jsdelivr.net/pyodide/v${version}/full/${transitiveWheel}`]
 	]);
-	assert.deepEqual(
-		missingLockFiles(lockData, ['black-26.5.1-py3-none-any.whl'], ['black', 'not-a-package']),
-		[]
+	expect(await readdir(outputDirectory)).toEqual(inventory);
+	expect(await readFile(outputLock, 'utf8')).toBe(lockText);
+});
+
+test('stale runtime cleanup preserves the lock and replaces generated files', async () => {
+	await writeFile(join(outputDirectory, 'package.json'), JSON.stringify({ version: 'old' }));
+	await writeFile(join(outputDirectory, 'stale-wheel.whl'), 'old');
+	await preparePyodide({ runtimeDirectory, outputDirectory });
+	expect(await readdir(outputDirectory)).not.toContain('stale-wheel.whl');
+	expect(await readFile(join(outputDirectory, 'package.json'), 'utf8')).toBe(
+		JSON.stringify({ version })
 	);
-	// Unscoped: every file the lock records.
-	assert.deepEqual(missingLockFiles(lockData, []), [
-		'black-26.5.1-py3-none-any.whl',
-		'mypy_extensions-1.1.0-py3-none-any.whl',
-		'scikit_learn-1.8.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl'
-	]);
-	assert.deepEqual(
-		missingLockFiles(lockData, [
-			'black-26.5.1-py3-none-any.whl',
-			'mypy_extensions-1.1.0-py3-none-any.whl',
-			'scikit_learn-1.8.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl',
-			'pyodide-lock.json'
-		]),
-		[]
+	expect(await readFile(outputLock, 'utf8')).toBe(lockText);
+});
+
+test('an incompatible lock fails before cache cleanup or downloads', async () => {
+	const incompatibleLock = JSON.stringify({
+		...committedLock,
+		info: { ...committedLock.info, python: '3.13.0' }
+	});
+	await writeFile(outputLock, incompatibleLock);
+	await writeFile(join(outputDirectory, 'package.json'), JSON.stringify({ version: 'old' }));
+	await expect(preparePyodide({ runtimeDirectory, outputDirectory })).rejects.toThrow(
+		'Pyodide lock python does not match installed runtime'
 	);
-	assert.deepEqual(missingLockFiles(null, []), []);
+	expect(fetchWheel).not.toHaveBeenCalled();
+	expect(await readFile(join(outputDirectory, 'package.json'), 'utf8')).toBe(
+		JSON.stringify({ version: 'old' })
+	);
+	expect(await readFile(outputLock, 'utf8')).toBe(incompatibleLock);
+});
+
+test('a failed required wheel download rejects preparation and preserves the lock', async () => {
+	vi.stubGlobal('fetch', async (url: string) =>
+		url.endsWith(`/${transitiveWheel}`) ? new Response(null, { status: 503 }) : fetchWheel(url)
+	);
+	await expect(preparePyodide({ runtimeDirectory, outputDirectory })).rejects.toThrow(
+		`${transitiveWheel} download returned HTTP 503`
+	);
+	expect(await readdir(outputDirectory)).not.toContain(transitiveWheel);
+	expect(await readdir(outputDirectory)).not.toContain('package.json');
+	expect(await readFile(outputLock, 'utf8')).toBe(lockText);
+});
+
+test('a different wheel filename cannot satisfy a pinned PyPI entry', async () => {
+	const entry = packages.openpyxl;
+	vi.stubGlobal('fetch', async (url: string) => {
+		expect(url).toBe(`https://pypi.org/pypi/openpyxl/${entry.version}/json`);
+		return Response.json({
+			urls: [{ filename: 'other-py3-none-any.whl', digests: { sha256: entry.sha256 } }]
+		});
+	});
+	await expect(preparePyodide({ runtimeDirectory, outputDirectory })).rejects.toThrow(
+		`PyPI is missing the locked wheel ${entry.file_name}`
+	);
+	expect(await readdir(outputDirectory)).toEqual([lockFilename]);
 });
