@@ -17,6 +17,15 @@ export type ShellVariant = 'tabs' | 'sidebar';
 type StorageLike = Pick<Storage, 'getItem'>;
 
 /**
+ * Whether the redesigned chrome is on for this page: the switch is on and the
+ * page is not one of the sign-in routes (sign-in and forced password change),
+ * which keep today's chrome.
+ */
+export function sidebarChromeOn(shell: ShellVariant, authExempt: boolean): boolean {
+	return shell === 'sidebar' && !authExempt;
+}
+
+/**
  * The chrome to render. `getStorage` is called inside the guard because
  * merely reading `window.localStorage` can throw (blocked site data, some
  * private windows); every failure falls back to today's chrome.

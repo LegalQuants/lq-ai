@@ -15,7 +15,7 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { authApi } from '$lib/lq-ai/api';
 	import { LQAIApiError, PasswordChangeRequiredError } from '$lib/lq-ai/api/client';
-	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
+	import ShellAttribution from '$lib/lq-ai/components/ShellAttribution.svelte';
 	import TopTabBar from '$lib/lq-ai/components/TopTabBar.svelte';
 	import AmbientTrustChrome from '$lib/lq-ai/components/AmbientTrustChrome.svelte';
 	import SessionTimeoutWarning from '$lib/lq-ai/components/SessionTimeoutWarning.svelte';
@@ -23,7 +23,7 @@
 	import ShellSidebar from '$lib/lq-ai/components/ShellSidebar.svelte';
 	import PageHeader from '$lib/lq-ai/components/PageHeader.svelte';
 	import RightSidebar from '$lib/lq-ai/components/RightSidebar.svelte';
-	import { readShellSwitch, type ShellVariant } from '$lib/lq-ai/shell';
+	import { readShellSwitch, sidebarChromeOn, type ShellVariant } from '$lib/lq-ai/shell';
 	import { autonomousChromeEnabled, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
@@ -75,7 +75,7 @@
 	onMount(() => {
 		shell = readShellSwitch();
 	});
-	$: sidebarChrome = shell === 'sidebar' && !isAuthExempt(pathname);
+	$: sidebarChrome = sidebarChromeOn(shell, isAuthExempt(pathname));
 
 	onMount(() => {
 		// Layouts survive client-side sign-in/navigation. Sync each new signed-in user,
@@ -139,9 +139,8 @@
 		</main>
 		{#if sidebarChrome}
 			<RightSidebar {pathname} />
-		{:else}
-			<DualBrandingFooter />
 		{/if}
+		<ShellAttribution {sidebarChrome} />
 		<SessionTimeoutWarning />
 	</div>
 {/if}
@@ -175,7 +174,7 @@
 	.lq-shell-sidebar {
 		display: grid;
 		grid-template-columns: auto minmax(0, 1fr) auto;
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr) auto;
 	}
 	.lq-shell-sidebar > :global(.lq-sidebar) {
 		grid-column: 1;
@@ -188,6 +187,13 @@
 	.lq-shell-sidebar main {
 		grid-column: 2;
 		grid-row: 2;
+		min-width: 0;
+	}
+	/* The attribution footer below the page, present only while the left
+	   sidebar is collapsed to its strip (see ShellAttribution). */
+	.lq-shell-sidebar > :global([data-testid='lq-ai-dual-branding-footer']) {
+		grid-column: 2;
+		grid-row: 3;
 		min-width: 0;
 	}
 	.lq-shell-sidebar > :global(.lq-right-sidebar) {
