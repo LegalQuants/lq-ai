@@ -231,7 +231,7 @@
 
 	$: bubbleClasses =
 		message.role === 'user'
-			? 'lq-t-primary-bg lq-t-on-accent self-end'
+			? 'lq-t-user-bubble lq-t-text self-end'
 			: message.role === 'assistant'
 				? 'lq-t-canvas lq-t-text border lq-t-border self-start'
 				: 'lq-t-inset lq-t-text2 self-center text-sm';
@@ -463,11 +463,10 @@
 	.lq-t-inset {
 		background-color: var(--lq-inset);
 	}
-	.lq-t-on-accent {
-		color: var(--lq-on-accent);
-	}
-	.lq-t-primary-bg {
-		background-color: var(--lq-accent);
+	/* The person's own message: ink on the muted surface, not an ink fill (ADR 0045,
+	   the redesign pictures; tokens.json: lq-surface is the user's message bubble). */
+	.lq-t-user-bubble {
+		background-color: var(--lq-surface-muted);
 	}
 	.lq-t-text {
 		color: var(--lq-text);

@@ -68,6 +68,12 @@ describe('governance signals (ADR 0045 §1)', () => {
 		expect(rule(src, '.lq-tier-chip')).toContain('color: var(--lq-governance)');
 	});
 
+	it("draws the person's own message on the muted surface, not as an ink fill", () => {
+		const src = source('MessageBubble.svelte');
+		expect(src).toContain("? 'lq-t-user-bubble lq-t-text self-end'");
+		expect(rule(src, '.lq-t-user-bubble')).toContain('background-color: var(--lq-surface-muted)');
+	});
+
 	it('colours the Trust & Privacy entry points and nothing else in the sidebar', () => {
 		const sidebar = source('ShellSidebar.svelte');
 		expect(sidebar).toContain(".lq-sidebar-row[data-nav-id='trust'] :global(svg)");
