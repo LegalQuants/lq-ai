@@ -2,6 +2,8 @@
   import { filesApi, projectsApi } from '$lib/lq-ai/api';
   import type { FileMeta, Project } from '$lib/lq-ai/types';
   import { onMount } from 'svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
   export let onMatterUpdate: (next: Project) => void = () => {};
@@ -109,7 +111,7 @@
 
 <section class="mrf-section" data-testid="matter-rail-files">
   <header class="mrf-header">
-    <h3 class="lq-text-panel-h mrf-title">Files</h3>
+    <LqTitle order={3} size="16" weight="semibold" tone="primary" class="mrf-title">Files</LqTitle>
     <button
       type="button"
       class="mrf-btn-attach"
@@ -126,15 +128,15 @@
   {/if}
 
   {#if loadingAttached}
-    <p class="lq-text-caption mrf-empty">Loading files…</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrf-empty">Loading files…</LqText>
   {:else if attachedFiles.length === 0 && !pickerOpen}
-    <p class="lq-text-caption mrf-empty">No files attached.</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrf-empty">No files attached.</LqText>
   {:else}
     <ul class="mrf-file-list">
       {#each attachedFiles as file (file.id)}
         <li class="mrf-file-row">
-          <span class="mrf-file-name lq-text-body-sm" title={file.filename}>{file.filename}</span>
-          <span class="mrf-file-size lq-text-caption">{formatBytes(file.size_bytes)}</span>
+          <LqText as="span" size="13.5" tone="primary" class="mrf-file-name" title={file.filename}>{file.filename}</LqText>
+          <LqText as="span" size="12" tone="tertiary" class="mrf-file-size">{formatBytes(file.size_bytes)}</LqText>
           <button
             type="button"
             class="mrf-btn-detach"
@@ -152,9 +154,9 @@
   {#if pickerOpen}
     <div id="mrf-picker" class="mrf-picker" role="listbox" aria-label="Available files to attach">
       {#if loadingAvailable}
-        <p class="lq-text-caption mrf-empty">Loading your files…</p>
+        <LqText as="p" size="12" tone="tertiary" class="mrf-empty">Loading your files…</LqText>
       {:else if availableFiles.length === 0}
-        <p class="lq-text-caption mrf-empty">No files available to attach.</p>
+        <LqText as="p" size="12" tone="tertiary" class="mrf-empty">No files available to attach.</LqText>
       {:else}
         <ul class="mrf-available-list">
           {#each availableFiles as file (file.id)}
@@ -165,10 +167,10 @@
                 on:click={() => attachFile(file)}
                 disabled={attachingId === file.id}
               >
-                <span class="mrf-file-name lq-text-body-sm">{file.filename}</span>
-                <span class="mrf-file-size lq-text-caption">{formatBytes(file.size_bytes)}</span>
+                <LqText as="span" size="13.5" tone="primary" class="mrf-file-name">{file.filename}</LqText>
+                <LqText as="span" size="12" tone="tertiary" class="mrf-file-size">{formatBytes(file.size_bytes)}</LqText>
                 {#if attachingId === file.id}
-                  <span class="lq-text-caption mrf-attaching">Attaching…</span>
+                  <LqText as="span" size="12" tone="accent" class="mrf-attaching">Attaching…</LqText>
                 {/if}
               </button>
             </li>
@@ -195,12 +197,11 @@
     gap: var(--lq-space-2);
   }
 
-  .mrf-title {
+  .mrf-header :global(.mrf-title) {
     margin: 0;
   }
 
-  .mrf-empty {
-    color: var(--lq-text-tertiary);
+  .mrf-section :global(.mrf-empty) {
     padding: var(--lq-space-1) 0;
   }
 
@@ -256,16 +257,14 @@
     border-radius: var(--lq-radius);
   }
 
-  .mrf-file-name {
+  .mrf-section :global(.mrf-file-name) {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--lq-text);
   }
 
-  .mrf-file-size {
-    color: var(--lq-text-tertiary);
+  .mrf-section :global(.mrf-file-size) {
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -346,8 +345,7 @@
     outline-offset: 2px;
   }
 
-  .mrf-attaching {
-    color: var(--lq-accent);
+  .mrf-available-item :global(.mrf-attaching) {
     flex-shrink: 0;
   }
 </style>

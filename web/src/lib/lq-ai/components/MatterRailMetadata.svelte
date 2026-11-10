@@ -46,6 +46,8 @@
 <script lang="ts">
   import { projectsApi } from '$lib/lq-ai/api';
   import TrustPill from './TrustPill.svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
   export let onMatterUpdate: (next: Project) => void = () => {};
@@ -155,7 +157,7 @@
 
 <section class="mrm-section" data-testid="matter-rail-metadata">
   <header class="mrm-header">
-    <h2 class="lq-text-panel-h mrm-title">{matter.name}</h2>
+    <LqTitle order={2} size="16" weight="semibold" tone="primary" class="mrm-title">{matter.name}</LqTitle>
     {#if !editing && !isArchived}
       <button type="button" class="mrm-btn-edit" on:click={enterEdit} aria-label="Edit matter metadata">
         Edit
@@ -165,11 +167,11 @@
 
   {#if !editing}
     <!-- View mode -->
-    <p class="lq-text-caption mrm-slug" title="Matter ID">/{matter.slug}</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrm-slug" title="Matter ID">/{matter.slug}</LqText>
 
-    <p class="lq-text-body mrm-description">
+    <LqText as="p" size="14" tone="secondary" class="mrm-description">
       {matter.description ?? '(no description)'}
-    </p>
+    </LqText>
 
     {#if matter.privileged || tierLabel}
       <div class="mrm-badges">
@@ -192,9 +194,9 @@
     {#if !isArchived && canArchive(matter)}
       {#if archiveConfirming}
         <div class="mrm-archive-confirm" role="alert">
-          <p class="lq-text-body-sm mrm-archive-msg">
+          <LqText as="p" size="13.5" tone="secondary" class="mrm-archive-msg">
             Archive this matter? Chats inside survive with their project link intact.
-          </p>
+          </LqText>
           {#if archiveError}
             <p class="mrm-error" role="alert">{archiveError}</p>
           {/if}
@@ -330,7 +332,7 @@
     gap: var(--lq-space-2);
   }
 
-  .mrm-title {
+  .mrm-header :global(.mrm-title) {
     margin: 0;
     overflow: hidden;
     display: -webkit-box;
@@ -340,13 +342,11 @@
     flex: 1;
   }
 
-  .mrm-slug {
-    color: var(--lq-text-tertiary);
+  .mrm-section :global(.mrm-slug) {
     margin: 0;
   }
 
-  .mrm-description {
-    color: var(--lq-text-secondary);
+  .mrm-section :global(.mrm-description) {
     margin: 0;
   }
 
@@ -392,9 +392,8 @@
     margin-top: var(--lq-space-2);
   }
 
-  .mrm-archive-msg {
+  .mrm-archive-confirm :global(.mrm-archive-msg) {
     margin: 0;
-    color: var(--lq-text-secondary);
   }
 
   .mrm-archive-actions {

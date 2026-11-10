@@ -92,8 +92,8 @@ describe('governance signals (ADR 0045 §1)', () => {
 		const sidebar = source('ShellSidebar.svelte');
 		expect(sidebar).toContain(".lq-sidebar-row[data-nav-id='trust'] :global(svg)");
 		expect(sidebar.match(/--lq-governance/g)).toHaveLength(1);
-		expect(source('GuidedDashboardTrustPanel.svelte')).toContain(
-			'href="/lq-ai/trust"\n      class="lq-text-body"\n      style="color: var(--lq-governance);'
+		expect(source('GuidedDashboardTrustPanel.svelte')).toMatch(
+			/<LqText\s+as="a"\s+size="14"\s+tone="governance"\s+href="\/lq-ai\/trust"/
 		);
 	});
 });
