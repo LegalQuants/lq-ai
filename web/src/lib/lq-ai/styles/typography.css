@@ -20,14 +20,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Type scale per spec §5.4. ADR 0045's scale replaces these in a later change
-   that migrates them to LqText and LqTitle. */
-.lq-text-label    { font-size: 12px;   font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lq-text-tertiary); }
-.lq-text-caption  { font-size: 12px;   color: var(--lq-text-tertiary); }
-.lq-text-body-sm  { font-size: 13.5px; color: var(--lq-text); }
-.lq-text-body     { font-size: 14px;   color: var(--lq-text); }
-.lq-text-panel-h  { font-size: 16px;   font-weight: 600; color: var(--lq-text); }
-.lq-text-page-h   { font-size: 18px;   font-weight: 600; color: var(--lq-text); }
-.lq-text-welcome  { font-size: 22px;   font-weight: 500; color: var(--lq-text); }
+/* The type scale (ADR 0045 §4) lives in LqText and LqTitle
+   (components/shared/types.ts, LQ_TYPE_SCALE). The .lq-text-label, -caption,
+   -body-sm, -body, -panel-h, -page-h and -welcome classes were migrated to them
+   and removed; the token guard keeps them out. */
 
 .lq-tabular { font-variant-numeric: tabular-nums; }
