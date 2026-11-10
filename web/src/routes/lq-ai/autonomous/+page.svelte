@@ -570,7 +570,7 @@
 	.empty-link {
 		font-style: normal;
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 
 	.empty-link:hover {

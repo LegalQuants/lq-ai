@@ -312,6 +312,8 @@
 		width: 100%;
 		text-align: left;
 		margin: 0.5rem 0;
+		/* A two-line selectable row, not a button shape: the list-tile radius. */
+		border-radius: var(--lq-radius-input);
 	}
 	.matter span,
 	.member span {

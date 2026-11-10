@@ -72,7 +72,7 @@
 </script>
 
 <div
-	class="min-h-screen flex flex-col lq-t-canvas lq-t-text"
+	class="min-h-screen flex flex-col lq-login-ground lq-t-text"
 	data-testid="lq-ai-login-page"
 >
 	<main class="flex-1 flex items-center justify-center">
@@ -172,6 +172,11 @@
 </div>
 
 <style>
+	/* The page is the inset grey and the card raised white, as the redesign draws it. */
+	.lq-login-ground {
+		background-color: var(--lq-inset);
+	}
+
 	.lq-form-card {
 		padding: var(--lq-space-6);
 		border-radius: var(--lq-radius-lg);

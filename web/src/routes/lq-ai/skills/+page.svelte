@@ -312,7 +312,7 @@
 
 	.lq-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 	.lq-link:hover { text-decoration: underline; }
 

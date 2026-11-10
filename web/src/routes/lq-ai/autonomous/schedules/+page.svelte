@@ -706,7 +706,7 @@
 
 	.empty-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 		font-style: normal;
 	}
 

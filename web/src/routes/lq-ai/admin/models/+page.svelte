@@ -259,6 +259,7 @@
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
+		white-space: nowrap;
 	}
 	.lq-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
