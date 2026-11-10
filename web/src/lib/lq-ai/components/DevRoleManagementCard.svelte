@@ -487,7 +487,7 @@
 		margin-top: var(--lq-space-2);
 	}
 	.password-display {
-		font-family: var(--lq-font-mono, monospace);
+		font-family: var(--lq-font-mono);
 	}
 	button:focus-visible,
 	input:focus-visible,
