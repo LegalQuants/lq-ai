@@ -18,15 +18,16 @@ const packages = [
 	'openpyxl'
 ];
 
-// Pure-Python packages whose wheels must be downloaded from PyPI and saved into
-// static/pyodide/ so that the browser can install them offline via micropip.
-// Packages already provided by the Pyodide distribution (click, platformdirs,
-// typing_extensions, etc.) do NOT need to be listed here.
-const pypiPackages = ['black', 'pathspec', 'mypy_extensions', 'pytokens'];
-
-import { loadPyodide } from 'pyodide';
+import { createHash, randomUUID } from 'node:crypto';
+import { copyFile, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { setGlobalDispatcher, ProxyAgent } from 'undici';
-import { writeFile, readFile, copyFile, readdir, rmdir, access } from 'fs/promises';
+
+const lockFilename = 'pyodide-lock.json';
+const normalize = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
 /**
  * Loading network proxy configurations from the environment variables.
@@ -58,144 +59,128 @@ function initNetworkProxyFromEnv() {
 	console.log(`Initialized network proxy "${preferedProxy}" from env`);
 }
 
-async function downloadPackages() {
-	console.log('Setting up pyodide + micropip');
-
-	let pyodide;
-	try {
-		pyodide = await loadPyodide({
-			packageCacheDir: 'static/pyodide'
-		});
-	} catch (err) {
-		console.error('Failed to load Pyodide:', err);
-		return;
-	}
-
-	const packageJson = JSON.parse(await readFile('package.json'));
-	const pyodideVersion = packageJson.dependencies.pyodide.replace('^', '');
-
-	try {
-		const pyodidePackageJson = JSON.parse(await readFile('static/pyodide/package.json'));
-		const pyodidePackageVersion = pyodidePackageJson.version.replace('^', '');
-
-		if (pyodideVersion !== pyodidePackageVersion) {
-			console.log('Pyodide version mismatch, removing static/pyodide directory');
-			await rmdir('static/pyodide', { recursive: true });
+function lockedWheels(lock, runtimeLock, version) {
+	for (const key of ['abi_version', 'arch', 'platform', 'python']) {
+		if (!lock.info?.[key] || lock.info[key] !== runtimeLock.info?.[key]) {
+			throw new Error(`Pyodide lock ${key} does not match installed runtime ${version}`);
 		}
-	} catch (err) {
-		console.log('Pyodide package not found, proceeding with download.', err);
 	}
 
-	try {
-		console.log('Loading micropip package');
-		await pyodide.loadPackage('micropip');
+	const entries = new Map(
+		Object.entries(lock.packages).map(([name, entry]) => [normalize(name), entry])
+	);
+	const runtimeEntries = new Map(
+		Object.entries(runtimeLock.packages).map(([name, entry]) => [normalize(name), entry])
+	);
+	const wheels = new Map();
+	const pending = [...packages];
+	while (pending.length) {
+		const name = normalize(pending.pop());
+		if (wheels.has(name)) continue;
 
-		const micropip = pyodide.pyimport('micropip');
-		console.log('Downloading Pyodide packages:', packages);
+		const entry = entries.get(name);
+		if (
+			!entry?.version ||
+			!/^[\w.-]+\.whl$/.test(entry.file_name) ||
+			!/^[a-f0-9]{64}$/.test(entry.sha256) ||
+			!Array.isArray(entry.depends)
+		) {
+			throw new Error(`Missing or invalid Pyodide lock entry for ${name}`);
+		}
 
-		try {
-			for (const pkg of packages) {
-				console.log(`Installing package: ${pkg}`);
-				await micropip.install(pkg);
+		const bundled = runtimeEntries.get(name);
+		if (bundled) {
+			if (
+				bundled.version !== entry.version ||
+				bundled.file_name !== entry.file_name ||
+				bundled.sha256 !== entry.sha256
+			) {
+				throw new Error(`Locked ${name} does not match Pyodide ${version}'s wheel`);
 			}
-		} catch (err) {
-			console.error('Package installation failed:', err);
-			return;
+		} else if (!/-(?:py2\.)?py3-none-any\.whl$/.test(entry.file_name)) {
+			throw new Error(`Locked ${name} is not a pure Python wheel for Pyodide ${version}`);
 		}
 
-		console.log('Pyodide packages downloaded, freezing into lock file');
-
-		try {
-			const lockFile = await micropip.freeze();
-			await writeFile('static/pyodide/pyodide-lock.json', lockFile);
-		} catch (err) {
-			console.error('Failed to write lock file:', err);
-		}
-	} catch (err) {
-		console.error('Failed to load or install micropip:', err);
+		wheels.set(name, { entry, bundled });
+		pending.push(...entry.depends);
 	}
+	return wheels;
 }
 
-async function copyPyodide() {
-	console.log('Copying Pyodide files into static directory');
-	// Copy all files from node_modules/pyodide to static/pyodide
-	for await (const entry of await readdir('node_modules/pyodide')) {
-		await copyFile(`node_modules/pyodide/${entry}`, `static/pyodide/${entry}`);
-	}
+async function wheelUrl(name, entry, bundled, version) {
+	if (bundled) return `https://cdn.jsdelivr.net/pyodide/v${version}/full/${entry.file_name}`;
+
+	const response = await fetch(
+		`https://pypi.org/pypi/${encodeURIComponent(name)}/${encodeURIComponent(entry.version)}/json`
+	);
+	if (!response.ok) throw new Error(`PyPI metadata for ${name} returned HTTP ${response.status}`);
+
+	const { urls } = await response.json();
+	const wheel = urls?.find(
+		(file) => file.filename === entry.file_name && file.digests?.sha256 === entry.sha256
+	);
+	if (!wheel) throw new Error(`PyPI is missing the locked wheel ${entry.file_name}`);
+	return wheel.url;
 }
 
-/**
- * Download pure-Python wheels from PyPI and save them into static/pyodide/.
- * Also injects entries into pyodide-lock.json so that micropip resolves these
- * packages from the local server instead of fetching them from the internet.
- */
-async function downloadPyPIWheels() {
-	const lockPath = 'static/pyodide/pyodide-lock.json';
-	let lockData;
+async function ensureWheel(directory, name, entry, bundled, version) {
+	const path = join(directory, entry.file_name);
 	try {
-		lockData = JSON.parse(await readFile(lockPath, 'utf-8'));
-	} catch {
-		console.warn('Could not read pyodide-lock.json, skipping PyPI wheel download');
-		return;
+		if (sha256(await readFile(path)) === entry.sha256) return;
+	} catch (err) {
+		if (err.code !== 'ENOENT') throw err;
 	}
 
-	for (const pkg of pypiPackages) {
-		console.log(`Fetching PyPI metadata for: ${pkg}`);
-		const res = await fetch(`https://pypi.org/pypi/${pkg}/json`);
-		if (!res.ok) {
-			console.error(`Failed to fetch PyPI metadata for ${pkg}: ${res.status}`);
-			continue;
-		}
-		const meta = await res.json();
-		const version = meta.info.version;
-		const files = meta.urls || [];
-		// Find the pure-Python wheel (py3-none-any)
-		const wheel = files.find(
-			(f) => f.filename.endsWith('.whl') && f.filename.includes('py3-none-any')
-		);
-		if (!wheel) {
-			console.warn(`No pure-Python wheel found for ${pkg}==${version}, skipping`);
-			continue;
-		}
-		const dest = `static/pyodide/${wheel.filename}`;
-		// Download wheel if not already present
-		try {
-			await access(dest);
-			console.log(`  Already exists: ${wheel.filename}`);
-		} catch {
-			console.log(`  Downloading: ${wheel.filename}`);
-			const wheelRes = await fetch(wheel.url);
-			if (!wheelRes.ok) {
-				console.error(`  Failed to download ${wheel.filename}: ${wheelRes.status}`);
-				continue;
-			}
-			const buffer = Buffer.from(await wheelRes.arrayBuffer());
-			await writeFile(dest, buffer);
-			console.log(`  Saved: ${dest} (${buffer.length} bytes)`);
-		}
+	console.log(`Downloading ${entry.file_name}`);
+	const response = await fetch(await wheelUrl(name, entry, bundled, version));
+	if (!response.ok) throw new Error(`${entry.file_name} download returned HTTP ${response.status}`);
 
-		// Inject into pyodide-lock.json so micropip resolves locally
-		const normalizedName = pkg.replace(/-/g, '_');
-		if (!lockData.packages[normalizedName]) {
-			lockData.packages[normalizedName] = {
-				name: normalizedName,
-				version: version,
-				file_name: wheel.filename,
-				install_dir: 'site',
-				sha256: wheel.digests?.sha256 || '',
-				package_type: 'package',
-				imports: [normalizedName],
-				depends: []
-			};
-			console.log(`  Added ${normalizedName}==${version} to pyodide-lock.json`);
-		}
+	const bytes = Buffer.from(await response.arrayBuffer());
+	if (sha256(bytes) !== entry.sha256) throw new Error(`SHA-256 mismatch for ${entry.file_name}`);
+
+	const temporaryPath = `${path}.${randomUUID()}.tmp`;
+	try {
+		await writeFile(temporaryPath, bytes);
+		await rename(temporaryPath, path);
+	} finally {
+		await rm(temporaryPath, { force: true });
 	}
-
-	await writeFile(lockPath, JSON.stringify(lockData, null, 2));
-	console.log('Updated pyodide-lock.json with PyPI packages');
 }
 
-initNetworkProxyFromEnv();
-await downloadPackages();
-await copyPyodide();
-await downloadPyPIWheels();
+export async function preparePyodide({
+	runtimeDirectory = 'node_modules/pyodide',
+	outputDirectory = 'static/pyodide'
+} = {}) {
+	const [lock, runtimeLock, { version }] = await Promise.all([
+		readJson(join(outputDirectory, lockFilename)),
+		readJson(join(runtimeDirectory, lockFilename)),
+		readJson(join(runtimeDirectory, 'package.json'))
+	]);
+	const wheels = lockedWheels(lock, runtimeLock, version);
+
+	const cachedRuntime = await readJson(join(outputDirectory, 'package.json')).catch((err) => {
+		if (err.code !== 'ENOENT') throw err;
+		return null;
+	});
+	if (cachedRuntime && cachedRuntime.version !== version) {
+		console.log('Pyodide version mismatch, removing generated cache files');
+		for (const entry of await readdir(outputDirectory)) {
+			if (entry === lockFilename) continue;
+			await rm(join(outputDirectory, entry), { recursive: true, force: true });
+		}
+	}
+
+	for (const [name, { entry, bundled }] of wheels) {
+		await ensureWheel(outputDirectory, name, entry, bundled, version);
+	}
+
+	for (const entry of await readdir(runtimeDirectory, { withFileTypes: true })) {
+		if (!entry.isFile() || entry.name === lockFilename) continue;
+		await copyFile(join(runtimeDirectory, entry.name), join(outputDirectory, entry.name));
+	}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	initNetworkProxyFromEnv();
+	await preparePyodide();
+}
