@@ -1712,7 +1712,7 @@
 		>
 			{#if activeChat}
 				<div>
-					<LqTitle order={5}>
+					<LqTitle order={5} size="16" leading="tight">
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
@@ -1731,7 +1731,7 @@
 					{/if}
 				</div>
 			{:else}
-				<LqText size="sm" tone="secondary">Pick or create a chat to start.</LqText>
+				<LqText size="sm" tone="secondary" leading="snug">Pick or create a chat to start.</LqText>
 			{/if}
 		</div>
 
@@ -1796,7 +1796,7 @@
 									title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
 									data-testid="lq-ai-sticky-toggle"
 								/>
-								<LqText size="xs" tone="secondary">Keep skills on</LqText>
+								<LqText size="xs" tone="secondary" leading="snug">Keep skills on</LqText>
 							</LqGroup>
 						{/if}
 					</div>

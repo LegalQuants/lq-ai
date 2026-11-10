@@ -75,9 +75,32 @@ export const LQ_WEIGHT_VAR: Record<LqWeight, string> = {
 	bold: '700'
 };
 
+// The type scale of ADR 0045 §4, in px. LqText and LqTitle carry this one
+// scale; each step is named by its size so a call site reads like the ADR's
+// table ("13.5" is navigation rows, buttons and pills; "20" is page titles).
+// "26" is not in the ADR's table: Houfu ruled on 11 November that the Home
+// greeting is 26 px (the ADR's row says 32).
+export const LQ_TYPE_SCALE = [
+	'11',
+	'12',
+	'12.5',
+	'13',
+	'13.5',
+	'14',
+	'14.5',
+	'16',
+	'20',
+	'24',
+	'26',
+	'32'
+] as const;
+export type LqTypeStep = (typeof LQ_TYPE_SCALE)[number];
+
 // Text-specific size scale. Deliberately separate from LqSize (Button's
-// sm/md/lg) — Text needs an xs/xl step Button has no CSS for.
-export const LQ_TEXT_SIZES = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
+// sm/md/lg). The named steps predate ADR 0045 and stay for their callers;
+// each now points at a step of the scale above (`xl` was 18 px, which is off
+// the scale, and moves to 20 px; nothing used it).
+export const LQ_TEXT_SIZES = ['xs', 'sm', 'md', 'lg', 'xl', ...LQ_TYPE_SCALE] as const;
 export type LqTextSize = (typeof LQ_TEXT_SIZES)[number];
 
 export const LQ_TEXT_SIZE_VAR: Record<LqTextSize, string> = {
@@ -85,8 +108,64 @@ export const LQ_TEXT_SIZE_VAR: Record<LqTextSize, string> = {
 	sm: '13px',
 	md: '14px',
 	lg: '16px',
-	xl: '18px'
+	xl: '20px',
+	'11': '11px',
+	'12': '12px',
+	'12.5': '12.5px',
+	'13': '13px',
+	'13.5': '13.5px',
+	'14': '14px',
+	'14.5': '14.5px',
+	'16': '16px',
+	'20': '20px',
+	'24': '24px',
+	'26': '26px',
+	'32': '32px'
 };
+
+// Letter spacing. `wide` is the uppercase label tracking (0.06em) that the
+// retired `.lq-text-label` class carried.
+export const LQ_TRACKINGS = ['normal', 'wide'] as const;
+export type LqTracking = (typeof LQ_TRACKINGS)[number];
+
+export const LQ_TRACKING_VAR: Record<LqTracking, string> = {
+	normal: 'normal',
+	wide: '0.06em'
+};
+
+// Line height. Unset, text keeps the line height it inherits, as the retired
+// `.lq-text-*` classes did; `tight` and `snug` are the values LqTitle and
+// LqText used to force, `relaxed` the long-form reading measure.
+export const LQ_LEADINGS = ['tight', 'snug', 'relaxed'] as const;
+export type LqLeading = (typeof LQ_LEADINGS)[number];
+
+export const LQ_LEADING_VAR: Record<LqLeading, string> = {
+	tight: '1.3',
+	snug: '1.4',
+	relaxed: '1.6'
+};
+
+// The elements LqText can render as: text containers whose own font size and
+// colour the retired classes used to set. Headings are LqTitle's.
+export const LQ_TEXT_ELEMENTS = [
+	'p',
+	'span',
+	'div',
+	'label',
+	'li',
+	'th',
+	'td',
+	'a',
+	'strong',
+	'code',
+	'legend',
+	'article',
+	'table'
+] as const;
+export type LqTextElement = (typeof LQ_TEXT_ELEMENTS)[number];
+
+export const LQ_TEXT_TRANSFORMS = ['none', 'uppercase', 'lowercase', 'capitalize'] as const;
+export type LqTextTransform = (typeof LQ_TEXT_TRANSFORMS)[number];
 
 // Text color: the text-hierarchy trio from practice.css (primary/secondary/
 // tertiary) plus the five semantic tones already used for emphasis/status
