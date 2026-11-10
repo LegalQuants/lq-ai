@@ -8,6 +8,7 @@
 	import { adminApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { ToolProviderStatus } from '$lib/lq-ai/api/admin';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	const LABELS: Record<string, string> = {
 		courtlistener: 'CourtListener (U.S. case law)',
@@ -134,7 +135,7 @@
 
 <div class="research-sources-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Research sources</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Research sources</LqTitle>
 		<p class="page-intro">
 			Enable the authority sources LQ.AI can cite. Keys are stored encrypted and never shown.
 			Changes apply immediately — no restart.

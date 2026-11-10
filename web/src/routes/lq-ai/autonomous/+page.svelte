@@ -32,6 +32,7 @@
 	import type { SkillSummary } from '$lib/lq-ai/types';
 	import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
 	import { formatCost, formatCreatedAt, isHaltable, statusPillClass } from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let sessions: AutonomousSessionRead[] = [];
 	let loading = false;
@@ -199,7 +200,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div class="page-header-copy">
-				<h1 class="lq-text-page-h">Autonomous sessions</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Autonomous sessions</LqTitle>
 				<p class="page-intro">
 					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal state.
 					Running sessions can be halted inline. Select a row to view the full receipt.
@@ -313,7 +314,14 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div class="modal-panel" on:click|stopPropagation on:keydown|stopPropagation>
-			<h2 id="run-modal-title" class="lq-text-page-h modal-title">Run a skill or playbook once</h2>
+			<LqTitle
+				order={2}
+				size="20"
+				weight="bold"
+				tone="primary"
+				id="run-modal-title"
+				class="modal-title">Run a skill or playbook once</LqTitle
+			>
 			<p class="modal-hint modal-lede">
 				This runs once now so you can see the result before arming a schedule or watch.
 			</p>
@@ -709,7 +717,7 @@
 		overflow-y: auto;
 	}
 
-	.modal-title {
+	.modal-panel :global(.modal-title) {
 		margin: 0 0 var(--lq-space-2);
 	}
 

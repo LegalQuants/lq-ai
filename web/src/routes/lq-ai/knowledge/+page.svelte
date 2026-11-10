@@ -62,6 +62,8 @@
 		createKnowledgeBase
 	} from '$lib/lq-ai/api/knowledgeBases';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 	// `KnowledgeBase` is imported in the module script above; Svelte merges
 	// the two script blocks at compile time, so re-importing here would
 	// duplicate-identifier under svelte-check (matches AttachKBModal pattern).
@@ -152,12 +154,12 @@
 <main class="lq-knowledge-page" data-testid="lq-ai-knowledge-page">
 	<header class="lq-page-header">
 		<div>
-			<h1 class="lq-text-page-h">Knowledge bases</h1>
-			<p class="lq-text-body lq-page-intro">
+			<LqTitle order={1} size="20" weight="bold" tone="primary">Knowledge bases</LqTitle>
+			<LqText as="p" size="14" tone="secondary" class="lq-page-intro">
 				Curated collections of documents your matters can search alongside the
 				prompt. Upload PDFs, attach them to a KB, and the hybrid retrieval
 				surface (vector + full-text) handles the rest.
-			</p>
+			</LqText>
 		</div>
 		<div class="lq-header-actions">
 			<a href="/lq-ai" class="lq-btn-secondary">Back to chat</a>
@@ -178,9 +180,9 @@
 			aria-label="Create knowledge base"
 			data-testid="lq-ai-knowledge-create-form"
 		>
-			<h2 class="lq-text-section-h">New knowledge base</h2>
+			<LqTitle order={2} size="14.5" weight="semibold" tone="primary">New knowledge base</LqTitle>
 			<label class="lq-field">
-				<span class="lq-text-label">Name</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Name</LqText>
 				<input
 					type="text"
 					bind:value={newName}
@@ -190,7 +192,7 @@
 				/>
 			</label>
 			<label class="lq-field">
-				<span class="lq-text-label">Description (optional)</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Description (optional)</LqText>
 				<textarea
 					bind:value={newDescription}
 					placeholder="What's in this KB? Where should it be used?"
@@ -227,12 +229,12 @@
 	{/if}
 
 	{#if loading}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</p>
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
 	{:else if kbs.length === 0}
 		<div class="lq-empty-state" data-testid="lq-ai-knowledge-empty">
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">
+			<LqText as="p" size="14" tone="secondary">
 				No knowledge bases yet. Create one to start collecting documents.
-			</p>
+			</LqText>
 			{#if !showCreateForm}
 				<button
 					type="button"
@@ -293,8 +295,7 @@
 		margin-bottom: var(--lq-space-5);
 	}
 
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
+	.lq-page-header :global(.lq-page-intro) {
 		margin-top: var(--lq-space-2);
 		max-width: 64ch;
 	}

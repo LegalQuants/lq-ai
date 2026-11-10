@@ -9,6 +9,8 @@
 	import SkillSourceView from '$lib/lq-ai/components/SkillSourceView.svelte';
 	import SkillTryItTab from '$lib/lq-ai/components/SkillTryItTab.svelte';
 	import SkillVersionsTab from '$lib/lq-ai/components/SkillVersionsTab.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	type Tab = 'use' | 'source' | 'try' | 'versions';
 	const VALID: Tab[] = ['use', 'source', 'try', 'versions'];
@@ -47,19 +49,18 @@
 
 <main style="padding: var(--lq-space-6); max-width: 1100px; margin: 0 auto;">
 	{#if error}
-		<p class="lq-text-body" style="color: var(--lq-error);">Couldn't load skill: {error}</p>
+		<LqText as="p" size="14" tone="danger">Couldn't load skill: {error}</LqText>
 	{:else if skill}
 		<header
 			style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--lq-space-4);"
 		>
 			<div>
-				<h1 class="lq-text-page-h">{skill.title ?? skill.name}</h1>
-				<p
-					class="lq-text-caption"
-					style="color: var(--lq-text-tertiary); margin-top: var(--lq-space-1);"
+				<LqTitle order={1} size="20" weight="bold" tone="primary"
+					>{skill.title ?? skill.name}</LqTitle
 				>
+				<LqText as="p" size="12" tone="tertiary" style="margin-top: var(--lq-space-1);">
 					{skill.name}{skill.version ? ` · v${skill.version}` : ''}
-				</p>
+				</LqText>
 			</div>
 			<div style="display: flex; gap: 8px;">
 				<a
@@ -79,9 +80,9 @@
 
 		<div style="margin-top: var(--lq-space-4);">
 			{#if activeTab === 'use'}
-				<article class="lq-text-body" style="white-space: pre-wrap;">
+				<LqText as="article" size="14" tone="primary" style="white-space: pre-wrap;">
 					{skill.description ?? '(no description)'}
-				</article>
+				</LqText>
 				{#if usageNote.uses.length > 0}
 					<div class="lq-tool-usage" data-testid="skill-tool-usage">
 						<span class="lq-tool-usage-label">Uses:</span>
@@ -110,7 +111,7 @@
 			{/if}
 		</div>
 	{:else}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading skill…</p>
+		<LqText as="p" size="14" tone="secondary">Loading skill…</LqText>
 	{/if}
 </main>
 

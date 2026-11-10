@@ -26,6 +26,7 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { ProjectContextProposalRead, ProposalState } from '$lib/lq-ai/api/autonomous';
 	import type { Project } from '$lib/lq-ai/types';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -228,7 +229,7 @@
 
 <div class="proposals-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Proposals</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Proposals</LqTitle>
 		<p class="page-intro">
 			Context proposals generated when a precedent is promoted to a project. Accept to append
 			the suggested text to the project's context, or reject to discard it. The agent never

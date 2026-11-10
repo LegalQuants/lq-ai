@@ -21,6 +21,7 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { PrecedentEntryRead } from '$lib/lq-ai/api/autonomous';
 	import type { Project } from '$lib/lq-ai/types';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -211,7 +212,7 @@
 
 <div class="precedents-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Precedents</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Precedents</LqTitle>
 		<p class="page-intro">
 			Patterns LQVern has observed across matters — recurring counterparty positions and
 			clause-language signals. Dismiss what is not relevant, or promote a pattern to a Project

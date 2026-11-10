@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 	/**
 	 * /lq-ai/autonomous/configure — Configure / education sub-tab (§4.2).
 	 *
@@ -15,7 +16,7 @@
 
 <div class="configure-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Configure autonomous</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Configure autonomous</LqTitle>
 		<p class="page-intro">
 			The autonomous layer lets LQVern run skills and playbooks on its own — on a schedule, when a
 			document arrives, or once on demand. It is opt-in and off by default. This page explains how

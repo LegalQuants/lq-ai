@@ -35,6 +35,7 @@
 	import type { Playbook } from '$lib/lq-ai/types';
 	import type { SkillSummary } from '$lib/lq-ai/types';
 	import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// List state
@@ -307,7 +308,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div>
-				<h1 class="lq-text-page-h">Watches</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Watches</LqTitle>
 				<p class="page-intro">
 					Document-arrival triggers. When a new file lands in a watched Knowledge Base, LQVern runs
 					the assigned playbook or skill automatically. The Knowledge Base is set at creation and
@@ -432,7 +433,7 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div class="modal-panel" on:click|stopPropagation on:keydown|stopPropagation>
-			<h2 id="watch-modal-title" class="lq-text-page-h modal-title">New watch</h2>
+			<LqTitle order={2} size="20" weight="bold" tone="primary" id="watch-modal-title" class="modal-title">New watch</LqTitle>
 
 			<form on:submit|preventDefault={handleSubmit} class="modal-form" novalidate>
 				<!-- Knowledge base (required + immutable after creation) -->
@@ -846,7 +847,7 @@
 		overflow-y: auto;
 	}
 
-	.modal-title {
+	.modal-panel :global(.modal-title) {
 		margin: 0 0 var(--lq-space-5);
 	}
 

@@ -24,6 +24,7 @@
 	import { autonomousApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousNotificationRead } from '$lib/lq-ai/api/autonomous';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -164,7 +165,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div>
-				<h1 class="lq-text-page-h">Notifications</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Notifications</LqTitle>
 				<p class="page-intro">
 					In-app notifications from LQVern autonomous sessions. Click an unread item or use "Mark
 					read" to dismiss it. Email delivery is handled separately per your notification settings.

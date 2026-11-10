@@ -16,6 +16,8 @@
 	 */
 	import { goto } from '$app/navigation';
 	import SavedPromptsPanel from '$lib/lq-ai/components/SavedPromptsPanel.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	function useInChat(text: string): void {
 		if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -27,12 +29,12 @@
 
 <main class="lq-saved-prompts-page" data-testid="lq-ai-saved-prompts-page">
 	<header class="lq-page-header">
-		<h1 class="lq-text-page-h">Saved prompts</h1>
-		<p class="lq-text-body lq-page-intro">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Saved prompts</LqTitle>
+		<LqText as="p" size="14" tone="secondary" class="lq-page-intro">
 			Reusable prompt fragments scoped to your account. Insert into a chat,
 			edit them in place, or promote one to a skill when a fragment outgrows
 			its prompt and starts deserving inputs / examples / a versioned home.
-		</p>
+		</LqText>
 	</header>
 
 	<SavedPromptsPanel alwaysOpen insertLabel="Use in chat" onInsert={useInChat} />
@@ -47,8 +49,7 @@
 	.lq-page-header {
 		margin-bottom: var(--lq-space-5);
 	}
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
+	.lq-page-header :global(.lq-page-intro) {
 		margin-top: var(--lq-space-2);
 		max-width: 60ch;
 	}

@@ -4,6 +4,8 @@
 	import { authApi, bootstrapApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let email = '';
 	let password = '';
@@ -87,13 +89,13 @@
 					LQ
 				</span>
 				<div>
-					<h1 class="lq-text-page-h">Sign in to LQ.AI</h1>
-					<p class="lq-text-caption" style="color: var(--lq-text-tertiary);">Open-Source Legal AI</p>
+					<LqTitle order={1} size="20" weight="bold" tone="primary">Sign in to LQ.AI</LqTitle>
+					<LqText as="p" size="12" tone="tertiary">Open-Source Legal AI</LqText>
 				</div>
 			</div>
 
 			<label class="block">
-				<span class="lq-text-label">Email</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Email</LqText>
 				<input
 					type="email"
 					autocomplete="username"
@@ -105,7 +107,7 @@
 			</label>
 
 			<label class="block">
-				<span class="lq-text-label">Password</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Password</LqText>
 				<input
 					type="password"
 					autocomplete="current-password"

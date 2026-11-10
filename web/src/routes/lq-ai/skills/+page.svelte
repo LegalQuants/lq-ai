@@ -18,6 +18,8 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { UserSkill, SkillSummary, TeamSummary } from '$lib/lq-ai/types';
 	import TrustPill from '$lib/lq-ai/components/TrustPill.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let rows: UserSkill[] = [];
 	let builtinSlugs = new Set<string>();
@@ -91,11 +93,11 @@
 <div class="p-4 max-w-5xl mx-auto" data-testid="lq-ai-user-skills">
 	<header class="mb-4 flex items-center justify-between">
 		<div>
-			<h1 class="lq-text-page-h">My skills</h1>
-			<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+			<LqTitle order={1} size="20" weight="bold" tone="primary">My skills</LqTitle>
+			<LqText as="p" size="12" tone="tertiary" class="mt-1">
 				Skills you can edit — your personal skills, plus team skills for any team where you're an
 				admin. A skill at the same slug as a built-in shadows the built-in for the relevant scope.
-			</p>
+			</LqText>
 		</div>
 		<div class="flex gap-2">
 			<a href="/lq-ai/skills/workspaces" class="lq-btn-secondary text-xs">Saved work</a>
@@ -134,27 +136,27 @@
 
 	{#if !loading && builtinTableSkills.length > 0}
 		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
-			<h2 class="lq-text-h4 mb-2">Reference table-mode skills</h2>
-			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
+			<LqTitle order={2} size="14.5" weight="semibold" tone="primary" class="mb-2">Reference table-mode skills</LqTitle>
+			<LqText as="p" size="12" tone="secondary" class="mb-3">
 				Built-in skills with <code>output_format: table</code> — usable from the
 				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>'s
 				skill picker. Paired with the synthetic corpus in
 				<code>docs/quickstart/</code> for first-run exploration.
-			</p>
+			</LqText>
 			<ul class="lq-table-skill-list">
 				{#each builtinTableSkills as s (s.name)}
 					<li class="lq-table-skill-card" data-testid="lq-ai-builtin-table-skill">
 						<div class="flex items-start justify-between gap-3">
 							<div class="min-w-0">
 								<div class="flex items-center gap-2 flex-wrap">
-									<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
+									<LqText as="span" size="14" weight="medium" tone="primary">{s.title ?? s.name}</LqText>
 									<span data-testid="lq-ai-table-badge">
 										<TrustPill variant="tier" label="Table" />
 									</span>
 								</div>
-								<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+								<LqText as="code" size="12" tone="secondary" class="font-mono">{s.name}</LqText>
 								{#if s.description}
-									<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
+									<LqText as="p" size="12" tone="tertiary" class="mt-1 line-clamp-2">{s.description}</LqText>
 								{/if}
 							</div>
 						</div>
@@ -165,30 +167,30 @@
 	{/if}
 
 	{#if loading}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</p>
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
 	{:else if rows.length === 0}
 		<div
 			class="lq-empty-state p-6 text-center"
 		>
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">You haven't created any skills yet.</p>
-			<p class="mt-2 lq-text-body">
+			<LqText as="p" size="14" tone="secondary">You haven't created any skills yet.</LqText>
+			<LqText as="p" size="14" tone="primary" class="mt-2">
 				<a href="/lq-ai/skills/new" class="lq-link">
 					Create your first skill
 				</a>
 				, or fork a built-in from the picker.
-			</p>
+			</LqText>
 		</div>
 	{:else}
 		<div class="lq-table-wrap overflow-x-auto">
-			<table class="min-w-full lq-text-body-sm">
+			<LqText as="table" size="13.5" tone="primary" class="min-w-full">
 				<thead class="lq-thead">
 					<tr>
-						<th class="text-left px-3 py-2 lq-text-label">Title</th>
-						<th class="text-left px-3 py-2 lq-text-label">Slug</th>
-						<th class="text-left px-3 py-2 lq-text-label">Scope</th>
-						<th class="text-left px-3 py-2 lq-text-label">Version</th>
-						<th class="text-left px-3 py-2 lq-text-label">Updated</th>
-						<th class="text-right px-3 py-2 lq-text-label">Actions</th>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Title</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Slug</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Scope</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Version</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Updated</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-right px-3 py-2">Actions</LqText>
 					</tr>
 				</thead>
 				<tbody class="lq-tbody">
@@ -202,11 +204,11 @@
 									{row.display_name}
 								</a>
 								{#if row.description}
-									<div class="lq-text-caption mt-0.5 line-clamp-1" style="color: var(--lq-text-tertiary);">{row.description}</div>
+									<LqText as="div" size="12" tone="tertiary" class="mt-0.5 line-clamp-1">{row.description}</LqText>
 								{/if}
 							</td>
 							<td class="px-3 py-2">
-								<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{row.slug}</code>
+								<LqText as="code" size="12" tone="secondary" class="font-mono">{row.slug}</LqText>
 								{#if builtinSlugs.has(row.slug)}
 									<span class="ml-2" data-testid="lq-ai-user-skill-shadow-chip">
 										<TrustPill
@@ -230,18 +232,18 @@
 									</span>
 								{/if}
 							</td>
-							<td class="px-3 py-2 lq-tabular lq-text-caption" style="color: var(--lq-text-secondary);">{row.version}</td>
-							<td class="px-3 py-2 lq-text-caption" style="color: var(--lq-text-tertiary);">{shortDate(row.updated_at)}</td>
+							<LqText as="td" size="12" tone="secondary" class="px-3 py-2 lq-tabular">{row.version}</LqText>
+							<LqText as="td" size="12" tone="tertiary" class="px-3 py-2">{shortDate(row.updated_at)}</LqText>
 							<td class="px-3 py-2 text-right whitespace-nowrap">
 								<a
 									href={`/lq-ai/skills/${row.id}/edit`}
-									class="lq-btn-secondary lq-text-caption"
+									class="lq-btn-secondary"
 								>
 									Edit
 								</a>
 								<button
 									type="button"
-									class="ml-1 lq-btn-danger lq-text-caption"
+									class="ml-1 lq-btn-danger"
 									on:click={() => archive(row)}
 									data-testid="lq-ai-user-skill-archive-btn"
 								>
@@ -251,7 +253,7 @@
 						</tr>
 					{/each}
 				</tbody>
-			</table>
+			</LqText>
 		</div>
 	{/if}
 </div>

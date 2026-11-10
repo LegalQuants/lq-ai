@@ -4,6 +4,7 @@
 		downloadManifestFile,
 		type WordAddinManifestOptions
 	} from '$lib/lq-ai/api/wordAddin';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// Form state — all three are optional overrides; backend defaults
 	// apply when they're left blank.
@@ -38,7 +39,7 @@
 
 <div class="word-addin-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Word add-in</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Word add-in</LqTitle>
 		<p class="page-intro">
 			Generate a deployment-specific Office Add-in manifest for sideload via Microsoft 365 Admin
 			Center. Each download embeds your deployment's URL and a fresh per-install GUID.

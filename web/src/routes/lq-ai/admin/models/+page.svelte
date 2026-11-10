@@ -19,6 +19,8 @@
 
 	import AliasTable from '$lib/lq-ai/components/AliasTable.svelte';
 	import AliasForm from '$lib/lq-ai/components/AliasForm.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let aliases: Alias[] = [];
 	let availableProviders: Array<{ name: string; type: string }> = [];
@@ -184,16 +186,16 @@
 <div class="p-6 max-w-4xl mx-auto space-y-4" data-testid="lq-ai-admin-models">
 	<div class="flex items-center justify-between">
 		<div>
-			<h1 class="lq-text-page-h">Settings — Models</h1>
-			<p class="lq-text-body mt-1" style="color: var(--lq-text-secondary);">
+			<LqTitle order={1} size="20" weight="bold" tone="primary">Settings — Models</LqTitle>
+			<LqText as="p" size="14" tone="secondary" class="mt-1">
 				Edit the model aliases that skills and the chat picker use. Changes take effect
 				immediately for new requests; in-flight requests finish on the prior config.
-			</p>
+			</LqText>
 		</div>
 		{#if editing === null}
 			<button
 				type="button"
-				class="lq-btn-primary lq-text-body-sm"
+				class="lq-btn-primary"
 				on:click={() => (editing = 'new')}
 				disabled={loading}
 				data-testid="lq-ai-admin-new-alias"
@@ -204,13 +206,13 @@
 	</div>
 
 	{#if listError}
-		<div class="lq-text-body-sm" style="color: var(--lq-error); background: var(--lq-error-soft); border: 1px solid var(--lq-error); border-radius: var(--lq-radius); padding: var(--lq-space-2) var(--lq-space-3);">
+		<LqText as="div" size="13.5" tone="danger" style="background: var(--lq-error-soft); border: 1px solid var(--lq-error); border-radius: var(--lq-radius); padding: var(--lq-space-2) var(--lq-space-3);">
 			{listError}
-		</div>
+		</LqText>
 	{/if}
 
 	{#if loading}
-		<div class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</div>
+		<LqText as="div" size="14" tone="secondary">Loading…</LqText>
 	{:else}
 		<AliasTable
 			{aliases}
