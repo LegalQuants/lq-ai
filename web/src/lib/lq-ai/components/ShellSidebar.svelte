@@ -30,7 +30,8 @@
 	 * the right sidebar; and the collapse (`../leftSidebar`): a strip with the
 	 * toggle when collapsed, and on narrow screens the sidebar opens over the
 	 * page, closing on Escape, on navigation, on the backdrop and when focus
-	 * leaves it. The foot carries today's full attribution wording
+	 * leaves it. On a matter page it starts collapsed, so the chat composer
+	 * keeps its width, and remembers a choice made there separately. The foot carries today's full attribution wording
 	 * (`DualBrandingFooter`, ADR 0001) until the committee rules on F2.
 	 */
 	import { onDestroy, onMount, tick } from 'svelte';
@@ -74,6 +75,7 @@
 		leftSidebarMode,
 		leftSidebarNarrow,
 		leftSidebarOpen,
+		leftSidebarPageFor,
 		setLeftSidebarOpen,
 		shouldCloseOnFocusOut,
 		syncLeftSidebar
@@ -232,9 +234,18 @@
 	$: mode = leftSidebarMode({ open: $leftSidebarOpen, narrow: $leftSidebarNarrow });
 	let panelEl: HTMLDivElement | undefined;
 
+	// Matter pages start collapsed and remember their own choice (`../leftSidebar`).
+	$: sidebarPage = leftSidebarPageFor(pathname);
+	// Not on the server or before mount: the state is loaded in the browser only.
+	let mounted = false;
+	$: if (mounted) resyncForPage(sidebarPage);
+	function resyncForPage(page: typeof sidebarPage): void {
+		syncLeftSidebar($leftSidebarNarrow, undefined, page);
+	}
+
 	async function toggleSidebar(): Promise<void> {
 		const next = !$leftSidebarOpen;
-		setLeftSidebarOpen(next, $leftSidebarNarrow);
+		setLeftSidebarOpen(next, $leftSidebarNarrow, undefined, sidebarPage);
 		await tick();
 		if (next) focusLeftSidebar();
 		else focusLeftSidebarOpener();
@@ -264,8 +275,9 @@
 
 	onMount(() => {
 		const query = window.matchMedia?.(NARROW_QUERY);
-		const apply = () => syncLeftSidebar(!!query?.matches);
+		const apply = () => syncLeftSidebar(!!query?.matches, undefined, sidebarPage);
 		apply();
+		mounted = true;
 		query?.addEventListener?.('change', apply);
 		return () => query?.removeEventListener?.('change', apply);
 	});

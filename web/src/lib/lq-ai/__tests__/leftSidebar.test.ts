@@ -8,14 +8,17 @@ import { get } from 'svelte/store';
 
 import {
 	LEFT_SIDEBAR_ID,
+	LEFT_SIDEBAR_MATTER_STORAGE_KEY,
 	LEFT_SIDEBAR_STORAGE_KEY,
 	NARROW_QUERY,
+	attributionBelowPage,
 	focusLeftSidebar,
 	focusLeftSidebarOpener,
 	initialLeftSidebarOpen,
 	leftSidebarMode,
 	leftSidebarNarrow,
 	leftSidebarOpen,
+	leftSidebarPageFor,
 	readLeftSidebarOpen,
 	setLeftSidebarOpen,
 	shouldCloseOnFocusOut,
@@ -35,6 +38,7 @@ import {
 	showRightSidebarOverlay,
 	type RightSidebarContent
 } from '../rightSidebar';
+import { sidebarChromeOn } from '../shell';
 
 class MemoryStorage {
 	map = new Map<string, string>();
@@ -87,6 +91,105 @@ describe('remembered choice (wide screens)', () => {
 		expect(readLeftSidebarOpen(() => s)).toBe(true);
 		expect(() => writeLeftSidebarOpen(false, () => throwing)).not.toThrow();
 		expect(() => writeLeftSidebarOpen(false)).not.toThrow();
+	});
+});
+
+describe('matter pages (houfu, 10 Nov: the composer keeps its width)', () => {
+	it('tells a matter workspace from every other page', () => {
+		for (const path of ['/lq-ai/matters/m1', '/lq-ai/matters/m1/', '/lq-ai/matters/m%201'])
+			expect(leftSidebarPageFor(path), path).toBe('matter');
+		for (const path of [
+			'/lq-ai',
+			'/lq-ai/matters',
+			'/lq-ai/matters/',
+			'/lq-ai/matters/m1/files',
+			'/lq-ai/chats',
+			'/lq-ai/knowledge',
+			'/lq-ai/skills'
+		])
+			expect(leftSidebarPageFor(path), path).toBe('other');
+	});
+
+	it('starts collapsed on a matter page while other pages start open', () => {
+		const s = new MemoryStorage();
+		expect(LEFT_SIDEBAR_MATTER_STORAGE_KEY).toBe('lq-ai.left-sidebar.matter');
+		expect(readLeftSidebarOpen(() => s, 'matter')).toBe(false);
+		expect(readLeftSidebarOpen(() => s, 'other')).toBe(true);
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(false);
+		syncLeftSidebar(false, () => s, 'other');
+		expect(get(leftSidebarOpen)).toBe(true);
+		// Loading the default writes nothing.
+		expect(s.map.size).toBe(0);
+	});
+
+	it('the default does not follow, or overwrite, the choice made on other pages', () => {
+		const s = new MemoryStorage();
+		// Collapsed and reopened on Home: the general key now says "open".
+		setLeftSidebarOpen(false, false, () => s, 'other');
+		setLeftSidebarOpen(true, false, () => s, 'other');
+		expect(s.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe('open');
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(false);
+		expect(s.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBe('open');
+		expect(s.getItem(LEFT_SIDEBAR_MATTER_STORAGE_KEY)).toBeNull();
+	});
+
+	it('honours an explicit choice made on a matter page, without touching other pages', () => {
+		const s = new MemoryStorage();
+		setLeftSidebarOpen(true, false, () => s, 'matter');
+		expect(s.getItem(LEFT_SIDEBAR_MATTER_STORAGE_KEY)).toBe('open');
+		expect(s.getItem(LEFT_SIDEBAR_STORAGE_KEY)).toBeNull();
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(true);
+		// Collapsing on another page leaves the matter-page choice alone.
+		setLeftSidebarOpen(false, false, () => s, 'other');
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(true);
+		syncLeftSidebar(false, () => s, 'other');
+		expect(get(leftSidebarOpen)).toBe(false);
+		// Collapsing again on a matter page is remembered there.
+		setLeftSidebarOpen(false, false, () => s, 'matter');
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(false);
+	});
+
+	it('a choice on a narrow screen is not remembered, and narrow screens start closed', () => {
+		const s = new MemoryStorage();
+		setLeftSidebarOpen(true, true, () => s, 'matter');
+		expect(s.map.size).toBe(0);
+		s.setItem(LEFT_SIDEBAR_MATTER_STORAGE_KEY, 'open');
+		syncLeftSidebar(true, () => s, 'matter');
+		expect(get(leftSidebarOpen)).toBe(false);
+	});
+
+	it('falls back to collapsed with no storage, blocked storage or an unknown value', () => {
+		expect(readLeftSidebarOpen(() => undefined, 'matter')).toBe(false);
+		expect(readLeftSidebarOpen(undefined, 'matter')).toBe(false); // node: no window
+		expect(readLeftSidebarOpen(() => throwing, 'matter')).toBe(false);
+		expect(
+			readLeftSidebarOpen(() => {
+				throw new DOMException('blocked', 'SecurityError');
+			}, 'matter')
+		).toBe(false);
+		const s = new MemoryStorage();
+		s.setItem(LEFT_SIDEBAR_MATTER_STORAGE_KEY, 'sideways');
+		expect(readLeftSidebarOpen(() => s, 'matter')).toBe(false);
+		expect(() => writeLeftSidebarOpen(true, () => throwing, 'matter')).not.toThrow();
+		expect(() => setLeftSidebarOpen(true, false, () => throwing, 'matter')).not.toThrow();
+		expect(get(leftSidebarOpen)).toBe(true);
+	});
+
+	it('with the switch off the footer still always shows, whatever the matter-page state', () => {
+		const s = new MemoryStorage();
+		syncLeftSidebar(false, () => s, 'matter');
+		expect(
+			attributionBelowPage({
+				sidebarChrome: sidebarChromeOn('tabs', false),
+				open: get(leftSidebarOpen),
+				narrow: get(leftSidebarNarrow)
+			})
+		).toBe(true);
 	});
 });
 

@@ -15,7 +15,15 @@ import { render } from 'svelte/server';
 import DualBrandingFooter from '../components/DualBrandingFooter.svelte';
 import ShellAttribution from '../components/ShellAttribution.svelte';
 import ShellSidebar from '../components/ShellSidebar.svelte';
-import { attributionBelowPage, leftSidebarNarrow, leftSidebarOpen } from '../leftSidebar';
+import {
+	LEFT_SIDEBAR_MATTER_STORAGE_KEY,
+	LEFT_SIDEBAR_STORAGE_KEY,
+	attributionBelowPage,
+	leftSidebarNarrow,
+	leftSidebarOpen,
+	leftSidebarPageFor,
+	syncLeftSidebar
+} from '../leftSidebar';
 import { sidebarChromeOn } from '../shell';
 import type { User } from '../tabs';
 
@@ -140,6 +148,61 @@ describe('exactly one attribution on the page (server render)', () => {
 				const below = render(ShellAttribution, { props: { sidebarChrome: false } }).body;
 				expect(count(below), JSON.stringify({ open, narrow })).toBe(1);
 			}
+	});
+});
+
+describe('matter pages start with the sidebar collapsed (server render)', () => {
+	class MemoryStorage {
+		map = new Map<string, string>();
+		getItem(k: string) {
+			return this.map.get(k) ?? null;
+		}
+		setItem(k: string, v: string) {
+			this.map.set(k, v);
+		}
+	}
+	const MATTER = '/lq-ai/matters/m1';
+	const shellOn = (pathname: string) => ({
+		sidebar: render(ShellSidebar, { props: { user: member, pathname } }).body,
+		below: render(ShellAttribution, { props: { sidebarChrome: true } }).body
+	});
+	const modeOf = (body: string) =>
+		/data-testid="lq-shell-sidebar"[^>]*data-mode="(\w+)"/.exec(body)?.[1];
+
+	it('loaded on a matter page with no choice made there: the strip, and the footer below the page', () => {
+		const s = new MemoryStorage();
+		s.setItem(LEFT_SIDEBAR_STORAGE_KEY, 'open');
+		syncLeftSidebar(false, () => s, leftSidebarPageFor(MATTER));
+		const { sidebar, below } = shellOn(MATTER);
+		expect(modeOf(sidebar)).toBe('collapsed');
+		expect(sidebar).toContain('data-testid="lq-shell-sidebar-open"');
+		expect(count(sidebar)).toBe(0);
+		expect(count(below)).toBe(1);
+	});
+
+	it('loaded on a matter page after the person opened it there: the panel, footer in its foot', () => {
+		const s = new MemoryStorage();
+		s.setItem(LEFT_SIDEBAR_MATTER_STORAGE_KEY, 'open');
+		syncLeftSidebar(false, () => s, leftSidebarPageFor(MATTER));
+		const { sidebar, below } = shellOn(MATTER);
+		expect(modeOf(sidebar)).toBe('open');
+		expect(count(sidebar)).toBe(1);
+		expect(count(below)).toBe(0);
+	});
+
+	it('loaded on another page (Knowledge) with no choice made: the panel stays open', () => {
+		const s = new MemoryStorage();
+		syncLeftSidebar(false, () => s, leftSidebarPageFor('/lq-ai/knowledge'));
+		const { sidebar, below } = shellOn('/lq-ai/knowledge');
+		expect(modeOf(sidebar)).toBe('open');
+		expect(count(sidebar) + count(below)).toBe(1);
+	});
+
+	it('the server render loads nothing itself: it draws the state it is given, one attribution', () => {
+		// The stores' defaults (open, wide); the matter-page rule runs only after mount.
+		const { sidebar, below } = shellOn(MATTER);
+		expect(modeOf(sidebar)).toBe('open');
+		expect(count(sidebar) + count(below)).toBe(1);
 	});
 });
 
