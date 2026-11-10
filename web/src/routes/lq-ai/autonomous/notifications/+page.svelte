@@ -16,8 +16,8 @@
 	 * Structure mirrors watches/+page.svelte (Task 16):
 	 *   onMount → load(), loading/error/success banners, LQAIApiError, per-row pending.
 	 *
-	 * The global-chrome bell is explicitly deferred (DE-324). This page + the rail
-	 * badge (in +layout.svelte) are the only notification surfaces in this iteration.
+	 * DE-324 adds a current-user opt-in bell in the global shell. Its dropdown
+	 * reads the newest ten unread items; this page remains the full-list surface.
 	 */
 	import { onMount } from 'svelte';
 

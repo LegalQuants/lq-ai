@@ -1,5 +1,6 @@
 """Unit tests for MCPToolProviderAdapter (Task 3 — injected fake session, no network)."""
 
+import json
 from contextlib import asynccontextmanager
 
 import pytest
@@ -207,3 +208,171 @@ async def test_none_auth_sends_no_auth_header(monkeypatch: pytest.MonkeyPatch) -
     adapter, captured = _capturing_adapter(monkeypatch, auth="none")
     await adapter.list_tools()
     assert captured["headers"] is None
+
+
+# --- A failed session reports its cause ---------------------------------------
+#
+# The MCP SDK runs a session inside task groups, so a failure reaches the
+# adapter wrapped in an exception group whose own text is only "unhandled
+# errors in a TaskGroup (1 sub-exception)".
+
+
+def _failing_adapter(
+    error: BaseException, monkeypatch: pytest.MonkeyPatch, *, in_body: bool = False
+) -> MCPToolProviderAdapter:
+    """An adapter whose session fails with ``error``: while connecting, or
+    (``in_body``) from a task group once the session is in use."""
+    import anyio
+
+    from app.providers.tool import egress
+
+    monkeypatch.setattr(egress, "_resolve_ips", lambda host: ["93.184.216.34"])
+
+    class _Raising(_FakeSession):
+        async def call_tool(self, name: str, args: dict) -> _FakeResult | None:
+            raise error
+
+    @asynccontextmanager
+    async def factory(url: str, headers: object):  # type: ignore[misc]
+        if not in_body:
+            raise error
+        async with anyio.create_task_group():
+            yield _Raising()
+
+    return MCPToolProviderAdapter.from_config(_cfg(), session_factory=factory)
+
+
+def _status_error(status: int) -> BaseException:
+    import httpx
+
+    request = httpx.Request("POST", "https://mcp.acme.example/sse?secret=1")
+    response = httpx.Response(status, request=request, text="body that must not be echoed")
+    return httpx.HTTPStatusError("refused", request=request, response=response)
+
+
+@pytest.mark.unit
+async def test_session_error_names_the_http_status_behind_a_task_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderHTTPError
+
+    wrapped = ExceptionGroup(
+        "unhandled errors in a TaskGroup", [ExceptionGroup("inner", [_status_error(429)])]
+    )
+    with pytest.raises(ToolProviderHTTPError) as caught:
+        await _failing_adapter(wrapped, monkeypatch).invoke_tool("x", {}, request_id="r1")
+
+    error = caught.value
+    assert error.message == "mcp session error: HTTP 429 Too Many Requests from mcp.acme.example"
+    # The status travels with it, so the gateway answers 429 and not a bare 502.
+    assert error.upstream_status == 429
+    # Neither the query string nor the response body is repeated.
+    assert "secret" not in error.message and "echoed" not in error.message
+
+
+@pytest.mark.unit
+async def test_session_error_names_a_failure_raised_while_the_session_is_in_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real task group wraps an error raised in its body; the cause is still named."""
+    from app.providers.tool.base import ToolProviderNetworkError
+
+    adapter = _failing_adapter(TimeoutError("read timed out"), monkeypatch, in_body=True)
+    with pytest.raises(ToolProviderNetworkError) as caught:
+        await adapter.invoke_tool("x", {}, request_id="r1")
+    assert caught.value.message == "mcp session error: TimeoutError"
+    assert "TaskGroup" not in caught.value.message
+
+
+@pytest.mark.unit
+async def test_session_error_lists_several_causes_and_caps_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderNetworkError
+
+    wrapped = ExceptionGroup("group", [ConnectionError(f"cause {n}") for n in range(5)])
+    with pytest.raises(ToolProviderNetworkError) as caught:
+        await _failing_adapter(wrapped, monkeypatch).list_tools()
+    assert caught.value.message == (
+        "mcp session error: ConnectionError; ConnectionError; ConnectionError; and 2 more"
+    )
+
+
+@pytest.mark.unit
+async def test_session_error_names_the_type_of_an_unwrapped_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderNetworkError
+
+    with pytest.raises(ToolProviderNetworkError) as caught:
+        await _failing_adapter(ConnectionError("refused"), monkeypatch).list_tools()
+    assert caught.value.message == "mcp session error: ConnectionError"
+
+
+@pytest.mark.unit
+async def test_a_tool_provider_error_inside_a_task_group_is_not_relabelled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderError, ToolProviderNetworkError
+
+    inner = ToolProviderError("mcp tool returned an error", details={"code": "x"})
+    adapter = _failing_adapter(inner, monkeypatch, in_body=True)
+    with pytest.raises(ToolProviderError) as caught:
+        await adapter.invoke_tool("x", {}, request_id="r1")
+    assert caught.value is inner
+    assert not isinstance(caught.value, ToolProviderNetworkError)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("in_body", [False, True], ids=["connect", "anyio-task-group"])
+@pytest.mark.parametrize("nested", [False, True], ids=["unwrapped", "nested-groups"])
+async def test_session_error_does_not_expose_generic_exception_messages(
+    monkeypatch: pytest.MonkeyPatch, *, in_body: bool, nested: bool
+) -> None:
+    from app.providers.tool.base import ToolProviderNetworkError
+
+    sensitive = (
+        "Authorization: Bearer synthetic-token; "
+        "https://mcp.acme.example/private?api_key=synthetic-key; "
+        "response body: confidential synthetic document"
+    )
+    error: Exception = ValueError(sensitive)
+    if nested:
+        error = ExceptionGroup("sensitive wrapper " + sensitive, [ExceptionGroup("inner", [error])])
+    adapter = _failing_adapter(error, monkeypatch, in_body=in_body)
+    with pytest.raises(ToolProviderNetworkError) as caught:
+        await adapter.invoke_tool("x", {}, request_id="r1")
+
+    envelope = json.dumps(caught.value.to_envelope())
+    for secret in (
+        "synthetic-token",
+        "synthetic-key",
+        "confidential synthetic document",
+        "/private",
+    ):
+        assert secret not in envelope
+    assert caught.value.message == "mcp session error: ValueError"
+
+
+@pytest.mark.unit
+async def test_mixed_session_error_preserves_http_status_without_exposing_other_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.providers.tool.base import ToolProviderHTTPError
+
+    wrapped = ExceptionGroup(
+        "outer", [ExceptionGroup("inner", [_status_error(429), RuntimeError("synthetic-secret")])]
+    )
+    with pytest.raises(ToolProviderHTTPError) as caught:
+        await _failing_adapter(wrapped, monkeypatch, in_body=True).invoke_tool(
+            "x", {}, request_id="r1"
+        )
+
+    envelope = json.dumps(caught.value.to_envelope())
+    assert "synthetic-secret" not in envelope
+    assert "secret=1" not in envelope
+    assert "body that must not be echoed" not in envelope
+    assert caught.value.message == (
+        "mcp session error: HTTP 429 Too Many Requests from mcp.acme.example; RuntimeError"
+    )
+    assert caught.value.upstream_status == 429

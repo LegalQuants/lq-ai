@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "msa-review-commercial-purchase",
+  "fixture": "unusual-warranty",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/msa-review-commercial-purchase/SKILL.md (Output template; warranty/acceptance/delivery calibration) and test-plan.md Scenario 4 (unusual warranty provisions: severity calibrated to deviation from market — this fixture stacks a full warranty disclaimer, waived inspection, deemed acceptance, and a repair-only remedy at buyer cost, so at least one critical-or-material finding on the warranty complex is expected). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "MSA Review",
+      "Bottom line",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 0,
+        "max": 5
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 8
+      },
+      {
+        "id": "warranty_flagged",
+        "kind": "regex_count",
+        "pattern": "warrant",
+        "min": 2,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 35000
+  }
+}

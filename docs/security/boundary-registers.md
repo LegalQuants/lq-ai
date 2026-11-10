@@ -68,7 +68,7 @@ LQ.AI's first capability boundary attaches to the **inference path** rather than
 - **Privileged Projects force a tier floor.** PRD §3.11 — privileged Projects disable anonymization and require a tier matching the privilege posture.
 - **Per-purpose tagging (M2-E2).** `gateway/app/routing_log.py` adds `lq_ai_purpose` tagging so cost-estimation and the ensemble pre-flight budget (an R4 input) can differentiate judge calls from chat calls and embeddings.
 
-**Gap.** Agent-to-agent tool grants don't exist as a model today because LQ.AI doesn't yet have agents-calling-agents. The Playbook executor (M3-A2, `api/app/playbooks/executor.py`) runs single-agent multi-step workflows with implicit tool capabilities (read document, retrieve chunks, emit findings); each step does not declare its tools explicitly. A retrofit that adds declared per-position tool grants is tracked by **DE-292**.
+**Gap.** Per-agent tool grants exist in one place. Governed orchestration (ADR 0035, 0.8.0) grants each approved child a closed set of tools for each phase; the server, not the model, supplies the grants, and a call outside them is refused at the chokepoint. ADR 0038 (proposed) lets a child call those tools natively, still only from the plan's grant. Everywhere else they do not: the Playbook executor (M3-A2, `api/app/playbooks/executor.py`) runs single-agent multi-step workflows with implicit tool capabilities (read document, retrieve chunks, emit findings), and each step does not declare its tools explicitly. A retrofit that adds declared per-position tool grants is tracked by **DE-292**.
 
 **Verification path.**
 

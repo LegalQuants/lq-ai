@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import json as _json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -44,7 +45,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -567,7 +568,7 @@ async def test_send_message_streaming_happy_path(
     ) as resp:
         assert resp.status_code == 200
         assert resp.headers.get("content-type", "").startswith("text/event-stream")
-        events: list[dict[str, object]] = []
+        events: list[dict[str, Any]] = []
         async for line in resp.aiter_lines():
             line = line.strip()
             if not line:
@@ -612,7 +613,7 @@ async def test_send_message_streaming_mid_stream_error_emits_error_frame(
         headers={"Authorization": f"Bearer {token}"},
     ) as resp:
         assert resp.status_code == 200
-        events: list[dict[str, object]] = []
+        events: list[dict[str, Any]] = []
         async for line in resp.aiter_lines():
             line = line.strip()
             if not line:
@@ -658,7 +659,7 @@ async def test_send_message_streaming_pre_frame_error_emits_error_frame(
     ) as resp:
         # SSE response has 200 status; error is in-band.
         assert resp.status_code == 200
-        events: list[dict[str, object]] = []
+        events: list[dict[str, Any]] = []
         async for line in resp.aiter_lines():
             line = line.strip()
             if not line:
@@ -699,7 +700,7 @@ async def test_send_message_does_not_write_inference_routing_log_on_backend(
 
     # Snapshot row count before.
     rows_before = await db_session.execute(text("SELECT count(*) FROM inference_routing_log"))
-    count_before = rows_before.scalar_one()
+    count_before: int = rows_before.scalar_one()
 
     response = await client.post(
         f"/api/v1/chats/{db_chat.id}/messages",
@@ -709,7 +710,7 @@ async def test_send_message_does_not_write_inference_routing_log_on_backend(
     assert response.status_code == 200
 
     rows_after = await db_session.execute(text("SELECT count(*) FROM inference_routing_log"))
-    count_after = rows_after.scalar_one()
+    count_after: int = rows_after.scalar_one()
     assert count_after == count_before, (
         "C3 must not write to inference_routing_log — the gateway does (B4)."
     )

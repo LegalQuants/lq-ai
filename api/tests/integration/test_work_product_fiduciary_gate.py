@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Chat, Message
 from app.models.user import User
@@ -13,7 +14,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest_asyncio.fixture
-async def seeded_message(db_session):
+async def seeded_message(db_session: AsyncSession) -> tuple[uuid.UUID, uuid.UUID]:
     user = User(
         email=f"gate-{uuid.uuid4().hex[:8]}@example.com",
         hashed_password="x",
@@ -31,7 +32,9 @@ async def seeded_message(db_session):
 
 
 @pytest.mark.asyncio
-async def test_gate_row_roundtrips(db_session, seeded_message):
+async def test_gate_row_roundtrips(
+    db_session: AsyncSession, seeded_message: tuple[uuid.UUID, uuid.UUID]
+) -> None:
     chat_id, mid = seeded_message
     db_session.add(
         WorkProductFiduciaryGate(
@@ -57,7 +60,9 @@ async def test_gate_row_roundtrips(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_message_id_unique(db_session, seeded_message):
+async def test_message_id_unique(
+    db_session: AsyncSession, seeded_message: tuple[uuid.UUID, uuid.UUID]
+) -> None:
     chat_id, mid = seeded_message
     for _ in range(2):
         db_session.add(
@@ -78,7 +83,9 @@ async def test_message_id_unique(db_session, seeded_message):
 
 
 @pytest.mark.asyncio
-async def test_confidence_range_check(db_session, seeded_message):
+async def test_confidence_range_check(
+    db_session: AsyncSession, seeded_message: tuple[uuid.UUID, uuid.UUID]
+) -> None:
     chat_id, mid = seeded_message
     db_session.add(
         WorkProductFiduciaryGate(

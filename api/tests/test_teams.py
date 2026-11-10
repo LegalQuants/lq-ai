@@ -18,7 +18,7 @@ Covers the operator-admin-controlled team management surface:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 import pytest_asyncio
@@ -33,7 +33,7 @@ from app.models import AuditLog, Team, TeamMember, User, UserSkill
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -174,6 +174,7 @@ async def test_update_team_writes_audit_when_changed(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["changed_fields"] == ["name"]
 
 
@@ -269,6 +270,7 @@ async def test_add_member_writes_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["user_email"] == member_user.email
     assert audit.details["role"] == "member"
 
@@ -349,6 +351,7 @@ async def test_role_change_records_before_and_after(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["role_before"] == "member"
     assert audit.details["role_after"] == "admin"
 
@@ -428,6 +431,7 @@ async def test_remove_member_audits_role_at_removal(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["role_at_removal"] == "admin"
 
 

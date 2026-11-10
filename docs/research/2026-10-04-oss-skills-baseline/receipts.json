@@ -1,0 +1,1705 @@
+{
+  "records": {
+    "P1-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:42:19.102576Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "5800789b-7eca-476d-9c65-498bcf77a20d",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:19.102576Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "5800789b-7eca-476d-9c65-498bcf77a20d",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:19.104580Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "35e5896b-fa86-4b51-8059-073f57143381",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1866,
+            "completion_tokens": 850
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:19.104580Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "35e5896b-fa86-4b51-8059-073f57143381",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.268426Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1866,
+            "tokens_out": 850,
+            "latency_ms": 29153,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "35e5896b-fa86-4b51-8059-073f57143381"
+          }
+        }
+      ]
+    },
+    "P10-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:06:26.453772Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c7bda2ea-bd1f-4e44-8ede-7a8105a97c21",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:26.453772Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "c7bda2ea-bd1f-4e44-8ede-7a8105a97c21",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:26.457503Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "ffd964c6-ea28-4406-a226-9360509bea44",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1834,
+            "completion_tokens": 668
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:26.457503Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "ffd964c6-ea28-4406-a226-9360509bea44",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:50.685330Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 1834,
+            "tokens_out": 668,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "ffd964c6-ea28-4406-a226-9360509bea44"
+          }
+        }
+      ]
+    },
+    "P10-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:54:40.854302Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "39e41f2b-e93d-4a41-bf7e-ae530a3d17f4",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:54:40.854302Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "39e41f2b-e93d-4a41-bf7e-ae530a3d17f4",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P11-focused-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1865,
+            "completion_tokens": 914
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:25.427594Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1865,
+            "tokens_out": 914,
+            "latency_ms": 37123,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390"
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.859463Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "67c8aafe-17e9-4d78-9fb1-9fb30423ba25",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.859463Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe-invoke",
+            "message_id": "67c8aafe-17e9-4d78-9fb1-9fb30423ba25",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.863594Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 710,
+            "completion_tokens": 139
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.863594Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe-invoke",
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.685419Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 710,
+            "tokens_out": 139,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae"
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.735413Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0cd1b7c3-dad5-45c2-aff1-f6dc08cff138",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.735413Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "0cd1b7c3-dad5-45c2-aff1-f6dc08cff138",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.743177Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 2375,
+            "completion_tokens": 948
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.743177Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:46.391542Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 2375,
+            "tokens_out": 948,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e"
+          }
+        },
+        {
+          "ts": "2026-10-04T01:15:32.083202Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0f6e5c11-4052-4b6d-abfb-37b21389e841",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:15:32.084857Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "edffbbad-2f35-4d29-b07a-f3ba7fe4f577",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 849,
+            "completion_tokens": 545
+          }
+        },
+        {
+          "ts": "2026-10-04T01:15:53.463177Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 849,
+            "tokens_out": 545,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "edffbbad-2f35-4d29-b07a-f3ba7fe4f577"
+          }
+        }
+      ]
+    },
+    "P11-subcheck-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1865,
+            "completion_tokens": 914
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:25.427594Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1865,
+            "tokens_out": 914,
+            "latency_ms": 37123,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390"
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.859463Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "67c8aafe-17e9-4d78-9fb1-9fb30423ba25",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.859463Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe-invoke",
+            "message_id": "67c8aafe-17e9-4d78-9fb1-9fb30423ba25",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.863594Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 710,
+            "completion_tokens": 139
+          }
+        },
+        {
+          "ts": "2026-10-04T01:06:58.863594Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe-invoke",
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.685419Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 710,
+            "tokens_out": 139,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "14fc6b0d-f1b9-482e-af69-cc3baee9d5ae"
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.735413Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0cd1b7c3-dad5-45c2-aff1-f6dc08cff138",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.735413Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "0cd1b7c3-dad5-45c2-aff1-f6dc08cff138",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.743177Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 2375,
+            "completion_tokens": 948
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:04.743177Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:07:46.391542Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 2375,
+            "tokens_out": 948,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "64c77c94-42d8-431b-b908-62861857402e"
+          }
+        }
+      ]
+    },
+    "P12-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:44:07.878946Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "ce23072a-e880-49e6-bb86-d6a0e9bfc9cb",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:44:07.878946Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "ce23072a-e880-49e6-bb86-d6a0e9bfc9cb",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:44:07.880444Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "4b8a947e-42ff-481e-8137-a8628037a94a",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1871,
+            "completion_tokens": 185
+          }
+        },
+        {
+          "ts": "2026-10-04T00:44:07.880444Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "4b8a947e-42ff-481e-8137-a8628037a94a",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:44:18.950754Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1871,
+            "tokens_out": 185,
+            "latency_ms": 11063,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "4b8a947e-42ff-481e-8137-a8628037a94a"
+          }
+        }
+      ]
+    },
+    "P2-initial-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.294413Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "c5f65457-85f9-4009-a346-eba102391ec7",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1865,
+            "completion_tokens": 914
+          }
+        },
+        {
+          "ts": "2026-10-04T00:42:48.296302Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:25.427594Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1865,
+            "tokens_out": 914,
+            "latency_ms": 37123,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "93c5fd77-2958-4693-b7c7-7de348539390"
+          }
+        }
+      ]
+    },
+    "P3-clean-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:48:08.125262Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "64c4e449-483f-4a26-9169-4340ad85fa0e",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:08.125262Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "64c4e449-483f-4a26-9169-4340ad85fa0e",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:08.127158Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "9ed6b0c3-71fa-40fe-93c0-6a24c5f1ddb9",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1836,
+            "completion_tokens": 1007
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:08.127158Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "9ed6b0c3-71fa-40fe-93c0-6a24c5f1ddb9",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:40.609166Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1836,
+            "tokens_out": 1007,
+            "latency_ms": 32363,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "9ed6b0c3-71fa-40fe-93c0-6a24c5f1ddb9"
+          }
+        }
+      ]
+    },
+    "P3-tracked-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:47:36.330298Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "f1b866dc-a2a2-4955-aab1-b2cd94175f1e",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:47:36.330298Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "f1b866dc-a2a2-4955-aab1-b2cd94175f1e",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:47:36.332384Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "5b8efbaa-c7fe-4c25-b55b-c9e8103d0b89",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1836,
+            "completion_tokens": 689
+          }
+        },
+        {
+          "ts": "2026-10-04T00:47:36.332384Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "5b8efbaa-c7fe-4c25-b55b-c9e8103d0b89",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:08.097753Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1836,
+            "tokens_out": 689,
+            "latency_ms": 31755,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "5b8efbaa-c7fe-4c25-b55b-c9e8103d0b89"
+          }
+        }
+      ]
+    },
+    "P4-focused-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:13:17.914665Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "8b4a6b4c-afb2-4702-904f-92aef98b2935",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:17.916756Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "d2e355a1-3c6d-4cff-b2db-72cc2496d010"
+              ],
+              "attached_count": 1,
+              "injected_count": 1
+            }
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:17.918374Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0cb8d21e-cc37-4f90-b2b8-3e4f6a1366ab",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 146,
+            "completion_tokens": 1783
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:52.004759Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 146,
+            "tokens_out": 1783,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "0cb8d21e-cc37-4f90-b2b8-3e4f6a1366ab"
+          }
+        }
+      ]
+    },
+    "P4-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:59:53.999948Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0e8f5b02-5cc6-457a-92cd-77c0c3366161",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:59:53.999948Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "0e8f5b02-5cc6-457a-92cd-77c0c3366161",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:59:54.002802Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "d2e355a1-3c6d-4cff-b2db-72cc2496d010"
+              ],
+              "attached_count": 1,
+              "injected_count": 1
+            }
+          }
+        },
+        {
+          "ts": "2026-10-04T00:59:54.004876Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "f4170839-8d9d-4020-92e5-67c2806c0ce0",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:59:54.004876Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "f4170839-8d9d-4020-92e5-67c2806c0ce0",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P4-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:48:40.631099Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "9ab721ec-05b6-453a-a7e5-51d1ee07224b",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:40.631099Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "9ab721ec-05b6-453a-a7e5-51d1ee07224b",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:48:40.633779Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "d2e355a1-3c6d-4cff-b2db-72cc2496d010"
+              ],
+              "attached_count": 1,
+              "injected_count": 1
+            }
+          }
+        }
+      ]
+    },
+    "P5-initial-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:43:25.459759Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "cef83e81-771f-404d-bf19-4ba595dbf2f7",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:25.462528Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 29,
+            "completion_tokens": 107
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:30.032061Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 29,
+            "tokens_out": 107,
+            "latency_ms": 4563,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "0ad07da5-21e2-4b6b-ba09-0db60ad74301"
+          }
+        }
+      ]
+    },
+    "P5-new-task-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:18:08.206571Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "8e71717a-6e76-4822-a93c-edf85e2e3cb2",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:18:08.208040Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c46fd7a8-8916-42c2-b79f-7d05357ee7d3",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 30,
+            "completion_tokens": 457
+          }
+        },
+        {
+          "ts": "2026-10-04T01:18:17.466010Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 30,
+            "tokens_out": 457,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "c46fd7a8-8916-42c2-b79f-7d05357ee7d3"
+          }
+        }
+      ]
+    },
+    "P5-new-task-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:43:30.059139Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "17a72425-1f50-4cf1-95c1-dd085092cb50",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:30.061423Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "cd452b70-f0b6-4d31-9d5f-48b6ca9c705e",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 23,
+            "completion_tokens": 284
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:39.799667Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 23,
+            "tokens_out": 284,
+            "latency_ms": 9732,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "cd452b70-f0b6-4d31-9d5f-48b6ca9c705e"
+          }
+        }
+      ]
+    },
+    "P6-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:43:39.821857Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "cd33b5ad-427e-400f-abd3-8cd6b2a8a32b",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:39.821857Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "cd33b5ad-427e-400f-abd3-8cd6b2a8a32b",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:39.823474Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "bf018879-ea4a-42a7-a1fc-c38701d9418c",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1878,
+            "completion_tokens": 738
+          }
+        },
+        {
+          "ts": "2026-10-04T00:43:39.823474Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "bf018879-ea4a-42a7-a1fc-c38701d9418c",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:44:07.859480Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "qwen3.8:27b-mlx",
+            "tier": 1,
+            "tokens_in": 1878,
+            "tokens_out": 738,
+            "latency_ms": 28025,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "bf018879-ea4a-42a7-a1fc-c38701d9418c"
+          }
+        }
+      ]
+    },
+    "P7a-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:00:56.556780Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "85c1fcdc-eee0-4826-97f0-c3454942d596",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:00:56.556780Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "legaldesign",
+            "message_id": "85c1fcdc-eee0-4826-97f0-c3454942d596",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:00:56.559777Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "b5cdf0da-8c23-4d1e-822e-01a0844681b3"
+              ],
+              "attached_count": 1,
+              "injected_count": 1
+            }
+          }
+        },
+        {
+          "ts": "2026-10-04T01:00:56.562277Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "a54fef54-d580-44ea-ab91-b1ae119c2736",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 961,
+            "completion_tokens": 3234
+          }
+        },
+        {
+          "ts": "2026-10-04T01:00:56.562277Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "legaldesign",
+            "message_id": "a54fef54-d580-44ea-ab91-b1ae119c2736",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:02:33.191639Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 961,
+            "tokens_out": 3234,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "a54fef54-d580-44ea-ab91-b1ae119c2736"
+          }
+        }
+      ]
+    },
+    "P7a-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:49:40.664944Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "81c68440-34f4-409a-bd2b-353a2cb27df7",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:49:40.664944Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "legaldesign",
+            "message_id": "81c68440-34f4-409a-bd2b-353a2cb27df7",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:49:40.667487Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "b5cdf0da-8c23-4d1e-822e-01a0844681b3"
+              ],
+              "attached_count": 1,
+              "injected_count": 1
+            }
+          }
+        }
+      ]
+    },
+    "P7b-focused-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:13:52.038746Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "dbbf281c-c7fd-4832-990c-da78bf5c4c04",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:52.038746Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "baseline-card",
+            "message_id": "dbbf281c-c7fd-4832-990c-da78bf5c4c04",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:52.040689Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "29f46260-d87e-40f0-ac24-65a1aece7b7c",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 146,
+            "completion_tokens": 1870
+          }
+        },
+        {
+          "ts": "2026-10-04T01:13:52.040689Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "baseline-card",
+            "message_id": "29f46260-d87e-40f0-ac24-65a1aece7b7c",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:14:22.418855Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 146,
+            "tokens_out": 1870,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "29f46260-d87e-40f0-ac24-65a1aece7b7c"
+          }
+        }
+      ]
+    },
+    "P7b-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:02:33.232064Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "6c287785-f321-4bf7-ae3f-e6b080fea86a",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:02:33.232064Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "baseline-card",
+            "message_id": "6c287785-f321-4bf7-ae3f-e6b080fea86a",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:02:33.234979Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "ad6ae795-f297-4621-ab98-74efa7f6967b",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:02:33.234979Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "baseline-card",
+            "message_id": "ad6ae795-f297-4621-ab98-74efa7f6967b",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P7b-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:50:40.694869Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "a055342b-f78b-4d1c-938d-85b23990fc2a",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:50:40.694869Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "baseline-card",
+            "message_id": "a055342b-f78b-4d1c-938d-85b23990fc2a",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P8-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:03:34.073720Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "57ee705e-3495-4b04-84b2-18b3d53c0cdf",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:03:34.073720Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "57ee705e-3495-4b04-84b2-18b3d53c0cdf",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:03:34.079575Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "cbafc890-b4cc-4156-aed6-ec1b57beeab2",
+                "ed5e4c2c-860e-4fc0-8d51-8cf20880728a"
+              ],
+              "attached_count": 2,
+              "injected_count": 2
+            }
+          }
+        },
+        {
+          "ts": "2026-10-04T01:03:34.084931Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "082f4030-3ca8-45c0-8b0a-bcabc5fb751d",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 1944,
+            "completion_tokens": 1083
+          }
+        },
+        {
+          "ts": "2026-10-04T01:03:34.084931Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "082f4030-3ca8-45c0-8b0a-bcabc5fb751d",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:04:24.218390Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 1944,
+            "tokens_out": 1083,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "082f4030-3ca8-45c0-8b0a-bcabc5fb751d"
+          }
+        }
+      ]
+    },
+    "P8-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:51:40.732290Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "db6b9f01-d2dc-4538-a00c-cd7868c2e213",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:51:40.732290Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "db6b9f01-d2dc-4538-a00c-cd7868c2e213",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:51:40.735753Z",
+          "kind": "audit",
+          "detail": {
+            "action": "inference.message_files_attached",
+            "actor_user_id": "da3d0896-4d5b-42f9-affb-b70a1579c659",
+            "details": {
+              "file_ids": [
+                "cbafc890-b4cc-4156-aed6-ec1b57beeab2",
+                "ed5e4c2c-860e-4fc0-8d51-8cf20880728a"
+              ],
+              "attached_count": 2,
+              "injected_count": 2
+            }
+          }
+        }
+      ]
+    },
+    "P9-focused-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:14:22.441072Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "8ee14966-b1bb-4318-bbbf-e637235f30e2",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:14:22.443518Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "5d46ca87-a2d1-495b-b034-14985f9528f1",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": 256,
+            "completion_tokens": 2951
+          }
+        },
+        {
+          "ts": "2026-10-04T01:15:32.064103Z",
+          "kind": "inference",
+          "detail": {
+            "provider": "host-ollama",
+            "model": "glm-4.7-flash:latest",
+            "tier": 1,
+            "tokens_in": 256,
+            "tokens_out": 2951,
+            "latency_ms": null,
+            "refused": false,
+            "refusal_reason": null,
+            "anonymization_applied": false,
+            "message_id": "5d46ca87-a2d1-495b-b034-14985f9528f1"
+          }
+        }
+      ]
+    },
+    "P9-initial-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:04:24.266944Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "d8ef3dd3-f023-4519-9cde-bceafd046b07",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:04:24.266944Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "d8ef3dd3-f023-4519-9cde-bceafd046b07",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:04:24.271858Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "feff7c86-1dba-41f9-b3d0-09c91bbbdeb0",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:04:24.271858Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "feff7c86-1dba-41f9-b3d0-09c91bbbdeb0",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P9-initial-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:52:40.770970Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "dcaa17ff-e780-4a8c-bac7-3fbc15c1e5e0",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:52:40.770970Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "dcaa17ff-e780-4a8c-bac7-3fbc15c1e5e0",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P9-supplied-fixture-glm-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T01:05:25.399673Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "c591bef5-c9ac-4ead-90db-49acc1eb8df9",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:05:25.399673Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "c591bef5-c9ac-4ead-90db-49acc1eb8df9",
+            "source": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:05:25.404558Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "0bccc3f2-d8b2-4f01-9933-a1634593c8fd",
+            "message_kind": "ai",
+            "role": "assistant",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T01:05:25.404558Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "0bccc3f2-d8b2-4f01-9933-a1634593c8fd",
+            "source": null
+          }
+        }
+      ]
+    },
+    "P9-supplied-fixture-receipts.json": {
+      "status": 200,
+      "body": [
+        {
+          "ts": "2026-10-04T00:53:40.806438Z",
+          "kind": "message",
+          "detail": {
+            "message_id": "770629d3-0fd1-4e73-9313-afdb3b1a2f20",
+            "message_kind": "user",
+            "role": "user",
+            "prompt_tokens": null,
+            "completion_tokens": null
+          }
+        },
+        {
+          "ts": "2026-10-04T00:53:40.806438Z",
+          "kind": "skill",
+          "detail": {
+            "skill_name": "harness-probe",
+            "message_id": "770629d3-0fd1-4e73-9313-afdb3b1a2f20",
+            "source": null
+          }
+        }
+      ]
+    }
+  },
+  "raw_records_sha256": {
+    "P1-receipts.json": "722f4901aa78d19dc7df4b666c9f2808082a890dfeb2c66943b557c59ea0d6ab",
+    "P10-glm-receipts.json": "3def32550a2d1785789a6ef5810645cea738fbda7be74f683fd0b513ff21c38d",
+    "P10-receipts.json": "87699e202f8ba2cbd1aac0f5b822493b80572ae6b6430721b91e2ce8bd507143",
+    "P11-focused-receipts.json": "9e451b39a150172ef19c768c8c00beccf1b05dae5ca8c4fc6d200f76b7fa52cf",
+    "P11-subcheck-glm-receipts.json": "28bb018786f73842cf37f16927b1a1eaba2957e1555ffb1c99a59f3dceeba182",
+    "P12-receipts.json": "7f4c7fd2c171cbe6818fc7d7e35f80b74c3b97691ce144bf6fb9f09a75753fcd",
+    "P2-initial-receipts.json": "802b0c09857deee291bb22369c8e0fc93d7f54530acb1b9291f05473ad299b51",
+    "P3-clean-receipts.json": "658ed59731d8852b49535a8472abac10fd31dac271af955086223ede973f3cdd",
+    "P3-tracked-receipts.json": "cf410b381b3ff457bafa691a7643e37af5d2c4ecbab69b4204bab1646a36d9e3",
+    "P4-focused-receipts.json": "669795351c8f8b9469771ec1911a9b80447fef74bdbaf185a1a1b39755a1f352",
+    "P4-glm-receipts.json": "a3080fcfbe8fdb5f7c099db490d66bc93f39facd0265b1d8c89c7864e479c30f",
+    "P4-receipts.json": "593d465164177852d6ebc213c6aee74e5a3acfb5a1eb7594266ce201ffc89a92",
+    "P5-initial-receipts.json": "3b70a162c617edf694387e70de7c42ee1049f5de862d6673f4c1cf17bb289835",
+    "P5-new-task-glm-receipts.json": "4a6a45f4aef16d8e64c05c141906433875a8bd47166695aa675fa12a89a1525e",
+    "P5-new-task-receipts.json": "b1595e2ba569729ce2d058c477caa033fb12117ec6f0630d5896836ddf9678b0",
+    "P6-receipts.json": "4b4273b64e3b01a8f38227a8ed887e8a20f6b939b0308839f5ad22ed0465240b",
+    "P7a-glm-receipts.json": "836929ff4358533598c95b026dfd9c91b44200ffb0c98856b5f592acad203976",
+    "P7a-receipts.json": "30b258750fe8a1a5c7095d9f9e375d2c8005003c0ef79671ae24cce628669a13",
+    "P7b-focused-receipts.json": "c96145d0ff6cc1bdeb7e7b6316c2a3cce6b2a7b9326bc99c49cc06edfde798e3",
+    "P7b-glm-receipts.json": "eb17f6b6e10f1ae4f2d864f78ba3159e550199ec7f64daf4c006f36be0817ead",
+    "P7b-receipts.json": "12a410ac32fa91ef3cb46d6f04246d4226a0c467ac5dfb1e1f03c0eed3887e9d",
+    "P8-glm-receipts.json": "7dad0726dd6a4bb7b2a1644e669b666235164eecbff0a36d81effd03b2c6c3b4",
+    "P8-receipts.json": "01a231526fcae71769c6accc5a11b9532aed0d2d897a6589fc743a426686eac4",
+    "P9-focused-receipts.json": "7511bb39a348af974ee0fbc968a2667fa7b0213505dd3f1a81193476437ca95d",
+    "P9-initial-glm-receipts.json": "750309f99f6aebee8c42344b4690f4d740db13315494ba8073dc64b21f8bbfb3",
+    "P9-initial-receipts.json": "a8a08acf3e54e01a324f3b6b42a1db1ebc76b655c17f8b41df059faf90f4f44b",
+    "P9-supplied-fixture-glm-receipts.json": "94316e834fc3d7c4b232aa4c866af1da4f46b5e52c8a39c7707c466749431f63",
+    "P9-supplied-fixture-receipts.json": "29f4bca23c246ecb8a125427890ecc67605bcadd4cabb877b0753f7f9e79101b"
+  }
+}

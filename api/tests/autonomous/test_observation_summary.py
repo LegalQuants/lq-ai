@@ -3,7 +3,7 @@ from app.autonomous.guard import ToolResult
 from app.autonomous.planner import summarize_observation
 
 
-def test_caselaw_summary_lists_case_names_not_full_text():
+def test_caselaw_summary_lists_case_names_not_full_text() -> None:
     result = ToolResult(
         data={
             "results": [
@@ -24,7 +24,7 @@ def test_caselaw_summary_lists_case_names_not_full_text():
     assert len(s) < 400
 
 
-def test_chunks_summary_counts_and_files():
+def test_chunks_summary_counts_and_files() -> None:
     result = ToolResult(
         data={
             "chunks": [
@@ -39,13 +39,13 @@ def test_chunks_summary_counts_and_files():
     assert "YYYY" not in s
 
 
-def test_failed_result_is_summarized_not_raised():
+def test_failed_result_is_summarized_not_raised() -> None:
     result = ToolResult(data=None, outcome="gateway_error")
     s = summarize_observation(ToolIntent.retrieve_caselaw, "x", result)
     assert "failed" in s and "gateway_error" in s
 
 
-def test_mcp_tool_summary_emits_keys_not_values():
+def test_mcp_tool_summary_emits_keys_not_values() -> None:
     result = ToolResult(
         data={"status": "ok", "citation": "X" * 500, "tool": "courtlistener"},
         outcome="success",
@@ -55,7 +55,7 @@ def test_mcp_tool_summary_emits_keys_not_values():
     assert "XXXX" not in s  # P3: keys only, never values
 
 
-def test_caselaw_summary_caps_at_five_and_notes_more():
+def test_caselaw_summary_caps_at_five_and_notes_more() -> None:
     result = ToolResult(
         data={
             "results": [

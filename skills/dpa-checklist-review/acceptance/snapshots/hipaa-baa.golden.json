@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "skill": "dpa-checklist-review",
+  "fixture": "hipaa-baa",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/dpa-checklist-review/SKILL.md (structured_checklist output; hipaa_baa regime sources cite 45 CFR provisions) and test-plan.md Scenario 4 (HIPAA BAA: 0-2 critical-equivalent only if §164.504(e)(2) elements missing — this fixture covers the core elements with soft spots on minimum-necessary and the 30-day breach window). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "DPA Checklist Review",
+      "Overall posture",
+      "Compliance checklist",
+      "Items requiring human judgment",
+      "Recommended next steps"
+    ],
+    "metrics": [
+      {
+        "id": "checklist_rows",
+        "kind": "table_rows",
+        "min": 6,
+        "max": null
+      },
+      {
+        "id": "hipaa_authority_cited",
+        "kind": "regex_count",
+        "pattern": "164\\.|45\\s*cfr",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "missing_status_rows",
+        "kind": "regex_count",
+        "pattern": "\\|\\s*missing\\s*\\|",
+        "min": 0,
+        "max": 5
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 3,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 35000
+  }
+}

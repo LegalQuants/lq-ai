@@ -2,6 +2,14 @@
 
 > **Status:** Stub at v1 launch. The Compliance Alignment Pack is a documented commitment in [PRD §1.8 Security Posture](../PRD.md#18-security-posture) and lands in M1–M2; this README documents the scope and provides operator-usable orientation in the interim.
 
+## In short
+
+This page describes the Compliance Alignment Pack: the format its per-framework documents will follow, and the commitment behind them. It is not a certification, and none of the six per-framework documents exists yet.
+
+- **What's here today.** This README and the document format below — no `soc2-alignment.md`, `iso27001-alignment.md`, or other per-framework file exists in `docs/compliance/` yet.
+- **What's named but not written.** SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP Moderate (below), plus NIST AI RMF, OWASP LLM Top 10, and OpenSSF Scorecard (further down) — each has a target milestone or a mini-PRD, not a finished mapping.
+- **Whose deployment gets certified.** The operator's, not the LQ.AI project's — the Pack gives the operator's compliance team a documented starting point, not a finished answer.
+
 The Compliance Alignment Pack is a set of documents mapping LQ.AI's design, architecture, and operational posture to the controls of major compliance frameworks. It is **not a certification** — LQ.AI is open-source software the operator deploys and operates; the operator's deployment is what gets certified, not the project itself. The Pack is the project's contribution to the operator's certification work: pre-mapped control responses with citations to PRD sections, code modules, and documentation, so the operator's compliance team has a substantive starting point rather than a blank questionnaire.
 
 ## Frameworks covered
@@ -51,6 +59,24 @@ deployment host, personnel screening, etc.).
 Controls where the project's response is in-development. As M1 and M2 ship,
 open items resolve.
 ```
+
+## Planned, not published: three named community-contribution targets
+
+Three mappings that would matter most to an AI-governance or AppSec reviewer specifically are
+scoped as open community-contribution items and do not exist as documents yet — each has a mini-PRD
+describing exactly what the finished document would contain, but no `docs/compliance/*.md` file
+behind it today:
+
+- **NIST AI RMF 1.0 Profile** (AI 100-1 plus the Generative AI Profile, AI 600-1) — the framework a
+  federal or federal-adjacent AI-governance reviewer looks for first. See the
+  [mini-PRD](../contribute/mini-prds/nist-ai-rmf-profile.md) for the planned structure.
+- **OWASP Top 10 for LLM Applications mapping** — the de facto framework an AppSec reviewer asks for
+  when blessing an LLM-touching tool. See the
+  [mini-PRD](../contribute/mini-prds/owasp-llm-top10-mapping.md).
+- **OpenSSF Scorecard and Best Practices Badge** — an independently-computed, continuously-updated
+  engineering-discipline signal (branch protection, signed releases, dependency automation, and
+  similar, scored 0–10) rather than a written mapping document, plus a self-attested Best Practices
+  Badge. See the [mini-PRD](../contribute/mini-prds/openssf-scorecard-and-badges.md).
 
 ## Related procurement-readiness materials
 

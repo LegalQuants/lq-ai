@@ -63,6 +63,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.inference import InferenceRoutingLog
@@ -112,20 +113,20 @@ async def estimate_judge_call_cost_usd(
     """Return the estimated USD cost of one judge call to ``judge_model``.
 
     Computes the rolling average ``cost_estimate`` across the last
-    :data:`_WINDOW_SAMPLES` ``inference_routing_log`` rows where
-    ``routed_model = judge_model`` AND ``purpose = purpose``.
-    Returns :data:`DEFAULT_PER_JUDGE_USD` if fewer than
-    :data:`_MIN_SAMPLES` such rows exist.
-
+    ...
     ``db=None`` skips the query and returns :data:`DEFAULT_PER_JUDGE_USD`.
-    Honored by tests that exercise the activation-resolver logic without
-    caring about cost calibration; production callers always pass a real
-    session.
+    ...
 
     ``purpose`` selects which routing-log rows to average. The default
     (``'judge_paraphrase'``) preserves all existing callers. Pass
     ``'judge_case_content'`` (or any other tag) to calibrate against a
     different inference purpose — e.g., the whole-opinion caselaw judge.
+
+    The lookup runs inside a SAVEPOINT on ``db``. A recoverable SQL
+    statement error rolls back only that savepoint and returns
+    :data:`DEFAULT_PER_JUDGE_USD`, leaving the caller's transaction usable.
+    Connection-invalidated errors and failures flushing the caller's
+    pending state propagate.
 
     Cached in-process per :data:`_CACHE_TTL_SECONDS`. Tests can use
     :func:`invalidate_cache` to reset between assertions.
@@ -160,21 +161,37 @@ async def estimate_judge_call_cost_usd(
         func.count(recent.c.cost_estimate),
     )
 
+    # Flush OUTSIDE the recoverable catch. ``begin_nested()`` autoflushes
+    # pending caller state; a failure there is the caller's problem and
+    # must propagate rather than be turned into a successful cost fallback.
+    await db.flush()
+
     try:
-        result = await db.execute(stmt)
-        avg_raw, count = result.one()
-    except Exception as exc:
-        # Defensive: a DB hiccup on the cost pre-flight should never
-        # break chat-send. Fall back to the conservative default and
-        # log loud — operators care about audit-trail visibility on
-        # this failure mode.
+        # SAVEPOINT isolates this optional read: if the statement fails,
+        # only the savepoint is rolled back (when the ``async with`` exits
+        # on the exception), so the caller's transaction and earlier
+        # writes stay intact and usable. It never commits, so the
+        # caller keeps ownership of the commit boundary.
+        async with db.begin_nested():
+            result = await db.execute(stmt)
+            avg_raw, count = result.one()
+    except DBAPIError as exc:
+        if exc.connection_invalidated:
+            # Unrecoverable: the connection is gone. Do not disguise this
+            # as a successful recovery; let the caller see the failure.
+            raise
+        # Recoverable statement error: savepoint already rolled back, so
+        # the session is usable. Fall back to the conservative default
+        # (deliberately NOT cached) and log loudly for operators.
         logger.warning(
-            "judge cost calibration query failed: %s",
+            "judge cost calibration query failed; savepoint rolled back, "
+            "using default estimate: %s",
             exc,
             extra={
                 "event": "citation_cost_query_error",
                 "judge_model": judge_model,
                 "error_type": type(exc).__name__,
+                "recovered": True,
             },
         )
         return DEFAULT_PER_JUDGE_USD

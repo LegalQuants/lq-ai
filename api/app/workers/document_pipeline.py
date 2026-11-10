@@ -234,7 +234,7 @@ def _build_cron_jobs() -> list[Any]:
     from arq import cron
 
     return [
-        # Hourly: clear expired user-export bundles from MinIO + the
+        # Hourly: clear expired user-export bundles from object storage + the
         # user_export_jobs row's storage_key. Runs at minute 7 to avoid
         # piling onto top-of-hour traffic.
         cron(export_gc_job, minute=7),

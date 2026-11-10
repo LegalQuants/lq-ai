@@ -4,7 +4,7 @@ This module is the entry point invoked by the ``arq`` worker. Given a
 ``files.id``, it:
 
 1. Loads the file row (refusing to ingest soft-deleted rows).
-2. Pulls the bytes from MinIO via :func:`app.storage.stream_download`.
+2. Pulls the bytes from object storage via :func:`app.storage.stream_download`.
 3. Runs :func:`app.pipeline.parsers.parse_pdf` (PyMuPDF mandatory,
    Docling best-effort) on the byte stream — wrapped in
    :func:`asyncio.to_thread` because the parsers are sync.
@@ -24,7 +24,7 @@ Failure paths:
   ``parse_failed`` (corrupt PDF), ``unsupported_content`` (encrypted /
   image-only PDF), or ``decode_error`` (a text/Markdown upload that is
   not valid UTF-8, or contains a NUL byte).
-* **Storage failure** (MinIO unreachable): the worker raises and
+* **Storage failure** (object store unreachable): the worker raises and
   ``arq`` retries per its visibility-timeout policy. The row stays
   at ``processing`` until a successful run flips it.
 
@@ -186,12 +186,12 @@ async def ingest_file(
         await db.commit()
         await db.refresh(row)
 
-    # ---- Pull bytes from MinIO.
+    # ---- Pull bytes from object storage.
     try:
         raw_bytes = await _read_all_bytes(row.storage_path)
     except Exception as exc:
         # Storage failures: log and re-raise so arq retries. Don't flip
-        # status to failed — operator-side fixes (MinIO restart) should
+        # status to failed — operator-side fixes (object-store restart) should
         # let the next attempt succeed.
         log.warning(
             "ingest_file: storage read failed",
@@ -322,7 +322,7 @@ async def ingest_file(
 
 
 async def _read_all_bytes(storage_path: str) -> bytes:
-    """Pull every byte from the MinIO object at ``storage_path``.
+    """Pull every byte from the object-store object at ``storage_path``.
 
     For M1 we read the full body into memory — PDF size is bounded by
     ``LQ_AI_MAX_UPLOAD_SIZE_MB`` (default 100 MB) which is acceptable

@@ -1,0 +1,389 @@
+{
+  "answered_directly": false,
+  "chat_id": "d23cb195-864a-41ad-896b-6939318cb508",
+  "direct_answer": null,
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0716",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 11199,
+        "messages_digest": "2941555f360a613a542ff9468b1bbab35805e460a952fa5be13325aa8860e34c",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0716",
+        "tier": 1
+      },
+      "charged_usd": "0.0716",
+      "completed_at": "2026-10-09T23:51:08.506766Z",
+      "created_at": "2026-10-09T23:51:08.497859Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0716",
+      "skill": {
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2",
+        "version": "2"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "55e69237-7b0c-47bd-8571-f69b6d732297",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-10T01:51:08.460582Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "How much annual leave do staff get?",
+    "knowledge_bases": [
+      {
+        "knowledge_base_id": "bb1f7688-190b-47e1-a01b-6bd5c649b11b",
+        "name": "People policies"
+      },
+      {
+        "knowledge_base_id": "14bd8bb7-5720-4cca-98de-eb9af8b38473",
+        "name": "Travel"
+      }
+    ],
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "42d6194d-90de-4b2c-8d55-dcbaa714ae06",
+    "packet_digest": null,
+    "plan_id": "79e5b372-0c82-45d6-a40d-6f7a69802f1f",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "3f39bc2e4c2c74a3ce504c6c29ab34f0b531395b3af067890d1c356655766faf",
+    "profile": "new_harness_v1",
+    "project_id": "29a5607d-7efa-4479-9500-63508dd11c9a",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [],
+        "knowledge_base_ids": [
+          "14bd8bb7-5720-4cca-98de-eb9af8b38473",
+          "bb1f7688-190b-47e1-a01b-6bd5c649b11b"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [],
+    "today": "2026-10-09"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0",
+  "sources": [],
+  "spent_usd": "0.0716",
+  "status": "awaiting_approval",
+  "stop_reason": null,
+  "tree": {
+    "approved": false,
+    "children": [
+      {
+        "allocation_usd": "3.4686",
+        "effects": [],
+        "files": [],
+        "outcome": null,
+        "phase": "intake",
+        "reserved_usd": "0",
+        "session_id": "c8214bc1-d8d4-4c4c-9288-59179c760004",
+        "spent_usd": "0",
+        "status": "pending",
+        "tools": [
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Search the matter's knowledge bases",
+            "name": "search_knowledge_base",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 5,
+        "updated_at": null
+      }
+    ],
+    "mode": "new_harness_v1",
+    "partial_summary": null,
+    "plan": {
+      "attempt_timeout_seconds": 300,
+      "budget_usd": "10.0000",
+      "children": [
+        {
+          "budget_usd": "3.4686",
+          "dispatch_id": "c8214bc1-d8d4-4c4c-9288-59179c760004",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [],
+              "knowledge_base_ids": [
+                "14bd8bb7-5720-4cca-98de-eb9af8b38473",
+                "bb1f7688-190b-47e1-a01b-6bd5c649b11b"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "896aabe4a8bc18f5c41e12f3b1349d6662c13ad371e6d29c79f5db2250767674",
+              "kind": "prompt",
+              "name": "new_harness/subagent.v2"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "What must Customer pay and when?",
+            "stopping_condition": "One answer",
+            "topic": "Payments"
+          },
+          "tools": {
+            "analysis": [
+              "read_note",
+              "save_note",
+              "search_knowledge_base"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 5
+        }
+      ],
+      "contract_version": 3,
+      "deadline": "2026-10-10T01:51:08.460582Z",
+      "delegation_grants": {
+        "analysis": [
+          "plan",
+          "retrieve_chunks",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "delivery": [],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "intake": []
+      },
+      "documents": [],
+      "goal": "How much annual leave do staff get?",
+      "knowledge_bases": [
+        {
+          "knowledge_base_id": "bb1f7688-190b-47e1-a01b-6bd5c649b11b",
+          "name": "People policies"
+        },
+        {
+          "knowledge_base_id": "14bd8bb7-5720-4cca-98de-eb9af8b38473",
+          "name": "Travel"
+        }
+      ],
+      "max_active_children": 2,
+      "owner_id": "42d6194d-90de-4b2c-8d55-dcbaa714ae06",
+      "plan_id": "79e5b372-0c82-45d6-a40d-6f7a69802f1f",
+      "planning_digest": "dbf8d6914a5fee39703e7728c49caf124c36f642afb170b1f0b070fa2c61f7ad",
+      "policy_version": "3f39bc2e4c2c74a3ce504c6c29ab34f0b531395b3af067890d1c356655766faf",
+      "profile": "new_harness_v1",
+      "project_id": "29a5607d-7efa-4479-9500-63508dd11c9a",
+      "revision": 1,
+      "root": {
+        "anonymize": true,
+        "grants": {
+          "analysis": [
+            "plan",
+            "retrieve_chunks",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "delivery": [],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "intake": []
+        },
+        "maximum_egress_tier": 0,
+        "minimum_inference_tier": 1,
+        "privileged": false,
+        "resources": {
+          "document_ids": [],
+          "knowledge_base_ids": [
+            "14bd8bb7-5720-4cca-98de-eb9af8b38473",
+            "bb1f7688-190b-47e1-a01b-6bd5c649b11b"
+          ],
+          "source_names": []
+        },
+        "skill": {
+          "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
+          "kind": "prompt",
+          "name": "new_harness/orchestrator.v2"
+        }
+      },
+      "root_allowance_usd": "1.1562",
+      "root_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0"
+    },
+    "plan_hash": "3074e2b4573c905dfeb60eb6fa5af479ea5b9ded96ffaf4a099f4ff246def353",
+    "reserved_usd": "0.0000",
+    "result": null,
+    "root": {
+      "allocation_usd": "1.1562",
+      "effects": [
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0716",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 11199,
+            "messages_digest": "2941555f360a613a542ff9468b1bbab35805e460a952fa5be13325aa8860e34c",
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0716",
+            "tier": 1
+          },
+          "charged_usd": "0.0716",
+          "completed_at": "2026-10-09T23:51:08.506766Z",
+          "created_at": "2026-10-09T23:51:08.497859Z",
+          "effect_key": "chat:plan:v1",
+          "intent": "plan",
+          "outcome": "success",
+          "reserved_usd": "0.0716",
+          "skill": {
+            "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
+            "kind": "prompt",
+            "name": "new_harness/orchestrator.v2",
+            "version": "2"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "planning",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        }
+      ],
+      "files": [],
+      "outcome": null,
+      "phase": "analysis",
+      "reserved_usd": "0.0000",
+      "session_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0",
+      "spent_usd": "0.0716",
+      "status": "queued",
+      "tools": [],
+      "turn_limit": 0,
+      "updated_at": "2026-10-09T23:51:08.510407Z"
+    },
+    "root_id": "d558525a-6bb2-4c04-a4da-0aecb1fff9e0",
+    "spent_usd": "0.0716",
+    "status": "awaiting_approval",
+    "stop_reason": null,
+    "verification": "unverified"
+  }
+}

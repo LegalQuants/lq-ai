@@ -1,9 +1,11 @@
 import uuid
+from typing import Any
 
 import httpx
 import pytest
 import respx
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import MCPAuthorizationRequired, NotFound
 from app.mcp import service
@@ -43,7 +45,7 @@ _GW_CONFIG_NO_OAUTH = {
 }
 
 
-def _tools_payload(provider, names):
+def _tools_payload(provider: str, names: list[str]) -> dict[str, Any]:
     return {
         "provider": provider,
         "tools": [
@@ -65,7 +67,9 @@ def _tools_payload(provider, names):
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_gateway(*, oauth_names: list[str], tools_payload: dict | None = None):
+def _make_fake_gateway(
+    *, oauth_names: list[str], tools_payload: dict | None = None
+) -> tuple[Any, Any]:
     """Build a minimal fake gateway client for service-layer tests.
 
     ``oauth_names`` — list of provider names that appear in the oauth config.
@@ -77,10 +81,12 @@ def _make_fake_gateway(*, oauth_names: list[str], tools_payload: dict | None = N
     ]
     payload = tools_payload or {"provider": "p", "tools": []}
 
-    async def fake_list_mcp_oauth_config(*, request_id=None):
+    async def fake_list_mcp_oauth_config(*, request_id: str | None = None) -> list[dict[str, str]]:
         return oauth_cfg
 
-    async def fake_discover_tools(provider, *, user_token=None, request_id=None):
+    async def fake_discover_tools(
+        provider: str, *, user_token: str | None = None, request_id: str | None = None
+    ) -> dict:
         # Stash the token for assertion.
         fake_discover_tools.last_user_token = user_token  # type: ignore[attr-defined]
         return payload
@@ -95,7 +101,9 @@ def _make_fake_gateway(*, oauth_names: list[str], tools_payload: dict | None = N
 
 
 @pytest.mark.asyncio
-async def test_refresh_oauth_server_with_valid_token_passes_token(db_session, monkeypatch) -> None:
+async def test_refresh_oauth_server_with_valid_token_passes_token(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """oauth server + get_valid_token returns a token → discover_tools called with it."""
     fake_gw, fake_discover = _make_fake_gateway(
         oauth_names=["oauth-mcp"],
@@ -105,7 +113,9 @@ async def test_refresh_oauth_server_with_valid_token_passes_token(db_session, mo
 
     uid = uuid.uuid4()
 
-    async def _fake_get_valid_token(db, *, user_id, server):
+    async def _fake_get_valid_token(
+        db: AsyncSession, *, user_id: uuid.UUID, server: str
+    ) -> str | None:
         return "secret-token"
 
     monkeypatch.setattr("app.mcp.service.oauth.get_valid_token", _fake_get_valid_token)
@@ -115,14 +125,18 @@ async def test_refresh_oauth_server_with_valid_token_passes_token(db_session, mo
 
 
 @pytest.mark.asyncio
-async def test_refresh_oauth_server_get_valid_token_none_raises(db_session, monkeypatch) -> None:
+async def test_refresh_oauth_server_get_valid_token_none_raises(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """oauth server + get_valid_token returns None → MCPAuthorizationRequired."""
     fake_gw, _fake_discover = _make_fake_gateway(oauth_names=["oauth-mcp"])
     monkeypatch.setattr("app.mcp.service.get_gateway_client", lambda: fake_gw)
 
     uid = uuid.uuid4()
 
-    async def _fake_get_valid_token_none(db, *, user_id, server):
+    async def _fake_get_valid_token_none(
+        db: AsyncSession, *, user_id: uuid.UUID, server: str
+    ) -> None:
         return None
 
     monkeypatch.setattr("app.mcp.service.oauth.get_valid_token", _fake_get_valid_token_none)
@@ -139,7 +153,9 @@ async def test_refresh_oauth_server_get_valid_token_none_raises(db_session, monk
 
 
 @pytest.mark.asyncio
-async def test_refresh_oauth_server_no_user_id_raises(db_session, monkeypatch) -> None:
+async def test_refresh_oauth_server_no_user_id_raises(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """oauth server + user_id=None (admin path) → MCPAuthorizationRequired."""
     fake_gw, _fake_discover = _make_fake_gateway(oauth_names=["oauth-mcp"])
     monkeypatch.setattr("app.mcp.service.get_gateway_client", lambda: fake_gw)
@@ -154,7 +170,9 @@ async def test_refresh_oauth_server_no_user_id_raises(db_session, monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_refresh_none_bearer_server_passes_no_token(db_session, monkeypatch) -> None:
+async def test_refresh_none_bearer_server_passes_no_token(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """none/bearer server → discover_tools called with user_token=None (unchanged path)."""
     fake_gw, fake_discover = _make_fake_gateway(
         oauth_names=[],  # acme-mcp is NOT in oauth list
@@ -173,10 +191,10 @@ async def test_refresh_none_bearer_server_passes_no_token(db_session, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_list_servers_filters_mcp(monkeypatch) -> None:
+async def test_list_servers_filters_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
     """list_servers returns only MCP-type providers WITH auth field populated."""
 
-    async def _fake_get_admin_config(*, request_id=None):
+    async def _fake_get_admin_config(*, request_id: str | None = None) -> dict[str, Any]:
         return {
             "tool_providers": [
                 {"name": "acme-mcp", "type": "mcp", "auth": "none"},
@@ -194,7 +212,7 @@ async def test_list_servers_filters_mcp(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_refresh_upserts_and_preserves_enabled(db_session) -> None:
+async def test_refresh_upserts_and_preserves_enabled(db_session: AsyncSession) -> None:
     # seed a disabled tool that will survive refresh + a stale tool that won't
     db_session.add(
         MCPToolCache(
@@ -242,7 +260,7 @@ async def test_refresh_upserts_and_preserves_enabled(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_tool_enabled_toggles(db_session) -> None:
+async def test_set_tool_enabled_toggles(db_session: AsyncSession) -> None:
     db_session.add(
         MCPToolCache(
             provider_name="acme-mcp",
@@ -262,13 +280,13 @@ async def test_set_tool_enabled_toggles(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_tool_enabled_missing_raises(db_session) -> None:
+async def test_set_tool_enabled_missing_raises(db_session: AsyncSession) -> None:
     with pytest.raises(NotFound):
         await service.set_tool_enabled(db_session, provider="x", tool="y", enabled=True)
 
 
 @pytest.mark.asyncio
-async def test_set_tool_enabled_is_provider_scoped(db_session) -> None:
+async def test_set_tool_enabled_is_provider_scoped(db_session: AsyncSession) -> None:
     """provider_name filter in set_tool_enabled is load-bearing: toggling a tool
     on one provider must not affect a same-named tool on a different provider."""
     db_session.add(
@@ -316,7 +334,7 @@ async def test_set_tool_enabled_is_provider_scoped(db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_refresh_is_provider_scoped(db_session) -> None:
+async def test_refresh_is_provider_scoped(db_session: AsyncSession) -> None:
     """refresh_server(provider="acme-mcp") with a narrower tool list must not
     delete cached rows belonging to a different provider."""
     db_session.add(

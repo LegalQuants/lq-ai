@@ -60,6 +60,12 @@ describe('ReceiptsList helpers', () => {
 		expect(result.map((e) => e.kind)).toEqual(['message', 'audit']);
 	});
 
+	it('describes a local reference read without presenting it as citation evidence', () => {
+		expect(eventDescription({ts:'t', kind:'audit', detail:{
+			action:'skill.reference_read', provider:'built-in:fixture-skill', outcome:'executed'
+		}})).toBe('Reference read — built-in:fixture-skill (executed)');
+	});
+
 	it('filterEvents returns empty when no kinds match', () => {
 		const events: ReceiptEvent[] = [{ ts: 't', kind: 'message', detail: {} }];
 		expect(filterEvents(events, ['audit', 'error'])).toHaveLength(0);

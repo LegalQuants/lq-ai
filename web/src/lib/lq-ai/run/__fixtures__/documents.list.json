@@ -1,0 +1,88 @@
+{
+  "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
+  "documents": [
+    {
+      "attached_to_project": true,
+      "characters": 244,
+      "file_id": "9345f902-3b18-4c44-bfb6-b78fcf58dd67",
+      "filename": "msa.txt",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "text/plain",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 244
+    },
+    {
+      "attached_to_project": false,
+      "characters": 190,
+      "file_id": "c215db07-f967-4cb7-bcc6-7c2cdd057874",
+      "filename": "dpa.md",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "text/markdown",
+      "reason": null,
+      "selectable": true,
+      "size_bytes": 190
+    },
+    {
+      "attached_to_project": true,
+      "characters": 4,
+      "file_id": "ac1cb54f-5233-4266-b48b-62e3bc64e2cc",
+      "filename": "draft.docx",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "reason": "unsupported_type",
+      "selectable": false,
+      "size_bytes": 4
+    },
+    {
+      "attached_to_project": true,
+      "characters": 0,
+      "file_id": "a2562402-eba0-4d97-80f8-596d586cb1bf",
+      "filename": "scan.pdf",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "application/pdf",
+      "reason": "not_ingested",
+      "selectable": false,
+      "size_bytes": 1
+    },
+    {
+      "attached_to_project": true,
+      "characters": 0,
+      "file_id": "d3997f72-06d1-4c07-a35f-5aa7c378a7dd",
+      "filename": "broken.pdf",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "application/pdf",
+      "reason": "ingestion_failed",
+      "selectable": false,
+      "size_bytes": 1
+    },
+    {
+      "attached_to_project": true,
+      "characters": 2,
+      "file_id": "98eac8f9-cfd2-40f0-80df-052c50f6153d",
+      "filename": "image-only.pdf",
+      "matter_minimum_inference_tier": null,
+      "matter_privileged": false,
+      "matters": [],
+      "mime_type": "application/pdf",
+      "reason": "no_text",
+      "selectable": false,
+      "size_bytes": 2
+    }
+  ],
+  "knowledge_bases": [],
+  "knowledge_bases_omitted": 0,
+  "max_documents": 8,
+  "project_id": "9f904602-db14-4d29-a8c1-affaaff3cdb0",
+  "suggested_file_ids": []
+}

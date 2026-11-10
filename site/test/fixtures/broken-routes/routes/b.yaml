@@ -1,0 +1,11 @@
+# The second half of two cross-file checks started in a.yaml.
+
+# f. duplicate route, second half.
+- route: broken/duplicate-route
+  source: site/test/fixtures/repo/route-mapped/extra-a.md
+  description: The second entry claiming the same route as one in a.yaml.
+
+# g. source mapped twice, second half.
+- route: broken/second-claim
+  source: site/test/fixtures/repo/route-mapped/extra-b.md
+  description: The second entry mapping the same source as one in a.yaml.

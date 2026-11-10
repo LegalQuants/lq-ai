@@ -77,6 +77,9 @@
 			case 'inference':
 				return `${detail.provider} — ${detail.model} (tier ${detail.tier})`;
 			case 'audit':
+				if (detail.action === 'skill.reference_read') {
+					return `Reference read — ${detail.provider} (${detail.outcome})`;
+				}
 				return String(detail.action ?? 'audit event');
 			case 'skill': {
 				const src = SOURCE_LABEL[String(detail.source ?? '')] ?? null;

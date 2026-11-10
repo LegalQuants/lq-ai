@@ -4,6 +4,13 @@ This document establishes the framework for acceptance testing skills before pub
 
 The framework operationalizes [PRD §9 DE-051](PRD.md#de-051--acceptance-testing-for-the-m1-skill-set-against-real-documents) (acceptance testing for the M1 skill set against real documents) and [DE-061](PRD.md#de-061--contract-qa-acceptance-testing) / [DE-072](PRD.md#de-072--msa-review-acceptance-testing-against-real-document-corpus) (skill-specific acceptance testing entries).
 
+## In short
+
+- Acceptance testing checks two different things: whether a skill's output has the right *shape* — sections, severity tags, and citations a script or a careful reader can check — and whether it's *calibrated* against real documents, which takes a practicing lawyer's judgment.
+- A test plan by itself is not a passing result. Passing needs the actual output the skill produced on real test documents, plus a reviewing attorney's evaluation against the plan's stated criteria — not just the plan file existing.
+- Test documents come from the operator's own anonymized practice, not the repository — keep confidential material out of anything you commit or share.
+- Keep a record of every run: which skill version was tested, which documents were used (described, not reproduced — see Reproduction under Issues filing convention), the actual output, and the reviewing attorney's assessment.
+
 ---
 
 ## Philosophy
@@ -47,7 +54,7 @@ For skills shipped with the project (the M1 starter skills), maintainers will ru
 
 ## Test plan template
 
-Every per-skill test plan follows this structure. The template lives at `skills/_test-plan-template.md` and serves as the starting point for any new skill's test plan.
+Every per-skill test plan follows this structure, intended to live at `skills/_test-plan-template.md` as the starting point for any new skill's test plan. **That file is not present in the repository as of the checked commit** — use an existing plan such as [`skills/nda-review/test-plan.md`](../skills/nda-review/test-plan.md) as the template instead; its structure (summary, corpus requirements, scenarios, pass criteria) is the one every shipped test plan below follows.
 
 ```markdown
 # Acceptance Test Plan — <skill name> v<version>
@@ -271,16 +278,16 @@ Each M1 starter skill has its test plan in the skill's folder:
 
 | Skill | Test plan location |
 |---|---|
-| NDA Review | [`skills/nda-review/test-plan.md`](nda-review/test-plan.md) |
-| MSA Review — SaaS | [`skills/msa-review-saas/test-plan.md`](msa-review-saas/test-plan.md) |
-| MSA Review — Commercial Purchase | [`skills/msa-review-commercial-purchase/test-plan.md`](msa-review-commercial-purchase/test-plan.md) |
-| DPA Checklist Review | [`skills/dpa-checklist-review/test-plan.md`](dpa-checklist-review/test-plan.md) |
-| Vendor Privacy Policy First Pass | [`skills/vendor-privacy-policy-first-pass/test-plan.md`](vendor-privacy-policy-first-pass/test-plan.md) |
-| Contract QA | [`skills/contract-qa/test-plan.md`](contract-qa/test-plan.md) |
-| Action Items from Client Alert | [`skills/action-items-from-client-alert/test-plan.md`](action-items-from-client-alert/test-plan.md) |
-| Comms Improver | [`skills/comms-improver/test-plan.md`](comms-improver/test-plan.md) |
-| Enhance Prompt | [`skills/enhance-prompt/test-plan.md`](enhance-prompt/test-plan.md) |
-| Skill Creator | [`skills/skill-creator/test-plan.md`](skill-creator/test-plan.md) |
+| NDA Review | [`skills/nda-review/test-plan.md`](../skills/nda-review/test-plan.md) |
+| MSA Review — SaaS | [`skills/msa-review-saas/test-plan.md`](../skills/msa-review-saas/test-plan.md) |
+| MSA Review — Commercial Purchase | [`skills/msa-review-commercial-purchase/test-plan.md`](../skills/msa-review-commercial-purchase/test-plan.md) |
+| DPA Checklist Review | [`skills/dpa-checklist-review/test-plan.md`](../skills/dpa-checklist-review/test-plan.md) |
+| Vendor Privacy Policy First Pass | [`skills/vendor-privacy-policy-first-pass/test-plan.md`](../skills/vendor-privacy-policy-first-pass/test-plan.md) |
+| Contract QA | [`skills/contract-qa/test-plan.md`](../skills/contract-qa/test-plan.md) |
+| Action Items from Client Alert | [`skills/action-items-from-client-alert/test-plan.md`](../skills/action-items-from-client-alert/test-plan.md) |
+| Comms Improver | [`skills/comms-improver/test-plan.md`](../skills/comms-improver/test-plan.md) |
+| Enhance Prompt | [`skills/enhance-prompt/test-plan.md`](../skills/enhance-prompt/test-plan.md) |
+| Skill Creator | [`skills/skill-creator/test-plan.md`](../skills/skill-creator/test-plan.md) |
 
 For new skills, the contributor drafts a test plan following the template above as part of the skill PR.
 

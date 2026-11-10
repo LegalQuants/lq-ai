@@ -55,7 +55,10 @@ explicitly qualified.
 
 ## Cascade
 
-Each citation the model emits (a `"<quote>" (Source: [N])` pair)
+Each citation the model emits (a `"<quote>" (Source: [N])` pair, optionally
+with up to three `*` or `_` between the closing quotation mark and the marker,
+so a quotation the model wrapped in Markdown emphasis is still checked; the
+characters between the quotation marks are unchanged, and an asterisk or underscore inside them is part of the quote; a curly quotation ends at the nearest opening quote, as a straight one does at the next straight quote, so an unclosed opening quote cannot make the scan quadratic)
 becomes a `CitationCandidate` and runs through staged verification.
 The first stage to verify wins; the persisted method names the stage.
 Misses propagate to the next stage. A row that misses *every* stage
@@ -244,9 +247,7 @@ per-judge `inference_routing_log` rows linked by `message_id`.
 
 ## Integration with Anonymization
 
-The Citation Engine and the Anonymization Layer coexist per **Decision
-M2-1**: chat/skill content gets pseudonymized; retrieved source
-documents stay un-pseudonymized. The integration boundary is the
+The Citation Engine and the Anonymization Layer coexist per **Decision M2-1**: in ordinary chat, chat/skill content gets pseudonymized and retrieved source documents stay un-pseudonymized. (A governed run, ADR 0038, also has what its tasks read pseudonymized; the model's quotations are put back by the gateway before they are checked, so they are checked against the file as stored.) The integration boundary is the
 `lq_ai_skip_anonymization` field on `ChatCompletionMessage`.
 
 ### Data flow (M2-D2)

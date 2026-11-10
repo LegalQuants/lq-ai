@@ -44,11 +44,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
+from app.autonomous.orchestration.reading import MatterTerms, thread_for_turn
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import LQAIError
 from app.models.chat import Chat, Message
 from app.models.enhance_prompt import EnhancePromptInteraction
+from app.models.orchestration import OrchestrationRoot
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 log = logging.getLogger(__name__)
@@ -301,6 +303,12 @@ async def _load_chat_history(
     doesn't exist — Enhance Prompt should still produce an expansion
     on a bare prompt; missing history is not an error. Mirrors the
     privacy posture in the chats endpoints.
+
+    A governed run's answer that was written under a matter's terms is
+    replaced by a note (ADR 0038 D5). This request carries no inference-tier
+    floor and no privilege flag, whatever matter the chat is in, so it is
+    compared with a turn that has no terms: any answer written under a floor
+    or under privilege is withheld.
     """
 
     chat = await db.get(Chat, chat_id)
@@ -308,15 +316,31 @@ async def _load_chat_history(
         return []
 
     stmt = (
-        select(Message)
+        select(
+            Message.role,
+            Message.content,
+            Message.autonomous_session_id,
+            OrchestrationRoot.project_id,
+            OrchestrationRoot.planning_snapshot,
+        )
+        .outerjoin(
+            OrchestrationRoot,
+            OrchestrationRoot.session_id == Message.autonomous_session_id,
+        )
         .where(Message.chat_id == chat_id)
         .order_by(Message.created_at.desc())
         .limit(limit)
     )
-    rows = (await db.execute(stmt)).scalars().all()
     # Reverse to chronological order — the skill expects the order it
     # would see in the chat (oldest of the window first).
-    return [{"role": m.role, "content": m.content} for m in reversed(rows)]
+    rows = [
+        (role, content, session_id, project_id, snapshot)
+        for role, content, session_id, project_id, snapshot in reversed(
+            (await db.execute(stmt)).all()
+        )
+    ]
+    thread = await thread_for_turn(db, rows, MatterTerms())
+    return [{"role": role, "content": content} for role, content in thread]
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +388,13 @@ async def enhance_prompt(
         stream=False,
         lq_ai_user_id=str(user.id),
         lq_ai_skills=["enhance-prompt"],
+        # ADR 0007 §2: the gateway enforces the skill's declared required
+        # inputs, and ``raw_input`` is the one this skill declares. Bind it
+        # so the declaration stays true and enforcement is satisfied. The
+        # YAML user turn above remains the skill's working input; the
+        # gateway renders this binding into its data envelope (which
+        # channel carries it is DE-388).
+        lq_ai_skill_inputs={"enhance-prompt": {"raw_input": payload.raw_input}},
     )
 
     try:

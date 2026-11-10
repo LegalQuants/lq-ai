@@ -37,6 +37,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.authz.documents import DocumentWorkflowGateway
 from app.clients.gateway import GatewayClient
 from app.db.session import get_session_factory
 from app.models.document import Document
@@ -169,6 +170,8 @@ async def _run_pipeline(
     was too thin or non-contract.
     """
 
+    gateway = DocumentWorkflowGateway(gateway, session, generation.user_id, generation.document_ids)
+    await gateway.authorize()
     documents = await _load_documents(session, generation.document_ids)
     contract_type = generation.contract_type
 
@@ -214,6 +217,7 @@ async def _run_pipeline(
         gateway=gateway,
     )
 
+    await gateway.authorize()
     generation.draft_playbook = draft.model_dump(mode="json")
     generation.status = "completed"
     generation.completed_at = datetime.now(tz=UTC)

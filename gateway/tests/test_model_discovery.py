@@ -545,6 +545,44 @@ async def test_discover_openai_skips_when_no_key() -> None:
 
 @pytest.mark.unit
 @respx.mock
+async def test_discover_openai_compatible_skips_when_declared_key_is_missing() -> None:
+    """A hosted OpenAI-compatible service whose declared key is not set has no
+    live adapter. Its catalog is not offered and the service is not contacted:
+    some (OpenRouter) serve ``/models`` to anyone, so an unauthenticated call
+    would fill the picker with models that cannot be used."""
+
+    provider = ProviderConfig(
+        name="openrouter",
+        type="openai_compatible",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        tier=2,
+        models=[],
+    )
+    route = respx.get("https://openrouter.ai/api/v1/models").mock(
+        return_value=httpx.Response(
+            200, json={"object": "list", "data": [{"id": "qwen/some-model", "object": "model"}]}
+        )
+    )
+    discoverer = ModelDiscoverer(env={})
+    try:
+        assert await discoverer.discover_openai(provider) == []
+        assert not route.called
+    finally:
+        await discoverer.aclose()
+
+    # With the key set, the catalog is fetched with it.
+    discoverer = ModelDiscoverer(env={"OPENROUTER_API_KEY": "sk-or-test"})
+    try:
+        rows = await discoverer.discover_openai(provider)
+        assert [r.id for r in rows] == ["openrouter/qwen/some-model"]
+        assert route.calls.last.request.headers["authorization"] == "Bearer sk-or-test"
+    finally:
+        await discoverer.aclose()
+
+
+@pytest.mark.unit
+@respx.mock
 async def test_discover_openai_returns_empty_on_401() -> None:
     config = _make_config_with_openai()
     discoverer = ModelDiscoverer(env={"OPENAI_API_KEY": "sk-bad"})

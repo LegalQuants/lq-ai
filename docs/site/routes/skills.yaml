@@ -1,0 +1,76 @@
+- route: skills/what-a-skill-is
+  source: docs/skill-authoring-guide.md
+  title: What is a skill?
+  description: A skill stores reusable instructions in a SKILL.md file, plus descriptive fields such as its name, and optional supporting files.
+  kind: explanation
+  audience: [author, evaluator]
+  status: draft
+  sources: [README.md]
+  sidebar: { order: 2 }
+  next: [skills/author-your-first-skill, skills/your-prompt-files-are-skills, skills/where-skills-live]
+
+- route: skills/author-your-first-skill
+  source: docs/skills/author-your-first-skill.md
+  title: Write your first skill
+  description: Choose one task with a clear input and a reviewable result, then write the instructions and required fields into a SKILL.md — in conversation, or by hand.
+  kind: how-to
+  audience: [author]
+  status: draft
+  sources: [docs/skill-authoring-guide.md, skills/skill-creator/SKILL.md, skills/nda-review/SKILL.md]
+  sidebar: { order: 3 }
+  next: [skills/test-your-skill, skills/attestation, skills/where-skills-live]
+
+- route: skills/your-prompt-files-are-skills
+  source: docs/skills/your-prompt-files-are-skills.md
+  title: Turn a saved prompt into a skill
+  description: What has to change in a prompt file you already use — a clear name, a description, and the required skill fields — to make it a SKILL.md, mapped field by field.
+  kind: how-to
+  audience: [author]
+  status: draft
+  sources: [docs/skill-authoring-guide.md, skills/nda-review/SKILL.md]
+  sidebar: { order: 4 }
+  next: [skills/author-your-first-skill, skills/what-a-skill-is, skills/attestation]
+
+- route: skills/test-your-skill
+  source: docs/acceptance-testing-framework.md
+  title: Test a skill before sharing it
+  description: Test both the decisions you want the AI to make and whether its answer has the right format — the structural-vs-calibration test-plan pattern every first-party skill follows.
+  kind: how-to
+  audience: [author, contributor]
+  status: draft
+  sources: [docs/contribute/mini-prds/skill-acceptance-tests.md, docs/PRD.md, skills/nda-review/test-plan.md]
+  sidebar: { order: 5 }
+  next: [skills/attestation, skills/author-your-first-skill]
+
+- route: skills/where-skills-live
+  source: docs/skills/where-skills-live.md
+  title: Find the skill files
+  description: Built-in skills live under skills/ in the repository — personal, team-shared, or upstream, and, for jurisdiction- or practice-area-specific work, which upstream.
+  kind: explanation
+  audience: [author, contributor]
+  status: draft
+  sources: [docs/adr/0012-db-backed-user-skills.md, docs/adr/0024-jurisdiction-and-practice-area-expansion.md, skills/CONTRIBUTING.md, api/app/api/user_skills.py, README.md]
+  sidebar: { order: 6 }
+  next: [skills/attestation]
+
+- route: skills/attestation
+  source: skills/CONTRIBUTING.md
+  title: What counts as a reviewed skill?
+  description: A useful review names who checked a legal-substance skill, what they tested, and what they found — an author field alone doesn't tell you that.
+  kind: explanation
+  audience: [author, contributor, evaluator]
+  status: draft
+  sources: [CLAUDE.md]
+  sidebar: { order: 7 }
+  next: [skills/where-skills-live, skills/test-your-skill]
+
+- route: skills/playbooks
+  source: docs/playbooks.md
+  title: Use a review playbook
+  description: A playbook records the standard and fallback positions you want applied to a repeatable contract review, rather than a workflow.
+  kind: reference
+  audience: [author, evaluator]
+  status: draft
+  sources: [skills/CONTRIBUTING.md]
+  sidebar: { order: 8 }
+  next: [skills/author-your-first-skill, skills/attestation]

@@ -13,8 +13,8 @@
 			desc: 'Chats, messages, file metadata, user accounts'
 		},
 		{
-			label: 'MinIO',
-			host: 'minio:9000',
+			label: 'RustFS / S3-compatible',
+			host: 'object-store:9000',
 			desc: 'Uploaded files, chat exports, BYOK key blobs'
 		},
 		{

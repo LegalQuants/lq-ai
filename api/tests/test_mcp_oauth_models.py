@@ -70,7 +70,7 @@ def test_mcp_oauth_token_columns() -> None:
 
 @pytest.mark.unit
 def test_mcp_oauth_token_primary_key() -> None:
-    pk = {c.name for c in MCPOAuthToken.__table__.primary_key.columns}
+    pk = {c.name for c in MCPOAuthToken.__table__.primary_key}
     assert pk == {"user_id", "provider_name"}
 
 
@@ -94,7 +94,7 @@ def test_mcp_oauth_state_columns() -> None:
 
 @pytest.mark.unit
 def test_mcp_oauth_state_primary_key() -> None:
-    pk = {c.name for c in MCPOAuthState.__table__.primary_key.columns}
+    pk = {c.name for c in MCPOAuthState.__table__.primary_key}
     assert pk == {"state"}
 
 

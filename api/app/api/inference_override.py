@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.chats import run_inference_override
 from app.api.dependencies import AdminUser
 from app.audit import audit_action
+from app.authz.matters import require_matter
 from app.clients.gateway import GatewayClient, get_gateway_client
 from app.db.session import get_db
 from app.errors import NotFound, ValidationError
@@ -116,6 +117,9 @@ async def override_tier_floor(
             "Chat not found for refusal message.",
             details={"chat_id": str(refusal.chat_id)},
         )
+
+    if chat.project_id is not None:
+        await require_matter(db, chat.project_id, admin, need="write", include_archived=True)
 
     # Locate the most recent ``kind='user'`` row that precedes the
     # refusal in the same chat. That's the prompt we re-run.

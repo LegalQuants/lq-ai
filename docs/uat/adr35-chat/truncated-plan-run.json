@@ -1,0 +1,94 @@
+{
+  "root_id": "fea7d030-eb58-49a5-ac94-93d9fc1f4800",
+  "status": "failed",
+  "stop_reason": "invalid_proposal",
+  "planning": {
+    "contract_version": 1,
+    "plan_id": "9e81bc74-9066-4d60-9f25-a7c238361b9a",
+    "root_id": "fea7d030-eb58-49a5-ac94-93d9fc1f4800",
+    "owner_id": "1a035000-0000-4000-8000-000000000002",
+    "project_id": "1a035000-0000-4000-8000-000000000001",
+    "goal": "Use two independent agents to answer two focused questions about this fictional agreement: (1) What amount must Customer pay and when? (2) What notice is required to prevent renewal or terminate for convenience? Combine their concise clause-based answers and flag only information that the agreement does not specify.",
+    "policy_version": "149d8f7b97d223f9c30ed3c923dca22bc134d20e84664d556c3de269db7aec8a",
+    "root": {
+      "resources": {
+        "document_ids": [],
+        "source_names": []
+      },
+      "grants": {
+        "intake": [],
+        "analysis": [
+          "plan"
+        ],
+        "drafting": [],
+        "ethics_review": [],
+        "delivery": []
+      },
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+      },
+      "minimum_inference_tier": 1,
+      "maximum_egress_tier": 0,
+      "privileged": false,
+      "anonymize": true
+    },
+    "delegation_grants": {
+      "intake": [],
+      "analysis": [
+        "plan",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "delivery": []
+    },
+    "budget_usd": "2.0000",
+    "root_allowance_usd": "0.0000",
+    "planning_allowance_usd": "0.0000",
+    "max_active_children": 2,
+    "deadline": "2026-09-27T09:04:55.896787Z",
+    "attempt_timeout_seconds": 300,
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "gateway_revision": "2e80c52a5ddf325ba9ab468c11e751a522ae0f025414bf1fcd9914502ca9ae79",
+    "model": "local-uat/gemma4:26b-mlx",
+    "child_skill_version": "1.0.0",
+    "root_skill_version": "1.0.0"
+  },
+  "effects": [
+    {
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "reserved_usd": "0.0000",
+      "charged_usd": "0.0000",
+      "intent": "plan",
+      "created_at": "2026-09-27T08:04:56.601673Z",
+      "completed_at": "2026-09-27T08:05:25.088185Z",
+      "skill": {
+        "name": "orchestration-chat-demo",
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "version": "1.0.0"
+      },
+      "accounting": {
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "model": "gemma4:26b-mlx",
+        "provider": "local-uat",
+        "charged_usd": "0.0000",
+        "reserved_usd": "0.0000",
+        "config_digest": "3fc6de655639f07216016264cb218ef4dc5e9aa5c5bb7ea484e13f9f4b080a0c",
+        "estimated_prompt_tokens": 8054,
+        "reported_usage_cost_usd": "0.0000"
+      }
+    }
+  ],
+  "spent_usd": "0.0000",
+  "reserved_usd": "0.0000",
+  "tree": null
+}

@@ -71,6 +71,20 @@ A tool whose metadata is `destructive` or `requires_confirmation` is **excluded 
 
 Mirroring ADR 0013 D6: every tool call emits an OTel span (`chat.tool_call` / `autonomous.tool_call`, attributes = tool/provider/tier/outcome/cost, counts and types only), writes a `tool_call_log` row, and surfaces in the UI as a **provenance pill** (which tool, which provider, which tier). Case-law answers additionally carry external-source citation provenance (ADR 0014 D5 + the citation engine), so a research answer is reproducible, not a bare chat bubble. A skill that uses tools **declares** that usage and its `minimum_inference_tier` in SKILL.md frontmatter — note that frontmatter is authored today but **not yet parsed/validated in code**, so WS5 must build the parser before the declaration is load-bearing.
 
+**Adopted clarification for #658 (maintainer-directed 2026-10-06;
+adopted by the maintainer 2026-10-17).** Ordinary bundled-reference reads belong to activation
+of an enabled, trusted skill and are enabled by default under host policy. The
+exact installed/pinned resource index is their declaration; no proprietary
+`lq_ai.capabilities`, tier declaration or experimental `allowed-tools` field is
+required solely for these reads. Operators can disable model reference reading
+independently while retaining authorized human inspection. Current policy,
+selected skill scope and pin checks remain load-bearing on every invocation.
+Resource text cannot expand grants. Reads use governed invocation and
+metadata-only audit. Script execution, persistence, external access and
+delegation retain their separate enablement and approval controls. This narrow
+amendment records the adopted maintainer direction; it does not change this
+ADR's original committee acceptance record.
+
 ## Open questions (for the implementation plan / contributor)
 
 1. **Per-turn tool-call cap.** What is the default cap on tool calls per chat turn (cost + latency bound)? Pin in WS4 (a small integer, operator-overridable).
@@ -84,3 +98,21 @@ Mirroring ADR 0013 D6: every tool call emits an OTel span (`chat.tool_call` / `a
 - [`docs/security/boundary-registers.md`](../security/boundary-registers.md) (R4/R5/R6).
 - Mini-PRD: [`docs/proposals/legal-research-and-mcp.md`](../proposals/legal-research-and-mcp.md) (WS4 + WS5 discharge this ADR).
 - Reference (the divergence we reject): [MikeOSS](https://github.com/willchen96/mike) open per-user function-calling.
+
+---
+
+## Amendment — 2026-10-01: Matter-scoped egress ceiling in per-call governance (DE-358 item 6 / AG-03)
+
+**Status:** Accepted addendum.
+**Trigger:** [LegalQuants/lq-ai#593](https://github.com/LegalQuants/lq-ai/issues/593).
+
+### What changed in D2's tier check
+
+D2's tier check compared the provider's data-egress tier against the matter/skill minimum. The ceiling side is now explicit and matter-scoped:
+
+- One resolver (`app.tools.governance.resolve_tool_egress_ceiling`) serves the chat and autonomous paths. Chat resolves from the chat's current `project_id` at call time; autonomous resolves from the session's `project_id` composed with the execution-scope ceiling.
+- The resolved ceiling is threaded through `execute_tool` → `governed_tool_invocation` → every governed gateway `call_tool` (MCP, authority, research): the same number the API applied is the number the gateway enforces.
+- `tool_call_log` rows carry `max_allowed_tier` + `ceiling_source` (see the 2026-10-01 amendment to [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md)).
+- The Project create/update/read API accepts and returns `max_egress_tier`.
+
+Policy reads include the chat's current Project lookup and are savepoint-isolated so a recoverable SQL error cannot poison refusal auditing. Error diagnostics contain metadata only. A storage outage still prevents dispatch but cannot guarantee persistence while the database is unavailable. New pending proposals are not created when their original policy cannot be resolved.

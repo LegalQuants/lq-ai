@@ -1,0 +1,20 @@
+Phase 7 — RustFS 1.0.0 probe endpoints, stuck store vs healthy store (2026-09-19)
+
+Stuck = RustFS running as uid 10001 (the image's user) on the root-owned MinIO-written
+volume: process up, store init looping on FileAccessDenied writing .rustfs.sys/pool.bin,
+every S3 call answering 503. Healthy = same volume after chown -R 10001:10001.
+
+endpoint                 stuck  healthy  body (stuck)
+/health                  200    200      {"status":"ok","service":"rustfs-endpoint",...}
+/health/live             200    200      {"status":"ok",...}
+/health/ready            503    200      {"status":"degraded","service":"rustfs-endpoint",...}
+/minio/health/live       200    200      {"status":"ok",...}
+/minio/health/ready      503    200      {"status":"degraded",...}
+/minio/health/cluster    503    200      {"status":"degraded",...}
+HEAD /lq-ai-files (S3)   503    403*     * unsigned request; a signed HeadBucket returns 200 when healthy
+
+Conclusion: /health, /health/live and the legacy /minio/health/live are liveness probes and
+stay green while the store cannot write. Compose healthchecks, Helm readiness probes and the
+upgrade guide's "store is up" check must use /health/ready.
+
+Driver: phase7-probe-endpoints.sh (run as root; it drops to uid 10001 with setpriv).

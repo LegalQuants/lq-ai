@@ -1,0 +1,80 @@
+{
+  "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+  "approval": {
+    "plan_id": "799af3ba-2cc1-4d0c-b92f-b8100535434b",
+    "root_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+    "revision": 1,
+    "plan_hash": "05c9d5c97c553f14b6f42d7528daa94960508afd8a55b9af295b1d8fd839306d",
+    "project_id": "1a035000-0000-4000-8000-000000000001",
+    "approved_at": "2026-09-27T08:16:37.772121Z",
+    "policy_version": "5f4ae5d232c7965df77909e84bf097d56447a05574bd59315ed2df6846c3f9ed",
+    "approving_user_id": "1a035000-0000-4000-8000-000000000002",
+    "root_skill_digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d"
+  },
+  "admissions": [
+    {
+      "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+      "created_at": "2026-09-27T08:16:37.958023+00:00",
+      "child_order": 1
+    },
+    {
+      "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+      "created_at": "2026-09-27T08:16:37.958023+00:00",
+      "child_order": 2
+    }
+  ],
+  "inferences": [
+    {
+      "session_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+      "effect_key": "chat:plan:v1",
+      "status": "completed",
+      "created_at": "2026-09-27T08:12:37.278793+00:00",
+      "completed_at": "2026-09-27T08:12:58.470502+00:00",
+      "finish_reason": "stop",
+      "charged_usd": "0.0000",
+      "token_counts": {
+        "prompt_tokens": 1872,
+        "completion_tokens": 2056
+      }
+    },
+    {
+      "session_id": "d867ed77-053d-4276-8dc3-66a0dd0e9d3c",
+      "effect_key": "demo:topic:v1",
+      "status": "completed",
+      "created_at": "2026-09-27T08:16:38.841763+00:00",
+      "completed_at": "2026-09-27T08:17:22.385242+00:00",
+      "finish_reason": "stop",
+      "charged_usd": "0.0000",
+      "token_counts": {
+        "prompt_tokens": 15699,
+        "completion_tokens": 2290
+      }
+    },
+    {
+      "session_id": "6cf7d53e-d3bc-4691-9d93-b6f1731f5b25",
+      "effect_key": "demo:topic:v1",
+      "status": "completed",
+      "created_at": "2026-09-27T08:16:38.851699+00:00",
+      "completed_at": "2026-09-27T08:17:52.002436+00:00",
+      "finish_reason": "stop",
+      "charged_usd": "0.0000",
+      "token_counts": {
+        "prompt_tokens": 15708,
+        "completion_tokens": 1711
+      }
+    },
+    {
+      "session_id": "129b14e7-d75f-45b1-aa9d-a0d1267042e4",
+      "effect_key": "demo:synthesis:v1",
+      "status": "completed",
+      "created_at": "2026-09-27T08:17:52.858483+00:00",
+      "completed_at": "2026-09-27T08:18:09.648730+00:00",
+      "finish_reason": "stop",
+      "charged_usd": "0.0000",
+      "token_counts": {
+        "prompt_tokens": 2015,
+        "completion_tokens": 1317
+      }
+    }
+  ]
+}

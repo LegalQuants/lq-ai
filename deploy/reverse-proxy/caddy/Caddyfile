@@ -1,0 +1,42 @@
+# LQ.AI public reverse proxy — Caddy, automatic HTTPS via Let's Encrypt.
+#
+# LQ_AI_FQDN and LQ_AI_ACME_EMAIL come from the container environment
+# (set in the root .env; see .env.example in this directory).
+{
+	# ACME account contact (expiry notices).
+	email {$LQ_AI_ACME_EMAIL}
+
+	# While iterating, uncomment to use the Let's Encrypt STAGING CA so
+	# failed attempts don't burn production rate limits. Staging certs are
+	# NOT browser-trusted; comment this back out (and delete the caddy-data
+	# volume's staged cert) once the recipe works end to end.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$LQ_AI_FQDN} {
+	encode gzip zstd
+
+	# HSTS — uncomment ONLY after HTTPS has been stable for a while.
+	# Do not add `preload` casually; see ../README.md ("HSTS").
+	# header Strict-Transport-Security "max-age=31536000"
+
+	# LQ.AI backend: the web client calls /lq-ai-api/v1/*; strip the
+	# public prefix so the api (which mounts /api/v1) sees /api/v1/*.
+	handle /lq-ai-api/v1/* {
+		uri replace /lq-ai-api/v1 /api/v1
+		reverse_proxy api:8000 {
+			# Chat responses stream (SSE); flush every write so tokens
+			# reach the browser as they are generated, never buffered.
+			flush_interval -1
+		}
+	}
+
+	# Everything else — the OpenWebUI shell, /api/config, its own
+	# /api/v1/*, websockets (/ws/socket.io), static bundle — goes to the
+	# web container. WebSocket upgrades are handled automatically.
+	handle {
+		reverse_proxy web:8080 {
+			flush_interval -1
+		}
+	}
+}

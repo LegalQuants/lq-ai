@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "skill": "nda-review",
+  "fixture": "unusual-edge",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/nda-review/SKILL.md (Pass 4: non-competes flagged as critical outside M&A; IP assignment flagged as material; indemnification flagged as material) and test-plan.md Scenario 6 (unusual NDA: 1-3 critical on the unusual elements, 1-3 material supporting). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "NDA Review",
+      "Bottom line",
+      "Critical issues",
+      "Operational red flags",
+      "Recommended next steps",
+      "Items requiring human judgment"
+    ],
+    "metrics": [
+      {
+        "id": "critical_issues",
+        "kind": "section_items",
+        "section": "Critical issues",
+        "min": 1,
+        "max": 4
+      },
+      {
+        "id": "material_issues",
+        "kind": "section_items",
+        "section": "Material issues",
+        "min": 1,
+        "max": 6
+      },
+      {
+        "id": "operational_red_flags",
+        "kind": "section_items",
+        "section": "Operational red flags",
+        "min": 2,
+        "max": 8
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 4,
+        "max": null
+      }
+    ],
+    "min_chars": 1200,
+    "max_chars": 30000
+  }
+}

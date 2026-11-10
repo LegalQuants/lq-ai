@@ -1,0 +1,42 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "5c736cce-ca54-4af7-b401-e488a48db4aa",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "Explain payment, renewal and termination questions independently.",
+    "cost_estimate": null,
+    "created_at": "2026-10-09T23:50:56.564380Z",
+    "error_code": null,
+    "id": "269dc593-b04c-434d-8b47-91bd32745720",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [],
+    "autonomous_session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+    "chat_id": "5c736cce-ca54-4af7-b401-e488a48db4aa",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "",
+    "cost_estimate": null,
+    "created_at": "2026-10-09T23:50:56.564381Z",
+    "error_code": null,
+    "id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "assistant",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  }
+]

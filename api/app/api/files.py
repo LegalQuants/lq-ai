@@ -3,7 +3,7 @@
 Surface (per ``docs/api/backend-openapi.yaml``):
 
 * ``POST   /api/v1/files``               — multipart upload; streams body to
-  MinIO, computes SHA-256, persists metadata with
+  object storage, computes SHA-256, persists metadata with
   ``ingestion_status='pending'`` and returns the canonical ``File`` shape.
 * ``GET    /api/v1/files/{file_id}``     — file metadata; 404 if missing or
   owned by a different user (per-user isolation; we return 404 rather
@@ -12,7 +12,7 @@ Surface (per ``docs/api/backend-openapi.yaml``):
   original bytes; ``Content-Disposition: attachment; filename=...`` with
   RFC 5987-encoded ``filename*`` for non-ASCII filenames.
 * ``DELETE /api/v1/files/{file_id}``     — soft-delete (sets ``deleted_at``);
-  the MinIO bytes outlive the soft-delete per ADR 0005. The endpoint is
+  the object-store bytes outlive the soft-delete per ADR 0005. The endpoint is
   idempotent: deleting an already-soft-deleted file (or a file that
   never existed) returns 404.
 
@@ -44,12 +44,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.authz.matters import (
+    denied_file_ids,
+    file_matter_ids,
+    require_matter,
+    require_resource_write,
+)
 from app.config import get_settings
 from app.db.session import get_db
-from app.errors import NotFound, ValidationError
+from app.errors import Forbidden, NotFound, ValidationError
 from app.models.document import Document
 from app.models.file import File as FileModel
-from app.models.project import Project
+from app.models.user import User
 from app.schemas.files import FileMetadata
 from app.storage import (
     StreamUploadResult,
@@ -170,7 +176,7 @@ async def _upload_file_stream(
     status_code=status.HTTP_201_CREATED,
     summary="Upload a file",
     description=(
-        "Streaming multipart upload. The body is streamed to MinIO without "
+        "Streaming multipart upload. The body is streamed to S3-compatible storage without "
         "ever loading the whole file into memory; a SHA-256 is computed as "
         "bytes flow past, and metadata is persisted with "
         "`ingestion_status='pending'`. The document pipeline (Task C5) "
@@ -192,29 +198,29 @@ async def upload_file(
                 "Optional UUID of a project to attach this file to. The "
                 "caller must own the project; cross-user or unknown ids "
                 "return 422 (the upload is rejected before bytes touch "
-                "MinIO)."
+                "the object store)."
             ),
         ),
     ] = None,
 ) -> FileMetadata:
-    """Stream the upload to MinIO; persist metadata; return the ``File`` shape.
+    """Stream the upload to object storage; persist metadata; return the ``File`` shape.
 
     Order of operations:
 
     1. **Validate ``project_id``** if supplied. The form field is parsed
        as a UUID; the project must exist, be owned by the caller, and
        not be archived. Failures here return 422 *before* any bytes
-       touch MinIO so a bad project_id doesn't leak into orphan storage.
+       touch object storage so a bad project_id doesn't leak into orphan storage.
     2. **Pre-allocate the file_id** locally so we know the storage path
-       before touching MinIO. (Per ADR 0005 the storage key is the bare
+       before touching object storage. (Per ADR 0005 the storage key is the bare
        UUID.)
-    3. **Stream the upload to MinIO** via ``stream_upload``. This raises
+    3. **Stream the upload to object storage** via ``stream_upload``. This raises
        :class:`PayloadTooLarge` if the streamed byte count exceeds the
        configured cap; on any other exception, the multipart upload is
        aborted (no orphan parts left behind).
     4. **Insert the row** in ``files`` with the streamed size and SHA-256.
        If the insert fails (e.g., the user has been deleted between
-       auth and now), we hard-delete the just-uploaded MinIO object so
+       auth and now), we hard-delete the just-uploaded object-store object so
        we don't leak orphaned bytes.
     5. **Return the ``FileMetadata``** matching the OpenAPI ``File`` schema.
     """
@@ -246,17 +252,19 @@ async def upload_file(
                 details={"project_id": project_id},
             ) from exc
 
-        stmt = select(Project.id).where(
-            Project.id == resolved_project_id,
-            Project.owner_id == user.id,
-            Project.archived_at.is_(None),
-        )
-        result = await db.execute(stmt)
-        if result.scalar_one_or_none() is None:
+        # Uploading into a matter is contributing to it, so ``write`` —
+        # firm-wide read does not entitle a colleague to put documents in
+        # someone's matter file. Both the not-found and the not-permitted
+        # cases fold into the same 422 the create contract already
+        # documents, rather than leaking a 403/404 distinction on what is
+        # request input.
+        try:
+            await require_matter(db, resolved_project_id, user, need="write")
+        except (NotFound, Forbidden) as exc:
             raise ValidationError(
-                "project_id does not reference a project owned by the caller.",
+                "project_id does not reference a matter the caller can contribute to.",
                 details={"project_id": str(resolved_project_id)},
-            )
+            ) from exc
 
     file_id = uuid.uuid4()
     storage_path = str(file_id)
@@ -317,13 +325,13 @@ async def upload_file(
         await db.commit()
     except IntegrityError:
         # Failed to persist after the bytes were uploaded. Clean up the
-        # MinIO object so we don't leak orphaned storage.
+        # object-store object so we don't leak orphaned storage.
         await db.rollback()
         try:
             await delete_object(storage_path=storage_path)
         except Exception:
             log.warning(
-                "Failed to clean up MinIO object after row-insert failure",
+                "Failed to clean up object-store object after row-insert failure",
                 extra={
                     "event": "file_upload_cleanup_failed",
                     "storage_path": storage_path,
@@ -407,7 +415,7 @@ async def get_file_content(
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> StreamingResponse:
-    """Stream the original bytes from MinIO with the right headers.
+    """Stream the original bytes from object storage with the right headers.
 
     Headers set:
     * ``Content-Type``: from the stored ``mime_type``.
@@ -444,7 +452,7 @@ async def get_file_content(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Soft-delete a file",
     description=(
-        "Sets `deleted_at` on the row; the MinIO object is left in place "
+        "Sets `deleted_at` on the row; the object-store object is left in place "
         "and reaped later by D6 (per-user export+delete) or a future GC "
         "sweep, per `docs/adr/0005-file-storage-soft-delete-and-key-scheme.md`. "
         "Idempotent: deleting an already-soft-deleted file or a missing "
@@ -466,7 +474,7 @@ async def delete_file(
     """
 
     file_uuid = _validate_file_id(file_id)
-    row = await _load_visible_file(db, file_uuid, user.id)
+    row = await _load_visible_file(db, file_uuid, user.id, need_write=True)
 
     from datetime import UTC, datetime
 
@@ -508,6 +516,8 @@ async def _load_visible_file(
     db: AsyncSession,
     file_id: uuid.UUID,
     owner_id: uuid.UUID,
+    *,
+    need_write: bool = False,
 ) -> FileModel:
     """Load ``files`` row by id, scoped to the owner, excluding soft-deleted rows.
 
@@ -520,6 +530,7 @@ async def _load_visible_file(
     stmt = select(FileModel).where(
         FileModel.id == file_id,
         FileModel.owner_id == owner_id,
+        FileModel.id.not_in(denied_file_ids(owner_id)),
         FileModel.deleted_at.is_(None),
     )
     result = await db.execute(stmt)
@@ -528,6 +539,21 @@ async def _load_visible_file(
         raise NotFound(
             f"File {file_id} not found.",
             details={"file_id": str(file_id)},
+        )
+    if row.project_id is not None:
+        user = await db.get(User, owner_id)
+        if user is None:
+            raise NotFound("Resource not found.")
+        await require_matter(db, row.project_id, user, include_archived=True)
+    if need_write:
+        actor = await db.get(User, owner_id)
+        if actor is None:
+            raise NotFound("Resource not found.")
+        await require_resource_write(
+            db,
+            actor,
+            row.project_id,
+            file_matter_ids(row.id),
         )
     return row
 

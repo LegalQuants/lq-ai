@@ -45,7 +45,7 @@ from rapidfuzz import fuzz
 
 from app.citation.judge_prompts import build_judge_prompt
 from app.citation.normalization import normalize
-from app.observability_helpers import get_tracer, record_attributes
+from app.observability_helpers import get_tracer, quiet_span, record_attributes
 from app.schemas.gateway import ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -587,10 +587,10 @@ async def verify(
     """
 
     tracer = get_tracer()
-    with tracer.start_as_current_span("citation.verify") as top:
+    with quiet_span(tracer, "citation.verify") as top:
         record_attributes(top, **{"document.id": str(document.id)})
 
-        with tracer.start_as_current_span("citation.stage.exact_match") as s:
+        with quiet_span(tracer, "citation.stage.exact_match") as s:
             result = verify_exact_match(candidate, document)
             record_attributes(
                 s,
@@ -604,7 +604,7 @@ async def verify(
             _set_result_attrs(top, result)
             return result
 
-        with tracer.start_as_current_span("citation.stage.tolerant_match") as s:
+        with quiet_span(tracer, "citation.stage.tolerant_match") as s:
             result = verify_tolerant_match(candidate, document)
             record_attributes(
                 s,
@@ -623,7 +623,7 @@ async def verify(
             return _MISS
 
         if ensemble_config is not None:
-            with tracer.start_as_current_span("citation.stage.ensemble") as s:
+            with quiet_span(tracer, "citation.stage.ensemble") as s:
                 result = await verify_ensemble(
                     candidate,
                     document,
@@ -640,7 +640,7 @@ async def verify(
                     },
                 )
         else:
-            with tracer.start_as_current_span("citation.stage.paraphrase_judge") as s:
+            with quiet_span(tracer, "citation.stage.paraphrase_judge") as s:
                 result = await verify_paraphrase(
                     candidate,
                     document,

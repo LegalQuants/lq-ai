@@ -1,0 +1,93 @@
+/* LiquidUI interaction layer. The existing palette and full guide renderer own
+   typography, diagrams, callouts, tables, and screenshot presentation.
+   Explore scrolls the window like every other page: no inner scroll box. */
+/* The composer itself is styled with every page's, in theme-pathways.css. */
+/*
+ * Explore is one conversation: the introduction's questions, "Where do I go
+ * from here?", then each search the reader makes, appended in order. Every
+ * turn is drawn the same way, as in the redesign's chat (Main.dc.html): the
+ * question is the reader's bubble, on the left (Houfu), in the selected-row grey with a
+ * hairline, ink text, 20px rounding — and the answer is plain text beside the
+ * LQ.AI mark, with no bubble of its own.
+ */
+/* No scroll-margin of its own: Starlight's scroll-padding-top already clears
+   the top bar, and the two added up left a 100px gap above each turn that the
+   tour and a new search scroll to. */
+.lq-answer { padding:1rem 0 2rem; border-bottom:1px solid var(--sl-color-hairline); }
+/* The introduction tour (tour-playback.ts): each step's place sits above its
+   question once the tour has started, so the reader can see where they are
+   wherever the page has scrolled; the step being shown is outlined and its
+   place is in ink. */
+.lq-tour-place { display:none; margin:0 0 0.5rem; font-size:var(--sl-text-sm); font-weight:600; color:var(--sl-color-gray-3); }
+.lq-explore[data-tour-started] .lq-tour-place { display:block; }
+.lq-answer[data-tour-active] .lq-tour-place { color:var(--sl-color-white); }
+.lq-answer[data-tour-active] { outline:2px solid var(--sl-color-text-accent); outline-offset:0.5rem; border-radius:0.75rem; }
+.sl-markdown-content .lq-explore :is(h2, h3).lq-ask { margin:0 0 1.25rem; padding:0.65rem 1.1rem; width:fit-content; max-width:min(100%, 36rem); font-size:1.125rem; font-weight:600; line-height:1.45; overflow-wrap:anywhere; border:1px solid var(--sl-color-hairline); border-radius:1.25rem; background:var(--lq-color-hover); color:var(--sl-color-white); }
+.lq-answer-reply { display:grid; grid-template-columns:2rem minmax(0,1fr); gap:0.875rem; }
+.lq-docs-avatar { width:2rem; height:2rem; display:grid; place-items:center; border-radius:var(--lq-radius-pill); font-size:0.75rem; font-weight:650; background:var(--lq-accent); color:var(--lq-on-accent); }
+.lq-answer-body { max-width:54rem; min-width:0; padding:0.15rem 0 0; }
+.lq-explore .lq-answer-body p { font-size:1.125rem; line-height:1.65; }
+.lq-explore .lq-answer-body p:not(.lq-diagram-description) { max-width:44rem; }
+.lq-read-next .lq-landing-next { margin:1rem 0 1.25rem; }
+@media (max-width:40rem) { .lq-answer-reply { grid-template-columns:1fr; } .lq-docs-avatar { display:none; } }
+
+/* A search's answer: how many guides matched, then the guides as rows. */
+.sl-markdown-content .lq-search-matches { list-style:none; margin:0.75rem 0 0; padding:0; }
+.lq-search-matches li { margin:0; padding:1rem 0; border-top:1px solid var(--sl-color-hairline); }
+.lq-match-title { font-weight:650; }
+.lq-explore .lq-search-matches p { font-size:1rem; line-height:1.6; }
+.lq-match-links { display:flex; align-items:center; flex-wrap:wrap; gap:0.75rem 1rem; font-size:0.9rem; }
+
+/* Selecting a result needs the sidebar, which needs a third column. */
+.lq-match-details, .lq-explore .lq-details { display:none; }
+
+/*
+ * Explore's right sidebar (C19): the selected result's details, in the same
+ * column a guide page uses for "On this page" — under the page bar, a hairline
+ * to its left, as wide as the contents column. The reading column and the
+ * composer make room for it while it is open (`--lq-side-offset`).
+ */
+@media (min-width:72rem) {
+  .lq-details-open { --lq-side-offset:var(--sl-sidebar-width); }
+  .lq-details-open .main-frame { margin-inline-end:var(--lq-side-offset); }
+  .lq-explore .lq-details:not([hidden]) { display:block; position:fixed; top:0; inset-inline-end:0; z-index:5; width:var(--sl-sidebar-width); height:100vh; overflow-y:auto; padding:calc(var(--sl-nav-height) + 1rem) var(--sl-sidebar-pad-x) 2rem; border-inline-start:1px solid var(--sl-color-hairline); background:var(--sl-color-bg); }
+
+  /* A selected result is the redesign's selected row: a soft grey fill, with
+     the Details button pressed. The fill bleeds into the card's padding. */
+  .lq-search-matches li { margin-inline:-0.75rem; padding-inline:0.75rem; border-radius:var(--lq-radius-xl); cursor:pointer; }
+  .lq-search-matches li[data-selected] { background:var(--lq-color-hover); border-top-color:transparent; }
+  .lq-search-matches li[data-selected] + li { border-top-color:transparent; }
+  .lq-match-details { display:inline-flex; align-items:center; min-height:44px; margin-inline-start:auto; padding:0 1rem; border:1px solid var(--sl-color-hairline); border-radius:var(--lq-radius-pill); color:var(--sl-color-white); background:transparent; font:inherit; font-size:0.875rem; font-weight:600; cursor:pointer; }
+  .lq-match-details:hover { background:var(--lq-color-hover); }
+  .lq-match-details[aria-expanded="true"] { color:var(--sl-color-text-invert); background:var(--sl-color-bg-accent); border-color:var(--sl-color-bg-accent); }
+}
+
+/* The sidebar's contents, drawn like the right sidebar of a guide page. */
+.lq-explore .lq-details-head { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; margin-bottom:0.75rem; }
+.lq-explore .lq-details-label { margin:0; font-size:var(--sl-text-xs); font-weight:600; color:var(--sl-color-gray-3); }
+.lq-explore .lq-details-close { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; margin:0; padding:0; border:1px solid var(--sl-color-hairline); border-radius:50%; color:var(--sl-color-gray-3); background:transparent; cursor:pointer; }
+.lq-explore .lq-details-close svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; }
+.lq-explore .lq-details-close:hover { color:var(--sl-color-white); background:var(--lq-color-hover); }
+.lq-explore .lq-details :where(p, ul, h2, h3, section) { margin:0; }
+.lq-explore .lq-details-chips { display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem; }
+.lq-explore .lq-details h2 { margin-top:0.75rem; font-size:1.25rem; font-weight:650; line-height:1.25; letter-spacing:-0.01em; }
+.lq-explore .lq-details h2:focus { outline:none; }
+.lq-explore .lq-details h2:focus-visible { outline:2px solid var(--sl-color-text-accent); outline-offset:3px; border-radius:var(--lq-radius-md); }
+.lq-explore .lq-details h2 a { color:var(--sl-color-white); text-decoration:none; }
+.lq-explore .lq-details h2 a:hover { text-decoration:underline; text-underline-offset:0.2em; }
+.lq-explore .lq-details-release { margin-top:0.5rem; font-size:var(--sl-text-sm); font-weight:600; color:var(--sl-color-white); }
+.lq-explore .lq-details-summary { margin-top:0.5rem; font-size:var(--sl-text-sm); line-height:1.55; color:var(--sl-color-gray-2); }
+.lq-explore .lq-details-actions { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem 1rem; margin-top:1rem; font-size:var(--sl-text-sm); }
+.lq-explore .lq-details-actions a { color:var(--sl-color-white); }
+.lq-explore .lq-details-actions .lq-details-open { display:inline-flex; align-items:center; min-height:44px; padding:0 1.1rem; border-radius:var(--lq-radius-pill); color:var(--sl-color-text-invert); background:var(--sl-color-bg-accent); font-weight:600; text-decoration:none; }
+.lq-explore .lq-details-actions .lq-details-open:hover { opacity:0.85; }
+.lq-explore .lq-details-section { margin-top:1.5rem; }
+.lq-explore .lq-details h3 { margin-bottom:0.5rem; font-size:var(--sl-text-h5); font-weight:600; color:var(--sl-color-white); }
+.lq-explore .lq-details ul { list-style:none; padding:0; display:grid; gap:0.35rem; }
+.lq-explore .lq-details li { margin:0; line-height:1.4; }
+.lq-explore .lq-details li a { font-size:var(--sl-text-xs); color:var(--sl-color-gray-3); text-decoration:none; overflow-wrap:anywhere; }
+.lq-explore .lq-details li a:hover { color:var(--sl-color-white); text-decoration:underline; text-underline-offset:0.2em; }
+.lq-explore .lq-details ul.lq-details-audience { display:flex; flex-wrap:wrap; gap:0.35rem; }
+.lq-explore .lq-details-sources a { font-family:var(--sl-font-mono); }
+.lq-explore .lq-details-checked { margin-top:1.5rem; font-size:var(--sl-text-xs); color:var(--sl-color-gray-3); }
+.lq-explore .lq-details-checked a { color:inherit; }

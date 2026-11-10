@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "capture": {
+    "note": "These examples use fictional material. AI answers require review; each caption identifies the workflow shown."
+  },
+  "screenshots": [
+    {
+      "id": "choose-skill",
+      "file": "choose-skill.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI's Contract QA skill chooser beside the fictional NDA marked ready in the chat's attached files.",
+      "caption": "The fictional NDA is attached and marked ready; the Contract QA skill chooser is open beside it.",
+      "note": "Ordinary chat in LQ.AI v0.8.0. Ready confirms text extraction; an AI answer is a separate check.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md",
+      "evidence": "Fresh browser capture after Docker/API recovery; the chooser is shown, not a successful Contract QA skill run."
+    },
+    {
+      "id": "matter-intake",
+      "file": "matter-intake.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI matter intake contains a fictional supplier NDA review request, the NDA Review skill, and a release demo matter.",
+      "caption": "Describe a fictional review task and select the skill and matter that will guide the run.",
+      "note": "Matter intake example from the v0.8.0 release. This is an autonomous workflow, separate from ordinary chat.",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "Fictional supplier NDA review request.",
+      "evidence": "docs/releases/v0.8.0.md",
+      "original": "docs/releases/assets/v0.8.0/matter-intake.jpg",
+      "recordedOn": "2026-09-30"
+    },
+    {
+      "id": "read-answer",
+      "file": "read-answer.png",
+      "width": 1280,
+      "height": 720,
+      "alt": "Experimental LQ.AI orchestration chat displays a combined answer about payment and notice terms, with clause references and a fictional-input warning.",
+      "caption": "Inspect the combined answer and its clause references in a completed experimental Contract QA demonstration.",
+      "note": "Experimental orchestration chat, disabled by default. This earlier demo uses a different fictional agreement; its AI output is unverified.",
+      "capturedOn": "2026-09-27",
+      "revision": "253eeaaa8f74c75c9eb4c2abed0f712386a97cef",
+      "input": "Fictional vendor agreement recorded in the ADR 0035 demonstration.",
+      "evidence": "docs/uat/adr35-chat/README.md",
+      "original": "docs/uat/adr35-chat/result.png"
+    },
+    {
+      "id": "document-ready",
+      "file": "document-ready.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "The fictional NDA demo matter contains a chat with sample-nda.md attached and marked ready.",
+      "caption": "Upload the fictional NDA and wait for its ready status before asking a question.",
+      "note": "Fresh LQ.AI v0.8.0 capture. Ready confirms text extraction, independently of a model answer.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md",
+      "evidence": "2026-10-06-live.json"
+    },
+    {
+      "id": "local-answer",
+      "file": "local-answer.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "Ordinary LQ.AI document chat answers a fictional NDA follow-up about when the five-year confidentiality clock starts, quoting from the date of disclosure; the sample is ready and the response shows Tier 1.",
+      "caption": "Ask a focused question, then compare the answer's quoted wording with Section 4 of the fictional NDA.",
+      "note": "Completed ordinary chat using the configured local GLM model in LQ.AI v0.8.0. The displayed quote matches the sample; the UI badges do not replace your review. This is separate from the skill-chooser example.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md, Section 4",
+      "evidence": "2026-10-06-live.json"
+    },
+    {
+      "id": "inference-route",
+      "file": "inference-route.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "The completed fictional NDA response's Tier 1 details identify the host-ollama provider, with the question, answer and ready document behind the dialog.",
+      "caption": "Open the response's tier badge to inspect the declared route and provider.",
+      "note": "This response used the configured local route. A Tier 1 badge on one answer does not establish that document search, fallbacks or other enabled connections are local.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "The completed ordinary-chat response to the fictional NDA follow-up.",
+      "evidence": "2026-10-06-live.json"
+    },
+    {
+      "id": "table-skills",
+      "file": "table-skills.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI's My skills page lists the built-in Contract Snapshot, MSA Snapshot and NDA Snapshot reference skills with Table badges.",
+      "caption": "Browse the built-in table-mode examples before choosing a multi-document review workflow.",
+      "note": "Fresh LQ.AI v0.8.0 library view. This screenshot shows the available examples, not a completed tabular review.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "The demo deployment's reference table-mode skill library; no model call.",
+      "evidence": "2026-10-06-live.json"
+    }
+  ],
+  "placements": [
+    {
+      "route": "overview",
+      "source": "docs/start/what-is-lq-ai.md",
+      "heading": "## What is LQ.AI?",
+      "screenshots": [
+        "local-answer",
+        "document-ready",
+        "choose-skill",
+        "inference-route",
+        "table-skills"
+      ]
+    },
+    {
+      "route": "start/quickstart",
+      "source": "docs/quickstart.md",
+      "heading": "## 5. Upload a test document",
+      "screenshots": [
+        "document-ready",
+        "choose-skill"
+      ]
+    },
+    {
+      "route": "",
+      "source": "docs/start/what-is-lq-ai.md",
+      "heading": "## What is LQ.AI?",
+      "screenshots": ["local-answer", "document-ready", "choose-skill", "inference-route", "table-skills"]
+    },
+    {
+      "route": "start/quickstart",
+      "source": "docs/quickstart.md",
+      "heading": "## Check that it worked",
+      "position": "after-section",
+      "screenshots": ["local-answer", "inference-route"]
+    },
+    {
+      "route": "trust/what-leaves-my-deployment",
+      "source": "docs/trust/what-leaves-my-deployment.md",
+      "heading": "## What the five tier labels mean",
+      "screenshots": ["inference-route"]
+    },
+    {
+      "route": "skills/what-a-skill-is",
+      "source": "docs/skill-authoring-guide.md",
+      "heading": "### Table-mode skills",
+      "position": "after-section",
+      "screenshots": ["table-skills"]
+    }
+  ]
+}

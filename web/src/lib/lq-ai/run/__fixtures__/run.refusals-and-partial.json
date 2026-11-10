@@ -1,0 +1,1360 @@
+{
+  "answered_directly": false,
+  "chat_id": "a6b296b0-2ce6-420f-8bd9-d8e93b09772a",
+  "direct_answer": null,
+  "effects": [
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0647",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 7756,
+        "messages_digest": "618ab52d055a86da8bd13fb1b7ded0b4d7c6a475384dd7bb9f3d839d0fb899ea",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0647",
+        "tier": 1
+      },
+      "charged_usd": "0.0647",
+      "completed_at": "2026-10-09T23:51:01.815553Z",
+      "created_at": "2026-10-09T23:51:01.797363Z",
+      "effect_key": "chat:plan:v1",
+      "intent": "plan",
+      "outcome": "success",
+      "reserved_usd": "0.0647",
+      "skill": {
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "name": "orchestration-chat-demo",
+        "version": "1.0.0"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "planning",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": null,
+      "charged_usd": "0.0000",
+      "completed_at": "2026-10-09T23:51:03.664510Z",
+      "created_at": "2026-10-09T23:51:03.638598Z",
+      "effect_key": "demo:collect:7754a871-0d2f-498f-8d6c-a570e9d3f077:v1",
+      "intent": "workspace_read",
+      "outcome": "success",
+      "reserved_usd": "0.0000",
+      "skill": null,
+      "status": "completed",
+      "step": {
+        "kind": "findings_collected",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": null,
+      "charged_usd": "0.0000",
+      "completed_at": "2026-10-09T23:51:03.706637Z",
+      "created_at": "2026-10-09T23:51:03.680339Z",
+      "effect_key": "demo:collect:ff9482d7-4ea2-4927-bf54-2af1c951e7b3:v1",
+      "intent": "workspace_read",
+      "outcome": "success",
+      "reserved_usd": "0.0000",
+      "skill": null,
+      "status": "completed",
+      "step": {
+        "kind": "findings_collected",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    },
+    {
+      "accounting": {
+        "anonymization_applied": true,
+        "basis": "conservative-estimate-or-reported-usage-v1",
+        "charged_usd": "0.0610",
+        "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+        "estimated_prompt_tokens": 5880,
+        "messages_digest": "17e923eb91b6f8c8968709af1ab89d6829c1605394779e2895c49da7d24319ec",
+        "model": "native",
+        "provider": "selected",
+        "reported_usage_cost_usd": "0.0003",
+        "reserved_usd": "0.0610",
+        "tier": 1
+      },
+      "charged_usd": "0.0610",
+      "completed_at": "2026-10-09T23:51:03.755969Z",
+      "created_at": "2026-10-09T23:51:03.739100Z",
+      "effect_key": "demo:synthesis:v1",
+      "intent": "run_skill",
+      "outcome": "success",
+      "reserved_usd": "0.0610",
+      "skill": {
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "name": "orchestration-chat-demo",
+        "version": "1.0.0"
+      },
+      "status": "completed",
+      "step": {
+        "kind": "synthesis",
+        "label": null,
+        "reason": null,
+        "summary": null,
+        "tool": null
+      }
+    }
+  ],
+  "evidence": "unverified",
+  "evidence_result": null,
+  "message_id": "848d5aad-4f2b-4c97-8c1c-2390030a46d3",
+  "packet": "# Fictional vendor agreement \u2014 demo packet v1\n\nThis invented agreement is a software demonstration fixture. No party, service\nor obligation described here is real. Effective date: 1 January 2026.\n\n## \u00a71 Parties and service\nPaper Lantern Ltd (Customer) subscribes to the team scheduling service supplied\nby Cedar Cloud Ltd (Supplier) for up to 20 users.\n\n## \u00a72 Payment\nCustomer shall pay USD 200 per month, invoiced monthly in advance. Undisputed\ninvoices are payable within 30 days of receipt. Customer must notify Supplier\nof a disputed amount within 15 days of receipt and pay undisputed amounts on\ntime. Supplier may suspend service for an undisputed invoice remaining unpaid\n15 days after Supplier gives written notice. This agreement specifies no late\nfee and no procedure for resolving a disputed amount.\n\n## \u00a73 Implementation\nSupplier will provide two remote onboarding sessions within 20 business days\nafter Customer supplies the user list. Customer is responsible for validating\nimported data. No migration service, implementation milestone payment, or\ncompletion acceptance procedure is specified.\n\n## \u00a74 Support\nSupplier will acknowledge support requests within two business days. Support\nhours are 09:00\u201317:00 Singapore time on Singapore business days. This agreement\ndoes not specify a resolution deadline, uptime commitment or service credits.\n\n## \u00a75 Term and renewal\nThe initial term is 12 months from the Effective Date. The agreement renews for\nsuccessive 12-month periods unless either party gives written notice of\nnon-renewal at least 30 days before the current term ends. No limit on the number\nof renewals is specified.\n\n## \u00a76 Termination\nEither party may terminate for material breach if the breach remains uncured\n30 days after written notice describing the breach. Customer may terminate for\nconvenience on 60 days' written notice but remains liable for subscription fees\nthrough the end of the current term. Supplier will provide a CSV export of\nCustomer data within 10 business days after termination upon Customer's request.\nThe agreement does not specify how long that export request right remains open.\n\n## \u00a77 Surviving obligations\nAccrued payment obligations and the confidentiality obligations in \u00a78 survive\ntermination. There is no survival period stated for confidentiality.\n\n## \u00a78 Confidentiality\nEach party will use the other's confidential information only to perform this\nagreement and will disclose it only to personnel who need to know it for that\npurpose and are bound by confidentiality obligations.\n",
+  "planning": {
+    "attempt_timeout_seconds": 120,
+    "budget_usd": "2.0000",
+    "child_skill_version": "1.0.0",
+    "contract_version": 2,
+    "deadline": "2026-10-10T00:51:01.718586Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [
+      {
+        "attached_for_run": false,
+        "document_id": "ab8514ca-49ff-47e4-aae2-aca9c78483b8",
+        "file_id": "58254f4f-1e15-4b52-8c15-1b145822845b",
+        "filename": "fictional-vendor-agreement.md",
+        "number": 1
+      }
+    ],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "A request with refused calls <i>and markup</i>.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "c0f244e6-ec65-4a81-aa90-54b6111429a4",
+    "packet_digest": "31621b3b2ac3b863a5fdfaf6f9e0021d24751e041654792d17b776d3d193b6db",
+    "plan_id": "e4167a90-87bb-42c4-b660-13d5482cc94a",
+    "planning_allowance_usd": "0.2478",
+    "policy_version": "f884a4608fc7a4a76270d6bfc5e077c0babe130473cda2941f2f64d0e9dd7f10",
+    "profile": "model_demo_v1",
+    "project_id": "d3c8fc30-c8ff-44bc-8fe4-95f6cb5a9cb3",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [
+          "ab8514ca-49ff-47e4-aae2-aca9c78483b8"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+        "name": "orchestration-chat-demo"
+      }
+    },
+    "root_allowance_usd": "0.4956",
+    "root_id": "0aec69dd-fe6f-43de-8066-6b3ec2ad856e",
+    "root_skill_version": "1.0.0"
+  },
+  "profile": "model_demo_v1",
+  "profile_title": "Contract Questions Orchestrator",
+  "reads": "The installed fictional vendor agreement only. No matter documents or live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "0aec69dd-fe6f-43de-8066-6b3ec2ad856e",
+  "sources": [],
+  "spent_usd": "0.8763",
+  "status": "completed",
+  "stop_reason": null,
+  "tree": {
+    "approved": true,
+    "children": [
+      {
+        "allocation_usd": "0.7434",
+        "effects": [
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.114658Z",
+            "created_at": "2026-10-09T23:51:02.085028Z",
+            "effect_key": "demo:notes:create:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_started",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.172727Z",
+            "created_at": "2026-10-09T23:51:02.144069Z",
+            "effect_key": "demo:notes:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1841",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 67466,
+              "messages_digest": "46c38a3c05bd6fa5c9759f861dcad849131f2a50416d8d77225ca914758d46e4",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1841",
+              "tier": 1
+            },
+            "charged_usd": "0.1841",
+            "completed_at": "2026-10-09T23:51:02.261223Z",
+            "created_at": "2026-10-09T23:51:02.244279Z",
+            "effect_key": "topic:t1",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1841",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 5,
+                "turn": 1
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.286504Z",
+            "created_at": "2026-10-09T23:51:02.275520Z",
+            "effect_key": "topic:t1:c0",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "code": "tool_not_granted"
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.311587Z",
+            "created_at": "2026-10-09T23:51:02.300444Z",
+            "effect_key": "topic:t1:c1",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": "Read a selected document",
+              "reason": null,
+              "summary": {
+                "code": "invalid_arguments"
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.335963Z",
+            "created_at": "2026-10-09T23:51:02.325154Z",
+            "effect_key": "topic:t1:c2",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": "Read a selected document",
+              "reason": "A ninth document.",
+              "summary": {
+                "code": "document_not_selected"
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.378665Z",
+            "created_at": "2026-10-09T23:51:02.350819Z",
+            "effect_key": "topic:t1:c3",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "note_saved",
+              "label": "Save a working note",
+              "reason": "Keep the term.",
+              "summary": {
+                "name": "note-terms.md",
+                "revision": 1,
+                "size_bytes": 14
+              },
+              "tool": "save_note"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.412030Z",
+            "created_at": "2026-10-09T23:51:02.395383Z",
+            "effect_key": "topic:t1:c4",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "<script>alert('hostile')</script> read it",
+              "summary": {
+                "document": 1,
+                "end": 2542,
+                "filename": "fictional-vendor-agreement.md",
+                "start": 0,
+                "total_chars": 2542,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1925",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 71625,
+              "messages_digest": "0ce311dd706fca54d8fdf8c1e0d6077fd87ac3c2500bef8920603e27948f32c9",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1925",
+              "tier": 1
+            },
+            "charged_usd": "0.1925",
+            "completed_at": "2026-10-09T23:51:02.463541Z",
+            "created_at": "2026-10-09T23:51:02.446777Z",
+            "effect_key": "topic:t2",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1925",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 1,
+                "turn": 2
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.505234Z",
+            "created_at": "2026-10-09T23:51:02.478995Z",
+            "effect_key": "topic:t2:c0",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "note_read",
+              "label": "Read back a working note",
+              "reason": "Check the note.",
+              "summary": {
+                "name": "note-terms.md",
+                "revision": 1,
+                "size_bytes": 14
+              },
+              "tool": "read_note"
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1898",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 70320,
+              "messages_digest": "9e0cbd3e4187a3076ab526662b24aa61144a9d7edc120890623d62786ad1e485",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1898",
+              "tier": 1
+            },
+            "charged_usd": "0.1898",
+            "completed_at": "2026-10-09T23:51:02.557178Z",
+            "created_at": "2026-10-09T23:51:02.540671Z",
+            "effect_key": "topic:t3",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1898",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "stop",
+                "tool_calls": 0,
+                "turn": 3
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.600585Z",
+            "created_at": "2026-10-09T23:51:02.572811Z",
+            "effect_key": "demo:findings:write:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_saved",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.645038Z",
+            "created_at": "2026-10-09T23:51:02.616853Z",
+            "effect_key": "demo:notes:update:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_updated",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.701764Z",
+            "created_at": "2026-10-09T23:51:02.674884Z",
+            "effect_key": "demo:findings:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.745774Z",
+            "created_at": "2026-10-09T23:51:02.717565Z",
+            "effect_key": "demo:findings:share:v1",
+            "intent": "workspace_share",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_shared",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          }
+        ],
+        "files": [
+          {
+            "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+            "shared": true,
+            "size_bytes": 263,
+            "updated_at": "2026-10-09T23:51:02.741877Z"
+          },
+          {
+            "digest": "6b0e737c635dc1c2c937ec62e4d178529bc8e3a8a17097bf756b1429d92c6c37",
+            "name": "notes.md",
+            "revision": 2,
+            "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+            "shared": false,
+            "size_bytes": 76,
+            "updated_at": "2026-10-09T23:51:02.640496Z"
+          },
+          {
+            "digest": "ca7e4cf46088b0e8786ae0fead187d29590552cc212bcbdd33a2905789ad3fda",
+            "name": "note-terms.md",
+            "revision": 1,
+            "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+            "shared": false,
+            "size_bytes": 14,
+            "updated_at": "2026-10-09T23:51:02.374307Z"
+          }
+        ],
+        "outcome": {
+          "artifact": {
+            "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077"
+          },
+          "failure_code": null,
+          "findings": [
+            "<b>Renewal</b> needs 30 days' notice. [\u00a75]\n\n<script>alert('answer')</script> ![x](javascript:alert(1))"
+          ],
+          "status": "completed",
+          "summary": "<b>Renewal</b> needs 30 days' notice. [\u00a75]",
+          "verification": "unverified"
+        },
+        "phase": "delivery",
+        "reserved_usd": "0.0000",
+        "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+        "spent_usd": "0.5664",
+        "status": "completed",
+        "tools": [
+          {
+            "label": "Read a selected document",
+            "name": "read_document",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 2,
+        "updated_at": "2026-10-09T23:51:02.802455Z"
+      },
+      {
+        "allocation_usd": "0.7434",
+        "effects": [
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.929567Z",
+            "created_at": "2026-10-09T23:51:02.901946Z",
+            "effect_key": "demo:notes:create:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_started",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:02.983617Z",
+            "created_at": "2026-10-09T23:51:02.957553Z",
+            "effect_key": "demo:notes:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": {
+              "anonymization_applied": true,
+              "basis": "conservative-estimate-or-reported-usage-v1",
+              "charged_usd": "0.1842",
+              "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+              "estimated_prompt_tokens": 67524,
+              "messages_digest": "afd69c7e6a21ba18830ada00fc63844c07b748bb89726acaa6cf7adc4e9bbc2f",
+              "model": "native",
+              "provider": "selected",
+              "reported_usage_cost_usd": "0.0003",
+              "reserved_usd": "0.1842",
+              "tier": 1
+            },
+            "charged_usd": "0.1842",
+            "completed_at": "2026-10-09T23:51:03.070205Z",
+            "created_at": "2026-10-09T23:51:03.053072Z",
+            "effect_key": "topic:t1",
+            "intent": "run_skill",
+            "outcome": "success",
+            "reserved_usd": "0.1842",
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa",
+              "version": "1.0.0"
+            },
+            "status": "completed",
+            "step": {
+              "kind": "model_turn",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "finish_reason": "tool_calls",
+                "tool_calls": 5,
+                "turn": 1
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.095534Z",
+            "created_at": "2026-10-09T23:51:03.084698Z",
+            "effect_key": "topic:t1:c0",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": null,
+              "reason": null,
+              "summary": {
+                "code": "tool_not_granted"
+              },
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.121015Z",
+            "created_at": "2026-10-09T23:51:03.109547Z",
+            "effect_key": "topic:t1:c1",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": "Read a selected document",
+              "reason": null,
+              "summary": {
+                "code": "invalid_arguments"
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.145462Z",
+            "created_at": "2026-10-09T23:51:03.134615Z",
+            "effect_key": "topic:t1:c2",
+            "intent": "refused",
+            "outcome": "tool_refused",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "tool_refused",
+              "label": "Read a selected document",
+              "reason": "A ninth document.",
+              "summary": {
+                "code": "document_not_selected"
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.189000Z",
+            "created_at": "2026-10-09T23:51:03.160403Z",
+            "effect_key": "topic:t1:c3",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "note_saved",
+              "label": "Save a working note",
+              "reason": "Keep the term.",
+              "summary": {
+                "name": "note-terms.md",
+                "revision": 1,
+                "size_bytes": 14
+              },
+              "tool": "save_note"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.222650Z",
+            "created_at": "2026-10-09T23:51:03.205813Z",
+            "effect_key": "topic:t1:c4",
+            "intent": "retrieve_chunks",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "document_read",
+              "label": "Read a selected document",
+              "reason": "<script>alert('hostile')</script> read it",
+              "summary": {
+                "document": 1,
+                "end": 2542,
+                "filename": "fictional-vendor-agreement.md",
+                "start": 0,
+                "total_chars": 2542,
+                "truncated": false
+              },
+              "tool": "read_document"
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.310983Z",
+            "created_at": "2026-10-09T23:51:03.282976Z",
+            "effect_key": "demo:findings:write:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_saved",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.354771Z",
+            "created_at": "2026-10-09T23:51:03.327097Z",
+            "effect_key": "demo:notes:update:v1",
+            "intent": "workspace_write",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "notes_updated",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.411032Z",
+            "created_at": "2026-10-09T23:51:03.384063Z",
+            "effect_key": "demo:findings:read:v1",
+            "intent": "workspace_read",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_read",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          },
+          {
+            "accounting": null,
+            "charged_usd": "0.0000",
+            "completed_at": "2026-10-09T23:51:03.454130Z",
+            "created_at": "2026-10-09T23:51:03.426882Z",
+            "effect_key": "demo:findings:share:v1",
+            "intent": "workspace_share",
+            "outcome": "success",
+            "reserved_usd": "0.0000",
+            "skill": null,
+            "status": "completed",
+            "step": {
+              "kind": "findings_shared",
+              "label": null,
+              "reason": null,
+              "summary": null,
+              "tool": null
+            }
+          }
+        ],
+        "files": [
+          {
+            "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+            "shared": true,
+            "size_bytes": 184,
+            "updated_at": "2026-10-09T23:51:03.450133Z"
+          },
+          {
+            "digest": "4edd6cde0d87989b22c97d019b8ceefd655b8b693b120484b93fd83b7425417b",
+            "name": "notes.md",
+            "revision": 2,
+            "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+            "shared": false,
+            "size_bytes": 93,
+            "updated_at": "2026-10-09T23:51:03.350435Z"
+          },
+          {
+            "digest": "ca7e4cf46088b0e8786ae0fead187d29590552cc212bcbdd33a2905789ad3fda",
+            "name": "note-terms.md",
+            "revision": 1,
+            "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+            "shared": false,
+            "size_bytes": 14,
+            "updated_at": "2026-10-09T23:51:03.184484Z"
+          }
+        ],
+        "outcome": {
+          "artifact": {
+            "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
+            "name": "findings.json",
+            "revision": 1,
+            "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3"
+          },
+          "failure_code": "execution_failed",
+          "findings": [],
+          "status": "failed",
+          "summary": "The topic could not be completed within its approved limits.",
+          "verification": "unverified"
+        },
+        "phase": "delivery",
+        "reserved_usd": "0.0000",
+        "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+        "spent_usd": "0.1842",
+        "status": "failed",
+        "tools": [
+          {
+            "label": "Read a selected document",
+            "name": "read_document",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Read back a working note",
+            "name": "read_note",
+            "phase": "analysis",
+            "registered": true
+          },
+          {
+            "label": "Save a working note",
+            "name": "save_note",
+            "phase": "analysis",
+            "registered": true
+          }
+        ],
+        "turn_limit": 2,
+        "updated_at": "2026-10-09T23:51:03.510115Z"
+      }
+    ],
+    "mode": "model_demo_v1",
+    "partial_summary": null,
+    "plan": {
+      "attempt_timeout_seconds": 120,
+      "budget_usd": "2.0000",
+      "children": [
+        {
+          "budget_usd": "0.7434",
+          "dispatch_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [
+                "ab8514ca-49ff-47e4-aae2-aca9c78483b8"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "What must Customer pay and when?",
+            "stopping_condition": "One answer",
+            "topic": "Payments"
+          },
+          "tools": {
+            "analysis": [
+              "read_document",
+              "read_note",
+              "save_note"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 2
+        },
+        {
+          "budget_usd": "0.7434",
+          "dispatch_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+          "execution": {
+            "anonymize": true,
+            "grants": {
+              "analysis": [
+                "plan",
+                "retrieve_chunks",
+                "run_skill",
+                "workspace_read",
+                "workspace_write"
+              ],
+              "delivery": [],
+              "drafting": [
+                "run_skill",
+                "workspace_read",
+                "workspace_share",
+                "workspace_write"
+              ],
+              "ethics_review": [],
+              "intake": []
+            },
+            "maximum_egress_tier": 0,
+            "minimum_inference_tier": 1,
+            "privileged": false,
+            "resources": {
+              "document_ids": [
+                "ab8514ca-49ff-47e4-aae2-aca9c78483b8"
+              ],
+              "source_names": []
+            },
+            "skill": {
+              "digest": "898f5b10cd75eb45d484dce8ce94b20186f436250ac2825b646f98acba61ae42",
+              "name": "contract-qa"
+            }
+          },
+          "profile": "research",
+          "task": {
+            "boundaries": "Only the fictional agreement",
+            "output_contract": "A clause-based answer",
+            "question": "How can Customer prevent renewal or terminate?",
+            "stopping_condition": "One answer",
+            "topic": "Renewal and termination"
+          },
+          "tools": {
+            "analysis": [
+              "read_document",
+              "read_note",
+              "save_note"
+            ],
+            "delivery": [],
+            "drafting": [],
+            "ethics_review": [],
+            "intake": []
+          },
+          "turn_limit": 2
+        }
+      ],
+      "contract_version": 3,
+      "deadline": "2026-10-10T00:51:01.718586Z",
+      "delegation_grants": {
+        "analysis": [
+          "plan",
+          "retrieve_chunks",
+          "run_skill",
+          "workspace_read",
+          "workspace_write"
+        ],
+        "delivery": [],
+        "drafting": [
+          "run_skill",
+          "workspace_read",
+          "workspace_share",
+          "workspace_write"
+        ],
+        "ethics_review": [],
+        "intake": []
+      },
+      "documents": [
+        {
+          "attached_for_run": false,
+          "document_id": "ab8514ca-49ff-47e4-aae2-aca9c78483b8",
+          "file_id": "58254f4f-1e15-4b52-8c15-1b145822845b",
+          "filename": "fictional-vendor-agreement.md",
+          "number": 1
+        }
+      ],
+      "goal": "A request with refused calls <i>and markup</i>.",
+      "max_active_children": 2,
+      "owner_id": "c0f244e6-ec65-4a81-aa90-54b6111429a4",
+      "plan_id": "e4167a90-87bb-42c4-b660-13d5482cc94a",
+      "planning_digest": "4057c6900427017f49db39e169a874b7fc16c32b575b178f4d49a6f60ddeed4b",
+      "policy_version": "f884a4608fc7a4a76270d6bfc5e077c0babe130473cda2941f2f64d0e9dd7f10",
+      "profile": "model_demo_v1",
+      "project_id": "d3c8fc30-c8ff-44bc-8fe4-95f6cb5a9cb3",
+      "revision": 1,
+      "root": {
+        "anonymize": true,
+        "grants": {
+          "analysis": [
+            "plan",
+            "retrieve_chunks",
+            "run_skill",
+            "workspace_read",
+            "workspace_write"
+          ],
+          "delivery": [],
+          "drafting": [
+            "run_skill",
+            "workspace_read",
+            "workspace_share",
+            "workspace_write"
+          ],
+          "ethics_review": [],
+          "intake": []
+        },
+        "maximum_egress_tier": 0,
+        "minimum_inference_tier": 1,
+        "privileged": false,
+        "resources": {
+          "document_ids": [
+            "ab8514ca-49ff-47e4-aae2-aca9c78483b8"
+          ],
+          "source_names": []
+        },
+        "skill": {
+          "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+          "name": "orchestration-chat-demo"
+        }
+      },
+      "root_allowance_usd": "0.4956",
+      "root_id": "0aec69dd-fe6f-43de-8066-6b3ec2ad856e"
+    },
+    "plan_hash": "3068d480720b3f8f90ae6d1f19a66c639b1b6c842bc9f7dacccb916c282a3277",
+    "reserved_usd": "0.0000",
+    "result": {
+      "coverage": "partial",
+      "kind": "orchestration_demonstration",
+      "summary": "Model-generated from fictional inputs; unverified.\nRenewal requires 30 days' notice [\u00a75].",
+      "topics": [
+        {
+          "outcome": {
+            "artifact": {
+              "digest": "fb29dbc4b3a625ee61ba6928ac7c7ec01abdae8300ebf8b36c6876e6e18442d5",
+              "name": "findings.json",
+              "revision": 1,
+              "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077"
+            },
+            "failure_code": null,
+            "findings": [
+              "<b>Renewal</b> needs 30 days' notice. [\u00a75]\n\n<script>alert('answer')</script> ![x](javascript:alert(1))"
+            ],
+            "status": "completed",
+            "summary": "<b>Renewal</b> needs 30 days' notice. [\u00a75]",
+            "verification": "unverified"
+          },
+          "session_id": "7754a871-0d2f-498f-8d6c-a570e9d3f077",
+          "topic": "Payments"
+        },
+        {
+          "outcome": {
+            "artifact": {
+              "digest": "8ed28563eb6aeda82a6f711c413a21008e5b587f3e0b86cc84c27aff760ba95d",
+              "name": "findings.json",
+              "revision": 1,
+              "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3"
+            },
+            "failure_code": "execution_failed",
+            "findings": [],
+            "status": "failed",
+            "summary": "The topic could not be completed within its approved limits.",
+            "verification": "unverified"
+          },
+          "session_id": "ff9482d7-4ea2-4927-bf54-2af1c951e7b3",
+          "topic": "Renewal and termination"
+        }
+      ],
+      "verification": "unverified"
+    },
+    "root": {
+      "allocation_usd": "0.4956",
+      "effects": [
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0647",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 7756,
+            "messages_digest": "618ab52d055a86da8bd13fb1b7ded0b4d7c6a475384dd7bb9f3d839d0fb899ea",
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0647",
+            "tier": 1
+          },
+          "charged_usd": "0.0647",
+          "completed_at": "2026-10-09T23:51:01.815553Z",
+          "created_at": "2026-10-09T23:51:01.797363Z",
+          "effect_key": "chat:plan:v1",
+          "intent": "plan",
+          "outcome": "success",
+          "reserved_usd": "0.0647",
+          "skill": {
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "name": "orchestration-chat-demo",
+            "version": "1.0.0"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "planning",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": null,
+          "charged_usd": "0.0000",
+          "completed_at": "2026-10-09T23:51:03.664510Z",
+          "created_at": "2026-10-09T23:51:03.638598Z",
+          "effect_key": "demo:collect:7754a871-0d2f-498f-8d6c-a570e9d3f077:v1",
+          "intent": "workspace_read",
+          "outcome": "success",
+          "reserved_usd": "0.0000",
+          "skill": null,
+          "status": "completed",
+          "step": {
+            "kind": "findings_collected",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": null,
+          "charged_usd": "0.0000",
+          "completed_at": "2026-10-09T23:51:03.706637Z",
+          "created_at": "2026-10-09T23:51:03.680339Z",
+          "effect_key": "demo:collect:ff9482d7-4ea2-4927-bf54-2af1c951e7b3:v1",
+          "intent": "workspace_read",
+          "outcome": "success",
+          "reserved_usd": "0.0000",
+          "skill": null,
+          "status": "completed",
+          "step": {
+            "kind": "findings_collected",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        },
+        {
+          "accounting": {
+            "anonymization_applied": true,
+            "basis": "conservative-estimate-or-reported-usage-v1",
+            "charged_usd": "0.0610",
+            "config_digest": "905c8f3edb0d5e86ad189e096f17adc71fe7889e100596fc24be60b6d72100b0",
+            "estimated_prompt_tokens": 5880,
+            "messages_digest": "17e923eb91b6f8c8968709af1ab89d6829c1605394779e2895c49da7d24319ec",
+            "model": "native",
+            "provider": "selected",
+            "reported_usage_cost_usd": "0.0003",
+            "reserved_usd": "0.0610",
+            "tier": 1
+          },
+          "charged_usd": "0.0610",
+          "completed_at": "2026-10-09T23:51:03.755969Z",
+          "created_at": "2026-10-09T23:51:03.739100Z",
+          "effect_key": "demo:synthesis:v1",
+          "intent": "run_skill",
+          "outcome": "success",
+          "reserved_usd": "0.0610",
+          "skill": {
+            "digest": "76895d69471329b86615d6cdaa01cdff8a0f57ac29a4b3219a5025753d15783d",
+            "name": "orchestration-chat-demo",
+            "version": "1.0.0"
+          },
+          "status": "completed",
+          "step": {
+            "kind": "synthesis",
+            "label": null,
+            "reason": null,
+            "summary": null,
+            "tool": null
+          }
+        }
+      ],
+      "files": [],
+      "outcome": null,
+      "phase": "delivery",
+      "reserved_usd": "0.0000",
+      "session_id": "0aec69dd-fe6f-43de-8066-6b3ec2ad856e",
+      "spent_usd": "0.1257",
+      "status": "completed",
+      "tools": [],
+      "turn_limit": 0,
+      "updated_at": "2026-10-09T23:51:03.812496Z"
+    },
+    "root_id": "0aec69dd-fe6f-43de-8066-6b3ec2ad856e",
+    "spent_usd": "0.8763",
+    "status": "completed",
+    "stop_reason": null,
+    "verification": "unverified"
+  }
+}

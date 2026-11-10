@@ -1,0 +1,9 @@
+2026-09-19T08:49:21.950 WARN  Profiling export is enabled but this binary was built without Pyroscope support
+2026-09-19T08:49:21.968 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:49:21.968 WARN  automatic storage class has no parity  {"event": "storage_class_zero_redundancy", "state": "degraded"}
+2026-09-19T08:49:21.970 WARN  SSE-KMS requests are not authorized against the KMS key they name; any identity allowed to write an object may encrypt it under any key, and any identity allowed to read it may have it decrypted. Grant kms:GenerateDataKey and kms:Decrypt on the keys your workloads use, then set RUSTFS_KMS_ENFORCE_SSE_KEY_POLICY=true.  {"event": "sse_kms_key_policy_mode"}
+2026-09-19T08:49:21.973 INFO  On-demand migration runtime initialized  {"event": "on_demand_migration_runtime_initialized", "state": "enabled"}
+2026-09-19T08:49:22.009 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:49:22.012 INFO  On-demand migration backfill recovery configured  {"event": "odm_backfill_recovery_configured", "state": "started"}
+2026-09-19T08:49:27.015 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:49:29.179 WARN  Audit system not initialized, cannot stop

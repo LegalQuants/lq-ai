@@ -1,0 +1,18 @@
+2026-09-19T08:47:31.985 WARN  Profiling export is enabled but this binary was built without Pyroscope support
+2026-09-19T08:47:32.018 INFO  checking for a legacy storage format  {"all_unformatted": true, "resumable_partial_migration": false}
+2026-09-19T08:47:32.020 INFO  Migrated format from MinIO config
+2026-09-19T08:47:32.096 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:47:32.096 WARN  Ignoring persisted heal config with a legacy scalar shape; it carries no decodable settings and is dropped on the next config save  {"event": "server_config_scalar_section_ignored"}
+2026-09-19T08:47:32.101 INFO  Migrated compatible server config from legacy metadata bucket
+2026-09-19T08:47:32.101 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:47:32.101 WARN  automatic storage class has no parity  {"event": "storage_class_zero_redundancy", "state": "degraded"}
+2026-09-19T08:47:32.102 WARN  SSE-KMS requests are not authorized against the KMS key they name; any identity allowed to write an object may encrypt it under any key, and any identity allowed to read it may have it decrypted. Grant kms:GenerateDataKey and kms:Decrypt on the keys your workloads use, then set RUSTFS_KMS_ENFORCE_SSE_KEY_POLICY=true.  {"event": "sse_kms_key_policy_mode"}
+2026-09-19T08:47:32.114 INFO  Migrated bucket metadata: lq-ai-files
+2026-09-19T08:47:32.119 INFO  Migrated IAM config: config/iam/format.json
+2026-09-19T08:47:32.119 INFO  IAM migration complete: 1 object(s) migrated
+2026-09-19T08:47:32.119 INFO  On-demand migration runtime initialized  {"event": "on_demand_migration_runtime_initialized", "state": "enabled"}
+2026-09-19T08:47:32.155 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:47:32.165 INFO  On-demand migration backfill recovery configured  {"event": "odm_backfill_recovery_configured", "state": "started"}
+2026-09-19T08:47:37.168 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:47:42.168 WARN  Ignoring unknown persisted scalar config key
+2026-09-19T08:47:46.517 WARN  Audit system not initialized, cannot stop

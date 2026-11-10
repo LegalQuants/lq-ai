@@ -1,8 +1,9 @@
 /**
- * /api/v1/auth — login, refresh, logout, change-password, /users/me.
+ * /api/v1/auth — login, logout, change-password, /users/me.
  *
- * The login + refresh calls bypass the auth header (no token yet); the rest
- * carry the bearer token via `apiRequest`.
+ * The login call bypasses the auth header (no token yet); the rest carry the
+ * bearer token via `apiRequest`. Refresh lives in `client.ts` as
+ * `refreshSession`, so every caller shares one refresh.
  */
 import { apiRequest } from './client';
 import { clearSession, setSession, setUser } from '../auth/store';
@@ -11,7 +12,6 @@ import type {
 	LoginRequest,
 	LoginResponse,
 	MfaSetupResponse,
-	TokenResponse,
 	User
 } from '../types';
 
@@ -28,22 +28,6 @@ export async function login(req: LoginRequest): Promise<LoginResponse> {
 		refresh_token: res.refresh_token ?? null,
 		expires_in: res.expires_in,
 		user: res.user
-	});
-	return res;
-}
-
-/** POST /api/v1/auth/refresh. Caller normally wants the wrapper in `client.ts`. */
-export async function refresh(refresh_token: string): Promise<TokenResponse> {
-	const res = await apiRequest<TokenResponse>('/auth/refresh', {
-		method: 'POST',
-		body: { refresh_token },
-		skipAuth: true,
-		skipRefresh: true
-	});
-	setSession({
-		access_token: res.access_token,
-		refresh_token: res.refresh_token,
-		expires_in: res.expires_in
 	});
 	return res;
 }

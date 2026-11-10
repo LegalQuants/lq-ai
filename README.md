@@ -5,7 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![PRD](https://img.shields.io/badge/PRD-v0.2-green.svg)](docs/PRD.md)
 [![Status](https://img.shields.io/badge/Status-Pre--Release-orange.svg)](#project-status)
-[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](https://slsa.dev) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
+[![SLSA 3](https://img.shields.io/badge/SLSA-Level%203-green)](docs/security/releases/README.md#verify-the-slsa-build-provenance) [![Security Policy](https://img.shields.io/badge/Security-Policy-blue)](./SECURITY.md)
 
 LQ.AI is a self-hosted AI platform purpose-built for legal teams. It delivers conversational chat with persistent history and matter-scoped projects, character-verifiable citations against source documents (M2's four-stage Citation Engine), a privacy-preserving anonymization layer for cloud inference (M2), reusable workflow skills authored in the open [agentskills.io / Anthropic Claude Skills](https://github.com/anthropics/skills) format, and a curated library of starter skills for the everyday work lawyers actually do — running on a laptop, an internal server, or a cloud VM, against the customer's choice of model (Anthropic, OpenAI, Azure OpenAI, or local Ollama out of the box), with zero license fees.
 
@@ -60,7 +60,7 @@ The chat UI renders citations as four visual states: green (exact / tolerant mat
 
 **Audit log.** Append-only `audit_log` table records every state-changing action with first-class columns for `privilege_marked`, `privilege_basis`, `routed_inference_tier`, `routed_provider`, plus a JSONB `details` field for action-specific context. Admin-gated `GET /admin/audit-log` endpoint supports filtering by user, resource, action, privilege, tier, and timestamp range; paginated for large windows. Privileged-matter compliance evidence is one query: `?privilege_marked=true&from_timestamp=...&to_timestamp=...`. Cross-references to the gateway's `inference_routing_log` (which records `anonymization_applied`, latency, cost estimate, and request correlation id) via `request_id` for end-to-end pipeline audit. See [`docs/procurement/sig-lite.md`](docs/procurement/sig-lite.md) for the procurement-team-facing audit posture.
 
-**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses Docling for layout-aware parsing of complex PDFs (multi-column, tables, footnotes) with PyMuPDF as the fast path for simpler documents. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
+**Files / Knowledge Bases.** Persistent collections of documents accessible across chats. Hybrid retrieval combining vector similarity (text-embedding-3-small or operator-configured embedding model via pgvector) with Postgres full-text search; the per-KB `hybrid_alpha` slider tunes the vector/FTS weight at retrieval time. Document ingestion uses PyMuPDF to parse text-bearing PDFs into a character stream. (Scanned-PDF OCR is not yet implemented — the pipeline parses text-bearing PDFs only and sets `was_ocrd=false`; OCR is tracked as DE-320.) Character-level offsets land in `documents.normalized_content` for the Citation Engine to verify against. KB-attached chats automatically retrieve before each turn, prepend a citation-formatted context block, and write a `📎 KB retrieval` audit row visible in Receipts.
 
 **Enhance Prompt.** A prompt-rewriting skill that runs as an optional pre-step. You type a short, natural-language question; Enhance Prompt expands it into a structured legal prompt (role, jurisdiction, audience, scope, output format, constraints, citation expectations) and shows you the expanded version before submission. The skill itself is inspectable — you can read the SKILL.md driving the enhancement at any time.
 
@@ -88,7 +88,7 @@ The privacy fallback for Tier 3+ inference when local (Tier 1) is impractical bu
 
 **Citation Ledger.** Every message and autonomous-session turn keeps a per-turn ledger of every source and passage the assistant actually read — not just what it cited — with one-click trace from a claim to its ledger entry (`GET /api/v1/chats/{chat_id}/ledger` and the autonomous-session equivalent). The ledger references content by id and character offset only; per the ADR 0016 P3 no-raw-payload guarantee, it never stores raw passages or tool payloads in the audit layer. See [ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md) and [`api/app/citation/ledger.py`](api/app/citation/ledger.py).
 
-**Fiduciary-grade gate.** A derive-don't-assert gate runs over every tool-retrieved citation, computing one PASS/FAIL verdict per assistant message from the ledger's own verification statuses, and flags failed messages rather than shipping them silently. Chat and autonomous paths do not yet have full verdict-tier parity: an attributed-authority FAIL tier for chat (DE-370) and an autonomous-path authority SUPPORTED tier (DE-371) are both still open. See [ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md) and [`api/app/citation/gate.py`](api/app/citation/gate.py).
+**Fiduciary-grade gate.** A derive-don't-assert gate runs over every tool-retrieved citation, computing one PASS/FAIL verdict per assistant message from the ledger's own verification statuses, and flags failed messages rather than shipping them silently. The chat path also FAILs a quote attributed (via a nearby statute/regulation/CELEX citation) to an authority fetched that turn when the quote cannot be verified against the fetched text (DE-370). Chat and autonomous paths do not yet have full verdict-tier parity: an autonomous-path authority SUPPORTED tier (DE-371) is still open. See [ADR 0018](docs/adr/0018-citation-ledger-and-fiduciary-grade-output.md) and [`api/app/citation/gate.py`](api/app/citation/gate.py).
 
 **Governed agentic matter sessions.** On the Autonomous Layer, a plain-language "describe your matter" query can drive a governed plan → act → observe → replan loop confined to the analysis phase, under the same R4/R5/R6 brakes described above, instead of one scripted call. There is no dedicated matter-intake UI yet — the plain-language entry point is a backend seam on session state today. See [ADR 0020](docs/adr/0020-governed-agentic-legal-matter-sessions.md) and [`api/app/autonomous/planner.py`](api/app/autonomous/planner.py).
 
@@ -160,6 +160,10 @@ The shared posture across the ecosystem: substantive legal work product is open-
 
 ## Quick Start
 
+### In short
+
+Docker Compose is the reference way to run LQ.AI: it starts eight services together on your own computer — the website, the API and gateway that handle requests and AI connections, two background workers, and three storage services. You'll need Docker and `git`, nothing else. Copy `.env.example` to `.env`, set four required secrets, then start the stack; the first run also builds the application images, so it takes longer than a later restart. Set the admin password with the CLI command in Step 3 and sign in, then create a test matter and try a skill — no AI-provider key is needed to install and sign in, only to get an answer from a model. Changing an environment variable afterwards needs the containers recreated, not just restarted. Running a second trial, using a model on your own computer, and turning on legal-research connectors are separate, opt-in steps covered further down.
+
 **Prerequisites:** [Docker Desktop 4.x+](https://www.docker.com/products/docker-desktop) (or Docker Engine 24+ on Linux) and `git`. No other host tooling required — no Python, no Node, no language-specific runtimes. Plan for ~8 GB of free disk space and ~6 GB of RAM available to Docker.
 
 ### Step 1 — Clone and configure
@@ -175,17 +179,21 @@ cp .env.example .env
 Open `.env` and set the four required secrets (the file explains each one):
 
 - `POSTGRES_PASSWORD` — any long random string
-- `MINIO_ROOT_PASSWORD` — any long random string
+- `OBJECT_STORE_SECRET_KEY` — any long random string
 - `LQ_AI_GATEWAY_KEY` — any long random string
 - `JWT_SECRET` — any long random string
 
-Generate all four at once, labelled and ready to paste into `.env`:
+Generate all four at once with Python 3 (`python3`), labelled and ready to paste into `.env`:
 
 ```bash
-python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","MINIO_ROOT_PASSWORD","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
+python3 -c 'import secrets; [print(f"{name}={secrets.token_urlsafe(32)}") for name in ("POSTGRES_PASSWORD","OBJECT_STORE_SECRET_KEY","LQ_AI_GATEWAY_KEY","JWT_SECRET")]'
 ```
 
-Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this step. The stack starts without any; inference calls return "no provider configured" until you add at least one. Two paths add a key: set it in `.env` and restart the gateway, or — once `LQ_AI_GATEWAY_MASTER_KEY` is configured — add it at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway with no restart.
+Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this step. The stack starts without any; inference calls return "no provider configured" until you add at least one. Two paths add a key: set it in `.env` and recreate the gateway (`docker compose up -d --force-recreate gateway`; a plain `restart` keeps the old environment), or — once `LQ_AI_GATEWAY_MASTER_KEY` is configured — add it at runtime through the admin provider-keys surface (`/api/v1/admin/provider-keys`), which encrypts the key into `gateway.yaml` and hot-applies it to the live gateway with no restart.
+
+Upgrading an installation that used the bundled MinIO service? Follow the
+[MinIO to RustFS migration runbook](docs/runbooks/minio-to-rustfs.md) before
+starting the new stack.
 
 ### Step 2 — Start the stack
 
@@ -193,7 +201,7 @@ Provider API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are optional at this s
 docker compose up -d
 ```
 
-Eight services start: postgres, redis, minio, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
+Eight services start: postgres, redis, rustfs, gateway, api, ingest-worker, arq-worker, web. The api container runs `alembic upgrade head` automatically as the first step of its entrypoint, so a fresh deployment lands a fully-migrated schema before uvicorn accepts traffic (the arq-worker and ingest-worker skip migrations and wait for the api to be healthy). Wait ~60 seconds for healthchecks, then confirm:
 
 ```bash
 docker compose ps   # all 8 services should show "healthy" or "running"
@@ -234,7 +242,7 @@ Inference Gateway:  http://localhost:8001/docs
 
 After login you land on the LQ.AI home. Three good starting points:
 
-- Click **Learn** in the top bar to take the interactive tour — eleven playgrounds walk through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
+- Click **Learn** in the top bar to take the interactive tour — a set of playgrounds (the count grows with releases) walks through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
 - Click **Skills** to browse the 10 built-in skills. Each is inspectable: click any skill to read the `SKILL.md` driving it.
 - Click **+ New matter** to create your first project workspace and attach a document to try a skill against.
 
@@ -242,9 +250,9 @@ After login you land on the LQ.AI home. Three good starting points:
 
 ### Providers and air-gapped deployments
 
-LQ.AI ships with four provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), and **Ollama** (local). Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. Google Vertex AI and AWS Bedrock adapters are on the deferred-enhancement list (DE-034 / DE-035) and welcome community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
+LQ.AI ships with five provider adapters: **Anthropic** (Claude), **OpenAI** (GPT models + text-embedding-3-*), **Azure OpenAI** (M2-E1 — unblocks Azure-tenant enterprise deployments via the operator's existing Azure agreement), **Ollama** (local) and **AWS Bedrock**. Any OpenAI-compatible local endpoint (vLLM, llama.cpp wrappers, LM Studio) works through the OpenAI adapter with a custom `base_url`. The Bedrock adapter uses Bedrock's compatible APIs and supports explicit Messages, Chat Completions and stateless Responses transports; [live AWS verification is deferred beyond 0.9.1](docs/bedrock-verification.md). Google Vertex AI remains on the deferred-enhancement list (DE-034) and welcomes community contribution — see [docs/HONEST-STATE.md](docs/HONEST-STATE.md) for the current shipped-vs-deferred catalog.
 
-Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `vertex-anthropic/claude-opus-4-7@anthropic` on failure; the routing log captures which target actually handled the request. Provider keys are encrypted at rest in the gateway (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`); the api/ service never sees them — defense-in-depth around the highest-value secret in the deployment.
+Multiple providers can run in parallel: operators declare `model_aliases` in `gateway.yaml` that resolve to specific provider+model pairs with fallback chains. A request for `smart` might primary-route to `anthropic-prod/claude-opus-4-7` and fall back to `openai-prod/gpt-5` on failure; the routing log captures which target actually handled the request. Only the gateway uses provider keys (for outbound provider authentication); the api/ service never stores them. A key entered through the admin provider-keys surface passes through the backend to the gateway once and is then encrypted at rest in `gateway.yaml` (Fernet AES-128-CBC + HMAC-SHA256 per `gateway/app/secrets.py`). A key configured in `.env` (including one written by the desktop first-run wizard) stays in `.env` as plaintext, and switching that provider to a runtime key does not remove the older `.env` copy — the defense-in-depth around the highest-value secret in the deployment still depends on how the operator handles `.env`.
 
 ### Enabling legal-research connectors (case-law / MCP) — operator opt-in
 
@@ -252,7 +260,7 @@ External tool connectors (CourtListener case-law, MCP servers) are **off by defa
 
 1. In `.env`, set `COURTLISTENER_API_TOKEN` to a token from [courtlistener.com/help/api](https://www.courtlistener.com/help/api/) (the `docker-compose.yml` gateway service forwards this variable into the gateway container).
 2. In `gateway.yaml`, uncomment the `tool_providers:` → `courtlistener-prod` block (the template is in [`gateway.yaml.example`](gateway.yaml.example); `api_key_env: COURTLISTENER_API_TOKEN`).
-3. Restart the gateway: `docker compose up -d gateway`. Confirm with `curl -s localhost:8000/api/v1/research/capabilities` → `"enabled": true`.
+3. Recreate the gateway so it picks up the new `.env` value: `docker compose up -d --force-recreate gateway` (a plain `docker compose restart` keeps the container's old environment). Confirm as a signed-in user — the capabilities route requires a bearer token (from `POST /api/v1/auth/login`): `curl -s -H "Authorization: Bearer $TOKEN" localhost:8000/api/v1/research/capabilities` → `"enabled": true`. An unauthenticated call returns `401`, which is not a research-setup failure.
 
 Once enabled, case-law lookups run through the governed chat tool-loop (every call tier-gated, audited to `tool_egress_log` as counts/types only, and surfaced to the user as "Sources consulted" provenance). MCP connectors follow the same opt-in pattern (register via the `/api/v1/admin/mcp` surface + per-user OAuth). See [HONEST-STATE.md §5.5](docs/HONEST-STATE.md).
 
@@ -262,7 +270,9 @@ For a **fully air-gapped deployment** (no outbound network calls), start the sta
 docker compose --profile local up -d
 ```
 
-In this mode, inference runs entirely on the local host via Ollama. The Inference Gateway is the only egress point in the stack — verify in `gateway/app/router.py`. Provider keys live only inside the Gateway, encrypted at rest (`gateway/app/secrets.py`); the API service never sees them.
+In this mode, inference runs entirely on the local host via Ollama. The Inference Gateway is the only egress point in the stack — verify in `gateway/app/router.py`. Provider keys are used only inside the Gateway (runtime-managed keys are encrypted at rest per `gateway/app/secrets.py`; keys set in `.env` stay in `.env`); the API service never stores them.
+
+Before you blame the model, check which Ollama the gateway is actually pointed at — inside the gateway container, `localhost` is the container, not your machine. `OLLAMA_BASE_URL` picks the target: `http://ollama:11434` reaches this Compose sidecar and is what `gateway.yaml.example` falls back to when the variable is unset, but `.env.example` ships `OLLAMA_BASE_URL=http://host.docker.internal:11434` by default, so a `.env` copied from it points at Ollama on the host until you switch that line for `--profile local`. `host.docker.internal` is a Docker Desktop convenience; `docker-compose.yml` adds no `extra_hosts` mapping for it, so on plain Linux Docker Engine either add one yourself or point at the host's private-range IP directly — the gateway's egress policy accepts plaintext `http` to loopback and RFC1918 addresses as well as these named hosts (`gateway/app/providers/base_url_policy.py`). Either way, starting the profile brings up an empty Ollama and pulls no models on its own.
 
 ---
 
@@ -274,7 +284,7 @@ In this mode, inference runs entirely on the local host via Ollama. The Inferenc
 
 **Login rejected / password not accepted** — re-run step 3 (the reset command is idempotent). Confirm you are using the login URL `http://localhost:3000/lq-ai/login`, not `http://localhost:3000`.
 
-**Inference returns "no provider configured"** — add at least one provider key. Either set it in `.env` (e.g., `ANTHROPIC_API_KEY=sk-...`) and `docker compose restart gateway` (the gateway reads environment provider keys at startup), or, with `LQ_AI_GATEWAY_MASTER_KEY` set, add it at runtime via the admin provider-keys surface (`/api/v1/admin/provider-keys`), which hot-applies without a restart.
+**Inference returns "no provider configured"** — add at least one provider key. Either set it in `.env` (e.g., `ANTHROPIC_API_KEY=sk-...`) and recreate the gateway with `docker compose up -d --force-recreate gateway` — the gateway reads environment provider keys at startup, and a plain `docker compose restart gateway` keeps the container's old environment, so the new value never arrives. This only takes effect if the provider's `gateway.yaml` entry still uses `api_key_env` (an entry already switched to an encrypted runtime key ignores the environment variable). The same recreate step applies to any other forwarded environment value, such as `OLLAMA_BASE_URL`. Or, with `LQ_AI_GATEWAY_MASTER_KEY` set, add it at runtime via the admin provider-keys surface (`/api/v1/admin/provider-keys`), which hot-applies without a restart.
 
 **A host port is already in use** (`bind: address already in use`) — every host-side port the stack uses is configurable via a `*_HOST_PORT` variable in `.env` (the compose file reads them; see `docker-compose.yml`). Override the colliding port and `docker compose up -d` again. The defaults shipped in `.env.example`:
 
@@ -284,13 +294,19 @@ WEB_HOST_PORT=3000         # change if another web app (Next.js dev, etc.) holds
 API_HOST_PORT=8000         # change if a host service (Django, FastAPI) holds :8000
 GATEWAY_HOST_PORT=8001     # change if another service holds :8001
 REDIS_HOST_PORT=6379       # change if a host redis holds :6379
-MINIO_API_HOST_PORT=9000   # change if another service holds :9000
-MINIO_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
+OBJECT_STORE_API_HOST_PORT=9000   # change if another service holds :9000
+OBJECT_STORE_CONSOLE_HOST_PORT=9001  # change if Portainer/Console holds :9001
 ```
 
 The most common Mac collision is `POSTGRES_HOST_PORT=5432` against a Homebrew Postgres. Either set `POSTGRES_HOST_PORT=15432` in your `.env` (the compose stack's internal traffic still uses 5432; services talk to each other unchanged — only the host-side mapping shifts), or stop the host postgres first (`brew services stop postgresql@<version>` on macOS).
 
-**Two clones of this repo sharing data** — Docker Compose derives its project name from the parent directory's basename. Two clones at `lq-ai/` will reuse each other's named volumes (`lq-ai_pgdata` etc.) — including the database, admin user, and MinIO objects — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`).
+**Two clones of this repo sharing data** — `docker-compose.yml` sets the project name explicitly (`name: lq-ai`), so Compose does not derive it from the checkout folder: two clones will reuse each other's containers and named volumes (`lq-ai_pgdata` etc.) whatever their folders are called — including the database, admin user, and object-store data — and `docker compose down` in one will tear down the shared stack. To isolate two parallel clones, set `COMPOSE_PROJECT_NAME` in each clone's `.env` to a unique name (e.g. `COMPOSE_PROJECT_NAME=lq-ai-dev` and `COMPOSE_PROJECT_NAME=lq-ai-prod-candidate`), or pass `-p <name>` on every command; both override the file's `name:`. Give each clone its own host ports too if they run at the same time.
+
+---
+
+### Where your data lives
+
+Everything the stack writes lands in named Compose volumes — none of them live inside a container, so `docker compose down` on its own leaves them intact; only `-v` removes them, and this repository's own dev-environment rules flag `down -v` as the thing never to run without a backup first. For what each volume holds, why `miniodata` keeps its name after the RustFS swap, and how to back it up, see [Backup and restore](docs/operate/backup-and-restore.md).
 
 ---
 
@@ -302,13 +318,13 @@ The trust model for a self-hosted, open-source project is that every claim termi
 - **Inference Gateway:** `gateway/app/router.py` — the only egress point, the security boundary, the place where routing decisions are made and logged.
 - **Audit log writer:** `api/app/audit.py` — what gets written to the `audit_log` table, and for which actions.
 - **Honest catalog:** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) — the shipped-vs-deferred table with a verification path for every row. If you find a discrepancy between this document and the code, the code is canonical.
-- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. The eleven playgrounds each point at the relevant source files for that topic.
+- **Interactive architecture tour:** Navigate to `http://localhost:3000/lq-ai/learn` after logging in. Each playground points at the relevant source files for that topic.
 
 ---
 
 ### First steps after login
 
-**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Eleven interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
+**The Learn page is the guided tour.** New users and procurement evaluators start at `http://localhost:3000/lq-ai/learn`. Its interactive playgrounds walk through the architecture, the full request lifecycle, the five-tier inference model, what the model actually sees (and what it doesn't), where data lives, and how to author your own skill. Each playground links to the relevant source file.
 
 **The honest catalog.** [`docs/HONEST-STATE.md`](docs/HONEST-STATE.md) names what is shipped, what is deferred, and how to verify each. We publish this because the verification path for an open-source product terminates in code, not in claims. If anything in this README is inconsistent with what the code does, please [open an issue](https://github.com/LegalQuants/lq-ai/issues) — the code is canonical.
 
@@ -318,7 +334,7 @@ The trust model for a self-hosted, open-source project is that every claim termi
 
 ## Architecture
 
-LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [Docling](https://github.com/DS4SD/docling) + [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
+LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the chat UI, plus a FastAPI backend, a custom-built Inference Gateway (~3,000 lines of Python that we own end-to-end for security reasons), [LangGraph](https://github.com/langchain-ai/langgraph) for stateful agent workflows, [PyMuPDF](https://github.com/pymupdf/PyMuPDF) for document parsing with character-level offsets, and PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) for unified storage of application data, vectors, and full-text indexes. Optional [Langfuse](https://github.com/langfuse/langfuse) for LLM-specific observability; OpenTelemetry throughout.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -336,10 +352,10 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
 ┌─────────────┐ ┌─────────────┐ ┌───────────┐ ┌────────────┐
 │ Inference   │ │   Skill     │ │  Document │ │ Knowledge  │
 │  Gateway    │ │  Service    │ │  Pipeline │ │  Service   │
-│ (multi-     │ │  (skills,   │ │ (Docling+ │ │  (pgvector │
-│  provider,  │ │  Org Profile│ │  PyMuPDF, │ │  + FTS)    │
-│  tier-aware,│ │  singleton) │ │  Citation │ │            │
-│  anonym.    │ │             │ │  Engine)  │ │            │
+│ (multi-     │ │  (skills,   │ │ (PyMuPDF, │ │  (pgvector │
+│  provider,  │ │  Org Profile│ │  Citation │ │  + FTS)    │
+│  tier-aware,│ │  singleton) │ │  Engine)  │ │            │
+│  anonym.    │ │             │ │           │ │            │
 │  middleware)│ │             │ │           │ │            │
 └──────┬──────┘ └──────┬──────┘ └─────┬─────┘ └────┬───────┘
        │               │              │            │
@@ -348,13 +364,13 @@ LQ.AI is a fork of [OpenWebUI](https://github.com/open-webui/open-webui) for the
        ┌──────────────────────┼─────────────────────┐
        ▼                      ▼                     ▼
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│ PostgreSQL   │      │    Redis     │      │   MinIO /    │
+│ PostgreSQL   │      │    Redis     │      │   RustFS /   │
 │ + pgvector   │      │  (sessions,  │      │   S3-compat  │
 │              │      │   queues)    │      │   (files)    │
 └──────────────┘      └──────────────┘      └──────────────┘
 
 LLM PROVIDERS (any combination, configured by operator):
-  Cloud:  Anthropic │ OpenAI │ Google Vertex │ Cohere │ Azure │ Bedrock
+  Cloud:  Anthropic │ OpenAI │ Azure OpenAI   (Vertex / Bedrock: deferred, DE-034 / DE-035)
   Local:  Ollama │ vLLM │ llama.cpp │ any OpenAI-compatible endpoint
 ```
 
@@ -369,9 +385,11 @@ For more, see [PRD §1.5 Deployment Modes and the Inference Choice Spectrum](doc
 
 ## Security
 
-LQ.AI ships with SLSA Level 3 build provenance, sigstore-signed
-container images, and a Software Bill of Materials (SBOM) with every
-release. See [`docs/security/`](docs/security/) for the threat model,
+LQ.AI ships with SLSA build provenance, sigstore-signed container
+images, and a Software Bill of Materials (SBOM) with every release. The
+provenance is SLSA Build Level 3 (produced by an isolated reusable
+workflow) from the first release after v0.7.1; earlier releases carry
+Build Level 2 provenance. See [`docs/security/`](docs/security/) for the threat model,
 cryptography reference, audit-logging policy, and dependency-management
 posture. Verify a release: [`docs/security/releases/README.md`](docs/security/releases/README.md).
 
@@ -383,7 +401,7 @@ LQ.AI's security posture is structurally different from closed-source commercial
 
 - **The operator chooses the deployment's posture.** LQ.AI does not run a SaaS that holds your data on our infrastructure; you run it on yours. The most consequential security decisions — where the deployment lives, what inference provider it routes to, how the audit log is retained, who has access — are yours, and the application makes the implications of each decision explicit.
 - **The Inference Choice Spectrum is the central security trade-off.** Inference is where customer data leaves the deployment, if it does. The five-tier spectrum maps the choice across local-only inference (Tier 1), customer-hosted cloud inference (Tier 2), enterprise managed inference with ZDR / no-training commitments (Tier 3), standard cloud API (Tier 4), and consumer or free tier (Tier 5). Tier 3 is recommended for most pragmatic enterprise deployments. Tier 1 is recommended for the most sensitive privileged work.
-- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA-3 build provenance attestations, a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
+- **Transparency replaces opacity.** Every release ships with an SBOM (Software Bill of Materials), signed container images (Sigstore/cosign), SLSA build provenance attestations (Build Level 3 from the first release after v0.7.1), a published threat model, and alignment documentation for SOC 2, ISO 27001, ISO 42001, GDPR, HIPAA, and FedRAMP — mapping our design choices to each framework's controls. Where LQ.AI does not yet match a specific commercial competitor's control, it is named on the public deferred-enhancements list with a roadmap.
 
 For procurement reviews, see:
 
@@ -479,7 +497,6 @@ Path to broader governance is documented but not implemented in v1: as the proje
 
 - **GitHub Issues** for bugs and feature requests.
 - **GitHub Discussions** for community Q&A.
-- **Discord** (LegalQuants-hosted) for synchronous community.
 - **Blog** at [legalquants.com/blog](https://legalquants.com/blog) for releases and roadmap updates.
 
 For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure process includes safe-harbor language for good-faith security researchers, response-time commitments (acknowledge within 72h, fix critical issues within 30d), and credit attribution for reporters.
@@ -493,8 +510,9 @@ For security disclosures, see [`SECURITY.md`](SECURITY.md). The disclosure proce
 - [`docs/observability.md`](docs/observability.md) — OpenTelemetry traces/metrics, deployment recipes, operator guide.
 - [`docs/contribute/EASIEST-CONTRIBUTIONS.md`](docs/contribute/EASIEST-CONTRIBUTIONS.md) — curated short-cycle contributions with mini-PRDs.
 - [`docs/skill-authoring-guide.md`](docs/skill-authoring-guide.md) — how to write a high-quality skill.
+- [OSS skill capability research](docs/research/issue-662-oss-skill-capabilities.md) — the v0.8.0 baseline, evidence and adoption buckets supporting #662.
 - [`docs/playbooks.md`](docs/playbooks.md) — how Playbooks work and how to write one.
-- [`deploy/`](deploy/) — deployment recipes (Helm chart, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
+- [`deploy/`](deploy/) — deployment recipes (Helm chart, [reverse-proxy + TLS recipes](deploy/reverse-proxy/) for Caddy/Traefik/nginx, Caddy/Tailscale, observability stack); see also [`docs/INSTALL-MAC.md`](docs/INSTALL-MAC.md) for a from-scratch macOS install.
 - [`docs/compliance/`](docs/compliance/) — Compliance Alignment Pack.
 - [`docs/security/`](docs/security/) — security artifacts (SBOM, threat model, supply-chain transparency).
 - [`docs/procurement/`](docs/procurement/) — procurement-readiness templates (SIG Lite, CAIQ).
@@ -507,7 +525,7 @@ LQ.AI builds on substantial open-source work. The most consequential dependencie
 
 - [OpenWebUI](https://github.com/open-webui/open-webui) — chat UI shell.
 - [LangGraph](https://github.com/langchain-ai/langgraph) — agent runtime.
-- [Docling](https://github.com/DS4SD/docling) and [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
+- [PyMuPDF](https://github.com/pymupdf/PyMuPDF) — document parsing.
 - [pgvector](https://github.com/pgvector/pgvector) — vector storage in PostgreSQL.
 - [Anthropic Claude Skills](https://github.com/anthropics/skills) — the agentskills.io format the project adopts as its skill substrate.
 - [OpenTelemetry](https://opentelemetry.io/) — observability.

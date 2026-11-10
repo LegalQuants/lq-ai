@@ -22,18 +22,20 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Deterministic namespace for synthesizing a tabular cell's ``citation_id``
-# from its ``chunk_id``. The tabular executor persists raw ``cited_chunk_ids``
-# (chunk references); the read-side surface (M3-C4) models structured
-# ``Citation`` objects keyed by ``citation_id``. Until the executor mints
-# real Citation-Engine rows (deferred — see PRD §9), we derive a stable,
-# display-only ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always
-# maps to the same id. The citation drawer is display-only and never resolves
-# this id against the Citation Engine, so a synthetic id is safe.
+# from its ``chunk_id``. LEGACY BRIDGE (DE-309): the executor now mints real
+# offset-bearing ``tabular_cell_citations`` rows (migration 0079) and the
+# read side serves those ids/offsets when rows exist for an execution. This
+# uuid5 bridge is KEPT as the fallback for executions predating the
+# migration (no minted rows): a stable, display-only
+# ``citation_id = uuid5(NS, chunk_id)`` so the same chunk always maps to
+# the same id. Bridge citations carry NO offsets and are never resolvable
+# against the Citation Engine. GET, cancellation and exports replace these
+# bridges with minted provenance for executions stamped m3-c2-v2.
 _TABULAR_CITATION_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "tabular-citation.lq.ai")
 
 TabularExecutionStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
@@ -117,12 +119,29 @@ class Citation(BaseModel):
     locates / highlights the cited span within this text."""
 
     verification_method: str | None = None
-    """The Citation-Engine verification method backing this citation
-    (Donna #6), e.g. ``ensemble_strict`` / ``ensemble_majority``.
-    Mirrors the parent cell's ``verification_method`` onto each citation
-    so the navigable UI can badge the ensemble-verified state per
-    citation. ``None`` when the column isn't ensemble-verified or
-    verification didn't confirm the value."""
+    """The Citation-Engine verification method backing this citation.
+    For minted ``tabular_cell_citations`` rows (DE-309) this is the
+    method that established the offsets (e.g. ``exact_match``). For
+    bridge citations it mirrors the parent cell's ensemble
+    ``verification_method`` (Donna #6, e.g. ``ensemble_strict``), or
+    ``None`` when the column isn't ensemble-verified or verification
+    didn't confirm the value."""
+
+    # --- Offset-bearing provenance fields (DE-309) -------------------------
+    # Populated only from minted ``tabular_cell_citations`` rows on
+    # ``GET /tabular/executions/{id}``. ``None`` on bridge-fallback
+    # citations (pre-migration executions).
+    source_offset_start: int | None = None
+    """Char offset (inclusive) of the located cell value inside the
+    cited chunk's content (= this citation's ``source_text``)."""
+
+    source_offset_end: int | None = None
+    """Char offset (exclusive) — ``source_text[start:end]`` re-derives
+    the located value."""
+
+    verification_confidence: float | None = None
+    """The locating cascade's confidence in ``[0, 1]`` (``1.0`` for
+    ``exact_match``). ``None`` on bridge citations."""
 
 
 class CellResult(BaseModel):
@@ -181,17 +200,20 @@ class TabularRow(BaseModel):
     @classmethod
     def _synthesize_cell_citations(cls, data: object) -> object:
         """Build display ``citations`` from each cell's persisted
-        ``cited_chunk_ids``.
+        ``cited_chunk_ids`` — the uuid5 bridge (DE-309: fallback only).
 
-        The executor persists raw chunk references (``cited_chunk_ids``)
-        rather than structured citations. Without this, the read-side
-        ``CellResult.citations`` would always be empty even though the
-        grounding chunks are recorded. We project each chunk id into a
-        ``Citation`` using the row's ``document_id`` (the citation's
-        source document), the cell's ``confidence``, and a deterministic
-        synthetic ``citation_id``. Cells that already carry ``citations``
-        (e.g., a future executor emitting real Citation-Engine rows) pass
-        through untouched.
+        The results JSONB persists raw chunk references
+        (``cited_chunk_ids``) rather than structured citations. This
+        validator projects each chunk id into a display-only ``Citation``
+        using the row's ``document_id``, the cell's ``confidence``, and a
+        deterministic synthetic ``citation_id``. Since DE-309 the
+        executor also mints real offset-bearing rows in
+        ``tabular_cell_citations``; ``GET /tabular/executions/{id}``
+        REPLACES these bridge citations for executions stamped
+        ``m3-c2-v2``, including executions that minted no rows (the
+        vintage check in ``app.api.tabular``). Legacy executions and
+        their exports keep bridge citations. Cells that already carry
+        ``citations`` pass through untouched.
         """
 
         if not isinstance(data, dict):
@@ -226,6 +248,18 @@ class TabularResults(BaseModel):
     once status is ``completed``."""
 
     rows: list[TabularRow]
+
+    ensemble_halted_at_ceiling: bool = False
+    """DE-331: true when the mid-run ensemble cost ceiling halted
+    Stage-4 ensemble verification partway through the run. Extraction
+    itself still completed for every cell (degrade-only); the halted
+    cells simply carry ``verification_method=None``. Defaults false so
+    payloads persisted before DE-331 validate unchanged."""
+
+    ensemble_halted_cells: int = 0
+    """DE-331: number of ensemble-eligible cells whose Stage-4 pass was
+    skipped because the ceiling was reached. Zero when no halt occurred
+    (including all pre-DE-331 payloads)."""
 
 
 # --- Wire shapes for endpoints --------------------------------------------
@@ -305,6 +339,141 @@ class TabularPreviewCostResponse(BaseModel):
     no cell is ensemble-verified."""
 
 
+# --- Bulk operations (DE-304 / ADR 0040) -----------------------------------
+
+
+TabularBulkOpKind = Literal["redline_rows", "summarize_column"]
+"""The two v1 bulk operations (ADR 0040 D2). Matches the CHECK
+constraint on ``tabular_bulk_ops.kind`` (migration 0071)."""
+
+TabularBulkOpStatus = Literal["pending", "running", "completed", "failed"]
+"""Lifecycle states for a :class:`TabularBulkOp`. ``completed``
+includes batches with per-item failures (ADR 0040 D4); ``failed`` is
+reserved for whole-batch orchestration crashes."""
+
+
+class TabularBulkOpRequest(BaseModel):
+    """Request body for
+    ``POST /api/v1/tabular/executions/{id}/bulk-ops`` (DE-304 / ADR 0040).
+
+    Replaces the never-wired M3-C4 stub of the same name (which
+    anticipated Decision C-9 sibling rows; ADR 0040 D1 stores bulk-op
+    output in a dedicated ``tabular_bulk_ops`` table instead because
+    the outputs are not grids).
+
+    ``column_name`` is required for both operations and validated against
+    the execution's snapshotted column spec. Instructions come from a
+    selected, immutable skill snapshot. ``confirmed_cost_usd`` is the echo of the
+    ``.../bulk-ops/preview-cost`` response value — persisted for audit,
+    same idiom as :class:`TabularExecutionCreate.confirmed_cost_usd`."""
+
+    kind: TabularBulkOpKind
+    column_name: str
+    skill_name: str = Field(min_length=1, max_length=128)
+    skill_inputs: dict[str, Any] = Field(default_factory=dict)
+    skill_content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed_cost_usd: Decimal | None = None
+
+
+class TabularBulkOpPreviewRequest(BaseModel):
+    """Request body for
+    ``POST /api/v1/tabular/executions/{id}/bulk-ops/preview-cost``.
+
+    Same shape as :class:`TabularBulkOpRequest` minus the
+    ``confirmed_cost_usd`` echo — preview produces the cost;
+    confirmation echoes it back on the subsequent create call."""
+
+    kind: TabularBulkOpKind
+    column_name: str
+    skill_name: str = Field(min_length=1, max_length=128)
+    skill_inputs: dict[str, Any] = Field(default_factory=dict)
+
+
+class TabularBulkOpPreviewResponse(BaseModel):
+    """Response from the bulk-op cost preview.
+
+    ``calls_count`` is the number of gateway calls the op will make
+    (one per grid row for ``redline_rows``; one for
+    ``summarize_column``). ``estimated_cost_usd`` = ``calls_count`` x
+    the rolling-average per-call cost over recent
+    ``purpose='tabular_bulk_op'`` routing-log rows (conservative
+    cold-start default before calibration; ADR 0040 D3)."""
+
+    kind: TabularBulkOpKind
+    calls_count: int
+    per_call_cost_usd: Decimal
+    estimated_cost_usd: Decimal
+    skill_name: str | None = None
+    skill_version: str | None = None
+    skill_content_hash: str | None = None
+
+
+class TabularBulkOpSourceRow(BaseModel):
+    """Selected-column evidence coverage, generated from the saved grid."""
+
+    document_name: str
+    value: str | None = None
+    status: Literal["available", "missing"]
+
+
+class TabularBulkOpItem(BaseModel):
+    """One item in a bulk op's results.
+
+    ``redline_rows`` produces one item per parent grid row (in grid-row
+    order); ``summarize_column`` produces a single item with
+    ``document_id = None`` (the memo spans the whole grid). Failed
+    items carry ``status='failed'`` + ``error`` and are rendered as
+    failures — the report never silently omits failed rows (C-10)."""
+
+    document_id: uuid.UUID | None = None
+    document_name: str | None = None
+    status: Literal["completed", "failed"]
+    output_text: str | None = None
+    error: str | None = None
+    cost_usd: Decimal | None = None
+    finish_reason: str | None = None
+    source_rows: list[TabularBulkOpSourceRow] = Field(default_factory=list)
+
+
+class TabularBulkOpSummary(BaseModel):
+    """Honesty counters for a bulk op's results panel."""
+
+    total_items: int
+    failed_items: int
+
+
+class TabularBulkOpResults(BaseModel):
+    """Shape persisted in ``tabular_bulk_ops.results`` once terminal."""
+
+    schema_version: str
+    items: list[TabularBulkOpItem]
+    summary: TabularBulkOpSummary
+
+
+class TabularBulkOpResponse(BaseModel):
+    """Wire shape for one bulk op — embedded in
+    :class:`TabularExecutionResponse.bulk_ops` (ADR 0040 D2: the detail
+    endpoint and available through independent owner-scoped reads)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    execution_id: uuid.UUID | None
+    source_execution_id: uuid.UUID
+    provenance: dict[str, Any]
+    user_id: uuid.UUID
+    kind: TabularBulkOpKind
+    status: TabularBulkOpStatus
+    params: dict[str, str | None]
+    results: TabularBulkOpResults | None = None
+    confirmed_cost_usd: Decimal | None = None
+    cost_actual_usd: Decimal | None = None
+    error_text: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class TabularExecutionResponse(BaseModel):
     """Wire shape returned by every tabular execution endpoint
     (``POST /execute``, ``GET /executions/{id}``, etc.)."""
@@ -335,6 +504,12 @@ class TabularExecutionResponse(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    bulk_ops: list[TabularBulkOpResponse] = Field(default_factory=list)
+    """Bulk operations run over this execution, recent-first (DE-304 /
+    ADR 0040 D2). Embedded here — rather than behind a dedicated GET —
+    because the detail endpoint is what the UI already polls, so the
+    results panel gets live progress for free."""
+
 
 class TabularExecutionSummary(BaseModel):
     """Compact wire shape for the list endpoint
@@ -358,29 +533,20 @@ class TabularExecutionSummary(BaseModel):
     completed_at: datetime | None = None
 
 
-class TabularBulkOpRequest(BaseModel):
-    """Request body for
-    ``POST /api/v1/tabular/executions/{id}/bulk-op`` (M3-C4).
-
-    Per Decision C-9, bulk ops spawn sibling execution rows rather
-    than mutating the original grid. The sibling carries
-    ``parent_execution_id`` set to this execution's ID."""
-
-    op: Literal["redline", "summarize"]
-    column_name: str
-    skill_name_override: str | None = None
-    """Override the default skill used for the operation. Default for
-    ``redline`` is ``nda-review`` (or skill matched to the parent
-    execution's skill family); default for ``summarize`` is the
-    deployment-configured summary skill."""
-
-
 __all__ = [
     "CellConfidence",
     "CellResult",
     "Citation",
     "ColumnSpec",
+    "TabularBulkOpItem",
+    "TabularBulkOpKind",
+    "TabularBulkOpPreviewRequest",
+    "TabularBulkOpPreviewResponse",
     "TabularBulkOpRequest",
+    "TabularBulkOpResponse",
+    "TabularBulkOpResults",
+    "TabularBulkOpStatus",
+    "TabularBulkOpSummary",
     "TabularExecutionCreate",
     "TabularExecutionResponse",
     "TabularExecutionStatus",

@@ -2,7 +2,7 @@
 export const EXPECTED_SERVICES = [
 	'postgres',
 	'redis',
-	'minio',
+	'rustfs',
 	'gateway',
 	'api',
 	'ingest-worker',
@@ -24,8 +24,8 @@ export interface PortConfig {
 	gateway: number
 	postgres: number
 	redis: number
-	minioApi: number
-	minioConsole: number
+	objectStoreApi: number
+	objectStoreConsole: number
 }
 
 /**
@@ -38,8 +38,8 @@ export const DEFAULT_PORTS: PortConfig = {
 	gateway: 18021,
 	postgres: 25442,
 	redis: 26389,
-	minioApi: 29020,
-	minioConsole: 29021
+	objectStoreApi: 29020,
+	objectStoreConsole: 29021
 }
 
 export type EngineStatus = 'absent' | 'present' | 'error'

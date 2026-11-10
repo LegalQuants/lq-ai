@@ -6,10 +6,13 @@ to the same database the API uses; here we verify the happy path and
 the error branches against the test DB.
 
 The CLI builds its own engine via `create_async_engine(settings.database_url)`,
-so we point `DATABASE_URL` at the per-run test database and let the
+so we point `DATABASE_URL` at a database of the test's own
+(`isolated_db_url`, a fresh copy of the migrated schema) and let the
 function execute end-to-end. We don't go through the SAVEPOINT-rolled
-session — the CLI commits, and the test database is dropped at session
-teardown anyway.
+session — the CLI commits. The CLI also reads global state (how many
+admins exist), so the shared per-run test database would not do: rows
+other tests on the same xdist worker committed there break these tests,
+and the admins these tests commit break theirs.
 """
 
 from __future__ import annotations
@@ -22,7 +25,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -35,20 +37,17 @@ from app.security import hash_password, verify_password
 
 
 @pytest_asyncio.fixture
-async def cli_db_url(test_db_url: str, test_engine: AsyncEngine) -> AsyncIterator[str]:
-    """Point the CLI's settings at the test DB by overriding env + cache.
-
-    Depends on `test_engine` so Alembic migrations run before the CLI talks
-    to the DB; without it the `users` table wouldn't exist yet.
+async def cli_db_url(isolated_db_url: str) -> AsyncIterator[str]:
+    """Point the CLI's settings at this test's own database by overriding env + cache.
 
     The CLI calls `get_settings()` which reads `DATABASE_URL` from env at
     instantiation; we set it before invocation and restore after.
     """
     saved = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = test_db_url
+    os.environ["DATABASE_URL"] = isolated_db_url
     get_settings.cache_clear()
     try:
-        yield test_db_url
+        yield isolated_db_url
     finally:
         if saved is None:
             os.environ.pop("DATABASE_URL", None)
@@ -112,6 +111,7 @@ async def test_reset_admin_password_happy_path(
         async with factory() as s:
             row = (await s.execute(select(User).where(User.email == email))).scalar_one()
             assert row.must_change_password is True
+            assert row.credential_version == 1
             # Old password no longer verifies.
             assert verify_password("OldOldOldOldOld!", row.hashed_password) is False
         await engine.dispose()

@@ -1,0 +1,44 @@
+# Fixture scope notes for `gen-coverage-index.mjs`.
+#
+# Deliberately small, and deliberately *not* a copy of the repository's own
+# `docs/site/_data/coverage-notes.yaml` — a fixture that duplicates a writer's
+# file goes stale the first time they edit it, and then the test is asserting
+# against last month's editorial judgement. This one asserts the generator's
+# behaviour: grouping several raw frontmatter values under one facet via
+# `match:`, a facet with a note, and a facet with no skill against it at all.
+
+jurisdictions:
+  - id: us
+    label: United States
+    match: [us, US-default]
+    note: >-
+      Two raw frontmatter values, one facet. The generator must group them by
+      `match:` rather than by guessing at the spelling.
+    source: docs/skill-authoring-guide.md
+
+  - id: agnostic
+    label: Jurisdiction-agnostic
+    match: [agnostic]
+    note: These skills do not branch on jurisdiction at all.
+
+practice_areas:
+  - id: contracts
+    label: Contracts
+    match: [contracts]
+    note: The largest first-party category.
+    source: docs/skill-authoring-guide.md
+
+  - id: employment
+    label: Employment
+    match: [employment]
+    note: >-
+      No first-party skill carries this tag. The facet page must say so as a
+      gap, not leave a silent blank.
+
+skill_overrides: []
+
+contribution_route:
+  note: >-
+    A jurisdiction- or practice-area-specific contribution routes to the
+    community skills repository, not to this one.
+  source: docs/adr/0024-jurisdiction-and-practice-area-expansion.md

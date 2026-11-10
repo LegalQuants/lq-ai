@@ -31,16 +31,40 @@ redis:
   storage: 5Gi
   storageClass: ""
 
-# MinIO
+# Bundled S3-compatible object store (ADR 0036). The current implementation is
+# RustFS 1.0.3, pinned by multi-arch index digest; operator values stay generic.
+objectStore:
+  enabled: true
+  image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
+  pullPolicy: IfNotPresent
+  storage: ""
+  storageClass: ""
+  rootUser: ""
+  rootPasswordSecretRef:
+    name: ""
+    key: ""
+
+# Deprecated compatibility keys, supported through at least v0.10.0 and, per
+# ADR 0036, throughout 0.x. objectStore values above take precedence; blank
+# generic settings fall back here so existing values files still render.
 minio:
   enabled: true
-  image: minio/minio:latest
   storage: 50Gi
   storageClass: ""
   rootUser: lq_ai
   rootPasswordSecretRef:
     name: lq-ai-minio
     key: password
+
+# Deployment-migration Helm hook (ADR 0037). Existing Helm installs were not
+# wired to their bundled MinIO, so this is opt-in and normally remains false.
+# When enabled, objectStoreClaim is both migrated in place by the hook and
+# mounted by the RustFS StatefulSet after the upgrade.
+migrations:
+  enabled: false
+  objectStoreClaim: ""
+  storage: 5Gi
+  storageClass: ""
 
 # Gateway
 gateway:

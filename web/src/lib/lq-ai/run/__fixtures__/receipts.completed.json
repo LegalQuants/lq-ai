@@ -1,0 +1,1874 @@
+[
+  {
+    "detail": {
+      "autonomous_session_id": null,
+      "completion_tokens": null,
+      "message_id": "269dc593-b04c-434d-8b47-91bd32745720",
+      "message_kind": "user",
+      "prompt_tokens": null,
+      "role": "user"
+    },
+    "kind": "message",
+    "ts": "2026-10-09T23:50:56.564380Z"
+  },
+  {
+    "detail": {
+      "autonomous_session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "completion_tokens": 180,
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "message_kind": "run",
+      "prompt_tokens": 120,
+      "role": "assistant"
+    },
+    "kind": "message",
+    "ts": "2026-10-09T23:50:56.564381Z"
+  },
+  {
+    "detail": {
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "skill_name": "orchestration-chat-demo",
+      "source": null
+    },
+    "kind": "skill",
+    "ts": "2026-10-09T23:50:56.564381Z"
+  },
+  {
+    "detail": {
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "skill_name": "contract-qa",
+      "source": null
+    },
+    "kind": "skill",
+    "ts": "2026-10-09T23:50:56.564381Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.planning_started",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "chat_id": "5c736cce-ca54-4af7-b401-e488a48db4aa",
+        "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+        "profile": "model_demo_v1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.569089Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.625438Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "plan",
+        "reserved_usd": "0.0647",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.700588Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "plan"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.702141Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.0647",
+        "generation": 1,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.710226Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0647,
+        "outcome": "success",
+        "tool": "plan"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.710712Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.plan_saved",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "child_count": 2,
+        "revision": 1
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.734255Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 2,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.742330Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.approved",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "revision": 1
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.811706Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 3,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.874865Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.children_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "child_count": 2,
+        "revision": 1
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.916042Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 4,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.936581Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:56.984838Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "analysis",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.023989Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.068338Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.069906Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.092571Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.093204Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.138750Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.140087Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.157654Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.158166Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1841",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.252980Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.254398Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.1841",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.260113Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.1841,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.260641Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "retrieve_chunks",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.294926Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.296481Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.303412Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.303915Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1901",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.358387Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.359964Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.1901",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.370464Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.1901,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.371980Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.438118Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.440127Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.463607Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.464301Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.502960Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.504452Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.525883Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.526443Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "drafting",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.544808Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.573691Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.574973Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.591424Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.591973Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_share",
+        "reserved_usd": "0",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.619370Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_share"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.620524Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.640066Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_share"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.640589Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.674347Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "delivery",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.691764Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.topic_delivered",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "completed",
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.710737Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 2,
+        "session_id": "a95cadf3-cb15-4a35-b7e7-3a458d0d939a"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.718900Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.771043Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "analysis",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.808415Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.851315Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.852811Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.871284Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.871834Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.916072Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.917339Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.934075Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:57.934597Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1842",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.020297Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.021554Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.1842",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.026686Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.1842,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.027129Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "retrieve_chunks",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.054211Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.055352Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.060536Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "retrieve_chunks"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.060997Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "run_skill",
+        "reserved_usd": "0.1902",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.109032Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.110152Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.1902",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.114957Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.1902,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.115374Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.142934Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.144094Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.160418Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.160904Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_write",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.189528Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.190775Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.208143Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_write"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.208606Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "drafting",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.224887Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.252997Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.254212Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.270387Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.270855Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 1,
+        "intent": "workspace_share",
+        "reserved_usd": "0",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.298223Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_share"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.299354Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 1,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.315894Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_share"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.316401Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.344485Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "delivery",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.359550Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.topic_delivered",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "completed",
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.376220Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 2,
+        "session_id": "cb3a99ea-a357-44ba-83cb-76637cf1b246"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.383405Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claimed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 5,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.418182Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "drafting",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.475614Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 5,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.529113Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.530428Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 5,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.548193Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.548710Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 5,
+        "intent": "workspace_read",
+        "reserved_usd": "0",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.577229Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.578390Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0",
+        "generation": 5,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.594053Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0,
+        "outcome": "success",
+        "tool": "workspace_read"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.594559Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_admitted",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 5,
+        "intent": "run_skill",
+        "reserved_usd": "0.0616",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.640076Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "outcome": "started",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.641214Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.effect_completed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "charged_usd": "0.0616",
+        "generation": 5,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.646072Z"
+  },
+  {
+    "detail": {
+      "action": "autonomous_session.tool_call",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "cost_usd": 0.0616,
+        "outcome": "success",
+        "tool": "run_skill"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.646497Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "ethics_review",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.673248Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.phase_changed",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "phase": "delivery",
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.687342Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.root_delivered",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "chat_id": "5c736cce-ca54-4af7-b401-e488a48db4aa",
+        "coverage": "complete",
+        "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+        "verification": "unverified"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.709521Z"
+  },
+  {
+    "detail": {
+      "action": "orchestration.claim_released",
+      "actor_user_id": "eeabd798-0013-48a3-bb10-0484121b44d5",
+      "details": {
+        "generation": 6,
+        "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+      },
+      "message_id": "2d923012-c26c-4ec0-9023-b39f246158cf",
+      "run_root_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1",
+      "session_id": "cacfe0ff-b1aa-41cb-8b8f-77d58563e8d1"
+    },
+    "kind": "audit",
+    "ts": "2026-10-09T23:50:58.716119Z"
+  }
+]

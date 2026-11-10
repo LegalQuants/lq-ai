@@ -150,3 +150,31 @@ def test_assert_production_secrets_allows_real_secret(
     monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert_production_secrets(s)  # does not raise
+
+
+@pytest.mark.unit
+def test_the_run_switches_default_to_off_and_the_new_harness_route_to_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Off is the containment for a feature ADR 0038 has not ratified, so it is pinned.
+
+    The fixtures set the switches explicitly, so nothing else reads the shipped default.
+    Both profiles are off, the New harness route names no provider and no model, and
+    turning on the 0.8.0 demonstration never turns on the New harness.
+    """
+    for name in (
+        "LQ_AI_NEW_HARNESS_ENABLED",
+        "LQ_AI_NEW_HARNESS_PROVIDER",
+        "LQ_AI_NEW_HARNESS_MODEL",
+        "LQ_AI_ORCHESTRATION_CHAT_ENABLED",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.new_harness_enabled is False
+    assert s.orchestration_chat_enabled is False
+    assert (s.new_harness_provider, s.new_harness_model) == ("", "")
+
+    monkeypatch.setenv("LQ_AI_ORCHESTRATION_CHAT_ENABLED", "true")
+    s = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert s.orchestration_chat_enabled is True
+    assert s.new_harness_enabled is False

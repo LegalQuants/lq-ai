@@ -19,6 +19,8 @@
 	import TopTabBar from '$lib/lq-ai/components/TopTabBar.svelte';
 	import AmbientTrustChrome from '$lib/lq-ai/components/AmbientTrustChrome.svelte';
 	import SessionTimeoutWarning from '$lib/lq-ai/components/SessionTimeoutWarning.svelte';
+	import NotificationBell from '$lib/lq-ai/components/NotificationBell.svelte';
+	import { autonomousChromeEnabled, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
 	import '$lib/lq-ai/styles/typography.css';
@@ -64,6 +66,15 @@
 	let activityHandler: (() => void) | null = null;
 
 	onMount(() => {
+		// Layouts survive client-side sign-in/navigation. Sync each new signed-in user,
+		// and let the store discard responses from an earlier session.
+		let preferenceUserId: string | null = null;
+		const unsubscribePreferences = auth.subscribe((session) => {
+			const userId = session.access_token ? (session.user?.id ?? null) : null;
+			if (userId === preferenceUserId) return;
+			preferenceUserId = userId;
+			if (userId) void initPreferences();
+		});
 		gate();
 		if (!isAuthExempt($page.url.pathname)) {
 			startTracker(() => goto('/lq-ai/login?reason=idle-timeout'));
@@ -72,6 +83,7 @@
 				window.addEventListener(e, activityHandler!, { passive: true })
 			);
 		}
+		return unsubscribePreferences;
 	});
 
 	onDestroy(() => {
@@ -94,6 +106,9 @@
 				</a>
 				<div style="display: inline-flex; align-items: center; gap: var(--lq-space-3);">
 					<AmbientTrustChrome />
+					{#if $autonomousChromeEnabled}
+						<NotificationBell />
+					{/if}
 					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm);">⚙</a>
 				</div>
 			</header>

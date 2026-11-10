@@ -1,0 +1,14 @@
+---
+/**
+ * Version C's right sidebar on a guide page: what the page is (GuideFacts,
+ * part "about"), Starlight's own "On this page" unchanged, then its sources,
+ * neighbours and text copies (part "more"). Starlight shows this column from
+ * 72rem wide; narrower screens keep the same facts in the page itself.
+ */
+import Default from '@astrojs/starlight/components/TableOfContents.astro';
+import GuideFacts from './GuideFacts.astro';
+---
+
+<GuideFacts part="about" />
+<Default />
+<GuideFacts part="more" />

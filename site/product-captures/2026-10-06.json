@@ -1,0 +1,59 @@
+{
+  "assembledOn": "2026-10-06",
+  "captures": [
+    {
+      "id": "choose-skill",
+      "file": "choose-skill.jpg",
+      "archivedFile": "site/product-captures/archive/choose-skill-before-recovery.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI's Contract QA skill chooser beside the fictional NDA marked ready in the chat's attached files.",
+      "caption": "The fictional NDA is attached and marked ready; the Contract QA skill chooser is open beside it.",
+      "note": "Ordinary chat in LQ.AI v0.8.0. Ready confirms text extraction; an AI answer is a separate check.",
+      "capturedOn": "2026-10-06",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "docs/quickstart/sample-nda.md",
+      "evidence": "Live browser capture of the local Docker demo.",
+      "assetSha256": "dad939af0385ce8833189672640b18340c8759edfe44b868e767384d361cdd92"
+    },
+    {
+      "id": "matter-intake",
+      "file": "matter-intake.jpg",
+      "width": 1280,
+      "height": 720,
+      "alt": "LQ.AI matter intake contains a fictional supplier NDA review request, the NDA Review skill, and a release demo matter.",
+      "caption": "Describe a fictional review task and select the skill and matter that will guide the run.",
+      "note": "Matter intake example from the v0.8.0 release. This is an autonomous workflow, separate from ordinary chat.",
+      "revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+      "input": "Fictional supplier NDA review request.",
+      "evidence": "docs/releases/v0.8.0.md",
+      "original": "docs/releases/assets/v0.8.0/matter-intake.jpg",
+      "recordedOn": "2026-09-30",
+      "assetSha256": "40968acb0fb4c2affd963ed8d647a4c6b38b32463b66abb07a6d3ea88cc14076",
+      "originalSha256": "40968acb0fb4c2affd963ed8d647a4c6b38b32463b66abb07a6d3ea88cc14076"
+    },
+    {
+      "id": "read-answer",
+      "file": "read-answer.png",
+      "width": 1280,
+      "height": 720,
+      "alt": "Experimental LQ.AI orchestration chat displays a combined answer about payment and notice terms, with clause references and a fictional-input warning.",
+      "caption": "Inspect the combined answer and its clause references in a completed experimental Contract QA demonstration.",
+      "note": "Experimental orchestration chat, disabled by default. This earlier demo uses a different fictional agreement; its AI output is unverified.",
+      "capturedOn": "2026-09-27",
+      "revision": "253eeaaa8f74c75c9eb4c2abed0f712386a97cef",
+      "input": "Fictional vendor agreement recorded in the ADR 0035 demonstration.",
+      "evidence": "docs/uat/adr35-chat/README.md",
+      "original": "docs/uat/adr35-chat/result.png",
+      "assetSha256": "dc02263cdf798a80b62d3ac00bb8ae88e5e1a14baf124738e5542524c06bb8ca",
+      "originalSha256": "dc02263cdf798a80b62d3ac00bb8ae88e5e1a14baf124738e5542524c06bb8ca"
+    }
+  ],
+  "liveAttempt": {
+    "documentExtraction": "ready",
+    "skillChooser": "captured",
+    "freshModelAnswer": "not obtained; request cancelled",
+    "apiRecovery": "Docker restart failed: did not receive an exit event",
+    "fallback": "User requested existing verified demo captures."
+  }
+}

@@ -36,16 +36,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser
 from app.audit import audit_action
+from app.config import get_settings
 from app.db.session import get_db
-from app.errors import NotFound
+from app.errors import Forbidden, NotFound
 from app.models.chat import Chat, Message
+from app.models.team import TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
+from app.skills.capabilities import ReferenceRead
 from app.skills.connectors import resolve_available_connectors, unavailable_tool_usage
 from app.skills.registry import MutableSkillRegistry
 from app.skills.schema import (
+    Skill,
     SkillFrontmatter,
     SkillInputs,
+    SkillInspection,
     extract_inputs,
     filter_summary_for_response,
 )
@@ -87,6 +92,22 @@ def _registry(request: Request) -> MutableSkillRegistry:
 # structured DB data — we synthesize an equivalent payload so the
 # wire shape is identical whichever source the row came from. The
 # gateway-side parser doesn't need to know which source it's reading.
+
+
+def _run_orchestrator_skills() -> frozenset[str]:
+    """Built-in skills that instruct a run profile's orchestrator (ADR 0038 D3).
+
+    Such a skill is that profile's own prompt. It plans and combines for a
+    governed run and does nothing useful attached to an ordinary message, so
+    the catalogue listing and the composer's autocomplete leave it out. It is
+    still an installed skill: it can be read by name, and the profile pins it.
+    A skill that instructs a run's tasks (Contract QA) is an ordinary skill and
+    stays listed.
+    """
+    # Imported here: the profile registry imports the skill registry.
+    from app.autonomous.orchestration.profiles import registered_profiles
+
+    return frozenset(p.root_skill for p in registered_profiles() if p.root_skill)
 
 
 def _summary_from_user_skill(row: UserSkill) -> dict[str, Any]:
@@ -149,6 +170,8 @@ def _skill_from_user_skill(row: UserSkill) -> dict[str, Any]:
         "content_md": row.body,
         "reference_files": [],
         "example_files": [],
+        "on_demand_files": [],
+        "reference_read_enabled": get_settings().skill_reference_read_enabled,
     }
     return payload
 
@@ -219,6 +242,25 @@ async def _list_user_shadows(db: AsyncSession, *, user_id: uuid.UUID) -> list[Us
     return list((await db.execute(stmt)).scalars().all())
 
 
+async def _list_team_shadows(db: AsyncSession, *, user_id: uuid.UUID) -> list[UserSkill]:
+    """Member-visible teams, with the same tie-break as single-skill resolution."""
+    stmt = (
+        select(UserSkill)
+        .join(TeamMember, TeamMember.team_id == UserSkill.owner_team_id)
+        .where(
+            UserSkill.scope == "team",
+            TeamMember.user_id == user_id,
+            UserSkill.archived_at.is_(None),
+        )
+        .order_by(UserSkill.updated_at.desc(), UserSkill.id.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    winners: dict[str, UserSkill] = {}
+    for row in rows:
+        winners.setdefault(row.slug, row)
+    return list(winners.values())
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -236,23 +278,16 @@ async def list_skills(
 
     Merging semantics (per ADR 0012):
 
-    * ``scope=all`` (default) — caller's user-scope rows first, then
-      built-ins. Dedup on slug: a user shadow hides the built-in of
-      the same slug from this listing.
+    * ``scope=all`` (default) — caller's user-scope rows, newest eligible
+      team rows, then built-ins. Dedup matches single-skill resolution.
     * ``scope=user`` — caller's user-scope rows only.
     * ``scope=builtin`` — filesystem built-ins only (no shadow merge).
-    * ``scope=team`` — empty list until D8.1 (team scope deferred).
+    * ``scope=team`` — skills from teams the caller belongs to.
 
-    The ``tag`` filter applies to both layers; a built-in matches if
+    The ``tag`` filter applies after personal/team precedence; a built-in matches if
     its ``lq_ai.tags`` contains the tag, a user shadow matches if its
     ``tags`` column contains it.
     """
-
-    if scope == "team":
-        # Deferred to D8.1 per ADR 0012; honor the contract by returning
-        # the empty set rather than 501 — clients can render "no team
-        # skills yet" without checking for a status code.
-        return JSONResponse(content=[])
 
     holder = _registry(request)
     registry = holder.current()
@@ -260,19 +295,22 @@ async def list_skills(
     user_rows: list[UserSkill] = []
     if scope in ("user", "all"):
         user_rows = await _list_user_shadows(db, user_id=user.id)
-        if tag is not None:
-            user_rows = [r for r in user_rows if tag in (r.tags or [])]
-
-    user_summaries = [_summary_from_user_skill(r) for r in user_rows]
+    team_rows = await _list_team_shadows(db, user_id=user.id) if scope in ("team", "all") else []
     shadowed_slugs = {r.slug for r in user_rows}
+    merged_rows = user_rows + [r for r in team_rows if r.slug not in shadowed_slugs]
+    shadowed_slugs.update(r.slug for r in team_rows)
+    if tag is not None:
+        merged_rows = [r for r in merged_rows if tag in (r.tags or [])]
+    user_summaries = [_summary_from_user_skill(r) for r in merged_rows]
 
-    if scope == "user":
+    if scope in ("user", "team"):
         return JSONResponse(content=user_summaries)
 
+    internal = _run_orchestrator_skills()
     builtin_summaries = [
         filter_summary_for_response(s)
         for s in registry.list_summaries(tag=tag)
-        if s.name not in shadowed_slugs
+        if s.name not in shadowed_slugs and s.name not in internal
     ]
 
     if scope == "builtin":
@@ -393,8 +431,9 @@ async def _list_merged_skills_for_user(
 
     holder = _registry(request)
     registry = holder.current()
+    internal = _run_orchestrator_skills()
     for summary in registry.list_summaries():
-        if summary.name in shadowed_slugs:
+        if summary.name in shadowed_slugs or summary.name in internal:
             continue
         out.append(
             {
@@ -553,7 +592,7 @@ async def autocomplete_skills(
     )
 
 
-@router.get("/{skill_name}")
+@router.get("/{skill_name}", response_model=Skill)
 async def get_skill(
     request: Request,
     skill_name: str,
@@ -585,23 +624,33 @@ async def _resolve_full_skill_payload(
     db: AsyncSession,
     user_id: uuid.UUID,
     skill_name: str,
+    inspect_references: bool = False,
+    reference_request: ReferenceRead | None = None,
+    expected_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Apply the D8.1b resolution stack and return the full Skill payload.
 
-    Shared between ``GET /skills/{name}`` and ``GET /skills/{name}/contents``
-    (which return the same shape — PRD §3.4 names the contents endpoint
-    explicitly as the inspector backend; ``/skills/{name}`` already
-    returns the same data, so contents is an alias the frontend can
-    target by URL semantics).
+    Only the human contents endpoint opts into installed-reference snapshots.
+    User/team shadows never inherit filesystem resources from a built-in.
     """
 
     shadow = await _load_user_shadow(db, user_id=user_id, slug=skill_name)
     if shadow is not None:
-        return _skill_from_user_skill(shadow)
+        if reference_request is not None:
+            raise NotFound("Reference is not available for the selected skill")
+        payload = _skill_from_user_skill(shadow)
+        if inspect_references:
+            payload["on_demand_contents"] = []
+        return payload
 
     team_shadow = await _load_team_shadow(db, user_id=user_id, slug=skill_name)
     if team_shadow is not None:
-        return _skill_from_user_skill(team_shadow)
+        if reference_request is not None:
+            raise NotFound("Reference is not available for the selected skill")
+        payload = _skill_from_user_skill(team_shadow)
+        if inspect_references:
+            payload["on_demand_contents"] = []
+        return payload
 
     holder = _registry(request)
     registry = holder.current()
@@ -616,6 +665,33 @@ async def _resolve_full_skill_payload(
     skill.unavailable_tool_usage = unavailable_tool_usage(skill.tool_usage, available)
 
     raw = skill.model_dump()
+    raw["reference_read_enabled"] = get_settings().skill_reference_read_enabled
+    if inspect_references:
+        from app.skills.binding import bind_record
+
+        record = registry.get(skill_name)
+        assert record is not None
+        snapshot = bind_record(record)
+        from app.skills.tools import SkillTools
+
+        service = SkillTools(holder)
+        if reference_request is not None:
+            installed = dict(snapshot.reference_snapshots).get(reference_request.path)
+            if installed is None:
+                raise NotFound("Reference is not available for the selected skill")
+            if expected_sha256 is not None and installed.sha256 != expected_sha256:
+                raise Forbidden(
+                    "Reference changed; reload the skill before reading another portion"
+                )
+            page = service.read_reference(snapshot, reference_request)
+            if "error" in page:
+                raise Forbidden(str(page.get("message") or "Reference is unavailable"))
+            raw["on_demand_contents"] = [page]
+        else:
+            raw["on_demand_contents"] = [
+                service.read_reference(snapshot, ReferenceRead(path=path))
+                for path in snapshot.reference_paths
+            ]
     # Keep tool_usage and unavailable_tool_usage even when None/[] — both are
     # meaningful verdicts ([] = "all connectors available"; None = "unknown").
     # Preserve the existing None/empty-tags filtering for all other keys.
@@ -629,6 +705,7 @@ async def _resolve_full_skill_payload(
 
 @router.get(
     "/{skill_name}/contents",
+    response_model=SkillInspection,
     summary="Full skill contents for the skill inspector (PRD §3.4)",
 )
 async def get_skill_contents(
@@ -636,20 +713,35 @@ async def get_skill_contents(
     skill_name: str,
     user: ActiveUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    reference_path: Annotated[
+        str | None,
+        Query(pattern=r"^references(/[A-Za-z0-9_][A-Za-z0-9_.-]{0,95}){1,6}$", max_length=255),
+    ] = None,
+    offset_bytes: Annotated[int, Query(ge=0, le=2**63 - 1)] = 0,
+    max_bytes: Annotated[int, Query(ge=1, le=65536)] = 65536,
+    expected_sha256: Annotated[str | None, Query(pattern=r"^[0-9a-f]{64}$")] = None,
 ) -> JSONResponse:
     """Return the full skill payload — SKILL.md + reference + example files.
 
-    Same shape as ``GET /skills/{skill_name}`` (the user-facing read
-    endpoint). PRD §3.4 names this endpoint explicitly as the contract
-    the "view this skill" affordance + the skill inspector side panel
-    target; exposing it under a distinct URL lets the frontend use URL
-    semantics ("/contents") to signal inspection intent, even though
-    the response body is the same as the base GET. Applies the same
-    D8.1b resolution stack (user > team > built-in).
+    Adds first bounded ranges of installed ``references/`` for human inspection.
+    Supply reference_path and offset_bytes for another explicit range; use the
+    prior sha256 as expected_sha256 to refuse changed text. Each range is at most
+    65536 UTF-8 bytes, including when runtime model reads are disabled. Applies the D8.1b resolution
+    stack (user > team > built-in); DB shadows have no filesystem resources.
     """
 
     payload = await _resolve_full_skill_payload(
-        request, db=db, user_id=user.id, skill_name=skill_name
+        request,
+        db=db,
+        user_id=user.id,
+        skill_name=skill_name,
+        inspect_references=True,
+        reference_request=ReferenceRead(
+            path=reference_path, offset_bytes=offset_bytes, max_bytes=max_bytes
+        )
+        if reference_path is not None
+        else None,
+        expected_sha256=expected_sha256,
     )
     return JSONResponse(content=payload)
 

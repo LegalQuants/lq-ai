@@ -1,0 +1,438 @@
+{
+  "services": [
+    {
+      "Service": "api",
+      "Name": "lq-ai-capability-baseline-api-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8000,
+          "PublishedPort": 18080,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "arq-worker",
+      "Name": "lq-ai-capability-baseline-arq-worker-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 8000,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "gateway",
+      "Name": "lq-ai-capability-baseline-gateway-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-gateway:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8001,
+          "PublishedPort": 18081,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "ingest-worker",
+      "Name": "lq-ai-capability-baseline-ingest-worker-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-api:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 8000,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "postgres",
+      "Name": "lq-ai-capability-baseline-postgres-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 5432,
+          "PublishedPort": 15433,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "proxy",
+      "Name": "lq-ai-capability-baseline-proxy-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-proxy:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8080,
+          "PublishedPort": 13080,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "redis",
+      "Name": "lq-ai-capability-baseline-redis-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 6379,
+          "PublishedPort": 16380,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "rustfs",
+      "Name": "lq-ai-capability-baseline-rustfs-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 9000,
+          "PublishedPort": 19000,
+          "Protocol": "tcp"
+        },
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 9001,
+          "PublishedPort": 19001,
+          "Protocol": "tcp"
+        }
+      ]
+    },
+    {
+      "Service": "web",
+      "Name": "lq-ai-capability-baseline-web-1",
+      "State": "running",
+      "Health": "healthy",
+      "Image": "ghcr.io/legalquants/lq-ai-web:v0.8.0",
+      "Publishers": [
+        {
+          "URL": "",
+          "TargetPort": 8080,
+          "PublishedPort": 0,
+          "Protocol": "tcp"
+        }
+      ]
+    }
+  ],
+  "init_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-04T00:38:46.330925429Z",
+    "FinishedAt": "2026-10-04T00:38:46.507223471Z"
+  },
+  "images": [
+    {
+      "Id": "sha256:2d647c7ab5d2daf020270182cb9e71f60d3656c2b00435699d52e05c485c2b58",
+      "RepoTags": [
+        "ghcr.io/legalquants/lq-ai-api:v0.8.0"
+      ],
+      "RepoDigests": [
+        "ghcr.io/legalquants/lq-ai-api@sha256:2d647c7ab5d2daf020270182cb9e71f60d3656c2b00435699d52e05c485c2b58"
+      ],
+      "Created": "2026-09-30T06:21:52.102157924Z",
+      "labels": {}
+    },
+    {
+      "Id": "sha256:70a515b492fcc65a1c44f0443830d91706f745c3f810796d6ac66b3ea26b653d",
+      "RepoTags": [
+        "ghcr.io/legalquants/lq-ai-gateway:v0.8.0"
+      ],
+      "RepoDigests": [
+        "ghcr.io/legalquants/lq-ai-gateway@sha256:70a515b492fcc65a1c44f0443830d91706f745c3f810796d6ac66b3ea26b653d"
+      ],
+      "Created": "2026-09-30T06:22:46.087396441Z",
+      "labels": {}
+    },
+    {
+      "Id": "sha256:1d274b7e54861def9d32c3bc6251d558cc312e1263fc122bd67f8997c8d2800f",
+      "RepoTags": [
+        "ghcr.io/legalquants/lq-ai-proxy:v0.8.0"
+      ],
+      "RepoDigests": [
+        "ghcr.io/legalquants/lq-ai-proxy@sha256:1d274b7e54861def9d32c3bc6251d558cc312e1263fc122bd67f8997c8d2800f"
+      ],
+      "Created": "2026-09-30T06:26:17.636049257Z",
+      "labels": {
+        "org.opencontainers.image.description": "a powerful, enterprise-ready, open source web server with automatic HTTPS written in Go",
+        "org.opencontainers.image.documentation": "https://caddyserver.com/docs",
+        "org.opencontainers.image.licenses": "Apache-2.0",
+        "org.opencontainers.image.source": "https://github.com/caddyserver/caddy-docker",
+        "org.opencontainers.image.title": "Caddy",
+        "org.opencontainers.image.url": "https://caddyserver.com",
+        "org.opencontainers.image.vendor": "Light Code Labs",
+        "org.opencontainers.image.version": "v2.11.4"
+      }
+    },
+    {
+      "Id": "sha256:a908ba08c96e283c17c242c74f0f91220c31d7bbeb84a255c5a4eb3f63b8b8f4",
+      "RepoTags": [
+        "ghcr.io/legalquants/lq-ai-web:v0.8.0"
+      ],
+      "RepoDigests": [
+        "ghcr.io/legalquants/lq-ai-web@sha256:a908ba08c96e283c17c242c74f0f91220c31d7bbeb84a255c5a4eb3f63b8b8f4"
+      ],
+      "Created": "2026-09-30T06:36:58.910339716Z",
+      "labels": {}
+    },
+    {
+      "Id": "sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b",
+      "RepoTags": [
+        "pgvector/pgvector:pg16",
+        "pgvector/pgvector@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b"
+      ],
+      "RepoDigests": [
+        "pgvector/pgvector@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b"
+      ],
+      "Created": "2026-08-13T21:25:06.877289053Z",
+      "labels": {}
+    },
+    {
+      "Id": "sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99",
+      "RepoTags": [
+        "redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+      ],
+      "RepoDigests": [
+        "redis@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+      ],
+      "Created": "2026-05-07T17:39:54.062865523Z",
+      "labels": {}
+    },
+    {
+      "Id": "sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+      "RepoTags": [
+        "rustfs/rustfs@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+      ],
+      "RepoDigests": [
+        "rustfs/rustfs@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+      ],
+      "Created": "2026-09-16T10:05:52.904927071Z",
+      "labels": {
+        "build-date": "",
+        "description": "RustFS is a distributed object storage system written in Rust, supporting erasure coding, multi-tenant management, and observability.",
+        "license": "Apache-2.0",
+        "maintainer": "RustFS Team <dev@rustfs.com>",
+        "name": "RustFS",
+        "org.opencontainers.image.title": "RustFS,org.opencontainers.image.description=RustFS distributed object storage system,org.opencontainers.image.version=1.0.0,org.opencontainers.image.revision=d47f54bfb2f39f48bd1adda334bd27e151fe85b8,org.opencontainers.image.source=https://github.com/rustfs/rustfs,org.opencontainers.image.created=2026-09-16T10:05:14Z,org.opencontainers.image.build-type=release",
+        "release": "1.0.0",
+        "summary": "High-performance distributed object storage system compatible with S3 API",
+        "url": "https://rustfs.com",
+        "vcs-ref": "",
+        "vendor": "RustFS Team",
+        "version": "v1.0.0"
+      }
+    }
+  ],
+  "source_revision": "c6b1c9bdda8d65ff55e7efd51f949d766c48b129",
+  "probe_revision": "b9ed8af9ea205344e1e3f6ff39161926888f25f4",
+  "upstream_revision": "fa5a6681dc3cc9a08fa9ed48a5fd213057edafa0",
+  "api_health": {
+    "status": 200,
+    "body": {
+      "status": "alive",
+      "service": "lq-ai-api",
+      "version": "0.8.0"
+    }
+  },
+  "gateway_health": {
+    "status": 200,
+    "body": {
+      "status": "alive",
+      "service": "lq-ai-gateway",
+      "version": "0.8.0"
+    }
+  },
+  "web_health": {
+    "status": 200,
+    "body": {
+      "status": true
+    }
+  },
+  "model": {
+    "name": "glm-4.7-flash:latest",
+    "model": "glm-4.7-flash:latest",
+    "modified_at": "2026-04-28T00:07:35.499320477+08:00",
+    "size": 19019270852,
+    "digest": "d1a8a26252f18b34301218d22abd2620a65b85ba4b78987842eb157e01321222",
+    "details": {
+      "parent_model": "",
+      "format": "gguf",
+      "family": "glm4moelite",
+      "families": [
+        "glm4moelite"
+      ],
+      "parameter_size": "29.9B",
+      "quantization_level": "Q4_K_M",
+      "context_length": 202752,
+      "embedding_length": 2048
+    },
+    "capabilities": [
+      "completion",
+      "tools",
+      "thinking"
+    ]
+  },
+  "gateway_config_sha256": "518f58c27e93d82f663eb0c3f12d69baebbee47b07ceceda00cc8a0fcfcecf29",
+  "application": {
+    "posture": {
+      "skill_workspaces_enabled": false,
+      "skill_script_runner_configured": false,
+      "orchestration_chat_enabled": false
+    },
+    "files": [
+      {
+        "id": "64907519-a403-4c8a-8db1-68c881761f2c",
+        "filename": "tracked-two-page.docx",
+        "ingestion_status": "failed",
+        "ingestion_error": "unsupported_type",
+        "size_bytes": 1874,
+        "hash_sha256": "851d7afeed44d61602fb1d6f014e7c1f7f1c4d0c1fdcf20cd6adbb245203a3e1"
+      },
+      {
+        "id": "65a9172f-bb30-4d0c-a775-386e90512358",
+        "filename": "clean-accepted-two-page.docx",
+        "ingestion_status": "failed",
+        "ingestion_error": "unsupported_type",
+        "size_bytes": 1345,
+        "hash_sha256": "2daa07ef9b4d629d4adea100961d5dd8c575124b414949d1ad8d50f6157fc8c0"
+      },
+      {
+        "id": "d2e355a1-3c6d-4cff-b2db-72cc2496d010",
+        "filename": "page-review.pdf",
+        "ingestion_status": "ready",
+        "ingestion_error": null,
+        "size_bytes": 6694,
+        "hash_sha256": "c7091daf8bc4f5b59d68087d21a2191a92a1be2722f83a9473ebc9c2133e402f"
+      },
+      {
+        "id": "cbafc890-b4cc-4156-aed6-ec1b57beeab2",
+        "filename": "first.pdf",
+        "ingestion_status": "ready",
+        "ingestion_error": null,
+        "size_bytes": 1535,
+        "hash_sha256": "9d72309fb6eba4ea706b6ba7904ebde7ec8034aebc4cc8fb1116a9aecf3deee0"
+      },
+      {
+        "id": "ed5e4c2c-860e-4fc0-8d51-8cf20880728a",
+        "filename": "second.pdf",
+        "ingestion_status": "ready",
+        "ingestion_error": null,
+        "size_bytes": 1539,
+        "hash_sha256": "0ac084a20d20d3aac03d433c96aa11c19ca9c2060e0b8cc95e9480582cb8af1d"
+      },
+      {
+        "id": "b1a0caea-469c-4e11-8a27-f6e216111da1",
+        "filename": "tracker.xlsx",
+        "ingestion_status": "failed",
+        "ingestion_error": "unsupported_type",
+        "size_bytes": 1916,
+        "hash_sha256": "81492cf4ef908fc55463e72de42d6831e53cc0f491410b0a87a746757b339ddd"
+      },
+      {
+        "id": "ee122f66-80b7-4578-aa14-bc1f8d2bf8d8",
+        "filename": "clause.docx",
+        "ingestion_status": "failed",
+        "ingestion_error": "unsupported_type",
+        "size_bytes": 1292,
+        "hash_sha256": "8de5ae9741b84126888c7483cd66b96bd2953db6e178d9a576cd4f1d08229f7d"
+      },
+      {
+        "id": "b5cdf0da-8c23-4d1e-822e-01a0844681b3",
+        "filename": "advice-note.txt",
+        "ingestion_status": "ready",
+        "ingestion_error": null,
+        "size_bytes": 230,
+        "hash_sha256": "89b3758ee357f0973be6d304f56c2216d4ecd836024e32d79533d67aaaa412a4"
+      }
+    ],
+    "tool_calls": [],
+    "documents": [
+      {
+        "filename": "page-review.pdf",
+        "parser": "pymupdf",
+        "page_count": 4,
+        "normalized_content": "Synthetic Agreement - Page 1\nThe supplier will deliver a monthly report.\n\nSynthetic Agreement - Page 2\nPayment is due within thirty days.\nPayment is due within sixty days.\n\n\nSynthetic Agreement - Page 4\nThe parties shall retain a copy of this agreement.\n",
+        "was_ocrd": false
+      },
+      {
+        "filename": "first.pdf",
+        "parser": "pymupdf",
+        "page_count": 4,
+        "normalized_content": "FIRST DOCUMENT PAGE 1\nA1-WYYFN\n\nFIRST DOCUMENT PAGE 2\nA2-TDEKU\n\nFIRST DOCUMENT PAGE 3\nA3-M9NWU\n\nFIRST DOCUMENT PAGE 4\nA4-EH74P\n",
+        "was_ocrd": false
+      },
+      {
+        "filename": "second.pdf",
+        "parser": "pymupdf",
+        "page_count": 4,
+        "normalized_content": "SECOND DOCUMENT PAGE 1\nB1-URLKL\n\nSECOND DOCUMENT PAGE 2\nB2-U3449\n\nSECOND DOCUMENT PAGE 3\nB3-7XU4K\n\nSECOND DOCUMENT PAGE 4\nB4-7HMX4\n",
+        "was_ocrd": false
+      },
+      {
+        "filename": "advice-note.txt",
+        "parser": "plain-text",
+        "page_count": 1,
+        "normalized_content": "Synthetic advice note: A fictional team plans a public workshop. Confirm venue access, caption the slides, and send the joining details three days before the event. Owner: Event coordinator. No client or legal matter is involved.\n",
+        "was_ocrd": false
+      }
+    ],
+    "migration": [
+      {
+        "version_num": "0068"
+      }
+    ],
+    "source_hashes": {
+      "app/api/chats.py": "e63e18b1f3084d483637288ab1a44949e9b8567dc5afaac9c1022f65afe5bae2",
+      "app/pipeline/ingest.py": "b9bc6a872f6a533869a2149faf3266dc6f29504797fad21b49878527fc322adf",
+      "app/skills/loader.py": "a9436846bf8262717e8e1a89f7a4705f92e77f822560f5e206488057e576da98",
+      "app/skills/chat_tools.py": "4bbddd439ce04d98440f0da0fbfd929eddc05c442bbcabf80e56677b935603eb"
+    }
+  },
+  "selected_source_hash_matches": {
+    "app/api/chats.py": true,
+    "app/pipeline/ingest.py": true,
+    "app/skills/loader.py": true,
+    "app/skills/chat_tools.py": true
+  },
+  "publication": {
+    "original_runtime_sha256": "9cf116ff5f16873b5b817dfb7d6afe3c1ae8193b13afa636dc0a928131650152",
+    "omitted_fields": [
+      "removed_projects"
+    ],
+    "observation": "Historical October 4 snapshot; delayed October 5 configuration checks are in p5-next-day.json."
+  }
+}

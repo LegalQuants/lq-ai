@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.chat.tool_schemas import (
     AUTHORITY_OPS,
@@ -17,7 +18,7 @@ class _FakeGateway:  # only what resolve_available_sources needs
 
 
 @pytest.mark.asyncio
-async def test_research_only_allowlist(db):
+async def test_research_only_allowlist(db: AsyncSession) -> None:
     with (
         patch(
             "app.chat.tool_schemas.get_capabilities",
@@ -36,11 +37,12 @@ async def test_research_only_allowlist(db):
         al = await assemble_allowlist(db, gateway=_FakeGateway())
     assert set(al.specs) >= RESEARCH_OPS
     spec = al.resolve("search_case_law")
+    assert spec is not None
     assert spec.kind == "research" and spec.provider == "cl-prod" and spec.read_only
 
 
 @pytest.mark.asyncio
-async def test_mcp_only_allowlist(db):
+async def test_mcp_only_allowlist(db: AsyncSession) -> None:
     tools = [
         {
             "name": "get_doc",
@@ -83,13 +85,15 @@ async def test_mcp_only_allowlist(db):
     ):
         al = await assemble_allowlist(db, gateway=_FakeGateway())
     assert mcp_function_name("files", "get_doc") in al.specs
-    assert al.resolve(mcp_function_name("files", "delete_doc")).destructive is True
+    delete_spec = al.resolve(mcp_function_name("files", "delete_doc"))
+    assert delete_spec is not None
+    assert delete_spec.destructive is True
     # disabled tools are NOT in the allowlist
     assert mcp_function_name("files", "disabled_tool") not in al.specs
 
 
 @pytest.mark.asyncio
-async def test_empty_allowlist_when_nothing_enabled(db):
+async def test_empty_allowlist_when_nothing_enabled(db: AsyncSession) -> None:
     with (
         patch(
             "app.chat.tool_schemas.get_capabilities",
@@ -102,13 +106,13 @@ async def test_empty_allowlist_when_nothing_enabled(db):
     assert al.function_schemas() == []
 
 
-def test_mcp_name_roundtrip():
+def test_mcp_name_roundtrip() -> None:
     n = mcp_function_name("files", "get_doc")
     assert parse_mcp_function_name(n) == ("files", "get_doc")
     assert parse_mcp_function_name("verify_citations") is None
 
 
-def test_authority_schemas_declare_search_and_get():
+def test_authority_schemas_declare_search_and_get() -> None:
     assert set(AUTHORITY_OPS) == {"search_authority", "get_authority"}
     for op in AUTHORITY_OPS:
         schema = AUTHORITY_TOOL_SCHEMAS[op]
@@ -123,8 +127,10 @@ class _FakeGovInfoSource:
 
 
 @pytest.mark.asyncio
-async def test_assemble_allowlist_adds_authority_when_govinfo_available(db, monkeypatch):
-    async def _fake_resolve(gateway):
+async def test_assemble_allowlist_adds_authority_when_govinfo_available(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _fake_resolve(gateway: object) -> list[object]:
         return [_FakeGovInfoSource()]
 
     monkeypatch.setattr("app.chat.tool_schemas.resolve_available_sources", _fake_resolve)
@@ -142,8 +148,10 @@ async def test_assemble_allowlist_adds_authority_when_govinfo_available(db, monk
 
 
 @pytest.mark.asyncio
-async def test_assemble_allowlist_no_authority_when_absent(db, monkeypatch):
-    async def _fake_resolve(gateway):
+async def test_assemble_allowlist_no_authority_when_absent(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _fake_resolve(gateway: object) -> list[object]:
         return []
 
     monkeypatch.setattr("app.chat.tool_schemas.resolve_available_sources", _fake_resolve)
@@ -159,8 +167,10 @@ async def test_assemble_allowlist_no_authority_when_absent(db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_assemble_allowlist_authority_failure_does_not_kill_other_ops(db, monkeypatch):
-    async def _boom(gateway):
+async def test_assemble_allowlist_authority_failure_does_not_kill_other_ops(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _boom(gateway: object) -> list[object]:
         raise RuntimeError("registry down")
 
     monkeypatch.setattr("app.chat.tool_schemas.resolve_available_sources", _boom)
@@ -183,7 +193,7 @@ async def test_assemble_allowlist_authority_failure_does_not_kill_other_ops(db, 
 from app.chat.tool_schemas import build_authority_tool_schemas  # noqa: E402
 
 
-def test_authority_source_enum_lists_enabled_sources():
+def test_authority_source_enum_lists_enabled_sources() -> None:
     # both govinfo + edgar enabled → source enum has both
     schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar"])
     search = next(s for s in schemas if s["name"] == "search_authority")
@@ -191,17 +201,17 @@ def test_authority_source_enum_lists_enabled_sources():
     assert set(source_prop["enum"]) == {"govinfo", "edgar"}
 
 
-def test_authority_schemas_empty_when_no_sources():
+def test_authority_schemas_empty_when_no_sources() -> None:
     assert build_authority_tool_schemas(enabled_sources=[]) == []
 
 
-def test_govinfo_only_still_works():
+def test_govinfo_only_still_works() -> None:
     schemas = build_authority_tool_schemas(enabled_sources=["govinfo"])
     search = next(s for s in schemas if s["name"] == "search_authority")
     assert search["parameters"]["properties"]["source"]["enum"] == ["govinfo"]
 
 
-def test_authority_schemas_require_source_and_op_specific_fields():
+def test_authority_schemas_require_source_and_op_specific_fields() -> None:
     schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar"])
     search = next(s for s in schemas if s["name"] == "search_authority")
     get_ = next(s for s in schemas if s["name"] == "get_authority")
@@ -219,8 +229,10 @@ class _FakeEdgarSource:
 
 
 @pytest.mark.asyncio
-async def test_assemble_allowlist_adds_both_sources_when_both_available(db, monkeypatch):
-    async def _fake_resolve(gateway):
+async def test_assemble_allowlist_adds_both_sources_when_both_available(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _fake_resolve(gateway: object) -> list[object]:
         return [_FakeGovInfoSource(), _FakeEdgarSource()]
 
     monkeypatch.setattr("app.chat.tool_schemas.resolve_available_sources", _fake_resolve)
@@ -237,10 +249,11 @@ async def test_assemble_allowlist_adds_both_sources_when_both_available(db, monk
     assert {s.tool for s in authority_specs} == {"search_authority", "get_authority"}
     assert len(authority_specs) == 2
     search_spec = allowlist.resolve("search_authority")
+    assert search_spec is not None
     assert set(search_spec.parameters["properties"]["source"]["enum"]) == {"govinfo", "edgar"}
 
 
-def test_authority_source_enum_is_per_op():
+def test_authority_source_enum_is_per_op() -> None:
     # govinfo+edgar support both ops; eurlex supports only get_authority.
     schemas = build_authority_tool_schemas(enabled_sources=["govinfo", "edgar", "eurlex"])
     by_name = {s["name"]: s for s in schemas}
@@ -255,7 +268,7 @@ def test_authority_source_enum_is_per_op():
     }
 
 
-def test_authority_search_omitted_when_no_search_source():
+def test_authority_search_omitted_when_no_search_source() -> None:
     # only a get-only source enabled → no search_authority tool at all
     schemas = build_authority_tool_schemas(enabled_sources=["eurlex"])
     assert [s["name"] for s in schemas] == ["get_authority"]

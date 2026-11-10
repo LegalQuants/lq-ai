@@ -9,7 +9,7 @@
  *   3. /lq-ai/playbooks/easy (Step 1 upload) → pick contract_type, upload 3
  *      stub PDFs, click Generate
  *   4. Step 2 progress → setTimeout-driven poll → first poll returns
- *      pending; cy.tick advances; second poll returns completed with a
+ *      running; the next real five-second poll returns completed with a
  *      draft_playbook
  *   5. Step 3 review → the inline editor surfaces the assembled positions
  *      bound to draft_playbook; edit one position's `issue` field
@@ -35,6 +35,8 @@
  */
 
 /// <reference types="cypress" />
+
+export {};
 
 const GENERATION_ID = 'gen-1';
 const SAVED_PLAYBOOK_ID = 'pb-saved-1';
@@ -271,13 +273,7 @@ describe('M3-A6 — Easy Playbook wizard happy path', () => {
 			],
 			{ force: true }
 		);
-		cy.get('[data-testid="lq-easy-wizard-file-list"]')
-			.find('li')
-			.should('have.length', 3);
-
-		// 5. Fake the clock before clicking generate so we can advance the
-		//    progress-step setTimeout(5s) poll deterministically.
-		cy.clock();
+		cy.get('[data-testid="lq-easy-wizard-file-list"]').find('li').should('have.length', 3);
 
 		cy.get('[data-testid="lq-easy-wizard-start"]').click();
 
@@ -288,45 +284,41 @@ describe('M3-A6 — Easy Playbook wizard happy path', () => {
 		cy.wait('@startGeneration');
 
 		// 7. Step 2 progress visible.
-		cy.get('[data-testid="lq-easy-wizard-step-progress"]', { timeout: 10000 }).should(
-			'be.visible'
-		);
+		cy.get('[data-testid="lq-easy-wizard-step-progress"]', { timeout: 10000 }).should('be.visible');
 
-		// 8. Advance through the first poll (status='running' → schedule another).
-		cy.tick(5_500);
-		cy.wait('@pollGeneration');
-
-		// 9. Advance through the second poll (status='completed' → review step).
-		cy.tick(5_500);
-		cy.wait('@pollGeneration');
+		// Each next timer is registered after the awaited response is consumed.
+		// Keep real timers and wait on the actual requests, rather than advancing
+		// a fake clock before that asynchronous rescheduling has happened.
+		cy.wait('@pollGeneration', { requestTimeout: 15000 })
+			.its('response.body.status')
+			.should('eq', 'running');
+		cy.wait('@pollGeneration', { requestTimeout: 15000 })
+			.its('response.body.status')
+			.should('eq', 'completed');
 
 		// 10. Step 3 review. Editor renders both positions.
 		cy.get('[data-testid="lq-easy-wizard-step-review"]', { timeout: 10000 }).should('be.visible');
 		cy.get('[data-testid="lq-playbook-editor"]').should('be.visible');
 		cy.get('[data-testid="lq-playbook-editor-position"]').should('have.length', 2);
 
-		// Restore real timers — the rest of the flow is synchronous from the
-		// browser's POV (no more setTimeout-driven UI).
-		cy.clock().then((clock) => clock.restore());
-
 		// 11. Edit the first position's `issue` field.
 		cy.get('[data-testid="lq-playbook-editor-position"]')
 			.first()
 			.find('input[id$="-issue"]')
-			.clear()
+			.clear();
+		cy.get('[data-testid="lq-playbook-editor-position"]')
+			.first()
+			.find('input[id$="-issue"]')
 			.type('Definition of Confidential Information (edited)');
 
 		// 12. Save.
 		cy.get('[data-testid="lq-easy-wizard-save"]').click();
-		cy.wait('@createPlaybook').its('request.body.positions.0.issue').should(
-			'eq',
-			'Definition of Confidential Information (edited)'
-		);
+		cy.wait('@createPlaybook')
+			.its('request.body.positions.0.issue')
+			.should('eq', 'Definition of Confidential Information (edited)');
 
 		// 13. Step 4 success screen.
-		cy.get('[data-testid="lq-easy-wizard-step-approve"]', { timeout: 10000 }).should(
-			'be.visible'
-		);
+		cy.get('[data-testid="lq-easy-wizard-step-approve"]', { timeout: 10000 }).should('be.visible');
 		cy.contains('Playbook saved').should('be.visible');
 	});
 });

@@ -5,6 +5,8 @@ import {
 	psArgs,
 	pullArgs,
 	upArgs,
+	upServicesWaitArgs,
+	migrationArgs,
 	downArgs,
 	downVArgs,
 	logsArgs,
@@ -35,11 +37,36 @@ describe('argv builders', () => {
 	it('up is detached', () => {
 		expect(upArgs(base)).toEqual([...base, 'up', '-d'])
 	})
-	it('down keeps volumes (no -v) so user data survives a stop', () => {
-		expect(downArgs(base)).toEqual([...base, 'down'])
+	it('waits for selected services during a migration', () => {
+		expect(upServicesWaitArgs(base, ['rustfs'])).toEqual([
+			...base,
+			'up',
+			'-d',
+			'--wait',
+			'rustfs'
+		])
+	})
+	it('runs the migration CLI through the ops profile without a TTY', () => {
+		expect(migrationArgs(base, ['plan', '--json'])).toEqual([
+			...base,
+			'--profile',
+			'ops',
+			'run',
+			'--rm',
+			'-T',
+			'migrate',
+			'plan',
+			'--json'
+		])
+	})
+	it('can read migration status without starting dependencies', () => {
+		expect(migrationArgs(base, ['status', '--json'], { noDeps: true })).toContain('--no-deps')
+	})
+	it('down removes renamed-service orphans but keeps volumes', () => {
+		expect(downArgs(base)).toEqual([...base, 'down', '--remove-orphans'])
 	})
 	it('down -v also removes volumes (Reset)', () => {
-		expect(downVArgs(base)).toEqual([...base, 'down', '-v'])
+		expect(downVArgs(base)).toEqual([...base, 'down', '-v', '--remove-orphans'])
 	})
 	it('logs follow a single service', () => {
 		expect(logsArgs(base, 'web')).toEqual([...base, 'logs', '-f', '--tail', '200', 'web'])

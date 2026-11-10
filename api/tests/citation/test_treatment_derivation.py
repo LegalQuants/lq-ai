@@ -5,10 +5,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.citation.treatment import TREATMENT_TTL_DAYS, derive_treatment_for_message
 from app.models.chat import Chat, Message
+from app.models.citation_ledger_entry import CitationLedgerEntry
 from app.models.citation_treatment import CitationTreatment
+from app.models.message_caselaw_citation import MessageCaselawCitation
 from app.models.user import User
 
 pytestmark = pytest.mark.integration
@@ -33,9 +36,12 @@ def _citing(n: int) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_derives_fetches_and_links(db_session, seeded):
+async def test_derives_fetches_and_links(
+    db_session: AsyncSession,
+    seeded: tuple[uuid.UUID, uuid.UUID, MessageCaselawCitation, CitationLedgerEntry],
+) -> None:
     message_id, _chat, _cc, entry = seeded
-    calls = []
+    calls: list[int] = []
 
     async def fake_fetch(opinion_id: int) -> dict:
         calls.append(opinion_id)
@@ -61,7 +67,10 @@ async def test_derives_fetches_and_links(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_reuses_fresh_cache_without_fetch(db_session, seeded):
+async def test_reuses_fresh_cache_without_fetch(
+    db_session: AsyncSession,
+    seeded: tuple[uuid.UUID, uuid.UUID, MessageCaselawCitation, CitationLedgerEntry],
+) -> None:
     message_id, _chat, _cc, entry = seeded
     db_session.add(
         CitationTreatment(
@@ -74,7 +83,7 @@ async def test_reuses_fresh_cache_without_fetch(db_session, seeded):
         )
     )
     await db_session.flush()
-    calls = []
+    calls: list[int] = []
 
     async def fake_fetch(opinion_id: int) -> dict:
         calls.append(opinion_id)
@@ -90,7 +99,10 @@ async def test_reuses_fresh_cache_without_fetch(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_refetches_when_stale(db_session, seeded):
+async def test_refetches_when_stale(
+    db_session: AsyncSession,
+    seeded: tuple[uuid.UUID, uuid.UUID, MessageCaselawCitation, CitationLedgerEntry],
+) -> None:
     message_id, *_ = seeded
     db_session.add(
         CitationTreatment(
@@ -103,7 +115,7 @@ async def test_refetches_when_stale(db_session, seeded):
         )
     )
     await db_session.flush()
-    calls = []
+    calls: list[int] = []
 
     async def fake_fetch(opinion_id: int) -> dict:
         calls.append(opinion_id)
@@ -122,7 +134,10 @@ async def test_refetches_when_stale(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_per_case_fetch_error_is_non_fatal(db_session, seeded):
+async def test_per_case_fetch_error_is_non_fatal(
+    db_session: AsyncSession,
+    seeded: tuple[uuid.UUID, uuid.UUID, MessageCaselawCitation, CitationLedgerEntry],
+) -> None:
     message_id, *_ = seeded
 
     async def boom(opinion_id: int) -> dict:
@@ -137,7 +152,7 @@ async def test_per_case_fetch_error_is_non_fatal(db_session, seeded):
 
 
 @pytest.mark.asyncio
-async def test_no_caselaw_citations_is_noop(db_session):
+async def test_no_caselaw_citations_is_noop(db_session: AsyncSession) -> None:
     # a message with no caselaw citations
     user = User(email=f"t-{uuid.uuid4().hex[:8]}@e.com", hashed_password="x", role="member")
     db_session.add(user)
@@ -148,7 +163,7 @@ async def test_no_caselaw_citations_is_noop(db_session):
     msg = Message(chat_id=chat.id, role="assistant", kind="ai", content="x")
     db_session.add(msg)
     await db_session.flush()
-    called = []
+    called: list[int] = []
 
     async def fake_fetch(opinion_id: int) -> dict:
         called.append(opinion_id)

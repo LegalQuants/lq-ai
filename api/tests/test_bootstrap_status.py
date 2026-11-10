@@ -17,7 +17,7 @@ the rest of the API tests (per ``tests/conftest.py``).
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -31,7 +31,7 @@ from app.models.user import User
 from app.security import hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 

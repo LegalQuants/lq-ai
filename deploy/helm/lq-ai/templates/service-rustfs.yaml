@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "lq-ai.fullname" . }}-rustfs
+  labels:
+    {{- include "lq-ai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rustfs
+spec:
+  type: ClusterIP
+  ports:
+    - { port: 9000, targetPort: api,     name: api }
+    - { port: 9001, targetPort: console, name: console }
+  selector:
+    {{- include "lq-ai.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: rustfs

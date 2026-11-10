@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "skill": "dpa-checklist-review",
+  "fixture": "gdpr-gaps",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/dpa-checklist-review/SKILL.md (Detailed findings cover only Partial/Missing/Unclear items) and test-plan.md Scenario 1 (a DPA omitting Art. 28(3) elements outright is the critical-equivalent case). This fixture omits breach notification, documented-instructions limits, sub-processor flow-down, audit rights, and data-subject assistance, so multiple Missing/Partial rows and detailed findings are expected. NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [
+      "DPA Checklist Review",
+      "Overall posture",
+      "Compliance checklist",
+      "Detailed findings",
+      "Items requiring human judgment",
+      "Recommended next steps"
+    ],
+    "metrics": [
+      {
+        "id": "checklist_rows",
+        "kind": "table_rows",
+        "min": 8,
+        "max": null
+      },
+      {
+        "id": "missing_or_partial_rows",
+        "kind": "regex_count",
+        "pattern": "\\|\\s*(missing|partial|unclear)\\s*\\|",
+        "min": 3,
+        "max": null
+      },
+      {
+        "id": "detailed_findings",
+        "kind": "section_items",
+        "section": "Detailed findings",
+        "min": 2,
+        "max": null
+      },
+      {
+        "id": "article_28_cited",
+        "kind": "regex_count",
+        "pattern": "art(?:icle)?\\.?\\s*28",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 1500,
+    "max_chars": 40000
+  }
+}

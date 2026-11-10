@@ -1,0 +1,161 @@
+# Editorial scope notes for the generated /skills/coverage/ index
+# (gen-coverage-index.mjs). The generator builds the jurisdiction and
+# practice-area facets from each shipped skill's `lq_ai.jurisdiction` and
+# `lq_ai.tags`; this file supplies the note it attaches to a given
+# jurisdiction, practice area, or (rarely) an individual skill row, plus the
+# canonical artifact the note traces to.
+#
+# Schema:
+#   jurisdictions: / practice_areas:
+#     - id:      the frontmatter value(s) this note attaches to (see `match`)
+#       label:   display label for the facet page
+#       match:   one or more raw `lq_ai.jurisdiction` / `lq_ai.tags` values
+#                this id groups together (frontmatter is free-form text; the
+#                generator groups exact matches under `match`, not a regex)
+#       note:    the scope note, in full sentences, as it should render
+#       source:  repo-relative canonical file (+ optional #anchor) the note
+#                is checked against
+#   skill_overrides:
+#     - slug:    a skill's `name` (folder slug), for a note on one specific
+#                skill's row rather than a whole jurisdiction/practice area
+#       note, source: as above
+#   contribution_route:
+#     note, source: the note the generator appends once, below the index,
+#                    on where an uncovered jurisdiction or practice area goes
+
+jurisdictions:
+  - id: us
+    label: United States
+    match: [us, US-default]
+    note: >-
+      The default calibration for most first-party contract-review skills
+      (NDA Review, MSA Review — SaaS, MSA Review — Commercial Purchase). A
+      skill marked "US-default" assumes general US commercial practice unless
+      its jurisdiction or regulatory_regime input says otherwise — that is
+      not a claim of review against every US state's law (NDA Review's own
+      jurisdiction input description: "Defaults to general US commercial
+      assumptions"). case-law-research also sits here and does not research
+      non-U.S. jurisdictions.
+    source:
+      - docs/skill-authoring-guide.md
+      - skills/nda-review/SKILL.md
+
+  - id: agnostic
+    label: Jurisdiction-agnostic
+    match: [agnostic]
+    note: >-
+      These skills (Contract QA, Comms Improver, Action Items from Client
+      Alert, Enhance Prompt, and the tabular snapshot skills) do not branch
+      on jurisdiction at all — there is no jurisdiction input for the output
+      to vary against.
+    source: docs/skill-authoring-guide.md
+
+  - id: regime-aware
+    label: Regime-aware (input-selected)
+    match: [regime-aware, regime-dependent]
+    note: >-
+      The skill takes a regulatory_regime (or similar) input and branches its
+      analysis per regime — for example DPA Checklist Review's `gdpr` /
+      `us_state_privacy` / `hipaa_baa` / `general_commercial` modes. Coverage
+      is only as wide as the regimes the skill's own reference/ directory
+      documents; open the skill to see the actual list rather than assuming
+      "regime-aware" means every regime.
+    source: skills/dpa-checklist-review/SKILL.md
+
+  - id: eu
+    label: European Union
+    match: [eu]
+    note: >-
+      Named as a first-class convention in the authoring guide's jurisdiction
+      list. No shipped first-party skill currently declares eu as its primary
+      jurisdiction; EU coverage today runs through the regime-aware skills'
+      gdpr mode instead.
+    source: docs/skill-authoring-guide.md
+
+practice_areas:
+  - id: contracts
+    label: Contracts — review and drafting support
+    match: [contracts]
+    note: >-
+      The largest first-party category: NDA Review, MSA Review — SaaS, MSA
+      Review — Commercial Purchase and DPA Checklist Review (review skills),
+      Contract QA (citation-grounded Q&A against one contract), Contract
+      Snapshot (table-mode extraction) and Playbook Easy Extract (internal;
+      feeds the Easy Playbook wizard). None produces an enforceability
+      opinion — see each skill's own "what this skill does not do" section.
+      The NDA and MSA snapshot skills sit on the nda and msa facets, not
+      here.
+    source: docs/skill-authoring-guide.md
+
+  - id: privacy
+    label: Privacy and data protection
+    match: [privacy, gdpr, ccpa, hipaa]
+    note: >-
+      DPA Checklist Review (regime-aware: GDPR, US state privacy, HIPAA BAA)
+      and Vendor Privacy Policy First Pass (triage-only, not a full review)
+      carry these tags. Regime coverage beyond what's shipped is an open
+      contribution area — see skills/CONTRIBUTING.md's regime-expansion
+      candidates for DPA Checklist Review.
+    source: skills/CONTRIBUTING.md
+
+  - id: litigation
+    label: Litigation
+    match: [litigation]
+    note: >-
+      Out of scope beyond case-law research and drafting support. PRD §1.6
+      excludes "e-discovery or litigation-specific workflows" outright,
+      scoping the project to in-house work: contracts, policies, regulatory
+      matters, advice. docs/skill-authoring-guide.md's tag conventions list
+      `litigation` as "(rarely; out of scope for v1)". The case-law-research
+      skill carries this tag, but its own "What this skill does not do"
+      section bounds it — it will not research non-U.S. jurisdictions,
+      search statutory or regulatory text, apply retrieved authority to the
+      user's facts, or assert that a case is still good law — so this is
+      case-law lookup and citation provenance for research and drafting, not
+      a broader litigation capability.
+    source:
+      - docs/PRD.md#16-out-of-scope-v1
+      - skills/case-law-research/SKILL.md
+
+  - id: employment
+    label: Employment
+    match: [employment]
+    note: >-
+      No first-party skill carries this tag today. Settlement Agreement
+      Review and Employment Offer Letter Review are named candidates in
+      skills/CONTRIBUTING.md's contribution catalog — an open gap, not a
+      scope exclusion.
+    source: skills/CONTRIBUTING.md
+
+  - id: ip
+    label: Intellectual property
+    match: [ip]
+    note: >-
+      No first-party skill carries this tag today. Patent License Review and
+      Trademark License Review are named candidates in
+      skills/CONTRIBUTING.md's contribution catalog — an open gap, not a
+      scope exclusion.
+    source: skills/CONTRIBUTING.md
+
+skill_overrides: []
+
+contribution_route:
+  note: >-
+    A jurisdiction- or practice-area-specific skill contribution routes to
+    the community LegalQuants/lq-skills repository (ADR 0024's skills
+    route), not to this repository's own skills/ directory — this
+    repository's skills/ holds the fifteen first-party built-in skills (the
+    ten M1 starter skills plus case-law-research and four table-mode/
+    internal skills), per README.md §"Starter skills". Claim the
+    jurisdiction or practice area on a tracking issue first, per
+    skills/CONTRIBUTING.md's contribution process, so two contributors don't
+    duplicate the same coverage. ADR 0024 commits to a standing coverage
+    ledger at docs/contribute/coverage-map.md; that file is not present in
+    the repository as of the checked commit, so this generated index is the
+    closest thing to it today. A practice area PRD §1.6 excludes outright
+    (litigation chief among them) is a different route entirely — it needs a
+    mini-PRD and a committee-decided PRD amendment before any skill work
+    starts, per ADR 0024's fourth route.
+  source:
+    - docs/adr/0024-jurisdiction-and-practice-area-expansion.md
+    - README.md

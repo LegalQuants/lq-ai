@@ -1,0 +1,7 @@
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+ARG SKILL_DIR
+COPY ${SKILL_DIR}/scripts /bundle/scripts
+COPY script_runner/launch.py /runner/launch.py
+USER 65534:65534
+WORKDIR /work
+ENTRYPOINT ["python", "-I", "-B", "/runner/launch.py"]

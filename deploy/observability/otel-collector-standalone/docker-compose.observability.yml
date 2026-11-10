@@ -35,6 +35,14 @@ services:
       OTEL_SERVICE_NAME: lq-ai-gateway
       OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
 
+  # The worker that executes governed runs. Without this a run's trace stops
+  # at the api request that queued it (ADR 0038 D2).
+  arq-worker:
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_SERVICE_NAME: lq-ai-arq-worker
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_always_on}
+
   # ============================================================
   # Standalone collector — stateless, forwards to operator backend
   # ============================================================

@@ -120,6 +120,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="LQ.AI Backend API",
     version=__version__,
+    # FastAPI's native telemetry activates when a global OTel provider exists.
+    # Keep the explicit opt-in instrumentation below as the single owner.
+    telemetry={"tracing": False, "metrics": False, "logs": False, "auto_configure": False},
     description=(
         "Backend API for the LQ.AI platform. The full surface is specified "
         "in docs/api/backend-openapi.yaml. M1 implementation lands progressively "
@@ -202,7 +205,7 @@ async def _check_gateway() -> bool:
 
 @app.get("/ready", tags=["meta"])
 async def ready() -> JSONResponse:
-    """Readiness probe — returns 200 when DB + Redis + MinIO + gateway are reachable.
+    """Readiness probe — returns 200 when DB + Redis + S3 storage + gateway are reachable.
 
     Per K8s readiness convention: this answers "can I serve user requests?"
     Returns 200 with per-dependency `ok: true` when everything is up.

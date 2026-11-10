@@ -1,0 +1,18 @@
+schemaVersion: 1
+journeys:
+  - id: first-compose-install
+    route: start/quickstart
+    before: "## Before you start"
+    steps:
+      - "## 1. Get the files"
+      - "## 2. Set four secrets"
+      - "## 3. Start the app"
+      - "## 4. Sign in"
+      - "## 5. Upload a test document"
+      - "## 6. Connect an AI model"
+    choices:
+      - id: cloud-model
+        section: "### Details: a cloud provider key (Mode 1)"
+      - id: local-model
+        section: "### Details: local Ollama (Mode 2)"
+    check: "## Check that it worked"

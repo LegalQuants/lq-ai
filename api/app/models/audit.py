@@ -38,10 +38,13 @@ class AuditLog(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
+    # clock_timestamp(), not now(): now() is fixed at transaction start, so
+    # rows flushed inside one transaction would show its start time rather
+    # than their insert times. Wall-clock timestamps do not guarantee order.
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        server_default=text("now()"),
+        server_default=text("clock_timestamp()"),
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),

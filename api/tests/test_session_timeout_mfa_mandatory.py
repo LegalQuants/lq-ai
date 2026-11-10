@@ -18,7 +18,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -34,7 +34,7 @@ from app.models.user import User, UserSession
 from app.security import hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -119,6 +119,7 @@ async def test_refresh_rejects_when_absolute_timeout_exceeded(
         select(UserSession).where(UserSession.user_id == seed_user.id)
     )
     session = result.scalars().first()
+    assert session is not None
     session.absolute_expires_at = datetime.now(tz=UTC) - timedelta(minutes=1)
     await db_session.flush()
 
@@ -148,6 +149,7 @@ async def test_refresh_rejects_when_idle_timeout_exceeded(
         select(UserSession).where(UserSession.user_id == seed_user.id)
     )
     session = result.scalars().first()
+    assert session is not None
     session.last_active_at = datetime.now(tz=UTC) - timedelta(
         seconds=settings.session_idle_timeout_seconds + 60
     )
@@ -178,6 +180,7 @@ async def test_refresh_preserves_absolute_expires_at_across_rotation(
         select(UserSession).where(UserSession.user_id == seed_user.id)
     )
     original = result.scalars().first()
+    assert original is not None
     original_absolute = original.absolute_expires_at
 
     # Rotate. The new session should have the SAME absolute_expires_at.
@@ -190,6 +193,7 @@ async def test_refresh_preserves_absolute_expires_at_across_rotation(
         .order_by(UserSession.created_at.desc())
     )
     new = result.scalars().first()
+    assert new is not None
     assert new.absolute_expires_at == original_absolute, (
         "absolute_expires_at must be preserved across rotation"
     )

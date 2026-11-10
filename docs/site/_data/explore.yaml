@@ -1,0 +1,15 @@
+schemaVersion: 1
+questions:
+  - id: what-is-lq-ai
+    content:
+      route: overview
+      heading: "## What is LQ.AI?"
+  - id: how-answers-work
+    content:
+      route: operate/architecture
+      heading: "## How LQ.AI answers a question"
+  - id: data-boundary
+    label: "Is it secure?"
+    content:
+      route: trust/what-leaves-my-deployment
+      heading: "## Data boundary summary"

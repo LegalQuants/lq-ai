@@ -6,6 +6,8 @@ const api = {
 	completeWizard: (input: unknown): Promise<{ ok: boolean; error?: string }> =>
 		ipcRenderer.invoke('wizard:complete', input),
 	status: (): Promise<unknown> => ipcRenderer.invoke('stack:status'),
+	migrationStatus: (): Promise<unknown> => ipcRenderer.invoke('stack:migrationStatus'),
+	rollbackMigration: (): Promise<unknown> => ipcRenderer.invoke('stack:rollbackMigration'),
 	start: (): Promise<unknown> => ipcRenderer.invoke('stack:start'),
 	stop: (): Promise<unknown> => ipcRenderer.invoke('stack:stop'),
 	reset: (): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('stack:reset'),

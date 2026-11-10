@@ -102,6 +102,33 @@ export function clearSession(): void {
 	auth.set(empty);
 }
 
+/**
+ * Take the session another tab stored, when it is a newer session for the
+ * same user. Refresh tokens rotate (PRD §5.1), so once another tab refreshes,
+ * the token this tab holds is revoked and refreshing with it would fail.
+ * Newer means a later expiry: every refresh sets one, while a tab that only
+ * caches the user (`setUser`) writes back the older session it holds.
+ * Returns `true` when a session was taken.
+ */
+export function adoptStoredSession(): boolean {
+	if (!browser) {
+		return false;
+	}
+	const stored = loadInitial();
+	const current = get(auth);
+	if (
+		!stored.access_token ||
+		!stored.refresh_token ||
+		stored.refresh_token === current.refresh_token ||
+		(stored.expires_at ?? 0) <= (current.expires_at ?? 0) ||
+		(stored.user?.id ?? null) !== (current.user?.id ?? null)
+	) {
+		return false;
+	}
+	auth.set(stored);
+	return true;
+}
+
 export function getAccessToken(): string | null {
 	return get(auth).access_token;
 }

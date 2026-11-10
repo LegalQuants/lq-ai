@@ -16,7 +16,7 @@ per-test access token and exercise the full setup → enable → login
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import jwt as pyjwt
 import pyotp
@@ -32,7 +32,7 @@ from app.models.user import User, UserSession
 from app.security import create_access_token, hash_password
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 

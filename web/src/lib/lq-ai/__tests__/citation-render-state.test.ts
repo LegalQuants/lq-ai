@@ -6,6 +6,7 @@
  * rendering of the resulting visual states is covered separately
  * via Playwright (M2-C2 Decision D).
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
 	CITATION_REGEX,
@@ -183,6 +184,76 @@ describe('CITATION_REGEX + iterCitationMarkers', () => {
 		const text = 'Prefix "the body" (Source: [1]) suffix';
 		const [marker] = Array.from(iterCitationMarkers(text));
 		expect(text.slice(marker.quoteStart, marker.quoteEnd)).toBe('the body');
+	});
+
+	// ADR 0038, ruling 2: a quotation wrapped in Markdown emphasis is still a citation.
+	it.each([
+		['bold', '**"no compete"** (Source: [1])'],
+		['italic', '*"no compete"* (Source: [1])'],
+		['underscore italic', '_"no compete"_ (Source: [1])'],
+		['bold italic', '***"no compete"*** (Source: [1])'],
+		['bold, curly quotes', '**“no compete”** (Source: [1])'],
+		['bold, no space before the marker', '**"no compete"**(Source: [1])']
+	])('matches a quotation wrapped in emphasis (%s)', (_name, written) => {
+		const text = `The agreement says ${written}.`;
+		const markers = Array.from(iterCitationMarkers(text));
+		expect(markers).toHaveLength(1);
+		// The body is the text between the quotation marks, without the emphasis.
+		expect(markers[0].quote).toBe('no compete');
+		expect(markers[0].sourceIndex).toBe(1);
+		expect(text.slice(markers[0].quoteStart, markers[0].quoteEnd)).toBe('no compete');
+		// The match starts at the opening quotation mark, after the leading emphasis.
+		expect(['"', '“']).toContain(text[markers[0].start]);
+		expect(text.slice(markers[0].end - 1, markers[0].end)).toBe(')');
+	});
+
+	it('does not take words, or more than three emphasis characters, as part of a marker', () => {
+		for (const written of [
+			'"no compete"**** (Source: [1])',
+			'"no compete" *see* (Source: [1])',
+			'"no compete"* and so on (Source: [1])'
+		]) {
+			expect(Array.from(iterCitationMarkers(written)), written).toHaveLength(0);
+		}
+	});
+
+	it('keeps a plain and an emphasised quotation on one line distinct', () => {
+		const text = '**"one"** (Source: [1]) and "two" (Source: [2])';
+		const markers = Array.from(iterCitationMarkers(text));
+		expect(markers.map((m) => m.quote)).toEqual(['one', 'two']);
+		expect(markers.map((m) => m.sourceIndex)).toEqual([1, 2]);
+	});
+
+	it('closes a curly quotation at the nearest opening quote, as a straight one does', () => {
+		// A stray opening quotation mark does not belong to the quotation after it.
+		const text = 'He said “no, and then “no compete” (Source: [1]).';
+		const markers = Array.from(iterCitationMarkers(text));
+		expect(markers.map((m) => m.quote)).toEqual(['no compete']);
+	});
+
+	it('has one copy of the pattern: the inline decorator uses it and carries none of its own', () => {
+		// The decorator's cheap probe was a third copy, with the old curly body (quadratic)
+		// and no emphasis, so an emphasised quotation was not styled until one was verified.
+		const source = readFileSync(
+			new URL('../citations/decorate-inline.ts', import.meta.url),
+			'utf8'
+		);
+		expect(source).toContain('CITATION_REGEX.source');
+		expect(source).not.toMatch(/“\[\^”\]/);
+		// No regular expression of its own for the marker (the header comment still names it).
+		expect(source).not.toMatch(/\\\(Source:/);
+	});
+
+	it('scans a reply full of unclosed curly quotes in linear time', () => {
+		// Each opening quote used to scan to the end of the text, which is quadratic: about
+		// half a second at 40 KB in the api's twin of this pattern, minutes at 1 MB. The
+		// bound is far above a linear scan and far below a quadratic one.
+		for (const text of ['“ '.repeat(250_000), '“a” '.repeat(125_000) + '“'.repeat(250_000)]) {
+			const started = performance.now();
+			const markers = Array.from(iterCitationMarkers(text));
+			expect(markers).toHaveLength(0);
+			expect(performance.now() - started).toBeLessThan(5000);
+		}
 	});
 
 	it('CITATION_REGEX is exported with the g + s flags (matchAll-safe)', () => {

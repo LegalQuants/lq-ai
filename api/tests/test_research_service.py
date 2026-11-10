@@ -1,9 +1,10 @@
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest
 import respx
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.errors import ResearchNotConfigured
 from app.models.research import ResearchOpinionMetadata
@@ -30,7 +31,7 @@ def _prime_and_reset_provider_cache() -> Iterator[None]:
 
 
 @pytest.fixture
-def fake_storage(monkeypatch):
+def fake_storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     store: dict[str, bytes] = {}
 
     async def _upload(*, storage_path: str, body: bytes, content_type: str) -> None:
@@ -40,18 +41,18 @@ def fake_storage(monkeypatch):
         def __init__(self, data: bytes) -> None:
             self._data = data
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> AsyncIterator[bytes]:
             data = self._data
 
-            async def _gen():
+            async def _gen() -> AsyncIterator[bytes]:
                 yield data
 
             return _gen()
 
-        async def __aexit__(self, *a):
+        async def __aexit__(self, *a: object) -> bool:
             return False
 
-    def _download(*, storage_path: str):
+    def _download(*, storage_path: str) -> _Reader:
         return _Reader(store[storage_path])
 
     monkeypatch.setattr("app.research.service.upload_bytes", _upload)
@@ -60,7 +61,9 @@ def fake_storage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_cluster_fetches_caches_then_serves_from_cache(db_session, fake_storage) -> None:
+async def test_get_cluster_fetches_caches_then_serves_from_cache(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     cluster = {
         "id": 5,
         "case_name": "X v. Y",
@@ -106,7 +109,9 @@ async def test_get_cluster_fetches_caches_then_serves_from_cache(db_session, fak
 
 
 @pytest.mark.asyncio
-async def test_read_opinion_404_when_not_fetched(db_session, fake_storage) -> None:
+async def test_read_opinion_404_when_not_fetched(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     from app.errors import NotFound
 
     with pytest.raises(NotFound):
@@ -114,7 +119,9 @@ async def test_read_opinion_404_when_not_fetched(db_session, fake_storage) -> No
 
 
 @pytest.mark.asyncio
-async def test_find_in_case_returns_matches(db_session, fake_storage) -> None:
+async def test_find_in_case_returns_matches(
+    db_session: AsyncSession, fake_storage: dict[str, bytes]
+) -> None:
     fake_storage["k"] = b"The right to privacy is fundamental. Privacy again here."
     db_session.add(
         ResearchOpinionMetadata(
@@ -128,7 +135,7 @@ async def test_find_in_case_returns_matches(db_session, fake_storage) -> None:
 
 
 @pytest.mark.asyncio
-async def test_verify_citations_passthrough(db_session) -> None:
+async def test_verify_citations_passthrough(db_session: AsyncSession) -> None:
     with respx.mock:
         respx.post(f"{GW}/v1/tools/courtlistener-prod/verify_citations").mock(
             return_value=httpx.Response(

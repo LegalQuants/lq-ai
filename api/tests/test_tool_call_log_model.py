@@ -88,7 +88,7 @@ def test_tool_call_log_columns() -> None:
 @pytest.mark.unit
 def test_tool_call_log_primary_key() -> None:
     """PK is 'id' only (single UUID column)."""
-    pk = {c.name for c in ToolCallLog.__table__.primary_key.columns}
+    pk = {c.name for c in ToolCallLog.__table__.primary_key}
     assert pk == {"id"}
 
 

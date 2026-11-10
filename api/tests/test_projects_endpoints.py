@@ -28,7 +28,7 @@ ASGI in-process client doesn't trigger lifespan), same pattern as
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -51,7 +51,7 @@ from tests.test_storage_streaming import FakeS3Client
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "skills"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -994,3 +994,40 @@ async def test_c7_verification_contract(client: AsyncClient, db_user: User) -> N
     assert "alpha-test-skill" in body["attached_skill_names"]
     assert fid in body["attached_file_ids"]
     assert body["context_md"] == "We are the customer; counterparty is Acme."
+
+
+@pytest.mark.parametrize("initial", [1, 3, 5])
+async def test_project_egress_ceiling_crud_and_owner_isolation(
+    client: AsyncClient, db_user: User, other_user: User, initial: int
+) -> None:
+    response = await client.post(
+        "/api/v1/projects",
+        headers=_h(db_user),
+        json={
+            "name": "Egress policy",
+            "privileged": True,
+            "minimum_inference_tier": 3,
+            "max_egress_tier": initial,
+        },
+    )
+    assert response.status_code == 201, response.text
+    project_id = response.json()["id"]
+    assert response.json()["max_egress_tier"] == initial
+    response = await client.patch(
+        f"/api/v1/projects/{project_id}", headers=_h(other_user), json={"max_egress_tier": 5}
+    )
+    assert response.status_code == 404
+    response = await client.get(f"/api/v1/projects/{project_id}", headers=_h(db_user))
+    assert response.json()["max_egress_tier"] == initial
+    response = await client.patch(
+        f"/api/v1/projects/{project_id}", headers=_h(db_user), json={"minimum_inference_tier": 4}
+    )
+    assert response.status_code == 200
+    assert response.json()["max_egress_tier"] == initial
+    response = await client.patch(
+        f"/api/v1/projects/{project_id}", headers=_h(db_user), json={"max_egress_tier": None}
+    )
+    assert response.status_code == 200
+    assert response.json()["max_egress_tier"] is None
+    assert response.json()["minimum_inference_tier"] == 4
+    assert response.json()["privileged"] is True

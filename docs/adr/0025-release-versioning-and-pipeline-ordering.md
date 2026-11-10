@@ -4,6 +4,16 @@
 **Date:** 2026-08-02
 **Owner:** Maintainer team (houfu)
 
+**Accepted amendment (2026-10-12):** [ADR 0029](0029-definition-of-1.0.md)
+R3 extends decision 3 with the post-1.0 semantics: **patch** = a blind upgrade;
+**minor** = read the release notes, operator action may be needed; **major** = an
+upgrade that can break a working install's data, configuration or API contracts.
+The operator-centric test — does a working install need a human to touch it? —
+continues to govern the minor/patch line. Per [ADR 0031](0031-headless-api-only-use.md),
+the patch and minor promises do not extend to third-party API clients; "API
+contracts" means the contracts the project's own clients rely on. Decision 3
+stands as the pre-1.0 record.
+
 ## Context
 
 The project publishes two independent release artifacts — the container image

@@ -1,0 +1,14 @@
+# The documentation site is public and meant to be read — by people, by search
+# engines, and by agents. Nothing here is gated, so nothing is disallowed.
+#
+# The agent-facing surface is /llms.txt (an index of every page) and
+# /llms-full.txt (the whole site as text); every page URL also answers at
+# <url>.md.
+#
+# No `Sitemap:` line: the directive takes an absolute URL, and the site's origin
+# and base path are configuration (SITE_URL / SITE_BASE), not content. Starlight
+# emits `sitemap-index.xml` and links it from every page's <head>, which is where
+# a crawler finds it.
+
+User-agent: *
+Allow: /

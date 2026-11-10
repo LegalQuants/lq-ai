@@ -124,7 +124,7 @@ async def test_notification_requires_user_id(db_session: AsyncSession) -> None:
     sess = await _make_session(db_session, owner=user)
 
     notif = AutonomousNotification(
-        user_id=None,  # type: ignore[arg-type]
+        user_id=None,
         session_id=sess.id,
         title="x",
         body="y",

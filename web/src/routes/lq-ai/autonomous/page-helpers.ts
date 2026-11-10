@@ -63,6 +63,20 @@ export function isHaltable(status: SessionStatus): boolean {
 	return status === 'running';
 }
 
+/** Render known skill refusals without exposing arbitrary worker exception text. */
+export function skillRefusalMessage(error: string | null | undefined): string | null {
+	switch (error) {
+		case 'ToolNotGranted: Skill changed or access was revoked; start a new invocation':
+			return 'The selected skill or its reference files changed, or access was revoked. Start a new invocation.';
+		case 'ToolNotGranted: Pinned skill artifact is unavailable or changed':
+			return 'The selected skill or a pinned reference is unavailable or changed. Restore it and start a new invocation.';
+		case 'ToolNotGranted: Optional skill capability is not enabled':
+			return 'This skill capability is disabled for the deployment. Start a new invocation after the operator enables it.';
+		default:
+			return null;
+	}
+}
+
 /**
  * Format a created_at ISO string into a short human-readable form.
  *

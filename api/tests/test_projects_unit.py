@@ -145,7 +145,7 @@ def test_create_request_privileged_with_tier_accepted() -> None:
 @pytest.mark.unit
 def test_create_request_rejects_invalid_tier() -> None:
     with pytest.raises(PydanticValidationError):
-        ProjectCreateRequest(name="X", privileged=True, minimum_inference_tier=6)
+        ProjectCreateRequest(name="X", privileged=True, minimum_inference_tier=6)  # type: ignore[arg-type]  # intentionally invalid
 
 
 @pytest.mark.unit

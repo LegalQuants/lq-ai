@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "skill": "contract-qa",
+  "fixture": "lookup-termination",
+  "status": "provisional",
+  "provenance": "Ranges derived from skills/contract-qa/SKILL.md (Type A direct lookup: one-sentence answer, verbatim blockquote of the clause, [§ ref] citation; answer length proportional to a lookup — adaptive format, so no fixed sections are asserted). NOT observed from a live run; first live run calibrates.",
+  "assertions": {
+    "required_sections": [],
+    "metrics": [
+      {
+        "id": "verbatim_blockquote",
+        "kind": "blockquote_lines",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "clause_citations",
+        "kind": "citation_count",
+        "min": 1,
+        "max": null
+      },
+      {
+        "id": "cites_section_4",
+        "kind": "regex_count",
+        "pattern": "§\\s*4|section\\s*4",
+        "min": 1,
+        "max": null
+      }
+    ],
+    "min_chars": 200,
+    "max_chars": 6000
+  }
+}

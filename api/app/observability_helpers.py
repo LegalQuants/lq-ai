@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import functools
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any, TypeVar, cast
 
 from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.trace import Span, Tracer
 from opentelemetry.trace.status import Status, StatusCode
 
@@ -48,6 +50,29 @@ def record_attributes(span: Span, /, **attributes: Any) -> None:
     for key, value in attributes.items():
         if value is not None:
             span.set_attribute(key, value)
+
+
+@contextmanager
+def quiet_span(tracer: Tracer, name: str, *, context: Context | None = None) -> Iterator[Span]:
+    """A span that records that it failed and with what type, never the text.
+
+    The SDK's default records an exception's message on the span, as an event
+    and as the status description. On the autonomous and orchestration paths
+    that message can carry what attributes are forbidden to carry: SQL
+    parameters, a provider's echo of a prompt, a validation error quoting its
+    input. This span keeps the failure and the exception's class name only.
+    """
+
+    with tracer.start_as_current_span(
+        name, context=context, record_exception=False, set_status_on_exception=False
+    ) as span:
+        try:
+            yield span
+        except BaseException as exc:
+            if span.is_recording():
+                span.set_attribute("error.type", type(exc).__name__)
+                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+            raise
 
 
 def traced(span_name: str, *, tracer_name: str = _TRACER_NAME) -> Callable[[_F], _F]:

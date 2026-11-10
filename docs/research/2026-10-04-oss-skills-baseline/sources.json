@@ -1,0 +1,50 @@
+{
+  "primary": {
+    "url": "https://houfu.github.io/lq-plugin-cowork/probes.html",
+    "package_version": "0.2.0",
+    "upstream_pin": "fa5a668",
+    "probe_count": 14
+  },
+  "supporting": {
+    "pr": "https://github.com/houfu/lq-plugin-cowork/pull/26",
+    "head": "b9ed8af9ea205344e1e3f6ff39161926888f25f4",
+    "probe_count": 27,
+    "merged": false
+  },
+  "source_files": {
+    "live-probes.html": {
+      "sha256": "4decb97c1b36f50dba4cc532460c45d4d75d8e06e5c5076b271591106b81dab0",
+      "bytes": 29081
+    },
+    "live-probes.txt": {
+      "sha256": "0608d804d09d780afa41558f489e6d853a8abcb87d019c5c57a41b7d66561138",
+      "bytes": 17368
+    },
+    "live-testing.html": {
+      "sha256": "1699b30b5149ae9939c2fd3267031b75c7bb3edf0fc0d9908922c66fc146158b",
+      "bytes": 95338
+    },
+    "live-testing.txt": {
+      "sha256": "a155f8e365d399143d628910b4dd35771b1fcdd471536a440be8eb7564a45c5f",
+      "bytes": 74594
+    },
+    "main-probes.yaml": {
+      "sha256": "8dea31a5b27ac77571a7c523c9b039699206857e90f1d632daf69fde22039b18",
+      "bytes": 16389
+    },
+    "pr26-catalog.json": {
+      "sha256": "df59669b9560c7c73a468d890646f58f33cc0c9f9cda8a4f56f9b926092d6af0",
+      "bytes": 142941
+    },
+    "pr26-harness-probe-SKILL.md": {
+      "sha256": "7cbfccc69cc7151df69b021bdd5e244695af0fd8a450be12e48e0527b37e6a3f",
+      "bytes": 6629
+    },
+    "pr26-probes.yaml": {
+      "sha256": "9a6410c0cb492a926a348eba9de8eb0b43d63ac19615411c378217b37588c508",
+      "bytes": 40531
+    }
+  },
+  "publication_note": "This is the source capture manifest from October 4, not a claim about current PR status. Source-file hashes identify the local capture; the HTML/YAML files themselves are not copied into this archive. The original 14 probe instructions and criteria are retained in probe-results.json.",
+  "upstream_full_pin": "fa5a6681dc3cc9a08fa9ed48a5fd213057edafa0"
+}

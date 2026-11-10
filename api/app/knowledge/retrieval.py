@@ -76,6 +76,7 @@ async def hybrid_search(
     query_embedding: list[float] | None,
     top_k: int,
     alpha: float,
+    user_id: uuid.UUID | None = None,
 ) -> list[HybridSearchResult]:
     """Run hybrid search against KB ``kb_id`` for ``query``.
 
@@ -98,6 +99,23 @@ async def hybrid_search(
         descending ``hybrid_score``.
     """
 
+    denied_files: set[uuid.UUID] = set()
+    if user_id is not None:
+        from sqlalchemy import select
+
+        from app.authz.matters import denied_file_ids, denied_kb_ids
+        from app.models.knowledge import KnowledgeBase
+
+        if (
+            await db.scalar(
+                select(KnowledgeBase.id).where(
+                    KnowledgeBase.id == kb_id, KnowledgeBase.id.in_(denied_kb_ids(user_id))
+                )
+            )
+            is not None
+        ):
+            return []
+        denied_files = set((await db.scalars(denied_file_ids(user_id))).all())
     alpha = max(0.0, min(1.0, alpha))
     candidate_limit = top_k * CANDIDATE_OVERSHOOT
 
@@ -177,7 +195,7 @@ async def hybrid_search(
         )
     # Re-sort because _hydrate_chunks doesn't preserve order.
     results.sort(key=lambda r: r.hybrid_score, reverse=True)
-    return results
+    return [r for r in results if r.file_id not in denied_files]
 
 
 # ---------------------------------------------------------------------------

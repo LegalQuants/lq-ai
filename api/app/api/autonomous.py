@@ -51,6 +51,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import ActiveUser, AutonomousEnabledUser, is_privileged_reader
 from app.audit import audit_action
 from app.auditor_audit import auditor_audit
+from app.authz.matters import (
+    denied_kb_ids,
+    matter_scope_filter,
+    readable_autonomous_session_ids,
+    require_autonomous_source,
+    require_matter,
+)
 from app.autonomous.audit import autonomous_audit
 from app.autonomous.cron import next_run_after, validate_cron_expr
 from app.autonomous.receipt import build_receipt
@@ -72,6 +79,7 @@ from app.models.autonomous import (
 from app.models.chat import Chat
 from app.models.document import Document
 from app.models.knowledge import KnowledgeBase
+from app.models.playbook import Playbook
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.autonomous import (
@@ -151,6 +159,7 @@ async def _load_owned_memory(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous memory entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -182,6 +191,7 @@ async def _load_owned_precedent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="precedent entry not found",
         )
+    await require_autonomous_source(db, row.source_session_id, user_id)
     return row
 
 
@@ -191,26 +201,132 @@ async def _load_owned_project(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
 ) -> Project:
-    """Fetch a Project by id; 404 if missing OR not owned by the caller.
+    """Fetch a matter the caller may act on; 404 if missing OR out of reach.
 
-    Conflates "doesn't exist" and "belongs to someone else" to avoid
-    existence disclosure — same idiom as the autonomous loaders. The
-    autonomous layer never reveals another user's Projects.
+    Conflates "doesn't exist" and "you have no access" to avoid existence
+    disclosure — same idiom as the autonomous loaders. The autonomous layer
+    never reveals a matter the caller cannot reach.
+
+    Access is resolved by :func:`app.authz.matters.require_matter` at
+    ``write``, because everything reached through here *spends* against the
+    matter — spawning a session, scheduling a watch, accepting a context
+    proposal. Reading a shared matter does not entitle a colleague to run
+    autonomous work under it and bill the firm for it.
+
+    ``archived_at IS NULL`` matches :func:`app.api.projects._load_visible_project`,
+    which excludes archived rows by default: a matter the caller has deleted is
+    gone from their UI and must not be re-attachable as an autonomous target.
 
     Raises:
-        HTTPException: 404 if the row is absent or owned by a different user.
+        HTTPException: 404 if the row is absent or unreachable; 403 if the
+        caller can read the matter but not contribute to it.
     """
-    stmt = select(Project).where(
-        Project.id == project_id,
-        Project.owner_id == user_id,
+    from app.authz.matters import require_matter
+    from app.errors import Forbidden as _Forbidden, NotFound as _NotFound
+
+    # The caller is identified by id at several of these call sites, so
+    # re-load the row rather than threading a User object through seven
+    # signatures; it is normally already in the session identity map.
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project not found",
+        )
+
+    try:
+        return await require_matter(db, project_id, user, need="write")
+    except _NotFound:
+        # Re-raise in this module's plain shape so the autonomous surface's
+        # error contract does not shift underneath its callers.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="project not found",
+        ) from None
+    except _Forbidden:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="project requires contributor access",
+        ) from None
+
+
+async def _load_owned_kb(
+    db: AsyncSession,
+    *,
+    kb_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> KnowledgeBase:
+    """Fetch a KnowledgeBase by id; 404 if missing OR not owned by the caller.
+
+    Conflates "doesn't exist" and "belongs to someone else" to avoid
+    existence disclosure — same idiom as :func:`_load_owned_project`.
+    Conservative per-user isolation: KB-sharing is out of scope for the
+    autonomous layer, so only the KB's owner may target it.
+
+    ``archived_at IS NULL`` matches :func:`app.api.knowledge_bases._load_visible_kb`.
+    ``DELETE /kb/{id}`` sets ``archived_at``, after which the KB 404s on its own
+    endpoint and disappears from the owner's UI; without this predicate it could
+    still be attached as a schedule/watch/run-now target and silently resurrected
+    as a live recurring retrieval source.
+
+    Raises:
+        HTTPException: 404 if the row is absent, archived, or owned by a
+        different user.
+    """
+    stmt = select(KnowledgeBase).where(
+        KnowledgeBase.id == kb_id,
+        KnowledgeBase.owner_id == user_id,
+        KnowledgeBase.id.not_in(denied_kb_ids(user_id)),
+        KnowledgeBase.archived_at.is_(None),
     )
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="project not found",
+            detail="knowledge base not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="knowledge base not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
+
+
+async def _load_visible_playbook(
+    db: AsyncSession,
+    *,
+    playbook_id: uuid.UUID,
+    user: User,
+) -> Playbook:
+    """Fetch a playbook by id, applying the read-visibility predicate.
+
+    Mirrors :func:`app.api.playbooks._load_visible_playbook` exactly —
+    the rule the execute endpoint applies:
+
+    * Admins see every non-deleted playbook.
+    * Non-admins see playbooks they authored OR built-ins
+      (``created_by IS NULL``).
+    * Soft-deleted rows (``deleted_at IS NOT NULL``) are invisible to
+      everyone, including admins.
+
+    Raises:
+        HTTPException: 404 if the row is absent, soft-deleted, or
+            authored by a different non-admin user (collapsed into 404 —
+            not 403 — to avoid existence disclosure via id-probing).
+    """
+    playbook = await db.get(Playbook, playbook_id)
+    if playbook is None or playbook.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="playbook not found",
+        )
+    if not user.is_admin and playbook.created_by is not None and playbook.created_by != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="playbook not found",
+        )
+    return playbook
 
 
 async def _load_owned_proposal(
@@ -237,6 +353,11 @@ async def _load_owned_proposal(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="project-context proposal not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -272,6 +393,13 @@ async def _load_owned_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous session not found",
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        caller = await db.get(User, user_id)
+        if caller is None:
+            raise HTTPException(status_code=404, detail="autonomous session not found")
+        await require_matter(db, row.project_id, caller, include_archived=True)
     return row
 
 
@@ -294,6 +422,11 @@ async def _load_session_for_reader(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="autonomous session not found"
         )
+    if row.project_id is not None:
+        from app.authz.matters import require_matter
+
+        await require_matter(db, row.project_id, user, include_archived=True)
+        return row, row.user_id != user.id and is_privileged_reader(user)
     if row.user_id == user.id:
         return row, False
     if is_privileged_reader(user):
@@ -331,6 +464,11 @@ async def _load_owned_schedule(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous schedule not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -362,6 +500,11 @@ async def _load_owned_watch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous watch not found",
         )
+    if row.project_id is not None:
+        actor = await db.get(User, user_id)
+        if actor is None:
+            raise HTTPException(status_code=404, detail="autonomous resource not found")
+        await require_matter(db, row.project_id, actor, include_archived=True)
     return row
 
 
@@ -392,6 +535,7 @@ async def _load_owned_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="autonomous notification not found",
         )
+    await require_autonomous_source(db, row.session_id, user_id)
     return row
 
 
@@ -429,6 +573,19 @@ async def halt_session(
     """
     session = await _load_owned_session(db, session_id=session_id, user_id=user.id)
 
+    from app.models.orchestration import OrchestrationRoot
+
+    if await db.get(OrchestrationRoot, session.root_session_id) is not None:
+        from app.api.orchestration import service
+
+        # Halt on an existing child receipt also stops the governed root.
+        root_id = session.root_session_id
+        actor_id = user.id
+        await db.rollback()
+        await service(request).store.halt(root_id, actor_id=actor_id)
+        await db.refresh(session)
+        return AutonomousSessionRead.model_validate(session)
+
     # Idempotency check: if the session is already halted (in any sense),
     # return current state without a duplicate audit write.
     if session.halt_state in ("halt_requested", "halted"):
@@ -447,6 +604,7 @@ async def halt_session(
         action="autonomous_session.halt_requested",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()
@@ -481,13 +639,21 @@ async def list_sessions(
     count_stmt = (
         select(func.count())
         .select_from(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
     )
     total_count: int = (await db.execute(count_stmt)).scalar_one()
 
     rows_stmt = (
         select(AutonomousSession)
-        .where(AutonomousSession.user_id == user.id)
+        .where(
+            AutonomousSession.user_id == user.id,
+            AutonomousSession.project_id.is_(None)
+            | AutonomousSession.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+        )
         .order_by(AutonomousSession.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -786,6 +952,8 @@ async def list_memory(
     base_where = [
         AutonomousMemory.user_id == user.id,
         AutonomousMemory.deleted_at.is_(None),
+        AutonomousMemory.source_session_id.is_(None)
+        | AutonomousMemory.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if state is not None:
         base_where.append(AutonomousMemory.state == str(state))
@@ -984,6 +1152,8 @@ async def list_precedents(
     base_where = [
         PrecedentEntry.user_id == user.id,
         PrecedentEntry.dismissed_at.is_(None),
+        PrecedentEntry.source_session_id.is_(None)
+        | PrecedentEntry.source_session_id.in_(readable_autonomous_session_ids(user)),
     ]
     if pattern_kind is not None:
         base_where.append(PrecedentEntry.pattern_kind == pattern_kind)
@@ -1144,7 +1314,10 @@ async def list_project_context_proposals(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [ProjectContextProposal.user_id == user.id]
+    base_where = [
+        ProjectContextProposal.user_id == user.id,
+        ProjectContextProposal.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
+    ]
     if state is not None:
         base_where.append(ProjectContextProposal.state == str(state))
     if project_id is not None:
@@ -1298,7 +1471,7 @@ async def reject_project_context_proposal(
     responses={
         201: {"description": "Schedule created"},
         422: {"description": "Invalid cron expression"},
-        404: {"description": "Referenced project not found"},
+        404: {"description": "Referenced project, playbook, or knowledge base not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1313,7 +1486,10 @@ async def create_schedule(
     Validates ``cron_expr`` via :func:`~app.autonomous.cron.validate_cron_expr`
     (invalid → 422), creates the schedule row, and seeds
     ``next_run_at = next_run_after(cron_expr, now(UTC))`` so the
-    dispatcher's first eligible tick can pick it up.  Returns the created
+    dispatcher's first eligible tick can pick it up.  Non-null FK targets
+    are validated (DE-322): ``project_id`` and ``target_kb_id`` must be
+    owned by the caller; ``playbook_id`` must be visible to the caller
+    (own or built-in) — otherwise 404.  Returns the created
     :class:`~app.schemas.autonomous.AutonomousScheduleRead` (201).
 
     Audited.
@@ -1327,9 +1503,17 @@ async def create_schedule(
         ) from exc
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
-    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    # is rejected 404 (id-probing-safe). NULL is allowed only for query-less
+    # runs, as enforced by AutonomousManualRunRequest.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate target FKs (DE-322) — a playbook the caller cannot see or a
+    # KB the caller doesn't own is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
+    if body.target_kb_id is not None:
+        await _load_owned_kb(db, kb_id=body.target_kb_id, user_id=user.id)
 
     now = datetime.now(UTC)
     schedule = AutonomousSchedule(
@@ -1365,7 +1549,7 @@ async def create_schedule(
 async def _spawn_manual_session(
     db: AsyncSession,
     *,
-    user_id: uuid.UUID,
+    user: User,
     body: AutonomousManualRunRequest,
     enqueue: Callable[[uuid.UUID], Awaitable[bool]] | None = None,
 ) -> AutonomousSession:
@@ -1376,7 +1560,8 @@ async def _spawn_manual_session(
     ``params`` carrying only the non-null target keys (plus
     ``emit_artifacts`` — set to ``True`` only when the request body opted
     in; Donna ask #8 — a manual run has no schedule/watch row, so the
-    body carries the flag), sets a non-null ``max_cost_usd`` (per-run cap
+    body carries the flag; plus ``query`` — the optional matter
+    description, item 1.6), sets a non-null ``max_cost_usd`` (per-run cap
     or the config default so R4 always arms), flushes to obtain the id,
     then best-effort enqueues. The five-phase executor + R4/R5/R6 brakes
     + receipt are unchanged.
@@ -1385,9 +1570,17 @@ async def _spawn_manual_session(
     settings = get_settings()
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
-    # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
+    # is rejected 404 (id-probing-safe). NULL is allowed only for query-less
+    # runs, as enforced by AutonomousManualRunRequest.
     if body.project_id is not None:
-        await _load_owned_project(db, project_id=body.project_id, user_id=user_id)
+        await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate target FKs (DE-322) — a playbook the caller cannot see or a
+    # KB the caller doesn't own is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
+    if body.target_kb_id is not None:
+        await _load_owned_kb(db, kb_id=body.target_kb_id, user_id=user.id)
 
     params: dict[str, object] = {"since": None}
     if body.target_kb_id is not None:
@@ -1400,9 +1593,16 @@ async def _spawn_manual_session(
         # Opt-in (Donna ask #8) — non-null-subset convention: the key is
         # present iff the caller opted in.
         params["emit_artifacts"] = True
+    if body.query is not None:
+        # Matter intake (item 1.6) — the free-text matter description the
+        # executor reads via ``session.params.get("query")`` into the
+        # ADR-0020 matter loop. Non-null-subset convention: key present
+        # iff the caller supplied a description; absent keeps the
+        # query-less path unchanged.
+        params["query"] = body.query
 
     session = AutonomousSession(
-        user_id=user_id,
+        user_id=user.id,
         project_id=body.project_id,
         trigger_kind="manual",
         trigger_ref=None,
@@ -1427,8 +1627,8 @@ async def _spawn_manual_session(
     responses={
         201: {"description": "Session spawned"},
         403: {"description": "Autonomous layer not enabled for this user"},
-        422: {"description": "Invalid target (need exactly one of playbook_id/skill_ref)"},
-        404: {"description": "Referenced project not found"},
+        422: {"description": "Invalid target or missing project_id for a query"},
+        404: {"description": "Referenced project, playbook, or knowledge base not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1446,13 +1646,14 @@ async def run_now(
     session runs under the same R4/R5/R6 brakes as every other session.
     Audited.
     """
-    session = await _spawn_manual_session(db, user_id=user.id, body=body)
+    session = await _spawn_manual_session(db, user=user, body=body)
     await audit_action(
         db,
         user_id=user.id,
         action="autonomous_session.run_now",
         resource_type="autonomous_session",
         resource_id=str(session.id),
+        project_id=session.project_id,
         request=request,
     )
     await db.commit()
@@ -1488,6 +1689,8 @@ async def list_schedules(
     base_where = [
         AutonomousSchedule.user_id == user.id,
         AutonomousSchedule.deleted_at.is_(None),
+        AutonomousSchedule.project_id.is_(None)
+        | AutonomousSchedule.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousSchedule.enabled.is_(enabled))
@@ -1517,7 +1720,7 @@ async def list_schedules(
     response_model=AutonomousScheduleRead,
     summary="Partially update an autonomous schedule (edit / enable / disable)",
     responses={
-        404: {"description": "Schedule or referenced project not found"},
+        404: {"description": "Schedule, referenced project, playbook, or knowledge base not found"},
         422: {"description": "Invalid cron expression"},
         401: {"description": "Not authenticated"},
     },
@@ -1563,11 +1766,19 @@ async def update_schedule(
         # explicit null is a no-op rather than a constraint violation.
         schedule.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
-        schedule.playbook_id = fields["playbook_id"]
+        new_playbook_id = fields["playbook_id"]
+        if new_playbook_id is not None:
+            # DE-322: a playbook the caller cannot see → 404 (id-probing-safe).
+            await _load_visible_playbook(db, playbook_id=new_playbook_id, user=user)
+        schedule.playbook_id = new_playbook_id  # explicit null clears the target
     if "skill_ref" in fields:
         schedule.skill_ref = fields["skill_ref"]
     if "target_kb_id" in fields:
-        schedule.target_kb_id = fields["target_kb_id"]
+        new_target_kb_id = fields["target_kb_id"]
+        if new_target_kb_id is not None:
+            # DE-322: a KB the caller doesn't own → 404 (id-probing-safe).
+            await _load_owned_kb(db, kb_id=new_target_kb_id, user_id=user.id)
+        schedule.target_kb_id = new_target_kb_id  # explicit null clears the target
     if "project_id" in fields:
         new_project_id = fields["project_id"]
         if new_project_id is not None:
@@ -1653,7 +1864,7 @@ async def delete_schedule(
     summary="Create an autonomous watch (KB-arrival-triggered run definition)",
     responses={
         201: {"description": "Watch created"},
-        404: {"description": "Target knowledge base or referenced project not found"},
+        404: {"description": "Target knowledge base, referenced project, or playbook not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1668,28 +1879,26 @@ async def create_watch(
     Validates the caller **owns** the target ``knowledge_base_id``
     (``KnowledgeBase.owner_id == user.id``) — a KB the caller cannot see
     returns 404 (conservative per-user isolation; KB-sharing is out of
-    scope). Creates the watch row. Returns the created
+    scope). A non-null ``playbook_id`` must be visible to the caller
+    (own or built-in; DE-322) — otherwise 404. Creates the watch row.
+    Returns the created
     :class:`~app.schemas.autonomous.AutonomousWatchRead` (201).
 
     Audited.
     """
     # Validate KB ownership — 404 (not 403) on a KB the caller doesn't own,
     # same existence-disclosure posture as the autonomous loaders.
-    kb_stmt = select(KnowledgeBase).where(
-        KnowledgeBase.id == body.knowledge_base_id,
-        KnowledgeBase.owner_id == user.id,
-    )
-    kb = (await db.execute(kb_stmt)).scalar_one_or_none()
-    if kb is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="knowledge base not found",
-        )
+    await _load_owned_kb(db, kb_id=body.knowledge_base_id, user_id=user.id)
 
     # Validate matter ownership — a non-null project_id the caller doesn't own
     # is rejected 404 (id-probing-safe). NULL = no matter; no check needed.
     if body.project_id is not None:
         await _load_owned_project(db, project_id=body.project_id, user_id=user.id)
+
+    # Validate the target playbook (DE-322) — a playbook the caller cannot
+    # see is rejected 404 (id-probing-safe).
+    if body.playbook_id is not None:
+        await _load_visible_playbook(db, playbook_id=body.playbook_id, user=user)
 
     watch = AutonomousWatch(
         user_id=user.id,
@@ -1748,6 +1957,8 @@ async def list_watches(
     base_where = [
         AutonomousWatch.user_id == user.id,
         AutonomousWatch.deleted_at.is_(None),
+        AutonomousWatch.project_id.is_(None)
+        | AutonomousWatch.project_id.in_(select(Project.id).where(matter_scope_filter(user))),
     ]
     if enabled is not None:
         base_where.append(AutonomousWatch.enabled.is_(enabled))
@@ -1779,7 +1990,7 @@ async def list_watches(
     response_model=AutonomousWatchRead,
     summary="Partially update an autonomous watch (enable / disable / retarget)",
     responses={
-        404: {"description": "Watch or referenced project not found"},
+        404: {"description": "Watch, referenced project, or playbook not found"},
         401: {"description": "Not authenticated"},
     },
 )
@@ -1811,7 +2022,11 @@ async def update_watch(
         # explicit null is a no-op rather than a constraint violation.
         watch.emit_artifacts = fields["emit_artifacts"]
     if "playbook_id" in fields:
-        watch.playbook_id = fields["playbook_id"]
+        new_playbook_id = fields["playbook_id"]
+        if new_playbook_id is not None:
+            # DE-322: a playbook the caller cannot see → 404 (id-probing-safe).
+            await _load_visible_playbook(db, playbook_id=new_playbook_id, user=user)
+        watch.playbook_id = new_playbook_id  # explicit null clears the target
     if "skill_ref" in fields:
         watch.skill_ref = fields["skill_ref"]
     if "project_id" in fields:
@@ -1917,7 +2132,11 @@ async def list_notifications(
     limit = max(1, min(limit, _LIMIT_MAX))
     offset = max(0, offset)
 
-    base_where = [AutonomousNotification.user_id == user.id]
+    base_where = [
+        AutonomousNotification.user_id == user.id,
+        AutonomousNotification.session_id.is_(None)
+        | AutonomousNotification.session_id.in_(readable_autonomous_session_ids(user)),
+    ]
     if unread:
         base_where.append(AutonomousNotification.read_at.is_(None))
 

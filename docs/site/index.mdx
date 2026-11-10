@@ -1,0 +1,35 @@
+---
+title: LQ.AI
+description: Run LQ.AI on computers your team controls, against model-provider keys you supply — every skill and verification heuristic inspectable.
+audience: [operator, evaluator, contributor, agent]
+status: draft
+sources:
+  - docs/start/what-is-lq-ai.md
+  - README.md
+  - docs/HONEST-STATE.md
+  - docs/architecture.md
+  - docs/PRD.md
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<!-- include: docs/start/what-is-lq-ai.md from="## What is LQ.AI?" to="## Decide whether it fits" -->
+
+## Start here, by goal
+
+<CardGrid>
+  <LinkCard title="Getting started" href="start/index.md" description="Decide whether LQ.AI fits, then get a deployment running." />
+  <LinkCard title="Run and maintain" href="operate/index.md" description="Install LQ.AI, plan the maintenance work, and know what to do when it breaks." />
+  <LinkCard title="Data and privacy" href="trust/index.md" description="Where your information goes, and the evidence a security or procurement review asks for." />
+  <LinkCard title="Skills" href="skills/index.md" description="Find, write, test, and trust a reusable set of instructions." />
+  <LinkCard title="Client handover" href="deliver/index.md" description="Brand and license a client-facing deployment." />
+  <LinkCard title="Contribute" href="contribute/index.md" description="Engineering and legal-substance contribution tracks." />
+  <LinkCard title="Reference" href="reference/index.md" description="Generated specs: configuration, skill frontmatter, ADR index." />
+  <LinkCard title="Release notes" href="changelog/index.intro.md" description="What shipped in each release, and how to read an upgrade class." />
+</CardGrid>
+
+## Next
+
+- [Is LQ.AI right for your team?](../start/is-it-for-you.md) — checkable disqualifiers
+- [Set up LQ.AI and try your first document](../quickstart.md) — about 15 minutes once the stack is up, no AI-provider key required
+- [The trust centre](trust/index.md) — for a security or procurement review

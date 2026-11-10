@@ -17,7 +17,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
@@ -38,7 +38,7 @@ from app.security import create_access_token, hash_password
 # ---------------------------------------------------------------------------
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -544,11 +544,15 @@ async def test_executor_seam_reads_kb_and_query_from_params(
     from app.autonomous.executor import run_autonomous_session
 
     original_build = executor_mod._build_graph
-    executor_mod._build_graph = lambda **_kw: _FakeGraph()  # type: ignore[assignment]
+    executor_mod._build_graph = lambda **_kw: _FakeGraph()
     try:
-        await run_autonomous_session(db_session, session_id=sess.id, gateway=object())
+        await run_autonomous_session(
+            db_session,
+            session_id=sess.id,
+            gateway=object(),  # type: ignore[arg-type]  # dummy; graph is faked so the gateway is never used
+        )
     finally:
-        executor_mod._build_graph = original_build  # type: ignore[assignment]
+        executor_mod._build_graph = original_build
 
     assert captured["kb_id"] == kb_id
     assert captured["query"] == "scan for liability caps"

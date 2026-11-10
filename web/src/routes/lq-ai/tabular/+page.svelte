@@ -69,6 +69,7 @@
 	<header class="lq-tabular-page__header">
 		<div class="lq-tabular-page__heading">
 			<h1>Tabular Review</h1>
+			<a href="/lq-ai/tabular/bulk-ops">Saved reports and memos</a>
 			<button
 				type="button"
 				class="lq-tabular-page__cta"
@@ -105,7 +106,12 @@
 				<tr>
 					<th scope="col">Skill</th>
 					<th scope="col" class="lq-tabular-table__compact">Scope</th>
-					<th scope="col" class="lq-tabular-table__compact">Cost</th>
+					<th
+						scope="col"
+						class="lq-tabular-table__compact"
+						title="Recorded extraction costs only; unreported costs are excluded. Open a result for cost availability."
+						>Reported sum / estimate</th
+					>
 					<th scope="col" class="lq-tabular-table__compact">Status</th>
 					<th scope="col" class="lq-tabular-table__compact">Created</th>
 				</tr>

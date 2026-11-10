@@ -48,6 +48,25 @@ def test_build_adapter_handles_openai_compatible_without_key() -> None:
 
 
 @pytest.mark.unit
+def test_build_adapter_refuses_openai_compatible_with_a_declared_key_that_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A hosted service that names its key: unset is a missing key. The
+    # ValueError is what startup turns into "skipping provider" and what
+    # makes the provider-keys listing report configured=false.
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    provider = ProviderConfig(
+        name="openrouter",
+        type="openai_compatible",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+        tier=2,
+    )
+    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+        build_adapter(provider)
+
+
+@pytest.mark.unit
 def test_build_adapter_returns_ollama() -> None:
     provider = ProviderConfig(
         name="ollama-local",

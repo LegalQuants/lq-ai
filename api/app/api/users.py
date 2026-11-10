@@ -5,7 +5,7 @@
 D6 lands the GDPR Article 17 / 20 surface:
 
 * `POST /api/v1/users/me/export` queues an export job; the worker
-  builds a ZIP of the user's data and uploads it to MinIO. Returns
+  builds a ZIP of the user's data and uploads it to object storage. Returns
   202 with `{job_id, status}`.
 * `GET  /api/v1/users/me/export/{job_id}` polls a job. When complete,
   returns a presigned download URL good for 24 hours.
@@ -26,9 +26,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, model_validator
-from sqlalchemy import update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import UserPublic
@@ -36,7 +36,7 @@ from app.api.dependencies import ActiveUser, CurrentUser, get_active_user
 from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
-from app.models.user import UserSession
+from app.models.user import User, UserSession
 from app.models.user_export import UserExportJob
 from app.storage import presigned_get_url
 from app.workers.queue import enqueue_user_export_job
@@ -171,6 +171,61 @@ class UserPreferencesResponse(BaseModel):
     provenance_pills: ProvenancePills
     # M4-C2 — Autonomous Layer opt-in (off by default)
     autonomous_enabled: bool
+
+
+# ---------------------------------------------------------------------------
+# /users/directory
+# ---------------------------------------------------------------------------
+
+
+class DirectoryEntry(BaseModel):
+    """One colleague, as the people-pickers need them."""
+
+    id: uuid.UUID
+    email: str
+    display_name: str | None = None
+
+
+@router.get(
+    "/directory",
+    response_model=list[DirectoryEntry],
+    summary="List the people in this deployment (for people-pickers)",
+)
+async def list_directory(
+    user: ActiveUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    q: Annotated[
+        str | None,
+        Query(description="Case-insensitive substring match on email or display name."),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[DirectoryEntry]:
+    """GET /api/v1/users/directory — id, email, and display name only.
+
+    Any signed-in user may call this. Sharing a matter is impossible without
+    it: the roster endpoints take a ``user_id``, and a matter lead who is not
+    an operator-admin cannot reach ``GET /admin/users`` to find one. Asking a
+    lawyer to paste a colleague's UUID is not a design.
+
+    Deliberately minimal — no role, no admin flag, no MFA or password state,
+    no last-login. Those stay behind ``GET /admin/users``. A deployment is a
+    single organisation (PRD §2.3), so who else works here is not a secret;
+    *what they can do* still is.
+
+    Soft-deleted users are excluded so a picker cannot re-add someone who has
+    exercised erasure.
+    """
+
+    stmt = select(User).where(User.deleted_at.is_(None))
+    if q is not None and q.strip():
+        needle = f"%{q.strip()}%"
+        # ``email`` is CITEXT so it is already case-insensitive; ``ilike``
+        # adds the substring wildcards and covers display_name too.
+        stmt = stmt.where(or_(User.email.ilike(needle), User.display_name.ilike(needle)))
+
+    stmt = stmt.order_by(User.display_name.asc().nulls_last(), User.email.asc()).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+    return [DirectoryEntry(id=r.id, email=r.email, display_name=r.display_name) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +458,7 @@ async def export_me(
 
     Inserts a `user_export_jobs` row with status='queued', enqueues the
     arq worker job, and returns 202. The worker runs the ZIP build +
-    MinIO upload out-of-band.
+    object-store upload out-of-band.
 
     Re-calling while a queued/processing job exists is allowed —
     operators may want a fresh export after deleting some content.
@@ -462,6 +517,12 @@ async def get_export_job(
     if job is None or job.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export job not found")
 
+    from app.authz.matters import blocked_project_ids
+
+    if await db.scalar(blocked_project_ids(user).limit(1)) is not None:
+        raise HTTPException(
+            status_code=403, detail="Export requires reconciliation of screened matter content."
+        )
     download_url: str | None = None
     if job.status == "completed" and job.storage_key:
         download_url = await presigned_get_url(

@@ -33,6 +33,27 @@ contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-com
   there's nothing per-tenant to encrypt. Contrast `slack-bridge`
   which stores `bot_token_encrypted` per workspace.
 
+## Trust boundary of the install id_token
+
+The bridge does not verify the id_token's signature. It trusts the
+token only because the token comes directly from Microsoft's token
+endpoint over TLS, in reply to the bridge's own
+`client_secret`-authenticated request; it is never read from anything a
+third party could have sent. Before any claim is used, the callback
+checks `iss`, `aud`, `exp`, `tid` and `oid` and fails closed if
+any is missing or wrong. Tenant and installer IDs must be GUID-shaped
+strings. The optional `nbf` claim must be an integer when present.
+An explicit null is rejected. The decoded claims only record which
+tenant and which admin completed the install (`tid` and `oid` in the tenant
+record) and grant no LQ.AI user or session permission. The decode
+helper is nested inside the install callback and must not be reused for
+inbound Bot Framework activities, which need JWKS signature
+verification; a test in `tests/test_oauth.py` fails if it is reused.
+Token endpoint, backend and Graph rejection logs contain only the HTTP
+status and install correlation ID. Response bodies are omitted because
+opaque tokens may appear outside recognizable token fields.
+Background: audit finding D-03 (#288), tracked in #587.
+
 ## Configuration
 
 | Env var | Required | Purpose |
@@ -41,7 +62,7 @@ contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-com
 | `MICROSOFT_APP_PASSWORD` | yes | Azure AD app client secret |
 | `LQ_AI_BACKEND_URL` | yes | Base URL of the lq-ai api (e.g. `http://api:8000`) |
 | `LQ_AI_BRIDGE_TOKEN` | yes | **Reused** from slack-bridge per M3-D3 decision #2 — same shared secret authenticates both bridges to the api |
-| `LQ_AI_TEAMS_BRIDGE_PUBLIC_URL` | yes | Public base URL of the teams-bridge — used to build the OAuth `redirect_uri` Microsoft calls back to (e.g. `https://lqai.example.com/teams`) |
+| `LQ_AI_TEAMS_BRIDGE_PUBLIC_URL` | yes | Public base URL at which the bridge's routes are reachable, **without** the `/teams` router prefix — the bridge appends `/teams/oauth/callback` itself (e.g. `https://teams-bridge.example.com`; give the bridge its own origin). `https://lqai.example.com/teams` would yield `…/teams/teams/oauth/callback`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OpenTelemetry exporter — opt-in per PRD §5.7 |
 | `OTEL_SERVICE_NAME` | no | Defaults to `lq-ai-teams-bridge` |
 | `LQ_AI_TEAMS_BRIDGE_LOG_LEVEL` | no | Defaults to `INFO` |

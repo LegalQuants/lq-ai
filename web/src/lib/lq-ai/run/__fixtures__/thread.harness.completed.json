@@ -1,0 +1,42 @@
+[
+  {
+    "applied_skills": [],
+    "autonomous_session_id": null,
+    "chat_id": "a893770c-6fc2-4f1b-912b-3747134c0dac",
+    "citations": [],
+    "completion_tokens": null,
+    "content": "Explain payment, renewal and termination questions independently.",
+    "cost_estimate": null,
+    "created_at": "2026-10-09T23:51:05.121094Z",
+    "error_code": null,
+    "id": "473f579f-0c6c-456b-968b-5177bc2ca5c4",
+    "is_enhanced": false,
+    "kind": "user",
+    "prompt_tokens": null,
+    "requested_model": null,
+    "role": "user",
+    "routed_inference_tier": null,
+    "routed_model": null,
+    "routed_provider": null
+  },
+  {
+    "applied_skills": [],
+    "autonomous_session_id": "e061b8ea-2c38-47f9-a9bc-21b0eebf6198",
+    "chat_id": "a893770c-6fc2-4f1b-912b-3747134c0dac",
+    "citations": [],
+    "completion_tokens": 180,
+    "content": "Fees are due \"within thirty (30) days\" (Source: [1]).",
+    "cost_estimate": 0.4107,
+    "created_at": "2026-10-09T23:51:05.121095Z",
+    "error_code": null,
+    "id": "2a20faeb-6d98-4807-a328-889373279ae8",
+    "is_enhanced": false,
+    "kind": "run",
+    "prompt_tokens": 120,
+    "requested_model": "selected/native",
+    "role": "assistant",
+    "routed_inference_tier": 1,
+    "routed_model": "native",
+    "routed_provider": "selected"
+  }
+]

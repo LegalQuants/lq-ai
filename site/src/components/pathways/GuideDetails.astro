@@ -1,0 +1,16 @@
+---
+/**
+ * Explore's right sidebar (scripts/guide-details.ts fills it; explore.css
+ * places it). Empty and hidden until a search result is selected; without
+ * JavaScript there are no results to select, so it never shows.
+ */
+---
+<section id="lq-details" class="lq-details not-content" aria-labelledby="lq-details-label" data-lq-details hidden>
+  <div class="lq-details-head">
+    <p id="lq-details-label" class="lq-details-label">Selected guide</p>
+    <button type="button" class="lq-details-close" data-lq-details-close aria-label="Close details">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+    </button>
+  </div>
+  <div data-lq-details-body></div>
+</section>

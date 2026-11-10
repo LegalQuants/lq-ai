@@ -47,7 +47,7 @@ from app.autonomous.state import AutonomousSessionState
 from app.clients.gateway import GatewayClient
 from app.errors import AutonomousBrake, ToolNotGranted
 from app.models.autonomous import AutonomousSession
-from app.observability_helpers import get_tracer, record_attributes
+from app.observability_helpers import get_tracer, quiet_span, record_attributes
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ async def run_autonomous_session(
         }
 
         tracer = get_tracer()
-        with tracer.start_as_current_span("autonomous.execute") as span:
+        with quiet_span(tracer, "autonomous.execute") as span:
             record_attributes(
                 span,
                 **{

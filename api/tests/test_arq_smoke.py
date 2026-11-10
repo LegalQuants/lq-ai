@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.config import get_settings
 from app.workers import arq_setup
 from app.workers.arq_setup import M3A6_QUEUE_NAME, WorkerSettings, noop_job
 
@@ -49,6 +50,27 @@ def test_worker_settings_class_shape() -> None:
 
 
 @pytest.mark.unit
+def test_orchestration_cron_is_registered_only_when_enabled() -> None:
+    def jobs(**switches: bool) -> set[str]:
+        # Real settings, so the test follows whichever profile switches exist.
+        settings = get_settings().model_copy(
+            update={
+                "orchestration_chat_enabled": False,
+                "new_harness_enabled": False,
+                **switches,
+            }
+        )
+        with patch("app.workers.arq_setup.get_settings", return_value=settings):
+            return {job.coroutine.__name__ for job in arq_setup._build_cron_jobs()}
+
+    assert "orchestration_watchdog" not in jobs()
+    assert "orchestration_watchdog" in jobs(orchestration_chat_enabled=True)
+    # ADR 0038: any enabled run profile needs the recovery sweep, not only the first.
+    assert "orchestration_watchdog" in jobs(new_harness_enabled=True)
+    assert {"autonomous_idle_watchdog", "autonomous_schedule_dispatcher"} <= jobs()
+
+
+@pytest.mark.unit
 async def test_noop_job_returns_ok() -> None:
     """Direct invocation: the registered job is a coroutine that returns ``"ok"``."""
 
@@ -68,17 +90,22 @@ async def test_on_startup_installs_skill_registry_and_returns_none() -> None:
     pins the wiring (hook calls the shared bootstrap; returns None).
     """
 
+    from app.config import get_settings
     from app.skills.registry import MutableSkillRegistry, SkillRegistry
 
     holder = MutableSkillRegistry(SkillRegistry(records={}))
-    with patch(
-        "app.skills.bootstrap.install_skill_registry",
-        return_value=holder,
-    ) as mock_install:
+    settings = get_settings().model_copy(update={"orchestration_chat_enabled": False})
+    ctx: dict[str, Any] = {}
+    with (
+        patch("app.skills.bootstrap.install_skill_registry", return_value=holder) as mock_install,
+        patch("app.workers.arq_setup.get_settings", return_value=settings),
+    ):
         # No exception, no return value.
-        assert await arq_setup.on_startup({}) is None
+        # The return-is-None contract is part of the pinned wiring.
+        assert await arq_setup.on_startup(ctx) is None  # type: ignore[func-returns-value]
 
     mock_install.assert_called_once()
+    assert "orchestration_runtime" not in ctx
 
 
 @pytest.mark.unit

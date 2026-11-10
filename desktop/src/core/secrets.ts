@@ -2,9 +2,9 @@ import { randomBytes } from 'node:crypto'
 
 export interface GeneratedSecrets {
 	POSTGRES_PASSWORD: string
-	MINIO_ROOT_PASSWORD: string
-	/** Must equal MINIO_ROOT_PASSWORD — the release compose pairs them. */
-	S3_SECRET_KEY: string
+	OBJECT_STORE_SECRET_KEY: string
+	/** Legacy encrypted-config field, read only by the 0.x config migration. */
+	MINIO_ROOT_PASSWORD?: string
 	LQ_AI_GATEWAY_KEY: string
 	JWT_SECRET: string
 	/**
@@ -38,11 +38,9 @@ export function generateMasterKey(rng: Rng = randomBytes): string {
 }
 
 export function generateSecrets(rng: Rng = randomBytes): GeneratedSecrets {
-	const minio = token(18, rng) // 24 base64url chars, well over the 8-char minimum
 	return {
 		POSTGRES_PASSWORD: token(24, rng),
-		MINIO_ROOT_PASSWORD: minio,
-		S3_SECRET_KEY: minio,
+		OBJECT_STORE_SECRET_KEY: token(18, rng), // 24 base64url chars
 		LQ_AI_GATEWAY_KEY: token(24, rng),
 		JWT_SECRET: token(48, rng), // 64 base64url chars
 		LQ_AI_GATEWAY_MASTER_KEY: fernetKey(rng)

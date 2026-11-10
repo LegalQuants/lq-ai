@@ -101,7 +101,7 @@ describe('consumeMessageStream', () => {
 			'',
 			'data: {"type":"delta","delta":"world","lq_ai_message_id":"a"}',
 			'',
-			'data: {"type":"complete","lq_ai_message_id":"a","message":{"id":"a","chat_id":"c","role":"assistant","content":"hello world","created_at":"2025-01-01T00:00:00Z"}}',
+			'data: {"type":"complete","lq_ai_message_id":"a","message":{"id":"a","chat_id":"c","role":"assistant","content":"hello world","created_at":"2025-01-01T00:00:00Z"},"applied_file_ids":["file-1"]}',
 			'',
 			'data: [DONE]',
 			''
@@ -113,6 +113,7 @@ describe('consumeMessageStream', () => {
 		expect(onComplete).toHaveBeenCalledTimes(1);
 		const completeFrame = onComplete.mock.calls[0][0] as MessageCompleteFrame;
 		expect(completeFrame.message.content).toBe('hello world');
+		expect(completeFrame.applied_file_ids).toEqual(['file-1']);
 	});
 
 	it('dispatches an onError and stops on a mid-stream error frame', async () => {
@@ -202,9 +203,9 @@ describe('consumeMessageStream', () => {
 	});
 
 	it('normalizeFrame accepts the two new types', () => {
-		expect(normalizeFrame({ type: 'tool_confirmation_required', pending_call_id: 'p1' })?.type).toBe(
-			'tool_confirmation_required'
-		);
+		expect(
+			normalizeFrame({ type: 'tool_confirmation_required', pending_call_id: 'p1' })?.type
+		).toBe('tool_confirmation_required');
 		expect(normalizeFrame({ type: 'mcp_authorization_required', server: 's' })?.type).toBe(
 			'mcp_authorization_required'
 		);

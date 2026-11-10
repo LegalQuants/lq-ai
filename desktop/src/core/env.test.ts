@@ -5,8 +5,7 @@ import type { LauncherConfig } from './config'
 const base: LauncherConfig = {
 	secrets: {
 		POSTGRES_PASSWORD: 'pg-secret',
-		MINIO_ROOT_PASSWORD: 'minio-secret',
-		S3_SECRET_KEY: 'minio-secret',
+		OBJECT_STORE_SECRET_KEY: 'object-store-secret',
 		LQ_AI_GATEWAY_KEY: 'gw-secret',
 		JWT_SECRET: 'jwt-secret',
 		LQ_AI_GATEWAY_MASTER_KEY: 'master-key-fernet='
@@ -17,8 +16,8 @@ const base: LauncherConfig = {
 		gateway: 18021,
 		postgres: 25442,
 		redis: 26389,
-		minioApi: 29020,
-		minioConsole: 29021
+		objectStoreApi: 29020,
+		objectStoreConsole: 29021
 	},
 	imageTag: 'latest',
 	imageNamespace: 'legalquants',
@@ -26,21 +25,23 @@ const base: LauncherConfig = {
 }
 
 describe('renderEnv', () => {
-	it('emits every required secret and the paired S3 key', () => {
+	it('emits every required secret', () => {
 		const env = parseEnv(renderEnv(base))
 		expect(env.POSTGRES_PASSWORD).toBe('pg-secret')
-		expect(env.MINIO_ROOT_PASSWORD).toBe('minio-secret')
-		expect(env.S3_SECRET_KEY).toBe('minio-secret')
+		expect(env.OBJECT_STORE_SECRET_KEY).toBe('object-store-secret')
 		expect(env.LQ_AI_GATEWAY_KEY).toBe('gw-secret')
 		expect(env.JWT_SECRET).toBe('jwt-secret')
 		// Forwarded so the gateway's runtime BYOK provider-key store is enabled.
 		expect(env.LQ_AI_GATEWAY_MASTER_KEY).toBe('master-key-fernet=')
 	})
 
-	it('writes the MinIO/S3 user pair the compose defaults read', () => {
+	it('writes the vendor-neutral object-store identity the compose defaults read', () => {
 		const env = parseEnv(renderEnv(base))
-		expect(env.MINIO_ROOT_USER).toBe('lq_ai')
-		expect(env.S3_ACCESS_KEY).toBe('lq_ai')
+		expect(env.OBJECT_STORE_ACCESS_KEY).toBe('lq_ai')
+		expect(env.RUSTFS_ACCESS_KEY).toBeUndefined()
+		expect(env.RUSTFS_SECRET_KEY).toBeUndefined()
+		expect(env.MINIO_ROOT_USER).toBeUndefined()
+		expect(env.MINIO_ROOT_PASSWORD).toBeUndefined()
 		expect(env.POSTGRES_DB).toBe('lq_ai')
 		expect(env.POSTGRES_USER).toBe('lq_ai')
 	})
@@ -52,8 +53,8 @@ describe('renderEnv', () => {
 		expect(env.GATEWAY_HOST_PORT).toBe('18021')
 		expect(env.POSTGRES_HOST_PORT).toBe('25442')
 		expect(env.REDIS_HOST_PORT).toBe('26389')
-		expect(env.MINIO_API_HOST_PORT).toBe('29020')
-		expect(env.MINIO_CONSOLE_HOST_PORT).toBe('29021')
+		expect(env.OBJECT_STORE_API_HOST_PORT).toBe('29020')
+		expect(env.OBJECT_STORE_CONSOLE_HOST_PORT).toBe('29021')
 	})
 
 	it('writes the image tag + namespace the compose interpolates', () => {

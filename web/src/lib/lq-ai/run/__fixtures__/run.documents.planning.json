@@ -1,0 +1,112 @@
+{
+  "answered_directly": false,
+  "chat_id": "edeb82cc-ab4b-457f-a4a3-6fc0f581e667",
+  "direct_answer": null,
+  "effects": [],
+  "evidence": "citations",
+  "evidence_result": null,
+  "message_id": "424147c6-4e55-4b4d-a036-e78c188cdcda",
+  "packet": null,
+  "planning": {
+    "attempt_timeout_seconds": 300,
+    "budget_usd": "10.0000",
+    "child_skill_version": "2",
+    "contract_version": 3,
+    "deadline": "2026-10-10T01:51:03.926771Z",
+    "delegation_grants": {
+      "analysis": [
+        "plan",
+        "retrieve_chunks",
+        "run_skill",
+        "workspace_read",
+        "workspace_write"
+      ],
+      "delivery": [],
+      "drafting": [
+        "run_skill",
+        "workspace_read",
+        "workspace_share",
+        "workspace_write"
+      ],
+      "ethics_review": [],
+      "intake": []
+    },
+    "documents": [
+      {
+        "attached_for_run": false,
+        "document_id": "de17c647-8fea-45a5-be6d-4ee3474374b4",
+        "file_id": "9345f902-3b18-4c44-bfb6-b78fcf58dd67",
+        "filename": "msa.txt",
+        "number": 1
+      },
+      {
+        "attached_for_run": true,
+        "document_id": "8314e261-0130-42ae-b663-fcaa1a0d1abd",
+        "file_id": "c215db07-f967-4cb7-bcc6-7c2cdd057874",
+        "filename": "dpa.md",
+        "number": 2
+      }
+    ],
+    "gateway_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "goal": "Explain payment, renewal and termination questions independently.",
+    "max_active_children": 2,
+    "max_children": 2,
+    "model": "selected/native",
+    "owner_id": "5f0da92f-28d8-4a67-8da9-c6049d0a2394",
+    "packet_digest": null,
+    "plan_id": "0de2c5ad-5b3c-45d0-82ac-2d175ffe3a99",
+    "planning_allowance_usd": "0.5781",
+    "policy_version": "3f39bc2e4c2c74a3ce504c6c29ab34f0b531395b3af067890d1c356655766faf",
+    "profile": "new_harness_v1",
+    "project_id": "9f904602-db14-4d29-a8c1-affaaff3cdb0",
+    "root": {
+      "anonymize": true,
+      "grants": {
+        "analysis": [
+          "plan"
+        ],
+        "delivery": [],
+        "drafting": [],
+        "ethics_review": [],
+        "intake": []
+      },
+      "maximum_egress_tier": 0,
+      "minimum_inference_tier": 1,
+      "privileged": false,
+      "resources": {
+        "document_ids": [
+          "8314e261-0130-42ae-b663-fcaa1a0d1abd",
+          "de17c647-8fea-45a5-be6d-4ee3474374b4"
+        ],
+        "source_names": []
+      },
+      "skill": {
+        "digest": "04603a44a5328468903f49c0f802e6d08c9592742329eac89371f78ded52d79f",
+        "kind": "prompt",
+        "name": "new_harness/orchestrator.v2"
+      }
+    },
+    "root_allowance_usd": "1.1562",
+    "root_id": "7621e084-35d2-4aac-a0b1-c1267aa71083",
+    "root_skill_version": "2",
+    "terms": {
+      "answer_chars": 16384,
+      "planning": "tool",
+      "read_chars": 40000,
+      "task_answer_chars": 12000,
+      "task_turns": 5
+    },
+    "thread": [],
+    "today": "2026-10-09"
+  },
+  "profile": "new_harness_v1",
+  "profile_title": "New harness",
+  "reads": "Your request, this chat's recent messages, the documents you select, if any, and in a matter the knowledge bases attached to it. No other files and no live sources.",
+  "reserved_usd": "0.0000",
+  "root_id": "7621e084-35d2-4aac-a0b1-c1267aa71083",
+  "sources": [],
+  "spent_usd": "0.0000",
+  "status": "planning",
+  "stop_reason": null,
+  "tree": null
+}

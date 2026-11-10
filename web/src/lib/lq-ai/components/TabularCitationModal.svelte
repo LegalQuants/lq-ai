@@ -1,168 +1,210 @@
 <script lang="ts">
-	/**
-	 * Citation modal for a tabular grid cell — M3-C3 sub-phase 4.
-	 *
-	 * Decision C-2 said "reuse the existing M2-C2 citation drawer" but
-	 * that drawer doesn't actually exist in the codebase — M2-C2 only
-	 * ships a chip-list with tooltips (`M2Citations.svelte`) wired to
-	 * chat content markers. Tabular cells need a different surface
-	 * because the citation list is data-bound (no inline content
-	 * markers to find), so M3-C3 introduces this purpose-built modal:
-	 * a small popover showing the cell value + confidence + error
-	 * (if any) + the citations attached to the cell.
-	 *
-	 * Per session-start AskUserQuestion (Cell citations decision).
-	 */
-	import { createEventDispatcher } from 'svelte';
-
+	import { createEventDispatcher, onMount } from 'svelte';
 	import type { TabularCellResult } from '$lib/lq-ai/types';
+	import { citationPassage } from './tabular-citation';
 
 	export let documentName: string;
 	export let columnName: string;
 	export let cell: TabularCellResult;
 
+	let dialog: HTMLDialogElement;
 	const dispatch = createEventDispatcher<{ close: void }>();
 
+	onMount(() => {
+		dialog.showModal();
+		return () => dialog.close();
+	});
+
 	function close(): void {
+		dialog.close();
 		dispatch('close');
 	}
 
-	function handleBackdropKey(e: KeyboardEvent): void {
-		if (e.key === 'Escape') close();
+	function backdropClick(event: MouseEvent): void {
+		if (event.target !== dialog) return;
+		const bounds = dialog.getBoundingClientRect();
+		if (
+			event.clientX < bounds.left ||
+			event.clientX > bounds.right ||
+			event.clientY < bounds.top ||
+			event.clientY > bounds.bottom
+		)
+			close();
+	}
+
+	function handleKeydown(event: KeyboardEvent): void {
+		if (event.key !== 'Tab') return;
+		const controls = dialog.querySelectorAll<HTMLElement>('button, summary');
+		const first = controls[0];
+		const last = controls[controls.length - 1];
+		if (event.shiftKey && event.target === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && event.target === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	}
 </script>
 
-<svelte:window on:keydown={handleBackdropKey} />
+<dialog
+	bind:this={dialog}
+	class="lq-tabcm"
+	aria-labelledby="lq-tabcm-title"
+	data-testid="lq-tabcm"
+	on:cancel|preventDefault={close}
+	on:click={backdropClick}
+	on:keydown={handleKeydown}
+>
+	<header class="lq-tabcm__header">
+		<div>
+			<h2 id="lq-tabcm-title">{columnName}</h2>
+			<p class="lq-tabcm__document">{documentName}</p>
+		</div>
+		<button
+			type="button"
+			class="lq-tabcm__close"
+			data-testid="lq-tabcm-close"
+			on:click={close}
+			aria-label="Close citations">×</button
+		>
+	</header>
 
-<div class="lq-tabcm__backdrop" on:click={close} on:keydown role="presentation">
-	<!-- Dialog content stops propagation so clicks inside don't close. -->
-	<div
-		class="lq-tabcm"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="lq-tabcm-title"
-		tabindex="-1"
-		data-testid="lq-tabcm"
-		on:click|stopPropagation
-		on:keydown|stopPropagation
-	>
-		<header class="lq-tabcm__header">
-			<div>
-				<div class="lq-tabcm__column" id="lq-tabcm-title">{columnName}</div>
-				<div class="lq-tabcm__document">{documentName}</div>
-			</div>
-			<button
-				type="button"
-				class="lq-tabcm__close"
-				data-testid="lq-tabcm-close"
-				on:click={close}
-				aria-label="Close citations">×</button
-			>
-		</header>
-
-		<section class="lq-tabcm__body">
-			{#if cell.confidence === 'failed'}
-				<p class="lq-tabcm__failed">
-					<strong>Not found.</strong> Extraction failed for this cell.
-				</p>
-				{#if cell.error}
-					<pre class="lq-tabcm__error" data-testid="lq-tabcm-error">{cell.error}</pre>
+	<section class="lq-tabcm__body">
+		{#if cell.confidence === 'failed'}
+			<p class="lq-tabcm__failed"><strong>Not found.</strong> Extraction failed for this cell.</p>
+			{#if cell.error}
+				<pre class="lq-tabcm__error" data-testid="lq-tabcm-error">{cell.error}</pre>
+			{/if}
+		{:else}
+			<dl class="lq-tabcm__meta">
+				<div class="lq-tabcm__value">
+					<dt>Extracted value</dt>
+					<dd data-testid="lq-tabcm-value">{cell.value ?? '—'}</dd>
+				</div>
+				<div>
+					<dt>Extraction confidence</dt>
+					<dd>{cell.confidence}</dd>
+				</div>
+				{#if cell.tier_used !== null && cell.tier_used !== undefined}
+					<div>
+						<dt>Inference tier</dt>
+						<dd>Tier {cell.tier_used}</dd>
+					</div>
 				{/if}
-			{:else}
-				<dl class="lq-tabcm__meta">
-					<div>
-						<dt>Value</dt>
-						<dd data-testid="lq-tabcm-value">{cell.value ?? '—'}</dd>
-					</div>
-					<div>
-						<dt>Confidence</dt>
-						<dd data-confidence={cell.confidence}>{cell.confidence}</dd>
-					</div>
-					{#if cell.tier_used !== null && cell.tier_used !== undefined}
-						<div>
-							<dt>Tier</dt>
-							<dd>Tier {cell.tier_used}</dd>
-						</div>
-					{/if}
-				</dl>
-			{/if}
+			</dl>
+		{/if}
 
-			<h3 class="lq-tabcm__cite-header">Citations</h3>
-			{#if cell.citations.length === 0}
-				<p class="lq-tabcm__empty">
-					{cell.confidence === 'failed'
-						? 'The cell errored before producing a citation.'
-						: 'No citations were attached to this cell.'}
-				</p>
-			{:else}
-				<ul class="lq-tabcm__cites" data-testid="lq-tabcm-citations">
-					{#each cell.citations as cite (cite.citation_id)}
-						<li class="lq-tabcm__cite" data-confidence={cite.confidence}>
-							<div class="lq-tabcm__cite-id">
-								<span class="lq-tabcm__cite-chip" data-confidence={cite.confidence}
-									>{cite.confidence}</span
-								>
-								<code>{cite.citation_id}</code>
-							</div>
-							<div class="lq-tabcm__cite-meta">
-								<span>Document: <code>{cite.document_id}</code></span>
-								{#if cite.chunk_id}
-									<span>· Chunk: <code>{cite.chunk_id}</code></span>
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</section>
-	</div>
-</div>
+		<h3>Supporting source</h3>
+		{#if cell.citations.length === 0}
+			<p class="lq-tabcm__empty">
+				No citations were attached to this cell. This value has no verified source location.
+			</p>
+		{:else}
+			<ul class="lq-tabcm__cites" data-testid="lq-tabcm-citations">
+				{#each cell.citations as cite (cite.citation_id)}
+					{@const passage = citationPassage(cite)}
+					<li class="lq-tabcm__cite">
+						<div class="lq-tabcm__source-label">
+							<strong>{documentName}</strong>{#if cite.source_page != null}<span
+									>Page {cite.source_page}</span
+								>{/if}
+						</div>
+						{#if cite.source_text}
+							<blockquote class="lq-tabcm__passage" data-testid="lq-tabcm-source">
+								{#if passage}{passage.before}<mark>{passage.match}</mark
+									>{passage.after}{:else}{cite.source_text}{/if}
+							</blockquote>
+						{:else}
+							<p class="lq-tabcm__empty">Source text is unavailable for this citation.</p>
+						{/if}
+						{#if passage}<p class="lq-tabcm__location">
+								Highlighted text is the located source span.
+							</p>{/if}
+						<details class="lq-tabcm__details">
+							<summary>Citation details</summary>
+							<dl>
+								<div>
+									<dt>Citation</dt>
+									<dd><code>{cite.citation_id}</code></dd>
+								</div>
+								<div>
+									<dt>Document</dt>
+									<dd><code>{cite.document_id}</code></dd>
+								</div>
+								{#if cite.chunk_id}<div>
+										<dt>Chunk</dt>
+										<dd><code>{cite.chunk_id}</code></dd>
+									</div>{/if}
+								{#if cite.verification_method}<div>
+										<dt>Verification</dt>
+										<dd>{cite.verification_method.replaceAll('_', ' ')}</dd>
+									</div>{/if}
+							</dl>
+						</details>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	</section>
+</dialog>
 
 <style>
-	.lq-tabcm__backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 100;
-		padding: 1.5rem;
-	}
 	.lq-tabcm {
-		max-width: 36rem;
-		width: 100%;
-		max-height: calc(100vh - 3rem);
+		width: min(44rem, calc(100% - 2rem));
+		max-width: none;
+		max-height: calc(100dvh - 2rem);
+		margin: auto;
+		padding: 0;
 		overflow-y: auto;
-		background: var(--lq-surface);
+		overscroll-behavior: contain;
+		background: var(--lq-canvas, #fff);
+		color: var(--lq-text, #1a1a1a);
+		font-family: var(--lq-font-sans);
+		font-size: 0.875rem;
+		line-height: 1.5;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.5rem;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+		border-radius: var(--lq-radius-lg, 8px);
+		box-shadow: 0 24px 64px rgb(0 0 0 / 0.2);
+	}
+	.lq-tabcm::backdrop {
+		background: rgb(15 23 42 / 0.55);
 	}
 	.lq-tabcm__header {
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
-		padding: 1rem 1.25rem;
+		gap: 1rem;
+		padding: 1.25rem;
 		border-bottom: 1px solid var(--lq-border);
 	}
-	.lq-tabcm__column {
-		font-weight: 600;
+	.lq-tabcm h2 {
+		margin: 0;
 		font-size: 1rem;
+		font-weight: 600;
 	}
 	.lq-tabcm__document {
-		font-size: 0.8125rem;
+		margin: 0.25rem 0 0;
 		color: var(--lq-text-secondary);
-		margin-top: 0.25rem;
+		overflow-wrap: anywhere;
 	}
 	.lq-tabcm__close {
-		background: none;
-		border: none;
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 2rem;
+		height: 2rem;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius);
+		font: inherit;
 		font-size: 1.5rem;
-		color: var(--lq-text-secondary);
 		cursor: pointer;
-		line-height: 1;
-		padding: 0;
+	}
+	.lq-tabcm__close:focus-visible,
+	.lq-tabcm summary:focus-visible {
+		outline: 2px solid var(--lq-accent);
+		outline-offset: 2px;
 	}
 	.lq-tabcm__body {
 		padding: 1.25rem;
@@ -171,50 +213,47 @@
 		gap: 1rem;
 	}
 	.lq-tabcm__failed {
-		padding: 0.75rem 1rem;
-		background: var(--lq-warning-soft, #fef3c7);
-		border: 1px solid var(--lq-warning-border, var(--lq-border));
-		border-radius: 0.375rem;
+		padding: 0.75rem;
+		background: var(--lq-warn-soft);
+		border: 1px solid var(--lq-warn-border);
+		border-radius: var(--lq-radius);
 		margin: 0;
 	}
 	.lq-tabcm__error {
-		margin: 0.5rem 0 0;
-		padding: 0.5rem 0.75rem;
+		margin: 0;
+		padding: 0.75rem;
 		background: var(--lq-inset);
-		border-radius: 0.25rem;
-		font-size: 0.8125rem;
 		white-space: pre-wrap;
-		max-height: 8rem;
-		overflow: auto;
+		overflow-wrap: anywhere;
 	}
 	.lq-tabcm__meta {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 0.75rem;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
 		margin: 0;
 	}
-	.lq-tabcm__meta dt {
-		font-size: 0.6875rem;
-		color: var(--lq-text-secondary);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+	.lq-tabcm__value {
+		grid-column: 1 / -1;
 	}
-	.lq-tabcm__meta dd {
+	.lq-tabcm dt {
+		color: var(--lq-text-secondary);
+		font-size: 0.8125rem;
+	}
+	.lq-tabcm dd {
 		margin: 0.25rem 0 0;
-		font-size: 0.875rem;
-		font-weight: 500;
+		overflow-wrap: anywhere;
 	}
-	.lq-tabcm__cite-header {
+	.lq-tabcm__value dd {
+		font-weight: 600;
+	}
+	.lq-tabcm h3 {
 		margin: 0;
 		font-size: 0.875rem;
-		text-transform: uppercase;
-		color: var(--lq-text-secondary);
-		letter-spacing: 0.04em;
+		font-weight: 600;
 	}
 	.lq-tabcm__empty {
 		margin: 0;
 		color: var(--lq-text-secondary);
-		font-size: 0.875rem;
 	}
 	.lq-tabcm__cites {
 		list-style: none;
@@ -222,39 +261,68 @@
 		margin: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		gap: 1rem;
 	}
 	.lq-tabcm__cite {
-		padding: 0.5rem 0.75rem;
+		padding: 1rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius);
 		background: var(--lq-inset);
 	}
-	.lq-tabcm__cite-id {
+	.lq-tabcm__source-label {
 		display: flex;
-		align-items: center;
+		flex-wrap: wrap;
+		justify-content: space-between;
 		gap: 0.5rem;
+		overflow-wrap: anywhere;
+	}
+	.lq-tabcm__source-label span,
+	.lq-tabcm__location {
+		color: var(--lq-text-secondary);
 		font-size: 0.8125rem;
 	}
-	.lq-tabcm__cite-chip {
-		padding: 0.0625rem 0.375rem;
-		border-radius: 999px;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
-		background: var(--lq-surface);
+	.lq-tabcm__passage {
+		margin: 0.75rem 0;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+		line-height: 1.65;
 	}
-	.lq-tabcm__cite-meta {
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-		margin-top: 0.25rem;
-		font-size: 0.75rem;
+	.lq-tabcm mark {
+		background: var(--lq-accent-soft);
+		color: var(--lq-text);
+		font-weight: 600;
+		padding: 0.125rem 0;
+		text-decoration: underline;
+		text-decoration-color: var(--lq-accent);
+		text-underline-offset: 0.2em;
+	}
+	.lq-tabcm__location {
+		margin: 0 0 0.75rem;
+	}
+	.lq-tabcm__details {
+		border-top: 1px solid var(--lq-border);
+		padding-top: 0.75rem;
+		font-size: 0.8125rem;
+	}
+	.lq-tabcm summary {
+		cursor: pointer;
 		color: var(--lq-text-secondary);
 	}
-	.lq-tabcm__cite-meta code,
-	.lq-tabcm__cite-id code {
-		font-family: 'Menlo', 'Monaco', monospace;
+	.lq-tabcm__details dl {
+		display: grid;
+		gap: 0.5rem;
+		margin: 0.75rem 0 0;
+	}
+	.lq-tabcm code {
+		font-size: 0.75rem;
+	}
+	@media (max-width: 480px) {
+		.lq-tabcm__header,
+		.lq-tabcm__body {
+			padding: 1rem;
+		}
+		.lq-tabcm__cite {
+			padding: 0.75rem;
+		}
 	}
 </style>

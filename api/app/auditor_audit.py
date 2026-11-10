@@ -28,6 +28,10 @@ _AUDITOR_EVENTS: frozenset[str] = frozenset(
         "session_ledger_viewed",
         "receipts_viewed",
         "receipts_exported",
+        # A governed run, and how one of its sessions was set up (ADR 0038,
+        # ruling 10).
+        "run_viewed",
+        "run_trace_viewed",
     }
 )
 

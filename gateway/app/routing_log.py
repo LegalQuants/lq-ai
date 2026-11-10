@@ -79,10 +79,12 @@ class InferenceRoutingLogRow:
     refused: bool = False
     refusal_reason: str | None = None
     request_id: str | None = None
-    # M2-E2: 'chat' | 'judge_paraphrase' | 'embedding'. Sourced from the
-    # request's ``lq_ai_purpose`` extension field on chat paths, hardcoded
-    # to ``'embedding'`` on embeddings paths. Lets per-model cost
-    # calibration filter routing-log rows down to judge-call traffic.
+    # M2-E2: one of the gateway's closed set of purpose labels ('chat',
+    # 'embedding', the judges, the batch executors, 'autonomous_executor',
+    # 'orchestration_run'). Sourced from the request's ``lq_ai_purpose``
+    # extension field on chat paths, hardcoded to ``'embedding'`` on
+    # embeddings paths. Lets cost calibration and receipts tell the kinds of
+    # traffic apart.
     purpose: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
 

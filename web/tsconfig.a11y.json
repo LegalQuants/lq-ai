@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM"],
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"types": ["node", "cypress"]
+	},
+	"include": [
+		"cypress.a11y.config.ts",
+		"cypress/support/a11y*.ts",
+		"cypress/e2e/lq-ai-a11y.cy.ts",
+		"scripts/run-a11y.ts"
+	]
+}

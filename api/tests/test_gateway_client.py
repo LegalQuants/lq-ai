@@ -25,6 +25,7 @@ These are unit tests; they don't need the FastAPI app or the database.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 
 import httpx
@@ -94,6 +95,44 @@ async def client() -> AsyncIterator[GatewayClient]:
 
 
 # --- Non-streaming: success --------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", ["inference", "tool"])
+@pytest.mark.parametrize("ack", ["a" * 64, "b" * 64, None])
+@respx.mock
+async def test_checked_calls_require_revision_acknowledgement(
+    client: GatewayClient, kind: str, ack: str | None
+) -> None:
+    revision = "a" * 64
+    path = "/v1/chat/completions" if kind == "inference" else "/v1/tools/source/search"
+    payload = (
+        _success_payload()
+        if kind == "inference"
+        else {"provider": "source", "tool": "search", "payload": {}, "tier": 1}
+    )
+    route = respx.post(GATEWAY_BASE + path).mock(
+        return_value=httpx.Response(
+            200, json=payload, headers={"X-LQ-AI-Config-Revision": ack} if ack else {}
+        )
+    )
+
+    async def call() -> object:
+        if kind == "inference":
+            return await client.chat_completion(_request(), configuration_revision=revision)
+        return await client.call_tool(
+            "source", "search", {}, configuration_revision=revision, require_anonymization=True
+        )
+
+    if ack == revision:
+        await call()
+    else:
+        with pytest.raises(GatewayInvalidResponse, match="acknowledge"):
+            await call()
+    request = route.calls[0].request
+    assert request.headers["X-LQ-AI-Config-Revision"] == revision
+    assert revision not in request.content.decode()
+    if kind == "tool":
+        assert json.loads(request.content) == {"args": {}, "require_anonymization": True}
 
 
 @pytest.mark.unit
@@ -173,7 +212,7 @@ async def test_chat_completion_overrides_stream_flag_to_false(client: GatewayCli
         return_value=httpx.Response(200, json=_success_payload())
     )
     req = _request()
-    req.stream = True  # type: ignore[misc]
+    req.stream = True
 
     await client.chat_completion(req)
 

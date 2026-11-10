@@ -325,6 +325,88 @@ async def test_streaming_translates_ndjson_to_sse(
 
 @pytest.mark.integration
 @respx.mock
+@pytest.mark.parametrize("done_reason", ["stop", "length"])
+async def test_tool_only_stream_succeeds_through_gateway(
+    ollama_client: AsyncClient,
+    ollama_app: FastAPI,
+    done_reason: str,
+) -> None:
+    """Tool-call output counts as a successful stream without visible text."""
+
+    upstream_frames = [
+        {
+            "model": "qwen3.5:4b-nvfp4",
+            "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"function": {"name": "search", "arguments": {"q": "pdpa"}}}],
+            },
+            "done": False,
+        },
+        {
+            "model": "qwen3.5:4b-nvfp4",
+            "message": {"role": "assistant", "content": ""},
+            "done": True,
+            "done_reason": done_reason,
+            "prompt_eval_count": 4,
+            "eval_count": 6,
+        },
+    ]
+    respx.post("http://ollama:11434/api/chat").mock(
+        return_value=httpx.Response(
+            200,
+            text="".join(json.dumps(frame) + "\n" for frame in upstream_frames),
+            headers={"content-type": "application/x-ndjson"},
+        )
+    )
+    response = await ollama_client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "local-fast",
+            "messages": [{"role": "user", "content": "find it"}],
+            "tools": [{"type": "function", "function": {"name": "search", "parameters": {}}}],
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    frames = [
+        frame.strip().removeprefix("data: ")
+        for frame in response.text.split("\n\n")
+        if frame.strip()
+    ]
+    assert frames[-1] == "[DONE]"
+    chunks = [json.loads(frame) for frame in frames[:-1]]
+    assert all("error" not in chunk for chunk in chunks), chunks
+    assert all(chunk["routed_provider"] == "ollama-local" for chunk in chunks)
+    assert all(chunk["routed_inference_tier"] == 1 for chunk in chunks)
+    calls = [
+        call for chunk in chunks for call in chunk["choices"][0]["delta"].get("tool_calls", [])
+    ]
+    assert len(calls) == 1
+    assert calls[0]["index"] == 0
+    assert calls[0]["id"].startswith("call_")
+    assert calls[0]["type"] == "function"
+    assert calls[0]["function"]["name"] == "search"
+    assert json.loads(calls[0]["function"]["arguments"]) == {"q": "pdpa"}
+    assert not any(chunk["choices"][0]["delta"].get("content") for chunk in chunks)
+    assert chunks[-1]["choices"][0]["finish_reason"] == (
+        "tool_calls" if done_reason == "stop" else "length"
+    )
+    assert chunks[-1]["usage"]["total_tokens"] == 10
+    recorder: RecordingRoutingLogWriter = ollama_app.state.test_recorder
+    assert len(recorder.rows) == 1
+    row = recorder.rows[0]
+    assert row.refusal_reason is None
+    assert row.refused is False
+    assert row.routed_provider == "ollama-local"
+    assert row.tokens_in == 4
+    assert row.tokens_out == 6
+
+
+@pytest.mark.integration
+@respx.mock
 async def test_routing_log_row_written_for_ollama_success(
     ollama_client: AsyncClient,
     ollama_app: FastAPI,

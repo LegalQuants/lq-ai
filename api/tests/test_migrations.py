@@ -740,7 +740,7 @@ async def test_messages_applied_skills_default_empty_array(db_session: AsyncSess
         text("SELECT applied_skills FROM messages WHERE id = :mid"),
         {"mid": msg_id},
     )
-    value = rows.scalar_one()
+    value: list[str] = rows.scalar_one()
     # Postgres returns the text[] as a Python list.
     assert value == []
 

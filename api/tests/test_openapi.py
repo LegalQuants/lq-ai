@@ -47,6 +47,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         # Wave D.1 T3 — matter <-> KB attach/detach (extends the sketch).
         "/api/v1/projects/{project_id}/knowledge-bases",
         "/api/v1/projects/{project_id}/knowledge-bases/{kb_id}",
+        # Migration 0067 — the matter roster (extends the sketch).
+        "/api/v1/projects/{project_id}/members",
+        "/api/v1/projects/{project_id}/members/{user_id}",
+        "/api/v1/projects/{project_id}/access",
         # chats + messages
         "/api/v1/chats",
         "/api/v1/chats/{chat_id}",
@@ -110,6 +114,14 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/users/{user_id}/role",
         # Wave B v2 — admin user list for DevRoleManagementCard
         "/api/v1/admin/users",
+        # User provisioning — reset a user's password (extends the sketch).
+        "/api/v1/admin/users/{user_id}/reset-password",
+        # People-picker source for the matter roster (extends the sketch).
+        "/api/v1/users/directory",
+        "/api/v1/admin/matters",
+        "/api/v1/admin/matters/{project_id}/members",
+        "/api/v1/admin/matters/{project_id}/policy",
+        "/api/v1/admin/matters/{project_id}/transfer",
         # admin
         "/api/v1/admin/audit-log",
         "/api/v1/admin/tier-policy",
@@ -156,6 +168,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/executions/{execution_id}/cancel",
         # M3-C4a — XLSX/CSV export.
         "/api/v1/tabular/executions/{execution_id}/export",
+        # DE-304 / ADR 0040 — bulk operations (preview + create).
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops/preview-cost",
+        "/api/v1/tabular/executions/{execution_id}/bulk-ops",
+        "/api/v1/tabular/bulk-ops",
+        "/api/v1/tabular/bulk-ops/{bulk_op_id}",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
@@ -164,6 +181,10 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/intake-bridges",
         "/api/v1/admin/intake-bridges/slack/{workspace_id}",
         "/api/v1/admin/intake-bridges/teams/{tenant_id}",
+        # 3.8 / DE-263 — admin community-skill installer (ADR 0041)
+        "/api/v1/admin/community-skills",
+        "/api/v1/admin/community-skills/{slug}",
+        "/api/v1/admin/community-skills/{slug}/install",
         # M4-A4-i — Autonomous sessions read/halt API (per-user)
         "/api/v1/autonomous/sessions",
         "/api/v1/autonomous/sessions/{session_id}",
@@ -197,6 +218,25 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/autonomous/notifications/{notification_id}/read",
         # Phase 1 §4.4 — one-off manual session spawn (run a skill/playbook now)
         "/api/v1/autonomous/run-now",
+        "/api/v1/autonomous/orchestration/chat-runs",
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}",
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}/halt",
+        # ADR 0038 — governed runs in chat
+        "/api/v1/autonomous/orchestration/chat-runs/{root_id}/close",
+        "/api/v1/chats/{chat_id}/run-profiles",
+        "/api/v1/chats/{chat_id}/run-documents",
+        "/api/v1/chats/{chat_id}/runs",
+        "/api/v1/admin/orchestration/profiles",
+        "/api/v1/autonomous/orchestration/{root_id}/sessions/{session_id}/trace",
+        "/api/v1/autonomous/orchestration/prompts/{family}/{name}",
+        "/api/v1/skill-workspaces",
+        "/api/v1/skill-workspaces/{workspace_id}",
+        "/api/v1/skill-workspaces/{workspace_id}/files/{name}",
+        "/api/v1/autonomous/orchestration/{root_id}/tree",
+        "/api/v1/autonomous/orchestration/{root_id}/approve",
+        "/api/v1/autonomous/orchestration/{root_id}/reject",
+        "/api/v1/autonomous/orchestration/{root_id}/halt",
+        "/api/v1/autonomous/orchestration/{root_id}/files/{session_id}/{name}",
         # WS3b — case-law research surface
         "/api/v1/research/capabilities",
         "/api/v1/research/verify-citations",
@@ -255,6 +295,10 @@ async def test_openapi_paths_match_sketch() -> None:
     # /skills/autocomplete, /projects/sandbox/ensure.
     # + M3-0.1's /admin/bootstrap-status.
     # + M3-0.3's /admin/ingest-health.
+    # + matter membership (0067): three /projects/{id}/members|access paths,
+    #   /admin/users/{id}/reset-password, and /users/directory. Note
+    #   POST /admin/users adds a method to an existing path, so it
+    #   contributes 0 new entries here.
     # + M3-A2's two playbook-executor endpoints.
     # + M3-A4's two playbook list/detail endpoints.
     # + M3-A6's Playbook CRUD adds POST/PATCH/DELETE methods on /playbooks +
@@ -342,7 +386,20 @@ async def test_openapi_paths_match_sketch() -> None:
     # Donna #3 adds two new paths (137 -> 139):
     # /api/v1/admin/tool-providers
     # /api/v1/admin/tool-providers/{provider_type}
-    assert len(actual) == 139
+    # ADR 0035 adds seven demonstration/consent/tree/file paths (139 -> 146).
+    # Optional persistent skill workspaces add three owner paths (146 -> 149).
+    # DE-304 / ADR 0040 adds four new paths (150 -> 154).
+    # 3.8 / DE-263 adds three community-skill paths (154 -> 157):
+    # /api/v1/admin/community-skills
+    # /api/v1/admin/community-skills/{slug}
+    # /api/v1/admin/community-skills/{slug}/install
+    # Admin provisioning adds the reset-password path (157 -> 158).
+    # ADR 0038 adds five paths (158 -> 163): closing an uncertain run, the chat
+    # run intake, its two composer reads, and the admin profile-registry read.
+    # ADR 0038 adds two more (163 -> 165): the owner's read of how one session
+    # of a run was set up, and the text of an engine prompt file.
+    # Matter access adds eight administration and sharing paths (165 -> 173).
+    assert len(actual) == 173
 
 
 @pytest.mark.unit

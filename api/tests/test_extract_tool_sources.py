@@ -8,7 +8,7 @@ from app.chat.tool_loop import (
 from app.chat.tool_schemas import ToolSpec
 
 
-def test_extract_from_search_case_law():
+def test_extract_from_search_case_law() -> None:
     data = {
         "count": 1,
         "results": [
@@ -34,7 +34,7 @@ def test_extract_from_search_case_law():
     assert r.tool == "search_case_law"
 
 
-def test_extract_from_get_cluster():
+def test_extract_from_get_cluster() -> None:
     data = {
         "cluster": {
             "cluster_id": 7,
@@ -52,7 +52,7 @@ def test_extract_from_get_cluster():
     assert recs[0].url == "https://www.courtlistener.com/opinion/7/"  # already absolute → unchanged
 
 
-def test_extract_non_research_and_empty():
+def test_extract_non_research_and_empty() -> None:
     assert extract_tool_sources("read_opinion", {"opinion_id": 1}) == []
     assert extract_tool_sources("find_in_case", {"matches": []}) == []
     assert extract_tool_sources("some_mcp_tool", {"payload": {}}) == []
@@ -73,7 +73,7 @@ def _spec(kind: str, provider: str, tool: str) -> ToolSpec:
     )
 
 
-def test_mcp_source_from_dict_payload_with_title_and_url():
+def test_mcp_source_from_dict_payload_with_title_and_url() -> None:
     spec = _spec("mcp", "deepwiki", "ask_question")
     data = {"title": "Repo answer", "url": "https://example.com/x", "body": "..."}
     rec = extract_mcp_tool_source(spec, data)
@@ -86,7 +86,7 @@ def test_mcp_source_from_dict_payload_with_title_and_url():
     assert rec.external_ref is None
 
 
-def test_mcp_source_from_text_blocks_falls_back_to_descriptor():
+def test_mcp_source_from_text_blocks_falls_back_to_descriptor() -> None:
     spec = _spec("mcp", "deepwiki", "ask_question")
     data = [{"type": "text", "text": "some answer"}, {"type": "text", "text": "more"}]
     rec = extract_mcp_tool_source(spec, data)
@@ -95,7 +95,7 @@ def test_mcp_source_from_text_blocks_falls_back_to_descriptor():
     assert rec.url is None
 
 
-def test_mcp_source_from_dict_block_inside_list_surfaces_url():
+def test_mcp_source_from_dict_block_inside_list_surfaces_url() -> None:
     spec = _spec("mcp", "srv", "search")
     data = [{"type": "text", "text": "intro"}, {"name": "Result One", "link": "https://e/1"}]
     rec = extract_mcp_tool_source(spec, data)
@@ -104,7 +104,7 @@ def test_mcp_source_from_dict_block_inside_list_surfaces_url():
     assert rec.url == "https://e/1"
 
 
-def test_mcp_source_malformed_payload_never_crashes():
+def test_mcp_source_malformed_payload_never_crashes() -> None:
     spec = _spec("mcp", "srv", "t")
     for data in (None, "a bare string", [1, 2, 3], {"url": 5}):  # url=5 is not a str -> ignored
         rec = extract_mcp_tool_source(spec, data)
@@ -113,17 +113,17 @@ def test_mcp_source_malformed_payload_never_crashes():
         assert rec.url is None
 
 
-def test_extract_mcp_returns_none_for_non_mcp_spec():
+def test_extract_mcp_returns_none_for_non_mcp_spec() -> None:
     assert extract_mcp_tool_source(_spec("research", "courtlistener", "get_cluster"), {}) is None
 
 
-def test_collect_routes_mcp_to_one_record():
+def test_collect_routes_mcp_to_one_record() -> None:
     recs = collect_tool_sources(_spec("mcp", "srv", "t"), {"title": "T"})
     assert len(recs) == 1
     assert recs[0].source_kind == "mcp"
 
 
-def test_collect_routes_research_caselaw_to_existing_path():
+def test_collect_routes_research_caselaw_to_existing_path() -> None:
     data = {
         "cluster": {
             "cluster_id": 7,
@@ -139,7 +139,7 @@ def test_collect_routes_research_caselaw_to_existing_path():
     assert recs[0].external_ref == "7"
 
 
-def test_collect_research_non_caselaw_tool_yields_no_rows():
+def test_collect_research_non_caselaw_tool_yields_no_rows() -> None:
     assert (
         collect_tool_sources(_spec("research", "courtlistener", "read_opinion"), {"text": "..."})
         == []

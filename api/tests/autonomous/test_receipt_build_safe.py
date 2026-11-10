@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.autonomous.nodes import make_delivery_node
 from app.autonomous.receipt import build_receipt, build_receipt_safe
+from app.autonomous.state import AutonomousSessionState
 from app.models.audit import AuditLog
 from app.models.autonomous import AutonomousSession
 
@@ -44,7 +45,10 @@ async def test_delivery_node_survives_build_receipt_failure(
     monkeypatch.setattr("app.autonomous.receipt.build_receipt", _boom)
 
     node = make_delivery_node(db_session, mock_gateway)
-    state = {"session_id": running_session_at_delivery.id, "findings": []}
+    state: AutonomousSessionState = {
+        "session_id": str(running_session_at_delivery.id),
+        "findings": [],
+    }
 
     # Must not raise.
     await node(state)

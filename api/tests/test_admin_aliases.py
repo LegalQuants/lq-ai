@@ -13,7 +13,7 @@ tests cover:
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
@@ -32,7 +32,7 @@ GATEWAY_BASE = "http://test-gateway"
 GATEWAY_KEY = "test-gw-key"
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -323,6 +323,12 @@ async def test_admin_config_proxy(client: AsyncClient, admin_user: User) -> None
     assert res.status_code == 200
     body = res.json()
     assert body["providers"][0]["name"] == "anthropic-prod"
+    assert body["skill_resource_policy"] == {
+        "reference_read_enabled": True,
+        "max_files": 64,
+        "max_read_bytes": 65536,
+        "scope": "installed skill references/",
+    }
 
 
 @pytest.mark.unit
