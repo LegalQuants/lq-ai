@@ -98,15 +98,16 @@ describe('design primitive native attribute contract', () => {
 	});
 });
 
-describe('semantic roles preserve the existing palette and spacing', () => {
-	it('exports only the agreed roles and maps their base shades to existing CSS families', () => {
-		expect(LQ_TONES).toEqual(['accent', 'info', 'warning', 'danger', 'neutral']);
+describe('semantic roles follow the ADR 0045 palette and keep the spacing', () => {
+	it('exports only the agreed roles and maps their base shades to the ADR 0045 role tokens', () => {
+		expect(LQ_TONES).toEqual(['accent', 'governance', 'info', 'warning', 'danger', 'neutral']);
 		const values = [
-			'var(--lq-accent, #1f7a6b)',
-			'var(--lq-tier, #355a82)',
-			'var(--lq-warn, #a16e1f)',
-			'var(--lq-error, #b54848)',
-			'var(--lq-text-secondary, #4b5563)'
+			'var(--lq-accent, #111114)',
+			'var(--lq-governance, #a34a00)',
+			'var(--lq-info, #111114)',
+			'var(--lq-warning, #111114)',
+			'var(--lq-danger, #b42318)',
+			'var(--lq-text-secondary, #4f5158)'
 		];
 		LQ_TONES.forEach((tone, index) => {
 			expect(lqColorShade(tone, 5)).toBe(values[index]);
