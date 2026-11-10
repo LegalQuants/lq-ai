@@ -12,7 +12,7 @@
 <section
   style="
     background: var(--lq-inset-secure);
-    border: 1px solid var(--lq-accent-border);
+    border: 1px solid var(--lq-border);
     border-radius: var(--lq-radius-lg);
     padding: var(--lq-space-4);
     margin-bottom: var(--lq-space-6);
@@ -34,7 +34,7 @@
     <a
       href="/lq-ai/trust"
       class="lq-text-body"
-      style="color: var(--lq-accent); text-decoration: none;"
+      style="color: var(--lq-governance); text-decoration: none;"
     >View detail →</a>
   </div>
 </section>

@@ -71,10 +71,10 @@
 
 	.notice {
 		padding: 0.5rem 0.75rem;
-		border: 1px solid var(--lq-tier-border);
-		border-left: 4px solid var(--lq-tier);
+		border: 1px solid var(--lq-border);
+		border-left: 4px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius-lg);
-		background: var(--lq-tier-soft);
+		background: var(--lq-inset);
 		font-size: 0.82rem;
 		line-height: 1.5;
 	}
