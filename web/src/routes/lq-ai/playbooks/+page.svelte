@@ -139,10 +139,10 @@
 	}
 	.lq-playbooks-page__cta {
 		padding: 0.5rem 0.875rem;
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -164,8 +164,8 @@
 	}
 	.lq-playbooks-page__error {
 		color: var(--lq-error);
-		background: var(--lq-error-soft, var(--lq-inset));
-		border: 1px solid var(--lq-error-border, var(--lq-border));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 	}
 	.lq-playbooks-table {
 		width: 100%;
@@ -214,9 +214,9 @@
 	.lq-playbooks-table__apply {
 		padding: 0.375rem 0.75rem;
 		background: var(--lq-accent);
-		color: var(--lq-on-accent, white);
+		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 0.875rem;
 		font-weight: 500;

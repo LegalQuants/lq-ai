@@ -134,15 +134,15 @@
     border: 0;
     padding: 4px 8px;
     cursor: pointer;
-    color: var(--lq-text-tertiary, #9ca3af);
+    color: var(--lq-text-tertiary);
     font-size: 16px;
     line-height: 1;
-    border-radius: var(--lq-radius-sm, 4px);
+    border-radius: var(--lq-radius-pill);
   }
 
   .trigger:hover {
-    background: var(--lq-inset, #fafbfa);
-    color: var(--lq-text-secondary, #6b7280);
+    background: var(--lq-inset);
+    color: var(--lq-text-secondary);
   }
 
   .menu {
@@ -152,9 +152,9 @@
     position: absolute;
     right: 0;
     top: 100%;
-    background: var(--lq-canvas, #ffffff);
-    border: 1px solid var(--lq-border, #e5e7eb);
-    border-radius: var(--lq-radius, 6px);
+    background: var(--lq-canvas);
+    border: 1px solid var(--lq-border);
+    border-radius: var(--lq-radius);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     min-width: 180px;
     z-index: 10;
@@ -173,7 +173,7 @@
   }
 
   .menu button:hover:not(:disabled) {
-    background: var(--lq-inset, #fafbfa);
+    background: var(--lq-inset);
   }
 
   .menu button:disabled {

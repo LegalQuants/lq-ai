@@ -183,9 +183,9 @@
 
   .mrk-error {
     font-size: 12px;
-    color: var(--lq-error, #b91c1c);
-    background: var(--lq-error-soft, #fef2f2);
-    border: 1px solid var(--lq-error-border, #fecaca);
+    color: var(--lq-error);
+    background: var(--lq-error-soft);
+    border: 1px solid var(--lq-error-border);
     border-radius: var(--lq-radius);
     padding: var(--lq-space-1) var(--lq-space-2);
     margin: 0;
@@ -197,7 +197,7 @@
     color: var(--lq-accent);
     background: transparent;
     border: 1px solid var(--lq-accent-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: 2px 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -258,7 +258,7 @@
   }
 
   .mrk-btn-detach:hover:not(:disabled) {
-    color: var(--lq-error, #b91c1c);
+    color: var(--lq-error);
   }
 
   .mrk-btn-detach:disabled {

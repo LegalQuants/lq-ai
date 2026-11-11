@@ -97,7 +97,7 @@
 					title="Skill Format Explorer — SKILL.md editor and validation"
 					loading="lazy"
 					data-testid="learn-playground-skill-format"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">

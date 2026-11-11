@@ -436,7 +436,7 @@
 		color: var(--lq-text-secondary);
 	}
 	button {
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 0.4rem 0.85rem;
 		font-size: 0.85rem;
 		cursor: pointer;

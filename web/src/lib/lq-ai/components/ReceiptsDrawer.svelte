@@ -32,6 +32,12 @@
   export let open: boolean = false;
   export let chatId: string;
   export let onClose: () => void = () => {};
+  /**
+   * True inside the shell's right sidebar (developer switch, Annex B P1.4):
+   * a section of that sidebar instead of its own complementary landmark,
+   * at the sidebar's width.
+   */
+  export let embedded: boolean = false;
 
   let events: ReceiptEvent[] = [];
   let selectedKinds: ReceiptEventKind[] = [
@@ -93,7 +99,12 @@
 </script>
 
 {#if open}
-<aside class="receipts-drawer" aria-label="Receipts drawer">
+<svelte:element
+  this={embedded ? 'section' : 'aside'}
+  class="receipts-drawer"
+  class:embedded
+  aria-label="Receipts drawer"
+>
   <header>
     <span class="title">📜 Receipts</span>
     <button class="close" on:click={onClose} aria-label="Close receipts drawer">×</button>
@@ -119,27 +130,34 @@
       {exporting ? 'Exporting…' : '⤓ Export JSONL'}
     </button>
   </footer>
-</aside>
+</svelte:element>
 {/if}
 
 <style>
   .receipts-drawer {
     width: 240px;
-    background: #fff;
-    border-left: 1px solid #e5e7eb;
+    background: var(--lq-canvas);
+    border-left: 1px solid var(--lq-border);
     padding: 10px 8px;
     display: flex;
     flex-direction: column;
     height: 100%;
   }
+  .receipts-drawer.embedded {
+    width: auto;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid var(--lq-border);
+    padding: 10px 12px;
+  }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-  .title { font-weight: 600; font-size: 11px; color: #374151; }
-  .close { background: transparent; border: 0; color: #6b7280; cursor: pointer; font-size: 16px; padding: 0 4px; }
-  .error { background: #fef2f2; color: #991b1b; padding: 4px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 4px; }
-  footer { padding-top: 6px; border-top: 1px solid #e5e7eb; margin-top: 6px; }
+  .title { font-weight: 600; font-size: 11px; color: var(--lq-text); }
+  .close { background: transparent; border: 0; color: var(--lq-text-tertiary); cursor: pointer; font-size: 16px; padding: 0 4px; }
+  .error { background: var(--lq-danger-soft); color: var(--lq-danger); padding: 4px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 4px; }
+  footer { padding-top: 6px; border-top: 1px solid var(--lq-border); margin-top: 6px; }
   .export {
-    background: transparent; border: 1px solid #d1d5db;
-    padding: 3px 6px; border-radius: 3px; color: #374151;
+    background: transparent; border: 1px solid var(--lq-border-strong);
+    padding: 3px 6px; border-radius: var(--lq-radius-pill); color: var(--lq-text-secondary);
     font-size: 9px; cursor: pointer; width: 100%;
   }
   .export:disabled { opacity: 0.5; cursor: not-allowed; }

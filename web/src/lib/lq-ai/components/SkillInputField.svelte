@@ -122,7 +122,7 @@
 	}
 
 	.lq-field-control {
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius-sm);
 		background: var(--lq-canvas);
 		color: var(--lq-text);

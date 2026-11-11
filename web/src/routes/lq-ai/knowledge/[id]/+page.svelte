@@ -638,7 +638,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -649,7 +649,7 @@
 	}
 
 	.lq-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.lq-btn-primary:disabled {
@@ -661,7 +661,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;
@@ -680,7 +680,7 @@
 		background: transparent;
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;
@@ -697,7 +697,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 12px;
 		cursor: pointer;
