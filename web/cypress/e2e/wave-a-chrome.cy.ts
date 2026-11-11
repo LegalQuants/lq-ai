@@ -1,10 +1,12 @@
 /**
  * Wave A chrome smoke test.
  *
- * Exercises the visual foundation end-to-end: log in, see the top-tab nav,
- * see ambient trust pills, navigate to Skills, click a not-yet-shipped tab
- * and see ComingSoonModal, dismiss it. Failure of any assertion means the
- * Wave A foundation is broken.
+ * Exercises the visual foundation end-to-end: log in, see the left
+ * sidebar's navigation (ADR 0045 §6; it replaced the top bar and tab row in
+ * the sidebar cutover), see that the top bar's self-hosted pill and command-K
+ * hint are gone, navigate to Skills from the Customise group. The last two
+ * tests still assert Wave A's ComingSoonModal and AmbientFooter and are
+ * stale; that is why this spec is excluded from the tracks (spec-tracks.ts).
  *
  * Run requires a live stack:
  *   docker compose up -d
@@ -21,27 +23,37 @@ describe('Wave A — LQ.AI chrome', () => {
     cy.url().should('not.include', '/login');
   });
 
-  it('renders the top tabs with role-aware visibility', () => {
-    cy.get('nav[aria-label="Primary"]').within(() => {
-      cy.contains('Home');
-      cy.contains('Chats');
-      cy.contains('Matters');
-      cy.contains('Skills');
-      cy.contains('Knowledge');
-      cy.contains('Saved Prompts');
-      cy.contains('Admin'); // visible because we logged in as admin
+  const nav = '[data-testid="lq-shell-sidebar"] nav[aria-label="Primary"]';
+
+  it('renders the sidebar with role-aware visibility', () => {
+    cy.get(nav).within(() => {
+      for (const id of ['new', 'home', 'tabular', 'customise', 'all-matters', 'all-chats'])
+        cy.get(`[data-nav-id="${id}"]`).should('be.visible');
+      // Customise holds Skills, Knowledge, Playbooks and Saved prompts.
+      for (const id of ['skills', 'knowledge', 'playbooks', 'saved-prompts'])
+        cy.get(`[data-nav-id="${id}"]`).should('exist');
+      for (const id of ['learn', 'trust', 'account']) cy.get(`[data-nav-id="${id}"]`).should('be.visible');
+      cy.get('[data-nav-id="admin"]').should('be.visible'); // visible because we logged in as admin
+      cy.get('[data-nav-id="labs"]').should('not.exist'); // Automations is off for a fresh admin
     });
   });
 
-  it('renders ambient trust chrome in the top bar', () => {
-    cy.contains('self-hosted').should('be.visible');
-    cy.contains('⌘K').should('be.visible');
+  it('has no top bar, tab row or self-hosted pill', () => {
+    cy.get('[data-testid="lq-shell-sidebar"]').should('be.visible');
+    cy.get('.lq-topbar').should('not.exist');
+    cy.get('.lq-tabbar').should('not.exist');
+    cy.get('[role="tablist"]').should('not.exist');
+    // The top bar's self-hosted pill is gone; Home's trust panel keeps its own, in the page.
+    cy.get('[data-testid="lq-shell-sidebar"]').should('not.contain.text', 'self-hosted');
+    cy.get('.lq-chrome').should('not.exist');
+    cy.contains('⌘K').should('not.exist');
   });
 
-  it('navigates to Skills when the tab is available', () => {
-    cy.contains('nav[aria-label="Primary"] button', 'Skills').click();
+  it('navigates to Skills from the Customise group', () => {
+    cy.get(`${nav} button[data-nav-id="customise"]`).click();
+    cy.get(`${nav} a[data-nav-id="skills"]`).click();
     cy.url().should('include', '/lq-ai/skills');
-    cy.contains('nav[aria-label="Primary"] button[aria-selected="true"]', 'Skills');
+    cy.get(`${nav} a[data-nav-id="skills"]`).should('have.attr', 'aria-current', 'page');
   });
 
   it('opens ComingSoonModal for not-yet-shipped tabs', () => {
