@@ -34,14 +34,24 @@
 	export function kbStatusLabel(s: KBListStatus): string {
 		switch (s) {
 			case 'indexed':
-				return '✓ indexed';
+				return 'indexed';
 			case 'indexing':
-				return '⏳ indexing';
+				return 'indexing';
 			case 'failed':
-				return '⚠ failed';
+				return 'failed';
 			case 'empty':
 				return 'empty';
 		}
+	}
+
+	/** The icon beside a status word: done, waiting or failed (ADR 0045 §1, WCAG 1.4.1). */
+	export type StatusIcon = 'check' | 'hourglass' | 'warning' | null;
+
+	export function kbStatusIcon(s: KBListStatus): StatusIcon {
+		if (s === 'indexed') return 'check';
+		if (s === 'indexing') return 'hourglass';
+		if (s === 'failed') return 'warning';
+		return null;
 	}
 </script>
 
@@ -62,6 +72,10 @@
 		createKnowledgeBase
 	} from '$lib/lq-ai/api/knowledgeBases';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconCheck, IconHourglass } from '@tabler/icons-svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 	// `KnowledgeBase` is imported in the module script above; Svelte merges
 	// the two script blocks at compile time, so re-importing here would
 	// duplicate-identifier under svelte-check (matches AttachKBModal pattern).
@@ -152,12 +166,12 @@
 <main class="lq-knowledge-page" data-testid="lq-ai-knowledge-page">
 	<header class="lq-page-header">
 		<div>
-			<h1 class="lq-text-page-h">Knowledge bases</h1>
-			<p class="lq-text-body lq-page-intro">
+			<LqTitle order={1} size="20" weight="bold" tone="primary">Knowledge bases</LqTitle>
+			<LqText as="p" size="14" tone="secondary" class="lq-page-intro">
 				Curated collections of documents your matters can search alongside the
 				prompt. Upload PDFs, attach them to a KB, and the hybrid retrieval
 				surface (vector + full-text) handles the rest.
-			</p>
+			</LqText>
 		</div>
 		<div class="lq-header-actions">
 			<a href="/lq-ai" class="lq-btn-secondary">Back to chat</a>
@@ -178,9 +192,9 @@
 			aria-label="Create knowledge base"
 			data-testid="lq-ai-knowledge-create-form"
 		>
-			<h2 class="lq-text-section-h">New knowledge base</h2>
+			<LqTitle order={2} size="14.5" weight="semibold" tone="primary">New knowledge base</LqTitle>
 			<label class="lq-field">
-				<span class="lq-text-label">Name</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Name</LqText>
 				<input
 					type="text"
 					bind:value={newName}
@@ -190,7 +204,7 @@
 				/>
 			</label>
 			<label class="lq-field">
-				<span class="lq-text-label">Description (optional)</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Description (optional)</LqText>
 				<textarea
 					bind:value={newDescription}
 					placeholder="What's in this KB? Where should it be used?"
@@ -227,12 +241,12 @@
 	{/if}
 
 	{#if loading}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</p>
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
 	{:else if kbs.length === 0}
 		<div class="lq-empty-state" data-testid="lq-ai-knowledge-empty">
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">
+			<LqText as="p" size="14" tone="secondary">
 				No knowledge bases yet. Create one to start collecting documents.
-			</p>
+			</LqText>
 			{#if !showCreateForm}
 				<button
 					type="button"
@@ -255,6 +269,18 @@
 					<header class="lq-kb-card-head">
 						<h3 class="lq-kb-card-name">{kb.name}</h3>
 						<span class="lq-kb-status lq-kb-status--{status}">
+							{#if kbStatusIcon(status) === 'check'}<IconCheck
+									size={12}
+									stroke={2}
+									aria-hidden="true"
+								/>{:else if kbStatusIcon(status) === 'hourglass'}<IconHourglass
+									size={12}
+									stroke={1.75}
+									aria-hidden="true"
+								/>{:else if kbStatusIcon(status) === 'warning'}<LqToneIcon
+									tone="warning"
+									size={12}
+								/>{/if}
 							{kbStatusLabel(status)}
 						</span>
 					</header>
@@ -293,8 +319,7 @@
 		margin-bottom: var(--lq-space-5);
 	}
 
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
+	.lq-page-header :global(.lq-page-intro) {
 		margin-top: var(--lq-space-2);
 		max-width: 64ch;
 	}
@@ -325,7 +350,7 @@
 	.lq-field input,
 	.lq-field textarea {
 		background: var(--lq-canvas);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -451,6 +476,9 @@
 	}
 
 	.lq-kb-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
 		font-size: 11px;
 		padding: 2px 8px;
 		border-radius: var(--lq-radius-pill);
@@ -486,7 +514,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -497,7 +525,7 @@
 	}
 
 	.lq-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.lq-btn-primary:disabled {
@@ -509,7 +537,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;

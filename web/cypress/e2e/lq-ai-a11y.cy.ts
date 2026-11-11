@@ -247,6 +247,9 @@ function docBody(win: Window) {
 
 // The general baseline matrix opts out of autonomous mode, so it never opens
 // the DE-324 bell. Check this opt-in surface separately with zero exceptions.
+// The bell sits in the left sidebar (ADR 0045 §6): beside the sidebar toggle
+// on a wide screen, in the collapsed strip on a phone. It opens the list in
+// the right sidebar (a sheet on a phone); both are checked.
 describe('DE-324 populated notification bell accessibility', () => {
 	for (const viewport of viewports)
 		for (const savedTheme of savedThemePreferences) {
@@ -291,22 +294,24 @@ describe('DE-324 populated notification bell accessibility', () => {
 					}
 				});
 				assertLightOnlyUI();
-				cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '99+');
-				cy.get('[data-testid="lq-ai-notification-bell-trigger"]')
-					.should('have.attr', 'aria-label', 'Notifications, 99+ (102 unread)')
-					.click();
-				cy.get('[data-testid="lq-ai-notification-bell-dropdown"] li.item').should(
-					'have.length',
-					10
-				);
+				const bell =
+					viewport.id === 'phone'
+						? '[data-testid="lq-shell-bell-strip"]'
+						: '[data-testid="lq-shell-bell"]';
+				cy.get(bell).find('.lq-sidebar-count').should('have.text', '99+');
+				cy.get(bell).should('have.attr', 'aria-label', 'Notifications, 99+ (102 unread)').click();
+				cy.get(
+					'[data-testid="lq-right-sidebar"] [data-testid="lq-shell-notifications-item"]'
+				).should('have.length', 10);
 				cy.document().then(async (doc) => {
 					await doc.fonts.ready;
 				});
 				assertLightOnlyUI();
 				cy.injectAxe();
-				cy.checkA11y('[data-testid="lq-ai-notification-bell"]', {
-					runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] }
-				});
+				cy.checkA11y(
+					{ include: [[bell], ['[data-testid="lq-right-sidebar"]']] },
+					{ runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } }
+				);
 			});
 		}
 });

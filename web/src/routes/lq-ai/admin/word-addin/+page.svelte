@@ -1,9 +1,11 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	import {
 		fetchWordAddinManifest,
 		downloadManifestFile,
 		type WordAddinManifestOptions
 	} from '$lib/lq-ai/api/wordAddin';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// Form state — all three are optional overrides; backend defaults
 	// apply when they're left blank.
@@ -38,7 +40,7 @@
 
 <div class="word-addin-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Word add-in</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Word add-in</LqTitle>
 		<p class="page-intro">
 			Generate a deployment-specific Office Add-in manifest for sideload via Microsoft 365 Admin
 			Center. Each download embeds your deployment's URL and a fresh per-install GUID.
@@ -149,6 +151,7 @@
 			<li>Users see <strong>LQ.AI</strong> appear on Word's Home ribbon within a few minutes.</li>
 		</ol>
 		<p class="release-note">
+			<LqToneIcon tone="warning" />
 			<strong>v0.3.0 manifest is unsigned.</strong> Signed manifests and the enterprise distribution
 			package land with
 			<a
@@ -251,7 +254,7 @@
 
 	.form-row input {
 		padding: var(--lq-space-2) var(--lq-space-3);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 4px;
 		background: var(--lq-bg);
 		color: var(--lq-text);
@@ -277,9 +280,9 @@
 
 	.generate-button {
 		background: var(--lq-accent);
-		color: var(--lq-on-accent, white);
+		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -304,15 +307,15 @@
 	}
 
 	.status-error {
-		background: var(--lq-error-bg, #fef2f2);
-		color: var(--lq-error-text, #991b1b);
-		border: 1px solid var(--lq-error-border, #fecaca);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.status-success {
-		background: var(--lq-success-bg, #f0fdf4);
-		color: var(--lq-success-text, #166534);
-		border: 1px solid var(--lq-success-border, #bbf7d0);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.next-steps {
@@ -341,8 +344,8 @@
 	.release-note {
 		margin: 0;
 		padding: var(--lq-space-3);
-		background: var(--lq-warning-bg, #fef3c7);
-		color: var(--lq-warning-text, #92400e);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
 		border-radius: 4px;
 		font-size: 13px;
 		line-height: 1.5;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * "How this run was set up": under a line of the run column, what one model call was
 	 * opened with. The system message it was pinned to (and its text), the opening message
@@ -113,7 +114,7 @@
 				class="flag"
 				data-testid="lq-ai-run-setup-flag"
 			>
-				· does not match what was recorded</span
+				· <LqToneIcon tone="warning" /> does not match what was recorded</span
 			>{/if}</summary
 	>
 	<div class="body">
@@ -167,7 +168,8 @@
 
 			{#if view.check}
 				<p class="check" class:warn={view.check.warn} data-testid="lq-ai-run-setup-check">
-					{view.check.text}
+					{#if view.check.warn}<LqToneIcon tone="warning" />
+					{/if}{view.check.text}
 				</p>
 			{/if}
 			{#if trace.note}<p class="small" data-testid="lq-ai-run-setup-note">{trace.note}</p>{/if}

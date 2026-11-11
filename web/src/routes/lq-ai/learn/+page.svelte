@@ -1,3 +1,9 @@
+<script lang="ts">
+	import { IconClipboardList, IconSearch, IconTool, IconScale } from '@tabler/icons-svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+</script>
+
 <!--
   /lq-ai/learn — Learn surface landing page.
 
@@ -8,15 +14,15 @@
 
 <main class="lq-learn-page" data-testid="lq-ai-learn-page">
 	<header class="lq-page-header">
-		<h1 class="lq-text-page-h">Learn</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Learn</LqTitle>
 		<div class="lq-learn-intro">
-			<p class="lq-text-body lq-learn-intro-p">
+			<LqText as="p" size="14" tone="secondary" class="lq-learn-intro-p">
 				A guided introduction to LQ.AI for everyone — practicing attorneys curious about what the
 				project does, security and procurement teams evaluating it for deployment, engineers
 				exploring the architecture, and anyone considering contributing a skill. The three sections
 				below address a different question: what it does, how it works, and how to contribute.
-			</p>
-			<p class="lq-text-body lq-learn-intro-p">
+			</LqText>
+			<LqText as="p" size="14" tone="secondary" class="lq-learn-intro-p">
 				Every claim on these pages is backed by a path to verify it in the codebase. If the docs say
 				something the code does not do, the code is canonical — please
 				<a
@@ -25,13 +31,15 @@
 					target="_blank"
 					rel="noopener noreferrer">open an issue</a
 				>.
-			</p>
+			</LqText>
 		</div>
 	</header>
 
 	<div class="lq-learn-grid">
 		<a class="lq-learn-card" href="/lq-ai/learn/use" data-testid="lq-ai-learn-card-use">
-			<span class="lq-learn-card-icon" aria-hidden="true">📋</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconClipboardList size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How to Use</h2>
 			<p class="lq-learn-card-desc">
 				What every feature does, in plain language. With links to source for every claim.
@@ -40,7 +48,9 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/how" data-testid="lq-ai-learn-card-how">
-			<span class="lq-learn-card-icon" aria-hidden="true">🔍</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconSearch size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How It Works</h2>
 			<p class="lq-learn-card-desc">
 				Interactive playgrounds that show how the system fits together. Click any visualization to
@@ -50,7 +60,8 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/build" data-testid="lq-ai-learn-card-build">
-			<span class="lq-learn-card-icon" aria-hidden="true">🔧</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"><IconTool size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How to Build</h2>
 			<p class="lq-learn-card-desc">
 				How to contribute a skill, a mini-PRD, or a bug fix. What's open right now.
@@ -59,7 +70,9 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/compare" data-testid="lq-ai-learn-card-compare">
-			<span class="lq-learn-card-icon" aria-hidden="true">⚖️</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconScale size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How It Compares</h2>
 			<p class="lq-learn-card-desc">
 				An evidence-linked, vendor-neutral comparison — every capability claim links to the code,
@@ -89,8 +102,7 @@
 		max-width: 68ch;
 	}
 
-	.lq-learn-intro-p {
-		color: var(--lq-text-secondary);
+	.lq-learn-intro :global(.lq-learn-intro-p) {
 		line-height: 1.6;
 	}
 

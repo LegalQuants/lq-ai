@@ -26,6 +26,8 @@
 
 <script lang="ts">
   import TrustPill from './TrustPill.svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
 
@@ -40,20 +42,20 @@
 >
   <div class="matter-card__body">
     <div class="matter-card__title-row">
-      <h3 class="lq-text-panel-h matter-card__title">{matter.name}</h3>
+      <LqTitle order={3} size="16" weight="semibold" tone="primary" class="matter-card__title">{matter.name}</LqTitle>
       {#if badges.isArchived}
         <span class="matter-card__archived-badge">Archived</span>
       {/if}
     </div>
 
-    <p class="lq-text-body matter-card__description">
+    <LqText as="p" size="14" tone="secondary" class="matter-card__description">
       {matter.description ?? '(no description)'}
-    </p>
+    </LqText>
 
     {#if badges.showPrivileged || badges.showTier}
       <div class="matter-card__badges">
         {#if badges.showPrivileged}
-          <TrustPill variant="secure" label="Privileged" />
+          <TrustPill variant="secure" tone="slate" lock label="Privileged" />
         {/if}
         {#if badges.showTier && badges.tierLabel}
           <TrustPill variant="tier" label={badges.tierLabel} />
@@ -63,9 +65,9 @@
   </div>
 
   <div class="matter-card__footer">
-    <span class="lq-text-caption matter-card__stats">
+    <LqText as="span" size="12" tone="tertiary" class="matter-card__stats">
       {badges.fileCount} {badges.fileCount === 1 ? 'file' : 'files'} · {badges.skillCount} {badges.skillCount === 1 ? 'skill' : 'skills'}
-    </span>
+    </LqText>
     <span class="matter-card__open" aria-hidden="true">Open →</span>
   </div>
 </a>
@@ -110,7 +112,7 @@
     margin-bottom: var(--lq-space-2);
   }
 
-  .matter-card__title {
+  .matter-card__title-row :global(.matter-card__title) {
     margin: 0;
     /* 2-line clamp */
     display: -webkit-box;
@@ -133,8 +135,7 @@
     flex-shrink: 0;
   }
 
-  .matter-card__description {
-    color: var(--lq-text-secondary);
+  .matter-card__body :global(.matter-card__description) {
     /* 3-line clamp */
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -158,10 +159,6 @@
     padding-top: var(--lq-space-3);
     border-top: 1px solid var(--lq-border);
     margin-top: auto;
-  }
-
-  .matter-card__stats {
-    color: var(--lq-text-tertiary);
   }
 
   .matter-card__open {

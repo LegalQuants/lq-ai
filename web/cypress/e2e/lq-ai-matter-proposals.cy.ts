@@ -315,10 +315,18 @@ describe('DE-323 Matter proposal inbox regressions', () => {
 		cy.get('#matter-chats-toggle').click();
 		usableComposer(390, 844);
 		cy.get('[data-testid="lq-ai-composer-input"]').type('Keep this draft');
-		cy.get('#matter-files-toggle').click();
+		// The attached files live in the right sidebar (ADR 0045 §6), a sheet on a
+		// phone that starts closed: open it from the page header, use the files
+		// panel's own toggle, then close the sheet with its close button.
+		cy.get('[data-testid="lq-page-header-sidebar-toggle"]').click();
+		cy.get('[data-testid="lq-right-sidebar"]').should('be.visible');
+		cy.get('[data-testid="lq-right-sidebar"] #matter-files-toggle').click();
 		cy.get('#matter-files-toggle').should('have.attr', 'aria-expanded', 'true');
 		cy.get('[data-testid="lq-ai-upload-btn"]').should('be.visible');
 		cy.get('#matter-files-toggle').click();
+		cy.get('[data-testid="lq-right-sidebar-close"]').click();
+		cy.get('[data-testid="lq-right-sidebar"]').should('not.exist');
+		cy.get('[data-testid="lq-ai-composer-input"]').should('have.value', 'Keep this draft');
 		cy.get('#matter-chat-options-toggle').click();
 		cy.contains('Saved prompts').should('be.visible');
 		cy.get('#matter-chat-options-toggle').click();

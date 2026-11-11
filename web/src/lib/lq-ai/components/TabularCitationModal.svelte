@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconX } from '@tabler/icons-svelte';
 	import { createEventDispatcher, onMount } from 'svelte';
 	import type { TabularCellResult } from '$lib/lq-ai/types';
 	import { citationPassage } from './tabular-citation';
@@ -66,13 +68,15 @@
 			class="lq-tabcm__close"
 			data-testid="lq-tabcm-close"
 			on:click={close}
-			aria-label="Close citations">×</button
+			aria-label="Close citations"><IconX size={16} stroke={1.75} aria-hidden="true" /></button
 		>
 	</header>
 
 	<section class="lq-tabcm__body">
 		{#if cell.confidence === 'failed'}
-			<p class="lq-tabcm__failed"><strong>Not found.</strong> Extraction failed for this cell.</p>
+			<p class="lq-tabcm__failed">
+				<LqToneIcon tone="warning" /> <strong>Not found.</strong> Extraction failed for this cell.
+			</p>
 			{#if cell.error}
 				<pre class="lq-tabcm__error" data-testid="lq-tabcm-error">{cell.error}</pre>
 			{/if}
@@ -158,13 +162,13 @@
 		padding: 0;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		background: var(--lq-canvas, #fff);
-		color: var(--lq-text, #1a1a1a);
+		background: var(--lq-canvas);
+		color: var(--lq-text);
 		font-family: var(--lq-font-sans);
 		font-size: 0.875rem;
 		line-height: 1.5;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg, 8px);
+		border-radius: var(--lq-radius-lg);
 		box-shadow: 0 24px 64px rgb(0 0 0 / 0.2);
 	}
 	.lq-tabcm::backdrop {
@@ -196,7 +200,7 @@
 		height: 2rem;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		font: inherit;
 		font-size: 1.5rem;
 		cursor: pointer;

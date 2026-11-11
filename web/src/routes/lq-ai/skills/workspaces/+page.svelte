@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { skillWorkspacesApi, type SavedSkillWorkspace } from '$lib/lq-ai/api/skillWorkspaces';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let workspaces: SavedSkillWorkspace[] = [];
 	let loading = true;
@@ -75,7 +76,9 @@
 
 <main class="mx-auto max-w-5xl p-6" data-testid="skill-workspaces">
 	<a href="/lq-ai/skills" class="text-sm underline">Back to skills</a>
-	<h1 class="lq-text-page-h mt-4">Saved skill work</h1>
+	<LqTitle order={1} size="20" weight="bold" tone="primary" class="mt-4"
+		>Saved skill work</LqTitle
+	>
 	<p class="mt-2 text-sm">
 		Skills can optionally save notes for later use. Each skill keeps separate work for each matter.
 		These are working notes and may be unverified.

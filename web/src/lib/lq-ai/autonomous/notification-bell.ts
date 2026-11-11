@@ -1,8 +1,10 @@
 /**
  * Pure helpers for the global-chrome notification bell (DE-324).
  *
- * Extracted from `NotificationBell.svelte` so vitest can exercise the
- * gating / badge / mark-read state transitions without the Svelte runtime.
+ * Extracted from the top bar's `NotificationBell.svelte` (removed with the top
+ * bar in the sidebar cutover; the sidebar bell and `NotificationsPanel` use
+ * these now) so vitest can exercise the gating / badge / mark-read state
+ * transitions without the Svelte runtime.
  * Mirrors the lib pattern of `cron.ts` / `receipt-timeline.ts` in this
  * directory. No side-effects; all functions are referentially transparent.
  */

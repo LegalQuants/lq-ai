@@ -11,8 +11,10 @@
 import { describe, expect, it } from 'vitest';
 import {
 	kbListStatus,
+	kbStatusIcon,
 	kbStatusLabel,
-	type KBListStatus
+	type KBListStatus,
+	type StatusIcon
 } from '../../../routes/lq-ai/knowledge/+page.svelte';
 import type { KnowledgeBase } from '../types';
 
@@ -64,13 +66,23 @@ describe('kbListStatus', () => {
 describe('kbStatusLabel', () => {
 	it('renders the spec-mandated indicators', () => {
 		const cases: Array<[KBListStatus, string]> = [
-			['indexed', '✓ indexed'],
-			['indexing', '⏳ indexing'],
-			['failed', '⚠ failed'],
+			['indexed', 'indexed'],
+			['indexing', 'indexing'],
+			['failed', 'failed'],
 			['empty', 'empty']
 		];
 		for (const [status, expected] of cases) {
 			expect(kbStatusLabel(status)).toBe(expected);
 		}
+	});
+
+	it('pairs each status with an icon instead of a glyph (ADR 0045 §5, WCAG 1.4.1)', () => {
+		const cases: Array<[KBListStatus, StatusIcon]> = [
+			['indexed', 'check'],
+			['indexing', 'hourglass'],
+			['failed', 'warning'],
+			['empty', null]
+		];
+		for (const [s, icon] of cases) expect(kbStatusIcon(s), s).toBe(icon);
 	});
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * /lq-ai/skills/new — Wave D.2 Skill Creator wizard entry point.
 	 *
@@ -52,6 +53,7 @@
 	import SkillWizard from '$lib/lq-ai/components/SkillWizard.svelte';
 	import { stashStorageKey } from '$lib/lq-ai/components/CaptureSkillModal.svelte';
 	import type { UserSkillCreate } from '$lib/lq-ai/types';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 
 	interface WizardInitial {
 		slug?: string;
@@ -197,10 +199,11 @@
 
 <main class="lq-skills-new" data-testid="lq-ai-user-skill-new">
 	{#if loading}
-		<p class="lq-text-body" data-testid="lq-ai-user-skill-new-loading">Loading…</p>
+		<LqText as="p" size="14" tone="primary" data-testid="lq-ai-user-skill-new-loading">Loading…</LqText>
 	{:else}
 		{#if loadError}
 			<div class="banner" role="status" data-testid="lq-ai-user-skill-new-load-error">
+			<LqToneIcon tone="warning" />
 				Couldn't load source skill ({loadError}). Starting blank.
 				<a href="/lq-ai/skills">Pick a different source</a>
 			</div>
@@ -214,7 +217,7 @@
 		padding: 32px 24px;
 	}
 	.banner {
-		background: rgba(234, 179, 8, 0.1);
+		background: var(--lq-warning-soft);
 		padding: 12px 16px;
 		border-radius: 6px;
 		margin-bottom: 16px;

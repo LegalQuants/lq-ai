@@ -37,6 +37,7 @@
 </script>
 
 <script lang="ts">
+	import { IconShield, IconLock, IconFileText } from '@tabler/icons-svelte';
 	import type { Message } from '../types';
 	// Note: refusalHeading / refusalBody / showOverrideButton are declared in
 	// the module-context script above; Svelte merges the two blocks at
@@ -77,7 +78,9 @@
 
 <div class="refusal-bubble" data-testid="refusal-bubble">
 	<div class="header">
-		<span class="shield" aria-hidden="true">🛡</span>
+		<span class="shield" aria-hidden="true"
+			><IconShield size={16} stroke={1.75} aria-hidden="true" /></span
+		>
 		<strong>{refusalHeading(enforcedTier)}</strong>
 	</div>
 	<p class="body">{refusalBody(requestedTier, enforcedTier)}</p>
@@ -105,22 +108,23 @@
 			data-testid="pill-tier-mismatch"
 			title="Tier mismatch — your matter's policy required a stronger inference tier than the one this request would have routed to. The Inference Gateway refused before any provider call was made. Click 'Why am I seeing this?' for the full explanation."
 		>
-			🔒 tier mismatch (requested {requestedTier}, enforced {enforcedTier})
+			<IconLock size={12} stroke={1.75} aria-hidden="true" /> tier mismatch (requested {requestedTier},
+			enforced {enforcedTier})
 		</span>
 		<span
 			class="pill pill-audited"
 			data-testid="pill-audited"
 			title="Audited — the refusal was recorded to the audit log with the requested tier, the enforced tier, and the policy basis. Admins can review this in the audit log surface."
 		>
-			📜 audited
+			<IconFileText size={12} stroke={1.75} aria-hidden="true" /> audited
 		</span>
 	</div>
 </div>
 
 <style>
 	.refusal-bubble {
-		background: #fffbeb;
-		border: 1px solid #f59e0b;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-governance-border);
 		border-radius: 8px;
 		padding: 12px;
 		margin-bottom: 8px;
@@ -135,11 +139,11 @@
 		font-size: 16px;
 	}
 	strong {
-		color: #92400e;
+		color: var(--lq-governance);
 	}
 	.body {
 		font-size: 13px;
-		color: #78350f;
+		color: var(--lq-text);
 		line-height: 1.5;
 		margin: 0 0 10px 0;
 	}
@@ -150,26 +154,26 @@
 		margin-bottom: 8px;
 	}
 	.primary {
-		background: #4338ca;
-		color: #fff;
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.secondary {
-		background: #fff;
-		color: #4338ca;
-		border: 1px solid #4338ca;
+		background: var(--lq-canvas);
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent);
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.tertiary {
 		background: transparent;
-		color: #6b7280;
+		color: var(--lq-text-secondary);
 		border: 0;
 		padding: 4px 10px;
 		cursor: pointer;
@@ -186,11 +190,11 @@
 		font-size: 10px;
 	}
 	.pill-tier {
-		background: #fef3c7;
-		color: #92400e;
+		background: var(--lq-surface-muted);
+		color: var(--lq-governance);
 	}
 	.pill-audited {
-		background: #dbeafe;
-		color: #1e40af;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 	}
 </style>

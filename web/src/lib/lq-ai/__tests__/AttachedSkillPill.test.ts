@@ -10,7 +10,7 @@
  *
  * Coverage:
  *   - removeAriaLabel(title)   → "Remove <title>"  (a11y contract)
- *   - displayIcon(icon|null)   → glyph fallback to '📜' when missing
+ *   - displayIcon(icon|null)   → the skill's own icon, or null (the pill draws the Tabler fallback)
  *   - handleRemove(skill, onRemove) → invokes callback with slug
  */
 import { describe, expect, it, vi } from 'vitest';
@@ -31,10 +31,10 @@ describe('AttachedSkillPill helpers', () => {
 		expect(displayIcon('A')).toBe('A');
 	});
 
-	it('displayIcon falls back to scroll glyph when missing', () => {
-		expect(displayIcon(null)).toBe('📜');
-		expect(displayIcon(undefined)).toBe('📜');
-		expect(displayIcon('')).toBe('📜');
+	it('displayIcon returns null when missing, so the pill draws its Tabler fallback', () => {
+		expect(displayIcon(null)).toBeNull();
+		expect(displayIcon(undefined)).toBeNull();
+		expect(displayIcon('')).toBeNull();
 	});
 
 	it('handleRemove invokes the callback with the skill slug', () => {

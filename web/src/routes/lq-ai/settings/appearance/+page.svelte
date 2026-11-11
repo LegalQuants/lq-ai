@@ -13,6 +13,8 @@
 		captureAffordanceInline,
 		readCaptureAffordanceInline
 	} from '$lib/lq-ai/preferences/capture-affordance';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let autoEnhance = false;
 	let captureInline = true;
@@ -38,11 +40,11 @@
 	}
 </script>
 
-<h2 class="lq-text-panel-h" style="margin-bottom: var(--lq-space-4);">Appearance</h2>
-<p class="lq-text-body" style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-6);">
+<LqTitle order={2} size="16" weight="semibold" tone="primary" style="margin-bottom: var(--lq-space-4);">Appearance</LqTitle>
+<LqText as="p" size="14" tone="secondary" style="margin-bottom: var(--lq-space-6);">
 	Tune how LQ.AI presents itself. Brave choices are on by default; you can dial them back if you
 	want less ceremony.
-</p>
+</LqText>
 
 <SettingsToggleGroup
 	label="Featured tools"
@@ -89,13 +91,13 @@
 
 <SettingsToggleGroup
 	label="Trust pills"
-	description="The ambient indicators in the top bar."
+	description="The ambient trust indicators."
 	value={$preferences.trust_pills}
 	options={[
 		{
 			value: 'labels',
 			label: 'Labels',
-			description: '"● self-hosted" — full label on the pill.'
+			description: '"self-hosted" — full label on the pill.'
 		},
 		{
 			value: 'dots',
@@ -119,7 +121,7 @@
 		{
 			value: 'collapsed',
 			label: 'Collapsed; expand on hover',
-			description: 'Single "🔍 details" affordance per reply.'
+			description: 'Single "details" affordance per reply.'
 		}
 	]}
 	onChange={(v) => setPreference('provenance_pills', v as ProvenancePills)}
@@ -132,7 +134,7 @@
 	enabled) lands in v1.1+ once UX is settled for the implicit-confirm path.
 -->
 <div class="lq-auto-enhance" style="margin-top: var(--lq-space-6);">
-	<label class="lq-text-body" style="display: flex; gap: var(--lq-space-2); align-items: flex-start;">
+	<LqText as="label" size="14" tone="primary" style="display: flex; gap: var(--lq-space-2); align-items: flex-start;">
 		<input
 			type="checkbox"
 			checked={autoEnhance}
@@ -146,7 +148,7 @@
 				ships in v1.1+; setting is stored locally).
 			</span>
 		</span>
-	</label>
+	</LqText>
 </div>
 
 <!--
@@ -158,7 +160,7 @@
 	(commits 8ce9897 + 64ab0d9) for the storage layer + MessageBubble wiring.
 -->
 <div class="lq-capture-affordance" style="margin-top: var(--lq-space-6);">
-	<label class="lq-text-body" style="display: flex; gap: var(--lq-space-2); align-items: flex-start;">
+	<LqText as="label" size="14" tone="primary" style="display: flex; gap: var(--lq-space-2); align-items: flex-start;">
 		<input
 			type="checkbox"
 			checked={captureInline}
@@ -168,9 +170,9 @@
 		<span>
 			<strong>Skill capture button</strong>
 			<span style="display: block; color: var(--lq-text-secondary); font-size: 12px;">
-				Show 📝 Capture-as-skill inline on every AI message. When off, the action
-				stays in the message's overflow (⋯) menu.
+				Show Capture-as-skill inline on every AI message. When off, the action
+				stays in the message's overflow (More actions) menu.
 			</span>
 		</span>
-	</label>
+	</LqText>
 </div>
