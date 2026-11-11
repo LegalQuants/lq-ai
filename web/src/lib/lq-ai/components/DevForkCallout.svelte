@@ -97,7 +97,7 @@
   }
 
   .fork-steps-list code {
-    font-family: var(--lq-font-mono, monospace);
+    font-family: var(--lq-font-mono);
     font-size: 12px;
     background: var(--lq-inset);
     border: 1px solid var(--lq-border);

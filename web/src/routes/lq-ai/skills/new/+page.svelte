@@ -214,7 +214,7 @@
 		padding: 32px 24px;
 	}
 	.banner {
-		background: rgba(234, 179, 8, 0.1);
+		background: var(--lq-warning-soft);
 		padding: 12px 16px;
 		border-radius: 6px;
 		margin-bottom: 16px;

@@ -552,14 +552,14 @@
 	}
 
 	.akm-error {
-		color: #b91c1c;
+		color: var(--lq-danger);
 		font-size: 13px;
 		margin: 0;
 	}
 
 	.akm-error--footer {
-		border: 1px solid #fecaca;
-		background: #fef2f2;
+		border: 1px solid var(--lq-danger-border);
+		background: var(--lq-danger-soft);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		border-radius: var(--lq-radius);
 	}
@@ -590,13 +590,13 @@
 	}
 
 	.akm-card--attached {
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 		cursor: default;
 	}
 
 	.akm-card--attached:hover {
 		border-color: var(--lq-border);
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 	}
 
 	.akm-card-name {
@@ -628,8 +628,8 @@
 	}
 
 	.akm-status--indexing {
-		background: #fef3c7;
-		color: #92400e;
+		background: var(--lq-warning-soft);
+		color: var(--lq-warning);
 	}
 
 	.akm-status--pending {
@@ -638,8 +638,8 @@
 	}
 
 	.akm-status--failed {
-		background: #fee2e2;
-		color: #b91c1c;
+		background: var(--lq-danger-soft);
+		color: var(--lq-danger);
 	}
 
 	.akm-card-foot {
@@ -689,7 +689,7 @@
 		align-self: flex-start;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		color: var(--lq-text-primary);
@@ -722,7 +722,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -730,7 +730,7 @@
 	}
 
 	.akm-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.akm-btn-primary:disabled {
@@ -742,7 +742,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;

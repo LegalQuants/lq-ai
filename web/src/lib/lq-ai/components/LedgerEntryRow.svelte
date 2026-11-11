@@ -157,39 +157,25 @@
 	/* verified-exact + verified-tolerant: emerald (same tokens as M2Citations) */
 	.state-verified-exact,
 	.state-verified-tolerant {
-		color: #047857; /* emerald-700 */
-		background-color: rgba(16, 185, 129, 0.08);
-		border-color: rgba(16, 185, 129, 0.32);
-	}
-	:global(.dark) .state-verified-exact,
-	:global(.dark) .state-verified-tolerant {
-		color: #6ee7b7; /* emerald-300 */
-		background-color: rgba(16, 185, 129, 0.12);
-		border-color: rgba(16, 185, 129, 0.36);
+		color: var(--lq-text);
+		background-color: var(--lq-surface-muted);
+		border-color: var(--lq-border-strong);
 	}
 
 	/* verified-paraphrase: amber */
 	.state-verified-paraphrase {
-		color: #b45309; /* amber-700 */
-		background-color: rgba(245, 158, 11, 0.08);
-		border-color: rgba(245, 158, 11, 0.32);
-	}
-	:global(.dark) .state-verified-paraphrase {
-		color: #fcd34d; /* amber-300 */
-		background-color: rgba(245, 158, 11, 0.12);
-		border-color: rgba(245, 158, 11, 0.36);
+		color: var(--lq-text);
+		background-color: var(--lq-surface-muted);
+		border-color: var(--lq-border-strong);
+		border-style: dashed;
 	}
 
 	/* unverified: gray */
 	.state-unverified {
-		color: #6b7280; /* gray-500 */
-		background-color: rgba(107, 114, 128, 0.08);
-		border-color: rgba(107, 114, 128, 0.32);
-	}
-	:global(.dark) .state-unverified {
-		color: #9ca3af; /* gray-400 */
-		background-color: rgba(107, 114, 128, 0.16);
-		border-color: rgba(107, 114, 128, 0.36);
+		color: var(--lq-text-tertiary);
+		background-color: var(--lq-canvas);
+		border-color: var(--lq-border);
+		border-style: dotted;
 	}
 
 	.lq-ledger-identity {
