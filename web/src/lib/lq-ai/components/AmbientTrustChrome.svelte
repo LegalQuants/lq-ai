@@ -13,7 +13,7 @@
 </script>
 
 <div class="lq-chrome">
-  <TrustPill variant="secure" label="● self-hosted" />
+  <TrustPill variant="secure" dot label="self-hosted" />
   <span class="lq-kbd" aria-hidden="true">⌘K</span>
 </div>
 

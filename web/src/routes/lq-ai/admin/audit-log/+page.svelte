@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconLock } from '@tabler/icons-svelte';
 	/**
 	 * /lq-ai/admin/audit-log — admin audit-log filter + paginated view (D3-coverage).
 	 *
@@ -266,6 +267,7 @@
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
 								<span class="px-1.5 py-0.5 rounded lq-t-warning-strong-bg lq-t-warning-text text-[10px]">
+									<IconLock size={10} stroke={2} aria-hidden="true" />
 									{r.privilege_basis ?? 'yes'}
 								</span>
 							{:else}

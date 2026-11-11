@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	import {
 		fetchWordAddinManifest,
 		downloadManifestFile,
@@ -150,6 +151,7 @@
 			<li>Users see <strong>LQ.AI</strong> appear on Word's Home ribbon within a few minutes.</li>
 		</ol>
 		<p class="release-note">
+			<LqToneIcon tone="warning" />
 			<strong>v0.3.0 manifest is unsigned.</strong> Signed manifests and the enterprise distribution
 			package land with
 			<a

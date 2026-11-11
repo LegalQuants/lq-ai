@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * /lq-ai/skills/new — Wave D.2 Skill Creator wizard entry point.
 	 *
@@ -202,6 +203,7 @@
 	{:else}
 		{#if loadError}
 			<div class="banner" role="status" data-testid="lq-ai-user-skill-new-load-error">
+			<LqToneIcon tone="warning" />
 				Couldn't load source skill ({loadError}). Starting blank.
 				<a href="/lq-ai/skills">Pick a different source</a>
 			</div>

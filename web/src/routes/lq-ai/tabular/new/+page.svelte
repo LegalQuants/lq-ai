@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 
@@ -448,7 +449,7 @@
 										type="button"
 										class="lq-tabwiz__adhoc-remove"
 										on:click={() => removeAdhocColumn(idx)}
-										aria-label="Remove column">×</button
+										aria-label="Remove column"><IconX size={14} stroke={1.75} aria-hidden="true" /></button
 									>
 								</td>
 							</tr>

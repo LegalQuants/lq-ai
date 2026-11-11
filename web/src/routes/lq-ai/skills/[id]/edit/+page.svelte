@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * /lq-ai/skills/[id]/edit — edit an existing user-scope skill (D8 / ADR 0012).
 	 *
@@ -210,6 +211,7 @@
 				role="status"
 				data-testid="lq-ai-user-skill-edit-shadow-warning"
 			>
+				<LqToneIcon tone="warning" />
 				This skill shadows the built-in <code class="font-mono">{row.slug}</code>.
 				{#if row.scope === 'team'}
 					When any member of this team attaches it to a chat, the team's version shapes the

@@ -1,19 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import {
+import { render } from 'svelte/server';
+import ProvenancePill, {
 	descriptionFor,
 	iconFor,
 	toneFor,
 	type ProvenanceKind
 } from '../components/ProvenancePill.svelte';
 
+const ICONS: Record<ProvenanceKind, string> = {
+	skill: 'tool',
+	tier: 'lock',
+	provider: 'brain',
+	kb: 'paperclip',
+	audit: 'file-text',
+	enhanced: 'sparkles',
+	caselaw: 'scale'
+};
+
 describe('ProvenancePill helpers', () => {
-	it('maps each provenance kind to its icon', () => {
-		expect(iconFor('skill')).toBe('🛠️');
-		expect(iconFor('tier')).toBe('🔒');
-		expect(iconFor('provider')).toBe('🧠');
-		expect(iconFor('kb')).toBe('📎');
-		expect(iconFor('audit')).toBe('📜');
-		expect(iconFor('enhanced')).toBe('✨');
+	it('maps each provenance kind to its Tabler icon (ADR 0045 §5)', () => {
+		for (const [kind, name] of Object.entries(ICONS))
+			expect(iconFor(kind as ProvenanceKind), kind).toBe(name);
 	});
 
 	it('maps kinds to sage by default; tier mismatch flips to governance', () => {
@@ -45,4 +52,18 @@ describe('ProvenancePill helpers', () => {
 		const descriptions = kinds.map((k) => descriptionFor(k));
 		expect(new Set(descriptions).size).toBe(kinds.length);
 	});
+});
+
+describe('ProvenancePill renders a hidden Tabler icon, no emoji (SSR)', () => {
+	for (const [kind, name] of Object.entries(ICONS))
+		it(`${kind}: tabler-icon-${name}, aria-hidden, accessible name kept`, () => {
+			const html = render(ProvenancePill, {
+				props: { kind: kind as ProvenanceKind, summary: 'Summary' }
+			}).body;
+			expect(html).toContain(`aria-label="${kind}: Summary"`);
+			expect(html).toMatch(
+				new RegExp(`<svg(?=[^>]*tabler-icon-${name}\\b)(?=[^>]*aria-hidden="true")`)
+			);
+			expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
+		});
 });

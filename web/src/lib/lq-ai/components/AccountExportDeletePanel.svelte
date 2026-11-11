@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { auth } from '../auth/store';
@@ -204,6 +205,7 @@
 		{:else if scheduledState}
 			<div class="scheduled-block">
 				<p class="status-msg status-msg--warn">
+					<LqToneIcon tone="warning" />
 					Your account is scheduled for deletion on
 					<strong>{formatDate(scheduledState.response.scheduled_deletion_at)}</strong>.
 					You have {scheduledState.response.grace_period_days} days to cancel.

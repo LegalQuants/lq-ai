@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	import { goto } from '$app/navigation';
 
 	import { authApi, bootstrapApi } from '$lib/lq-ai/api';
@@ -134,7 +135,7 @@
 					role="status"
 					aria-live="polite"
 				>
-					<p class="font-medium">First-run deployment?</p>
+					<p class="font-medium"><LqToneIcon tone="warning" /> First-run deployment?</p>
 					<p>
 						The bootstrap admin password is printed once to the API
 						container's logs. Run the command below to retrieve it,

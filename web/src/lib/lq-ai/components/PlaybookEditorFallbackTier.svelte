@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconArrowUp, IconArrowDown } from '@tabler/icons-svelte';
 	/**
 	 * PlaybookEditorFallbackTier — inline editor for one fallback tier
 	 * inside a position (M3-A6 Phase 6 / Step 3).
@@ -44,7 +45,7 @@
 				disabled={disabled || !canMoveUp}
 				aria-label="Move tier up"
 			>
-				↑
+				<IconArrowUp size={14} stroke={1.75} aria-hidden="true" />
 			</button>
 			<button
 				type="button"
@@ -53,7 +54,7 @@
 				disabled={disabled || !canMoveDown}
 				aria-label="Move tier down"
 			>
-				↓
+				<IconArrowDown size={14} stroke={1.75} aria-hidden="true" />
 			</button>
 			<button
 				type="button"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconX } from '@tabler/icons-svelte';
   /**
    * MatterRailKnowledge — the rail's Knowledge section.
    *
@@ -139,7 +140,7 @@
             on:click={() => detachFromRail(kb.id)}
             disabled={detachingId === kb.id}
           >
-            {detachingId === kb.id ? '…' : '×'}
+            {#if detachingId === kb.id}…{:else}<IconX size={14} stroke={1.75} aria-hidden="true" />{/if}
           </button>
         </li>
       {/each}

@@ -23,6 +23,7 @@
 </script>
 
 <script lang="ts">
+  import { IconListDetails, IconX } from '@tabler/icons-svelte';
   import { onDestroy } from 'svelte';
   import ReceiptsList from './ReceiptsList.svelte';
   import type { ReceiptEvent, ReceiptEventKind } from '../api/receipts';
@@ -106,8 +107,10 @@
   aria-label="Receipts drawer"
 >
   <header>
-    <span class="title">📜 Receipts</span>
-    <button class="close" on:click={onClose} aria-label="Close receipts drawer">×</button>
+    <span class="title"><IconListDetails size={14} stroke={1.75} aria-hidden="true" /> Receipts</span>
+    <button class="close" on:click={onClose} aria-label="Close receipts drawer"
+      ><IconX size={14} stroke={1.75} aria-hidden="true" /></button
+    >
   </header>
 
   {#if error}

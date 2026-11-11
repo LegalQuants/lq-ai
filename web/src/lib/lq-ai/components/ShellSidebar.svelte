@@ -57,7 +57,8 @@
 		IconTool,
 		IconUserCircle,
 		IconChevronDown,
-		IconFileDescription
+		IconFileDescription,
+		IconLock
 	} from '@tabler/icons-svelte';
 	import { autonomousApi } from '$lib/lq-ai/api';
 	import { badgeText } from '$lib/lq-ai/autonomous/notification-bell';
@@ -420,6 +421,15 @@
 										>
 											<IconFolder size={16} stroke={1.75} aria-hidden="true" />
 											<span class="lq-sidebar-row-label">{matter.project.name}</span>
+											{#if matter.project.privileged}
+												<IconLock
+													size={14}
+													stroke={1.75}
+													class="lq-sidebar-privileged"
+													role="img"
+													aria-label="Privileged"
+												/>
+											{/if}
 										</a>
 										{#if matter.chats.length > 0}
 											<ul class="lq-sidebar-list lq-sidebar-children">
@@ -796,6 +806,11 @@
 	/* Trust & Privacy is a governance entry point: its icon is orange, its label ink. */
 	.lq-sidebar-row[data-nav-id='trust'] :global(svg) {
 		color: var(--lq-governance);
+	}
+	/* A privileged matter carries a lock in the governance colour (ADR 0045 §1, Sidebar.dc.html). */
+	.lq-sidebar-row :global(.lq-sidebar-privileged) {
+		color: var(--lq-governance);
+		flex: none;
 	}
 	.lq-sidebar-row-label {
 		flex: 1;

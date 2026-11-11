@@ -31,7 +31,7 @@
     </LqText>
   </div>
   <div style="display: inline-flex; gap: var(--lq-space-2); align-items: center;">
-    <TrustPill variant="secure" label="● self-hosted" />
+    <TrustPill variant="secure" dot label="self-hosted" />
     <LqText
       as="a"
       size="14"

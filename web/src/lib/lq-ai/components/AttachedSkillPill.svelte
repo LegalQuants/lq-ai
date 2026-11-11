@@ -48,6 +48,7 @@
 </script>
 
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	export let skill: AttachedSkill;
 	export let onRemove: ((slug: string) => void) | undefined = undefined;
 
@@ -63,7 +64,8 @@
 		class="lq-skill-pill__remove"
 		aria-label={ariaLabel}
 		on:click={() => handleRemove(skill, onRemove)}
-	>×</button>
+		><IconX size={12} stroke={1.75} aria-hidden="true" /></button
+	>
 </span>
 
 <style>

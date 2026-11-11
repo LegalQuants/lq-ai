@@ -24,18 +24,27 @@
 	export function docStatusLabel(s: DocStatus): string {
 		switch (s) {
 			case 'ready':
-				return '✓ ready';
+				return 'ready';
 			case 'processing':
-				return '⏳ processing';
+				return 'processing';
 			case 'pending':
-				return '⏳ pending';
+				return 'pending';
 			case 'failed':
-				return '⚠ failed';
+				return 'failed';
 			case 'embed_failed':
-				return '⚠ embed failed';
+				return 'embed failed';
 			case 'partial':
-				return '⚠ partial embed';
+				return 'partial embed';
 		}
+	}
+
+	/** The icon beside a status word: done, waiting or failed (ADR 0045 §1, WCAG 1.4.1). */
+	export type StatusIcon = 'check' | 'hourglass' | 'warning' | null;
+
+	export function docStatusIcon(s: DocStatus): StatusIcon {
+		if (s === 'ready') return 'check';
+		if (s === 'processing' || s === 'pending') return 'hourglass';
+		return 'warning';
 	}
 
 	/** Resolve the effective per-row status for the doc-list pill. */
@@ -87,6 +96,8 @@
 </script>
 
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconCheck, IconHourglass } from '@tabler/icons-svelte';
 	/**
 	 * /lq-ai/knowledge/[id] — Knowledge detail page (Wave C of the M1
 	 * frontend redesign per docs/superpowers/specs/2026-05-10-m1-frontend-design.md).
@@ -415,6 +426,15 @@
 									<td class="lq-doc-filename">{file.filename}</td>
 									<td>
 										<span class="lq-doc-status lq-doc-status--{effectiveStatus(file)}">
+											{#if docStatusIcon(effectiveStatus(file)) === 'check'}<IconCheck
+													size={12}
+													stroke={2}
+													aria-hidden="true"
+												/>{:else if docStatusIcon(effectiveStatus(file)) === 'hourglass'}<IconHourglass
+													size={12}
+													stroke={1.75}
+													aria-hidden="true"
+												/>{:else}<LqToneIcon tone="warning" size={12} />{/if}
 											{docStatusLabel(effectiveStatus(file))}
 										</span>
 										{#if effectiveFailureReason(file)}
@@ -579,7 +599,9 @@
 	}
 
 	.lq-doc-status {
-		display: inline-block;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
 		font-size: 11px;
 		padding: 2px 8px;
 		border-radius: var(--lq-radius-pill);

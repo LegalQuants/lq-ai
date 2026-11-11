@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconSparkles, IconX } from '@tabler/icons-svelte';
 	/**
 	 * EnhancedDiffModal — tap-to-diff popover for the ✨ enhanced pill.
 	 *
@@ -56,8 +57,12 @@
 >
 	<div class="diff-panel">
 		<header>
-			<h2 id="enhanced-diff-title">✨ Enhance Prompt — original vs. enhanced</h2>
-			<button class="close" on:click={close} aria-label="Close" data-testid="enhanced-diff-close">×</button>
+			<h2 id="enhanced-diff-title">
+				<IconSparkles size={16} stroke={1.75} aria-hidden="true" /> Enhance Prompt — original vs. enhanced
+			</h2>
+			<button class="close" on:click={close} aria-label="Close" data-testid="enhanced-diff-close"
+				><IconX size={16} stroke={1.75} aria-hidden="true" /></button
+			>
 		</header>
 
 		<div class="cols">

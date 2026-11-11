@@ -34,14 +34,24 @@
 	export function kbStatusLabel(s: KBListStatus): string {
 		switch (s) {
 			case 'indexed':
-				return '✓ indexed';
+				return 'indexed';
 			case 'indexing':
-				return '⏳ indexing';
+				return 'indexing';
 			case 'failed':
-				return '⚠ failed';
+				return 'failed';
 			case 'empty':
 				return 'empty';
 		}
+	}
+
+	/** The icon beside a status word: done, waiting or failed (ADR 0045 §1, WCAG 1.4.1). */
+	export type StatusIcon = 'check' | 'hourglass' | 'warning' | null;
+
+	export function kbStatusIcon(s: KBListStatus): StatusIcon {
+		if (s === 'indexed') return 'check';
+		if (s === 'indexing') return 'hourglass';
+		if (s === 'failed') return 'warning';
+		return null;
 	}
 </script>
 
@@ -63,6 +73,8 @@
 	} from '$lib/lq-ai/api/knowledgeBases';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconCheck, IconHourglass } from '@tabler/icons-svelte';
 	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 	// `KnowledgeBase` is imported in the module script above; Svelte merges
 	// the two script blocks at compile time, so re-importing here would
@@ -257,6 +269,18 @@
 					<header class="lq-kb-card-head">
 						<h3 class="lq-kb-card-name">{kb.name}</h3>
 						<span class="lq-kb-status lq-kb-status--{status}">
+							{#if kbStatusIcon(status) === 'check'}<IconCheck
+									size={12}
+									stroke={2}
+									aria-hidden="true"
+								/>{:else if kbStatusIcon(status) === 'hourglass'}<IconHourglass
+									size={12}
+									stroke={1.75}
+									aria-hidden="true"
+								/>{:else if kbStatusIcon(status) === 'warning'}<LqToneIcon
+									tone="warning"
+									size={12}
+								/>{/if}
 							{kbStatusLabel(status)}
 						</span>
 					</header>
@@ -452,6 +476,9 @@
 	}
 
 	.lq-kb-status {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
 		font-size: 11px;
 		padding: 2px 8px;
 		border-radius: var(--lq-radius-pill);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { goto } from '$app/navigation';
 
@@ -130,7 +131,7 @@
 			disabled={executing}
 			aria-label="Close"
 		>
-			×
+			<IconX size={16} stroke={1.75} aria-hidden="true" />
 		</button>
 	</header>
 

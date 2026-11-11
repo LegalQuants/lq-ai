@@ -32,9 +32,9 @@ describe('governance signals (ADR 0045 §1)', () => {
 	it('draws the slate trust pill as a neutral outline with a governance dot', () => {
 		const src = source('TrustPill.svelte');
 		expect(rule(src, '.lq-pill-tone-slate')).toContain('color: var(--lq-text)');
-		expect(rule(src, '.lq-pill-tone-slate:not(.lq-pill-dot)::before')).toContain(
-			'background: var(--lq-governance)'
-		);
+		expect(
+			rule(src, '.lq-pill-tone-slate:not(.lq-pill-dot):not(.lq-pill-locked)::before')
+		).toContain('background: var(--lq-governance)');
 		expect(rule(src, '.lq-pill-tone-sage')).not.toMatch(/--lq-(accent|governance|tier)/);
 	});
 
@@ -88,10 +88,13 @@ describe('governance signals (ADR 0045 §1)', () => {
 		expect(rule(src, '.lq-t-user-bubble')).toContain('background-color: var(--lq-surface-muted)');
 	});
 
-	it('colours the Trust & Privacy entry points and nothing else in the sidebar', () => {
+	it('colours the Trust & Privacy entry points and privileged matters, and nothing else in the sidebar', () => {
 		const sidebar = source('ShellSidebar.svelte');
 		expect(sidebar).toContain(".lq-sidebar-row[data-nav-id='trust'] :global(svg)");
-		expect(sidebar.match(/--lq-governance/g)).toHaveLength(1);
+		expect(rule(sidebar, '.lq-sidebar-row :global(.lq-sidebar-privileged)')).toContain(
+			'color: var(--lq-governance)'
+		);
+		expect(sidebar.match(/--lq-governance/g)).toHaveLength(2);
 		expect(source('GuidedDashboardTrustPanel.svelte')).toMatch(
 			/<LqText\s+as="a"\s+size="14"\s+tone="governance"\s+href="\/lq-ai\/trust"/
 		);

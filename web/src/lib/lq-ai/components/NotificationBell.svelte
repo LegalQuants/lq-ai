@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconBell } from '@tabler/icons-svelte';
 	/**
 	 * NotificationBell — global-chrome bell for autonomous notifications (DE-324).
 	 *
@@ -121,7 +122,7 @@
 		bind:this={triggerEl}
 		on:click={toggle}
 	>
-		<span class="bell-icon" aria-hidden="true">🔔</span>
+		<span class="bell-icon" aria-hidden="true"><IconBell size={18} stroke={1.75} /></span>
 		{#if badge !== null}
 			<span class="unread-badge" aria-hidden="true" data-testid="lq-ai-notification-bell-badge">
 				{badge}

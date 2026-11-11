@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconSettings } from '@tabler/icons-svelte';
 	/**
 	 * LQ.AI shell layout. Acts as the auth gate + force-change-password gate
 	 * for every route under `/lq-ai/*` except `/lq-ai/login` and
@@ -129,7 +130,7 @@
 					{#if $autonomousChromeEnabled}
 						<NotificationBell />
 					{/if}
-					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm);">⚙</a>
+					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm); display: inline-flex;"><IconSettings size={18} stroke={1.75} aria-hidden="true" /></a>
 				</div>
 			</header>
 			<TopTabBar user={$auth.user ?? null} pathname={pathname} />

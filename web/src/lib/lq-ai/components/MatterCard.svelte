@@ -55,7 +55,7 @@
     {#if badges.showPrivileged || badges.showTier}
       <div class="matter-card__badges">
         {#if badges.showPrivileged}
-          <TrustPill variant="secure" tone="slate" label="Privileged" />
+          <TrustPill variant="secure" tone="slate" lock label="Privileged" />
         {/if}
         {#if badges.showTier && badges.tierLabel}
           <TrustPill variant="tier" label={badges.tierLabel} />

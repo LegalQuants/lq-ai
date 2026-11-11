@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * PlaybookDisclaimerBanner — the standard not-legal-advice posture
 	 * for the playbook execution surface, per Decision F (M3-A3 session)
@@ -17,21 +18,7 @@
 </script>
 
 <aside class="lq-playbook-disclaimer" role="note" data-testid="lq-playbook-disclaimer">
-	<svg
-		class="lq-playbook-disclaimer__icon"
-		viewBox="0 0 16 16"
-		width="16"
-		height="16"
-		aria-hidden="true"
-	>
-		<path
-			d="M8 1.5L1 14h14L8 1.5zm0 4.5v4M8 11.5v.5"
-			stroke="currentColor"
-			stroke-width="1.5"
-			stroke-linecap="round"
-			fill="none"
-		/>
-	</svg>
+	<LqToneIcon tone="warning" size={16} class="lq-playbook-disclaimer__icon" />
 	<div class="lq-playbook-disclaimer__body">
 		<strong>Not legal advice.</strong>
 		Playbooks codify one reasonable market position. Apply your own professional judgment; review results
@@ -53,7 +40,7 @@
 		line-height: 1.4;
 	}
 
-	.lq-playbook-disclaimer__icon {
+	.lq-playbook-disclaimer :global(.lq-playbook-disclaimer__icon) {
 		flex-shrink: 0;
 		color: var(--lq-warn);
 		margin-top: 0.125rem;

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconScale, IconChevronDown, IconChevronRight } from '@tabler/icons-svelte';
 	/**
 	 * LedgerEntryRow — one row in the Citation Ledger panel (P1-C1).
 	 *
@@ -71,11 +72,16 @@
 					title={notEditorial}
 					on:click={() => (treatmentOpen = !treatmentOpen)}
 				>
-					<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
+					<span class="lq-ledger-treatment-icon" aria-hidden="true"
+						><IconScale size={12} stroke={1.75} /></span
+					>
 					<span class="lq-ledger-treatment-label">{t.label}</span>
 					<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
 					<span class="lq-ledger-treatment-caret" aria-hidden="true"
-						>{treatmentOpen ? '▾' : '▸'}</span
+						>{#if treatmentOpen}<IconChevronDown size={12} stroke={1.75} />{:else}<IconChevronRight
+								size={12}
+								stroke={1.75}
+							/>{/if}</span
 					>
 				</button>
 			{:else}
@@ -85,7 +91,9 @@
 					title={notEditorial}
 					aria-label={`Citation-graph treatment — ${t.label}, derived ${t.asOf} — not an editorial good-law judgment`}
 				>
-					<span class="lq-ledger-treatment-icon" aria-hidden="true">⚖</span>
+					<span class="lq-ledger-treatment-icon" aria-hidden="true"
+						><IconScale size={12} stroke={1.75} /></span
+					>
 					<span class="lq-ledger-treatment-label">{t.label}</span>
 					<span class="lq-ledger-treatment-asof">· derived {t.asOf}</span>
 				</div>

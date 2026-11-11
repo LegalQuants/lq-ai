@@ -166,6 +166,7 @@
 </script>
 
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { goto } from '$app/navigation';
 	import { createUserSkill } from '$lib/lq-ai/api/userSkills';
 
@@ -261,7 +262,7 @@
 		<header class="csm-header">
 			<h2 id="csm-title" class="csm-title">Capture as a skill</h2>
 			<button type="button" class="csm-close" aria-label="Close" on:click={onClose}
-				>×</button
+				><IconX size={16} stroke={1.75} aria-hidden="true" /></button
 			>
 		</header>
 

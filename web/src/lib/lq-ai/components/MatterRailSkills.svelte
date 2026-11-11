@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconX } from '@tabler/icons-svelte';
   import { skillsApi, projectsApi } from '$lib/lq-ai/api';
   import type { Project, SkillSummary } from '$lib/lq-ai/types';
   import TrustPill from './TrustPill.svelte';
@@ -101,7 +102,7 @@
             on:click={() => detachSkill(name)}
             disabled={detachingName === name}
           >
-            {detachingName === name ? '…' : '×'}
+            {#if detachingName === name}…{:else}<IconX size={14} stroke={1.75} aria-hidden="true" />{/if}
           </button>
         </div>
       {/each}

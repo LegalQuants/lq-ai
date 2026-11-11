@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconNotes } from '@tabler/icons-svelte';
 	/**
 	 * Single message bubble.
 	 *
@@ -370,7 +371,8 @@
 									: 'Capture as skill'}
 								disabled={isStreaming}
 								data-testid="lq-ai-message-capture-inline"
-								on:click={() => (captureOpen = true)}>📝</button
+								on:click={() => (captureOpen = true)}
+								><IconNotes size={16} stroke={1.75} aria-hidden="true" /></button
 							>
 						{/if}
 						<MessageOverflowMenu
