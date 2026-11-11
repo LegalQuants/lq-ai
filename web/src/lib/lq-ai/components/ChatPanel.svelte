@@ -215,6 +215,7 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
+	import ChatListDrawer from './ChatListDrawer.svelte';
 	import ChatDetailsPanel from './ChatDetailsPanel.svelte';
 	import {
 		clearShellContext,
@@ -1509,6 +1510,8 @@
 	// props) and the chat's title in its page header. Every route that mounts
 	// this panel renders inside the LQ.AI layout, which hosts both.
 	const shellOwner = Symbol('ChatPanel');
+	// The chat list's narrow-screen sheet (ChatListDrawer), closed after a choice.
+	let chatListDrawer: ChatListDrawer | undefined;
 	onDestroy(() => clearShellContext(shellOwner));
 	$: publishShellContext(
 		shellOwner,
@@ -1679,21 +1682,32 @@
 <div
 	class="flex flex-1 h-full min-h-0 overflow-hidden"
 	class:compact-matter={!!projectIdFilter}
+	class:compact-chats={!projectIdFilter}
 	data-testid="lq-ai-chat-shell"
 >
-	<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
-		<ChatSidebar
-			groups={filteredGroups}
-			activeChatId={activeChat?.id ?? null}
-			activeProjectId={activeProject?.id ?? null}
-			{archivedToggle}
-			hideProjectFilter={!!projectIdFilter}
-			onSelectChat={selectChat}
-			onNewChat={createNewChat}
-			onSelectProject={selectProject}
-			onToggleArchived={toggleArchived}
-		/>
-	</CompactPanel>
+	<!-- Outside a matter, narrow screens get the list as a sheet behind a toggle
+	     (houfu, 11 Nov); a matter keeps its CompactPanel toggles. -->
+	<ChatListDrawer bind:this={chatListDrawer} enabled={!projectIdFilter}>
+		<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
+			<ChatSidebar
+				groups={filteredGroups}
+				activeChatId={activeChat?.id ?? null}
+				activeProjectId={activeProject?.id ?? null}
+				{archivedToggle}
+				hideProjectFilter={!!projectIdFilter}
+				onSelectChat={(chat) => {
+					void chatListDrawer?.close();
+					return selectChat(chat);
+				}}
+				onNewChat={() => {
+					void chatListDrawer?.close();
+					return createNewChat();
+				}}
+				onSelectProject={selectProject}
+				onToggleArchived={toggleArchived}
+			/>
+		</CompactPanel>
+	</ChatListDrawer>
 
 	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
@@ -2032,21 +2046,28 @@
 		min-height: 0;
 	}
 
+	/* Narrow screens: the list (a matter's CompactPanel, or the chat page's
+	   sheet toggle) sits above the conversation, and the composer row wraps so
+	   the message box takes the full width. */
 	@media (max-width: 1279px) {
-		.compact-matter {
+		.compact-matter,
+		.compact-chats {
 			flex-direction: column;
 			min-width: 0;
 		}
 
-		.compact-matter .chat-conversation {
+		.compact-matter .chat-conversation,
+		.compact-chats .chat-conversation {
 			min-height: 0;
 		}
 
-		.compact-matter .composer-row {
+		.compact-matter .composer-row,
+		.compact-chats .composer-row {
 			flex-wrap: wrap;
 		}
 
-		.compact-matter .lq-composer-wrap {
+		.compact-matter .lq-composer-wrap,
+		.compact-chats .lq-composer-wrap {
 			flex: 1 0 100%;
 		}
 	}
