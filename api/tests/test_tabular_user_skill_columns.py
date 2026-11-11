@@ -27,7 +27,7 @@ helper from ``test_tabular_endpoints.py``.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import pytest
@@ -62,7 +62,7 @@ TABLE_COLUMNS = [
 ]
 
 
-def _override_get_db(db_session: AsyncSession):
+def _override_get_db(db_session: AsyncSession) -> Callable[[], AsyncIterator[AsyncSession]]:
     async def _override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
@@ -541,7 +541,7 @@ def test_non_table_metadata_is_opaque(output_format: object) -> None:
     from app.api.user_skills import _validate_frontmatter_extra
     from app.skills.schema import parse_table_skill_extra
 
-    extra = {
+    extra: dict[str, object] = {
         "columns": {"custom": "metadata"},
         "minimum_inference_tier": "custom",
         "ensemble_verification": ["custom"],
@@ -690,7 +690,9 @@ async def test_table_extension_metadata_survives_create_patch_and_execute(
 
 async def test_builtin_resolution_snapshots_skill_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, create_autospec
+
+    from fastapi import Request
 
     from app.api import skills, tabular
     from app.skills.schema import LQAIFrontmatter
@@ -711,14 +713,16 @@ async def test_builtin_resolution_snapshots_skill_defaults(monkeypatch: pytest.M
             ],
         }
     )
+    request = Request({"type": "http"})
+    db: AsyncSession = create_autospec(AsyncSession, instance=True)
     record = SimpleNamespace(frontmatter=SimpleNamespace(lq_ai=lq))
     registry = SimpleNamespace(current=lambda: {"builtin-grid": record})
     monkeypatch.setattr(tabular, "_registry", lambda request: registry)
     monkeypatch.setattr(skills, "_load_user_shadow", AsyncMock(return_value=None))
     monkeypatch.setattr(skills, "_load_team_shadow", AsyncMock(return_value=None))
     _, columns = await tabular._resolve_columns(
-        None,
-        None,
+        request,
+        db,
         user=User(id=uuid.uuid4()),
         skill_name="builtin-grid",
         ad_hoc=None,
@@ -735,8 +739,8 @@ async def test_builtin_resolution_snapshots_skill_defaults(monkeypatch: pytest.M
 
     with pytest.raises(HTTPException) as exc:
         await tabular._resolve_columns(
-            None,
-            None,
+            request,
+            db,
             user=User(id=uuid.uuid4()),
             skill_name="builtin-grid",
             ad_hoc=None,
