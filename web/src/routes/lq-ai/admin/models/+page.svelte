@@ -254,11 +254,12 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
+		white-space: nowrap;
 	}
 	.lq-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

@@ -54,7 +54,7 @@
     {:else if error}
       <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">Could not load recent chats.</p>
     {:else if chats.length === 0}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No chats yet. <a href="/lq-ai/chats" style="color: var(--lq-accent); text-decoration: none;">Start one →</a></p>
+      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No chats yet. <a href="/lq-ai/chats" style="color: var(--lq-accent); text-decoration: underline;">Start one →</a></p>
     {:else}
       <ul class="chat-list">
         {#each chats as chat (chat.id)}
@@ -77,7 +77,7 @@
     {#if loadingMatters}
       <p class="lq-text-body-sm" style="color: var(--lq-text-secondary);">Loading…</p>
     {:else if matters.length === 0}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No matters yet. <a href="/lq-ai/matters" style="color: var(--lq-accent); text-decoration: none;">+ Start a matter</a></p>
+      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No matters yet. <a href="/lq-ai/matters" style="color: var(--lq-accent); text-decoration: underline;">+ Start a matter</a></p>
     {:else}
       <ul class="chat-list">
         {#each matters as matter (matter.id)}

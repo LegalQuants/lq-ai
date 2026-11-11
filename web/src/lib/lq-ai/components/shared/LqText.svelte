@@ -53,7 +53,7 @@
 	}
 
 	.lq-text-mono {
-		font-family: var(--lq-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+		font-family: var(--lq-font-mono, ui-monospace, 'SF Mono', Menlo, Consolas, monospace);
 	}
 
 	.lq-text-truncate {

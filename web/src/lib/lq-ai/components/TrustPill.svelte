@@ -77,6 +77,6 @@
   .lq-pill-tone-red     { background: var(--lq-error-soft);  color: var(--lq-error);  border-color: var(--lq-error-border); }
   .lq-pill-tone-neutral { background: var(--lq-inset);       color: var(--lq-text-secondary); border-color: var(--lq-border); }
 
-  .lq-pill-clickable:hover { filter: brightness(0.97); }
+  .lq-pill-clickable:hover { opacity: 0.85; }
   .lq-pill-clickable:focus-visible { outline: 2px solid var(--lq-accent); outline-offset: 2px; }
 </style>

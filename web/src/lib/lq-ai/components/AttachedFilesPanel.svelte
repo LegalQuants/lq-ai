@@ -42,14 +42,14 @@
 	function statusBadge(status: string | undefined): string {
 		switch (status) {
 			case 'ready':
-				return 'bg-emerald-100 text-emerald-800';
+				return 'lq-t-success-bg lq-t-success';
 			case 'processing':
-				return 'bg-amber-100 text-amber-800';
+				return 'lq-t-warning-soft lq-t-warning-text';
 			case 'failed':
-				return 'bg-rose-100 text-rose-800';
+				return 'lq-t-error-soft lq-t-error-strong';
 			case 'pending':
 			default:
-				return 'bg-gray-100 text-gray-700';
+				return 'lq-t-inset lq-t-text2';
 		}
 	}
 </script>
@@ -91,25 +91,25 @@
 
 	{#if chatFiles.length > 0}
 		<div>
-			<h4 class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">This chat</h4>
+			<h4 class="text-xs font-medium uppercase tracking-wide lq-t-text2 mb-1">This chat</h4>
 			<ul class="space-y-1">
 				{#each chatFiles as f (f.id)}
 					<li class="flex items-start justify-between gap-2 group">
-						<div class="text-sm text-gray-800 dark:text-gray-200 truncate">
+						<div class="text-sm lq-t-text truncate">
 							<div class="truncate" title={f.filename}>{f.filename}</div>
-							<div class="text-xs text-gray-500 flex items-center gap-1">
+							<div class="text-xs lq-t-text2 flex items-center gap-1">
 								<span class="inline-block px-1 py-0.5 rounded {statusBadge(f.ingestion_status)}">
 									{f.ingestion_status ?? 'pending'}
 								</span>
 								<span>{Math.ceil(f.size_bytes / 1024)} KB</span>
 							</div>
 							{#if f.ingestion_error}
-								<div class="text-xs text-rose-600">{f.ingestion_error}</div>
+								<div class="text-xs lq-t-error">{f.ingestion_error}</div>
 							{/if}
 						</div>
 						<button
 							type="button"
-							class="text-xs text-gray-400 hover:text-rose-600 opacity-0 group-hover:opacity-100"
+							class="text-xs lq-t-text3 lq-t-error-hover-text opacity-0 group-hover:opacity-100"
 							on:click={() => onDetach(f)}
 							title="Detach from this chat"
 							data-testid={`lq-ai-detach-${f.id}`}
@@ -124,12 +124,12 @@
 
 	{#if projectFiles.length > 0}
 		<div>
-			<h4 class="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+			<h4 class="text-xs font-medium uppercase tracking-wide lq-t-text2 mb-1">
 				From project (read-only here)
 			</h4>
 			<ul class="space-y-1">
 				{#each projectFiles as f (f.id)}
-					<li class="text-sm text-gray-700 dark:text-gray-300 truncate" title={f.filename}>
+					<li class="text-sm lq-t-text2 truncate" title={f.filename}>
 						{f.filename}
 						<span class="ml-1 inline-block px-1 py-0.5 rounded text-xs {statusBadge(f.ingestion_status)}">
 							{f.ingestion_status ?? 'pending'}
@@ -165,7 +165,7 @@
 		background: white;
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 13px;
 		cursor: pointer;
@@ -176,5 +176,43 @@
 	.lq-btn-secondary:focus-visible {
 		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-hover-text:hover {
+		color: var(--lq-error);
+	}
+	.lq-t-error-soft {
+		background-color: var(--lq-error-soft);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-success {
+		color: var(--lq-success);
+	}
+	.lq-t-success-bg {
+		background-color: var(--lq-success-bg);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+	.lq-t-text3 {
+		color: var(--lq-text-tertiary);
+	}
+	.lq-t-warning-soft {
+		background-color: var(--lq-warning-soft);
+	}
+	.lq-t-warning-text {
+		color: var(--lq-warning-text);
 	}
 </style>

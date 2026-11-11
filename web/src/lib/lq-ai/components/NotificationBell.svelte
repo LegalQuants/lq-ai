@@ -214,11 +214,11 @@
 		color: var(--lq-text-secondary);
 		font-size: 16px;
 		line-height: 1;
-		border-radius: var(--lq-radius-sm, 4px);
+		border-radius: var(--lq-radius-pill);
 	}
 
 	.trigger:hover {
-		background: var(--lq-inset, #fafbfa);
+		background: var(--lq-inset);
 		color: var(--lq-text);
 	}
 
@@ -255,9 +255,9 @@
 		width: 340px;
 		/* Reserve the shell's trailing Settings control and page padding on phones. */
 		max-width: calc(100vw - 5 * var(--lq-space-4));
-		background: var(--lq-canvas, #ffffff);
-		border: 1px solid var(--lq-border, #e5e7eb);
-		border-radius: var(--lq-radius, 6px);
+		background: var(--lq-canvas);
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius);
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 		z-index: 10;
 	}
@@ -286,12 +286,12 @@
 		font-weight: 500;
 		color: var(--lq-accent);
 		cursor: pointer;
-		border-radius: var(--lq-radius-sm, 4px);
+		border-radius: var(--lq-radius-pill);
 		white-space: nowrap;
 	}
 
 	.mark-all:hover:not(:disabled) {
-		background: var(--lq-inset, #fafbfa);
+		background: var(--lq-inset);
 	}
 
 	.mark-all:disabled {
@@ -366,7 +366,7 @@
 	.mark-read {
 		flex-shrink: 0;
 		padding: 2px 8px;
-		border-radius: var(--lq-radius-sm, 4px);
+		border-radius: var(--lq-radius-pill);
 		font-size: 12px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -377,7 +377,7 @@
 	}
 
 	.mark-read:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.mark-read:disabled {
@@ -405,6 +405,6 @@
 	.view-all:focus-visible {
 		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
-		border-radius: var(--lq-radius-sm, 4px);
+		border-radius: var(--lq-radius-sm);
 	}
 </style>

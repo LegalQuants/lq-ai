@@ -95,7 +95,7 @@
 		Loading matter...
 	</p>
 {:else if error || !matter}
-	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-error, #b91c1c);">
+	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-error);">
 		{error ?? 'Matter not found'}
 	</p>
 {:else}
@@ -258,15 +258,15 @@
 	}
 
 	.proposal-message--error {
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
-		border: 1px solid var(--lq-error-border, #fbb);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.proposal-message--success {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.proposal-list {
@@ -286,7 +286,7 @@
 		border: 1px solid var(--lq-border);
 		border-left: 3px solid var(--lq-accent);
 		border-radius: 6px;
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.03));
+		background: var(--lq-surface-hover);
 	}
 
 	.proposal-body {
@@ -318,7 +318,7 @@
 
 	.proposal-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -329,7 +329,7 @@
 	}
 
 	.proposal-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.proposal-button--primary {
@@ -344,8 +344,8 @@
 	}
 
 	.proposal-button--danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.proposal-button:disabled {

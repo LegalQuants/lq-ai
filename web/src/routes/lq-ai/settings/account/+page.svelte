@@ -59,7 +59,7 @@
 		background: var(--lq-canvas);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;

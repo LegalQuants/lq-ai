@@ -136,7 +136,7 @@
 			<span class="lq-text-label mb-1">Privilege</span>
 			<select
 				bind:value={privilegeMarked}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-privilege"
 			>
 				<option value="any">Any</option>
@@ -149,7 +149,7 @@
 			<span class="lq-text-label mb-1">Routed tier</span>
 			<select
 				bind:value={routedTier}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-tier"
 			>
 				<option value="">Any</option>
@@ -167,7 +167,7 @@
 				type="text"
 				placeholder="e.g. chat.message_sent"
 				bind:value={action}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-action"
 			/>
 		</label>
@@ -178,7 +178,7 @@
 				type="text"
 				placeholder="00000000-0000-…"
 				bind:value={userId}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm font-mono"
+				class="rounded lq-t-border-strong text-sm font-mono"
 				data-testid="lq-ai-audit-filter-user"
 			/>
 		</label>
@@ -188,7 +188,7 @@
 			<input
 				type="datetime-local"
 				bind:value={since}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-since"
 			/>
 		</label>
@@ -198,7 +198,7 @@
 			<input
 				type="datetime-local"
 				bind:value={until}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-until"
 			/>
 		</label>
@@ -225,7 +225,7 @@
 
 	{#if listError}
 		<div
-			class="px-3 py-2 rounded border border-rose-300 bg-rose-50 text-rose-800 text-sm mb-3"
+			class="px-3 py-2 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm mb-3"
 			data-testid="lq-ai-admin-audit-log-error"
 		>
 			{listError}
@@ -251,7 +251,7 @@
 				{#each rows as r (r.id)}
 					<tr
 						class="lq-row align-top"
-						class:bg-amber-50={r.privilege_marked}
+						class:lq-t-warning-bg={r.privilege_marked}
 					>
 						<td class="px-2 py-1 font-mono whitespace-nowrap lq-text-caption" style="color: var(--lq-text-tertiary);">{formatTimestamp(r.timestamp)}</td>
 						<td class="px-2 py-1 font-mono lq-text-body">{r.action}</td>
@@ -263,7 +263,7 @@
 						</td>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
-								<span class="px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px]">
+								<span class="px-1.5 py-0.5 rounded lq-t-warning-strong-bg lq-t-warning-text text-[10px]">
 									{r.privilege_basis ?? 'yes'}
 								</span>
 							{:else}
@@ -329,7 +329,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 14px;
 		font-weight: 500;
@@ -341,11 +341,34 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13.5px;
 		cursor: pointer;
 	}
 	.lq-btn-secondary:hover { background: var(--lq-inset); }
 	.lq-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-warning-bg {
+		background-color: var(--lq-warning-bg);
+	}
+	.lq-t-warning-strong-bg {
+		background-color: var(--lq-warning-border);
+	}
+	.lq-t-warning-text {
+		color: var(--lq-warning-text);
+	}
 </style>

@@ -157,7 +157,7 @@
 		gap: var(--lq-space-1);
 		padding: var(--lq-space-1) var(--lq-space-3);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-canvas);
 		font-size: 13.5px;
 		color: var(--lq-text);

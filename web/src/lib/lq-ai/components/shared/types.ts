@@ -10,7 +10,7 @@
 export const LQ_VARIANTS = ['filled', 'outline', 'subtle', 'ghost'] as const;
 export type LqVariant = (typeof LQ_VARIANTS)[number];
 
-export const LQ_TONES = ['accent', 'info', 'warning', 'danger', 'neutral'] as const;
+export const LQ_TONES = ['accent', 'governance', 'info', 'warning', 'danger', 'neutral'] as const;
 export type LqTone = (typeof LQ_TONES)[number];
 
 export const LQ_SIZES = ['sm', 'md', 'lg'] as const;
@@ -95,14 +95,15 @@ export const LQ_TEXT_TONES = ['primary', 'secondary', 'tertiary', ...LQ_TONES] a
 export type LqTextTone = (typeof LQ_TEXT_TONES)[number];
 
 export const LQ_TEXT_TONE_VAR: Record<LqTextTone, string> = {
-	primary: 'var(--lq-text, #1a1a1a)',
-	secondary: 'var(--lq-text-secondary, #4b5563)',
-	tertiary: 'var(--lq-text-tertiary, #9ca3af)',
-	accent: 'var(--lq-accent, #1f7a6b)',
-	info: 'var(--lq-tier, #355a82)',
-	warning: 'var(--lq-warn, #a16e1f)',
-	danger: 'var(--lq-error, #b54848)',
-	neutral: 'var(--lq-text-secondary, #4b5563)'
+	primary: 'var(--lq-text, #111114)',
+	secondary: 'var(--lq-text-secondary, #4f5158)',
+	tertiary: 'var(--lq-text-tertiary, #65676f)',
+	accent: 'var(--lq-accent, #111114)',
+	governance: 'var(--lq-governance, #a34a00)',
+	info: 'var(--lq-info, #111114)',
+	warning: 'var(--lq-warning, #111114)',
+	danger: 'var(--lq-danger, #b42318)',
+	neutral: 'var(--lq-text-secondary, #4f5158)'
 };
 
 // --- Color + shade ---------------------------------------------------------
@@ -125,11 +126,12 @@ export const LQ_SHADES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export type LqShade = (typeof LQ_SHADES)[number];
 
 const LQ_COLOR_BASE_VAR: Record<LqColor, string> = {
-	accent: 'var(--lq-accent, #1f7a6b)',
-	info: 'var(--lq-tier, #355a82)',
-	warning: 'var(--lq-warn, #a16e1f)',
-	danger: 'var(--lq-error, #b54848)',
-	neutral: 'var(--lq-text-secondary, #4b5563)'
+	accent: 'var(--lq-accent, #111114)',
+	governance: 'var(--lq-governance, #a34a00)',
+	info: 'var(--lq-info, #111114)',
+	warning: 'var(--lq-warning, #111114)',
+	danger: 'var(--lq-danger, #b42318)',
+	neutral: 'var(--lq-text-secondary, #4f5158)'
 };
 
 /**

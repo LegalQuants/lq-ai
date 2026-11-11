@@ -72,7 +72,7 @@
 </script>
 
 <div
-	class="min-h-screen flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+	class="min-h-screen flex flex-col lq-login-ground lq-t-text"
 	data-testid="lq-ai-login-page"
 >
 	<main class="flex-1 flex items-center justify-center">
@@ -82,7 +82,7 @@
 		>
 			<div class="flex items-center gap-2">
 				<span
-					class="inline-flex items-center justify-center h-9 w-9 rounded bg-indigo-600 text-white font-semibold"
+					class="inline-flex items-center justify-center h-9 w-9 rounded lq-t-primary-bg lq-t-on-accent font-semibold"
 				>
 					LQ
 				</span>
@@ -98,7 +98,7 @@
 					type="email"
 					autocomplete="username"
 					required
-					class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+					class="mt-1 block w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 					bind:value={email}
 					data-testid="lq-ai-login-email"
 				/>
@@ -110,7 +110,7 @@
 					type="password"
 					autocomplete="current-password"
 					required
-					class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+					class="mt-1 block w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 					bind:value={password}
 					data-testid="lq-ai-login-password"
 				/>
@@ -118,7 +118,7 @@
 
 			{#if error}
 				<div
-					class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+					class="text-sm lq-t-error lq-t-error-bg border lq-t-error-border rounded px-2 py-1"
 					data-testid="lq-ai-login-error"
 				>
 					{error}
@@ -140,14 +140,14 @@
 					</p>
 					<div class="flex items-stretch gap-2">
 						<code
-							class="flex-1 px-2 py-1 rounded bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-700 text-xs overflow-x-auto whitespace-nowrap"
+							class="flex-1 px-2 py-1 rounded lq-t-canvas border lq-t-warning-border text-xs overflow-x-auto whitespace-nowrap"
 							data-testid="lq-ai-bootstrap-hint-command"
 						>
 							{bootstrapLogsHint}
 						</code>
 						<button
 							type="button"
-							class="px-2 py-1 text-xs rounded border border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900"
+							class="px-2 py-1 text-xs rounded border lq-t-warning-border lq-t-warning-hover"
 							on:click={copyHint}
 							data-testid="lq-ai-bootstrap-hint-copy"
 							aria-label="Copy command to clipboard"
@@ -172,6 +172,11 @@
 </div>
 
 <style>
+	/* The page is the inset grey and the card raised white, as the redesign draws it. */
+	.lq-login-ground {
+		background-color: var(--lq-inset);
+	}
+
 	.lq-form-card {
 		padding: var(--lq-space-6);
 		border-radius: var(--lq-radius-lg);
@@ -184,7 +189,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -198,14 +203,40 @@
 	}
 
 	.lq-bootstrap-hint {
-		background: #fffbeb;
-		border-color: #fcd34d;
-		color: #78350f;
+		background: var(--lq-warning-soft);
+		border-color: var(--lq-warning-border);
+		color: var(--lq-warning);
 	}
 
-	:global(.dark) .lq-bootstrap-hint {
-		background: rgba(120, 53, 15, 0.25);
-		border-color: rgba(252, 211, 77, 0.4);
-		color: #fde68a;
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-on-accent {
+		color: var(--lq-on-accent);
+	}
+	.lq-t-primary-bg {
+		background-color: var(--lq-accent);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-warning-border {
+		border-color: var(--lq-warning-border);
+	}
+	.lq-t-warning-hover:hover {
+		background-color: var(--lq-warning-soft);
 	}
 </style>

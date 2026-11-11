@@ -88,10 +88,10 @@
   }
   .lq-btn-primary {
     background: var(--lq-accent); color: white;
-    border: 0; border-radius: var(--lq-radius);
+    border: 0; border-radius: var(--lq-radius-pill);
     padding: 8px 16px; font-size: 14px; font-weight: 500;
     cursor: pointer;
   }
-  .lq-btn-primary:hover { filter: brightness(0.95); }
+  .lq-btn-primary:hover { opacity: 0.85; }
   .lq-btn-primary:focus-visible { outline: 2px solid var(--lq-accent); outline-offset: 2px; }
 </style>
