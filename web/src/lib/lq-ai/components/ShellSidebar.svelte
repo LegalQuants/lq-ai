@@ -393,184 +393,187 @@
 			</div>
 
 			<nav class="lq-sidebar-nav" aria-label="Primary">
-				{#each mainSections as section (section.id)}
-					<div class="lq-sidebar-section" data-section={section.id}>
-						{#if SECTION_LABELS[section.id]}
-							<p class="lq-sidebar-label" id="lq-sidebar-label-{section.id}">
-								{SECTION_LABELS[section.id]}
-							</p>
-						{/if}
-						<ul
-							class="lq-sidebar-list"
-							aria-labelledby={SECTION_LABELS[section.id]
-								? `lq-sidebar-label-${section.id}`
-								: undefined}
-						>
-							{#if section.id === 'matters'}
-								{#if listsPending && shaped.matters.length === 0}
-									<li class="lq-sidebar-status"><span role="status">Loading matters…</span></li>
-								{/if}
-								{#each shaped.matters as matter (matter.project.id)}
-									<li>
-										<a
-											class="lq-sidebar-row"
-											class:lq-sidebar-row-current={current.matterId === matter.project.id}
-											href="/lq-ai/matters/{encodeURIComponent(matter.project.id)}"
-											aria-current={current.matterId === matter.project.id ? 'page' : undefined}
-											data-sidebar-matter={matter.project.id}
-										>
-											<IconFolder size={16} stroke={1.75} aria-hidden="true" />
-											<span class="lq-sidebar-row-label">{matter.project.name}</span>
-											{#if matter.project.privileged}
-												<IconLock
-													size={14}
-													stroke={1.75}
-													class="lq-sidebar-privileged"
-													role="img"
-													aria-label="Privileged"
-												/>
+				<!-- The lists scroll here; the foot below stays pinned (houfu, 11 Nov). -->
+				<div class="lq-sidebar-scroll" data-testid="lq-shell-sidebar-scroll">
+					{#each mainSections as section (section.id)}
+						<div class="lq-sidebar-section" data-section={section.id}>
+							{#if SECTION_LABELS[section.id]}
+								<p class="lq-sidebar-label" id="lq-sidebar-label-{section.id}">
+									{SECTION_LABELS[section.id]}
+								</p>
+							{/if}
+							<ul
+								class="lq-sidebar-list"
+								aria-labelledby={SECTION_LABELS[section.id]
+									? `lq-sidebar-label-${section.id}`
+									: undefined}
+							>
+								{#if section.id === 'matters'}
+									{#if listsPending && shaped.matters.length === 0}
+										<li class="lq-sidebar-status"><span role="status">Loading matters…</span></li>
+									{/if}
+									{#each shaped.matters as matter (matter.project.id)}
+										<li>
+											<a
+												class="lq-sidebar-row"
+												class:lq-sidebar-row-current={current.matterId === matter.project.id}
+												href="/lq-ai/matters/{encodeURIComponent(matter.project.id)}"
+												aria-current={current.matterId === matter.project.id ? 'page' : undefined}
+												data-sidebar-matter={matter.project.id}
+											>
+												<IconFolder size={16} stroke={1.75} aria-hidden="true" />
+												<span class="lq-sidebar-row-label">{matter.project.name}</span>
+												{#if matter.project.privileged}
+													<IconLock
+														size={14}
+														stroke={1.75}
+														class="lq-sidebar-privileged"
+														role="img"
+														aria-label="Privileged"
+													/>
+												{/if}
+											</a>
+											{#if matter.chats.length > 0}
+												<ul class="lq-sidebar-list lq-sidebar-children">
+													{#each matter.chats as chat (chat.id)}
+														<li>
+															<a
+																class="lq-sidebar-row lq-sidebar-chat"
+																class:lq-sidebar-row-current={chatCurrent(chat.id) !== undefined}
+																href={chatHref(chat.id)}
+																aria-current={chatCurrent(chat.id)}
+																data-sidebar-chat={chat.id}
+															>
+																<span class="lq-sidebar-row-label"
+																	>{chat.title || 'Untitled chat'}</span
+																>
+															</a>
+														</li>
+													{/each}
+												</ul>
 											{/if}
-										</a>
-										{#if matter.chats.length > 0}
-											<ul class="lq-sidebar-list lq-sidebar-children">
-												{#each matter.chats as chat (chat.id)}
+										</li>
+									{/each}
+								{:else if section.id === 'chats'}
+									{#if listsPending && shaped.otherChats.length === 0}
+										<li class="lq-sidebar-status"><span role="status">Loading chats…</span></li>
+									{/if}
+									{#each shaped.otherChats as chat (chat.id)}
+										<li>
+											<a
+												class="lq-sidebar-row lq-sidebar-chat"
+												class:lq-sidebar-row-current={chatCurrent(chat.id) !== undefined}
+												href={chatHref(chat.id)}
+												aria-current={chatCurrent(chat.id)}
+												data-sidebar-chat={chat.id}
+											>
+												<span class="lq-sidebar-row-label">{chat.title || 'Untitled chat'}</span>
+											</a>
+										</li>
+									{/each}
+									{#if listsFailed}
+										<li class="lq-sidebar-status" data-testid="lq-shell-lists-error">
+											<span role="status">Couldn’t load recent matters and chats.</span>
+											<button type="button" class="lq-sidebar-retry" on:click={retryLists}
+												>Retry</button
+											>
+										</li>
+									{/if}
+								{/if}
+								{#each section.items as item (item.id)}
+									<li>
+										{#if item.children}
+											<button
+												type="button"
+												class="lq-sidebar-row"
+												class:lq-sidebar-row-holds-current={hasActiveChild(item, active)}
+												aria-expanded={expanded[item.id] === true}
+												aria-controls="lq-sidebar-group-{item.id}"
+												data-nav-id={item.id}
+												on:click={() => toggle(item.id)}
+											>
+												<svelte:component
+													this={ICONS[item.id]}
+													size={16}
+													stroke={1.75}
+													aria-hidden="true"
+												/>
+												<span class="lq-sidebar-row-label">{item.label}</span>
+												<span
+													class="lq-sidebar-chevron"
+													class:lq-sidebar-chevron-open={expanded[item.id]}
+												>
+													<IconChevronDown size={14} stroke={1.75} aria-hidden="true" />
+												</span>
+											</button>
+											<ul
+												class="lq-sidebar-list lq-sidebar-children"
+												id="lq-sidebar-group-{item.id}"
+												hidden={expanded[item.id] !== true}
+											>
+												{#each item.children as child (child.id)}
 													<li>
 														<a
-															class="lq-sidebar-row lq-sidebar-chat"
-															class:lq-sidebar-row-current={chatCurrent(chat.id) !== undefined}
-															href={chatHref(chat.id)}
-															aria-current={chatCurrent(chat.id)}
-															data-sidebar-chat={chat.id}
+															class="lq-sidebar-row"
+															class:lq-sidebar-row-current={currentNav(child.id)}
+															href={child.route}
+															aria-current={currentNav(child.id) ? 'page' : undefined}
+															data-nav-id={child.id}
 														>
-															<span class="lq-sidebar-row-label"
-																>{chat.title || 'Untitled chat'}</span
-															>
+															<svelte:component
+																this={ICONS[child.id]}
+																size={16}
+																stroke={1.75}
+																aria-hidden="true"
+															/>
+															<span class="lq-sidebar-row-label">{child.label}</span>
 														</a>
 													</li>
 												{/each}
 											</ul>
+										{:else}
+											<a
+												class="lq-sidebar-row"
+												class:lq-sidebar-new={item.id === 'new'}
+												class:lq-sidebar-row-current={currentNav(item.id)}
+												href={item.route}
+												aria-current={currentNav(item.id) ? 'page' : undefined}
+												data-nav-id={item.id}
+											>
+												<svelte:component
+													this={ICONS[item.id]}
+													size={16}
+													stroke={1.75}
+													aria-hidden="true"
+												/>
+												<span class="lq-sidebar-row-label">{item.label}</span>
+											</a>
 										{/if}
 									</li>
 								{/each}
-							{:else if section.id === 'chats'}
-								{#if listsPending && shaped.otherChats.length === 0}
-									<li class="lq-sidebar-status"><span role="status">Loading chats…</span></li>
-								{/if}
-								{#each shaped.otherChats as chat (chat.id)}
+								{#if section.id === 'primary' && bell}
 									<li>
-										<a
-											class="lq-sidebar-row lq-sidebar-chat"
-											class:lq-sidebar-row-current={chatCurrent(chat.id) !== undefined}
-											href={chatHref(chat.id)}
-											aria-current={chatCurrent(chat.id)}
-											data-sidebar-chat={chat.id}
-										>
-											<span class="lq-sidebar-row-label">{chat.title || 'Untitled chat'}</span>
-										</a>
-									</li>
-								{/each}
-								{#if listsFailed}
-									<li class="lq-sidebar-status" data-testid="lq-shell-lists-error">
-										<span role="status">Couldn’t load recent matters and chats.</span>
-										<button type="button" class="lq-sidebar-retry" on:click={retryLists}
-											>Retry</button
-										>
-									</li>
-								{/if}
-							{/if}
-							{#each section.items as item (item.id)}
-								<li>
-									{#if item.children}
 										<button
 											type="button"
 											class="lq-sidebar-row"
-											class:lq-sidebar-row-holds-current={hasActiveChild(item, active)}
-											aria-expanded={expanded[item.id] === true}
-											aria-controls="lq-sidebar-group-{item.id}"
-											data-nav-id={item.id}
-											on:click={() => toggle(item.id)}
+											class:lq-sidebar-row-current={notificationsShown}
+											aria-expanded={notificationsShown}
+											aria-label={bellLabel}
+											data-testid="lq-shell-notifications-row"
+											on:click={toggleNotifications}
 										>
-											<svelte:component
-												this={ICONS[item.id]}
-												size={16}
-												stroke={1.75}
-												aria-hidden="true"
-											/>
-											<span class="lq-sidebar-row-label">{item.label}</span>
-											<span
-												class="lq-sidebar-chevron"
-												class:lq-sidebar-chevron-open={expanded[item.id]}
-											>
-												<IconChevronDown size={14} stroke={1.75} aria-hidden="true" />
-											</span>
+											<IconBell size={16} stroke={1.75} aria-hidden="true" />
+											<span class="lq-sidebar-row-label">Notifications</span>
+											{#if badge !== null}
+												<span class="lq-sidebar-count" aria-hidden="true">{badge}</span>
+											{/if}
 										</button>
-										<ul
-											class="lq-sidebar-list lq-sidebar-children"
-											id="lq-sidebar-group-{item.id}"
-											hidden={expanded[item.id] !== true}
-										>
-											{#each item.children as child (child.id)}
-												<li>
-													<a
-														class="lq-sidebar-row"
-														class:lq-sidebar-row-current={currentNav(child.id)}
-														href={child.route}
-														aria-current={currentNav(child.id) ? 'page' : undefined}
-														data-nav-id={child.id}
-													>
-														<svelte:component
-															this={ICONS[child.id]}
-															size={16}
-															stroke={1.75}
-															aria-hidden="true"
-														/>
-														<span class="lq-sidebar-row-label">{child.label}</span>
-													</a>
-												</li>
-											{/each}
-										</ul>
-									{:else}
-										<a
-											class="lq-sidebar-row"
-											class:lq-sidebar-new={item.id === 'new'}
-											class:lq-sidebar-row-current={currentNav(item.id)}
-											href={item.route}
-											aria-current={currentNav(item.id) ? 'page' : undefined}
-											data-nav-id={item.id}
-										>
-											<svelte:component
-												this={ICONS[item.id]}
-												size={16}
-												stroke={1.75}
-												aria-hidden="true"
-											/>
-											<span class="lq-sidebar-row-label">{item.label}</span>
-										</a>
-									{/if}
-								</li>
-							{/each}
-							{#if section.id === 'primary' && bell}
-								<li>
-									<button
-										type="button"
-										class="lq-sidebar-row"
-										class:lq-sidebar-row-current={notificationsShown}
-										aria-expanded={notificationsShown}
-										aria-label={bellLabel}
-										data-testid="lq-shell-notifications-row"
-										on:click={toggleNotifications}
-									>
-										<IconBell size={16} stroke={1.75} aria-hidden="true" />
-										<span class="lq-sidebar-row-label">Notifications</span>
-										{#if badge !== null}
-											<span class="lq-sidebar-count" aria-hidden="true">{badge}</span>
-										{/if}
-									</button>
-								</li>
-							{/if}
-						</ul>
-					</div>
-				{/each}
+									</li>
+								{/if}
+							</ul>
+						</div>
+					{/each}
+				</div>
 
 				{#if foot.length > 0}
 					<ul class="lq-sidebar-list lq-sidebar-foot" data-section="foot">
@@ -735,14 +738,23 @@
 	.lq-sidebar-brand-lq {
 		color: var(--lq-accent);
 	}
+	/* The nav fills the panel; its lists scroll inside it and the foot stays
+	   pinned below them, above the attribution. */
 	.lq-sidebar-nav {
+		flex: 1;
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--lq-space-2);
+		padding: var(--lq-space-1) 10px var(--lq-space-3);
+	}
+	.lq-sidebar-scroll {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		gap: var(--lq-space-4);
-		padding: var(--lq-space-1) 10px var(--lq-space-3);
 	}
 	.lq-sidebar-label {
 		margin: 0 0 var(--lq-space-1);
@@ -768,7 +780,9 @@
 		display: none;
 	}
 	.lq-sidebar-foot {
-		margin-top: auto;
+		flex-shrink: 0;
+		padding-top: var(--lq-space-2);
+		border-top: 1px solid var(--lq-border);
 	}
 	.lq-sidebar-row {
 		display: flex;

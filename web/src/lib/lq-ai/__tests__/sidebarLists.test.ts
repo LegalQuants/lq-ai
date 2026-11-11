@@ -89,8 +89,17 @@ describe('shapeSidebarLists', () => {
 		const lists = shapeSidebarLists(projects, chats);
 		expect(lists.matters).toHaveLength(SIDEBAR_CAPS.matters);
 		expect(lists.matters[0].chats.map((c) => c.id)).toEqual(['in5', 'in4', 'in3']);
-		expect(lists.otherChats.map((c) => c.id)).toEqual(['o8', 'o7', 'o6', 'o5', 'o4']);
-		expect(SIDEBAR_CAPS).toEqual({ matters: 5, chatsPerMatter: 3, otherChats: 5 });
+		expect(lists.otherChats.map((c) => c.id)).toEqual([
+			'o8',
+			'o7',
+			'o6',
+			'o5',
+			'o4',
+			'o3',
+			'o2',
+			'o1'
+		]);
+		expect(SIDEBAR_CAPS).toEqual({ matters: 5, chatsPerMatter: 3, otherChats: 8 });
 		expect(
 			shapeSidebarLists(projects, chats, { matters: 2, chatsPerMatter: 1, otherChats: 1 })
 		).toMatchObject({

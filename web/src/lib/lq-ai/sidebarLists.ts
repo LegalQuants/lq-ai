@@ -18,8 +18,11 @@ import { get, writable } from 'svelte/store';
 
 import type { Chat, PaginatedChats, Project } from './types';
 
-/** How much the sidebar lists. "All matters" and "All chats" lead to the rest. */
-export const SIDEBAR_CAPS = { matters: 5, chatsPerMatter: 3, otherChats: 5 } as const;
+/**
+ * How much the sidebar lists (houfu, 11 Nov: at most 5 matters, 3 chats under
+ * each, 8 other chats). "All matters" and "All chats" lead to the rest.
+ */
+export const SIDEBAR_CAPS = { matters: 5, chatsPerMatter: 3, otherChats: 8 } as const;
 /** One page of the caller's chats; enough to fill the caps in practice. */
 export const SIDEBAR_CHAT_PAGE = 50;
 /** Navigation refreshes at most this often. */
