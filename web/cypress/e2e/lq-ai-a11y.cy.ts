@@ -51,6 +51,8 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 		'/api/v1/knowledge-bases': [],
 		'/api/v1/user-skills': [],
 		'/api/v1/skills': [],
+		// Empty catalog still loads per-user recents for the default sort.
+		'/api/v1/skills/autocomplete': { results: [] },
 		'/api/v1/saved-prompts': [],
 		'/api/v1/teams': [],
 		'/api/v1/autonomous/notifications': { notifications: [], total_count: 0, limit: 50, offset: 0 },
@@ -63,6 +65,7 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 		'/api/v1/users/me': 'a11yUser',
 		'/api/v1/user-skills': 'a11yUserSkills',
 		'/api/v1/skills': 'a11yBuiltinSkills',
+		'/api/v1/skills/autocomplete': 'a11ySkillRecents',
 		'/api/v1/teams': 'a11yTeams'
 	};
 	cy.intercept('**/api/**', async (req) => {
@@ -71,6 +74,8 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 		if (dashboard && (path === '/api/v1/chats' || path === '/api/v1/projects')) await activityReady;
 		if (req.method === 'GET' && Object.hasOwn(reads, path)) {
 			if (aliases[path]) req.alias = aliases[path];
+			if (path === '/api/v1/skills' && new URL(req.url).searchParams.get('scope') !== 'builtin')
+				req.alias = 'a11yActiveSkills';
 			const delay = delayBootstrap && firstConfig && path === '/api/config' ? bootstrapDelayMs : 0;
 			if (path === '/api/config') firstConfig = false;
 			req.reply({ statusCode: 200, body: reads[path], delay });
@@ -133,7 +138,16 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					if ('heading' in state)
 						cy.contains('h1,h2', state.heading, { timeout: 15000 }).should('be.visible');
 					if (state.id === 'skills') {
-						cy.wait(['@a11yUserSkills', '@a11yBuiltinSkills', '@a11yTeams'], bootstrapTimeout);
+						cy.wait(
+							[
+								'@a11yUserSkills',
+								'@a11yBuiltinSkills',
+								'@a11yActiveSkills',
+								'@a11ySkillRecents',
+								'@a11yTeams'
+							],
+							bootstrapTimeout
+						);
 						cy.contains(
 							'[data-testid="lq-ai-user-skills"]',
 							"You haven't created any skills yet."
