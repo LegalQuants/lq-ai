@@ -14,16 +14,34 @@ None of this proves the software is free of vulnerabilities, or that a release w
 
 LQ.AI uses [sigstore keyless signing](https://docs.sigstore.dev/) (cosign + Fulcio + Rekor) and [SLSA build provenance](https://slsa.dev/spec/v1.0/) attestations.
 
+## Which cosign
+
+The release workflow signs with cosign 2.4, which stores the image signature and the SBOM
+attestation in cosign's older registry layout. cosign 3 looks for the newer bundle format unless
+told otherwise, so every cosign command on this page passes `--new-bundle-format=false`. cosign 2.5
+and later accept that flag. With cosign 2.4 or earlier, leave it out: those versions read only the
+older layout and don't have the flag on `verify` or `verify-attestation`.
+
+The identity pattern names `release.yml` running for a tag, so only the release run's own signature
+satisfies it. The build provenance is signed by a different workflow, `build-image.yml`, and is
+checked separately with `gh attestation verify` below.
+
 ## Quick verify (single image)
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
+  --new-bundle-format=false \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/\.github/workflows/release\.yml@refs/tags/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:v0.1.0
 ```
 
-A successful run prints the signing certificate's issuer, subject (the workflow OIDC identity), and Rekor transparency-log entry. Failure prints a diagnostic explaining whether the signature is missing, the cert doesn't match, or the cert's identity doesn't match the regexp.
+A successful run prints a JSON list. Look for an entry whose `critical.type` is
+`cosign container image signature` and whose `optional.Subject` is
+`https://github.com/LegalQuants/lq-ai/.github/workflows/release.yml@refs/tags/<tag>`, the release run
+for the tag you asked about. Failure prints a diagnostic explaining whether the signature is missing,
+the cert doesn't match, or the cert's identity doesn't match the regexp. With cosign 3, leaving out
+`--new-bundle-format=false` makes this command fail with `no matching CertificateIdentity found`.
 
 ## Verify all four images in a release
 
@@ -32,7 +50,8 @@ TAG=v0.1.0
 for service in api gateway web proxy; do
   echo "=== ${service} ==="
   cosign verify \
-    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
+    --new-bundle-format=false \
+    --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/\.github/workflows/release\.yml@refs/tags/' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     "ghcr.io/legalquants/lq-ai-${service}:${TAG}"
 done
@@ -45,8 +64,9 @@ needs `cosign`, `jq`, and an SBOM scanner (`grype` below; use your own):
 
 ```bash
 cosign verify-attestation \
+  --new-bundle-format=false \
   --type spdxjson \
-  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/\.github/workflows/release\.yml@refs/tags/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:v0.1.0 | jq -r '.payload' | base64 -d | jq '.predicate' > api.spdx.json
 
