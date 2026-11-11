@@ -62,10 +62,6 @@
 		touched = { ...touched, [index]: { ...touched[index], [field]: true } };
 	}
 
-	function errorFor(index: number, field: 'name' | 'query'): string | null {
-		if (!showErrors && !touched[index]?.[field]) return null;
-		return validation.columnErrors[index]?.[field] ?? null;
-	}
 </script>
 
 <div class="lq-column-editor" data-testid="lq-ai-column-editor">
@@ -126,9 +122,9 @@
 					on:input={(e) => setField(i, { name: e.currentTarget.value })}
 					on:blur={() => markTouched(i, 'name')}
 				/>
-				{#if errorFor(i, 'name')}
+				{#if (showErrors || touched[i]?.name) && validation.columnErrors[i]?.name}
 					<span class="error inline-error" data-testid="lq-ai-column-name-error">
-						{errorFor(i, 'name')}
+						{validation.columnErrors[i]?.name}
 					</span>
 				{/if}
 			</label>
@@ -144,9 +140,9 @@
 					on:input={(e) => setField(i, { query: e.currentTarget.value })}
 					on:blur={() => markTouched(i, 'query')}
 				></textarea>
-				{#if errorFor(i, 'query')}
+				{#if (showErrors || touched[i]?.query) && validation.columnErrors[i]?.query}
 					<span class="error inline-error" data-testid="lq-ai-column-query-error">
-						{errorFor(i, 'query')}
+						{validation.columnErrors[i]?.query}
 					</span>
 				{/if}
 			</label>

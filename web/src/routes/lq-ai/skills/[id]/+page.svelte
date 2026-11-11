@@ -81,8 +81,8 @@
 					data-testid="lq-ai-skill-fork-link"
 					aria-label={`Fork ${skill.title ?? skill.name} as my own`}
 				>🔱 Fork as my own</a>
-				{#if skill.scope !== 'builtin'}
-					<a href={`/lq-ai/skills/${encodeURIComponent(skill.name)}/edit`} class="lq-btn-primary"
+				{#if skill.scope !== 'builtin' && skill.id}
+					<a href={`/lq-ai/skills/${encodeURIComponent(skill.id)}/edit`} class="lq-btn-primary"
 						>Edit</a
 					>
 				{/if}
@@ -105,7 +105,7 @@
 							Review — one grid cell per document per column.
 						</p>
 						<dl class="lq-columns-list">
-							{#each tableColumns as col (col.name)}
+							{#each tableColumns as col}
 								<div class="lq-columns-row" data-testid="lq-ai-skill-column">
 									<dt>
 										{col.name}
@@ -115,7 +115,7 @@
 											</span>
 										{/if}
 										{#if col.minimum_inference_tier !== null}
-											<span class="lq-columns-flag">tier ≥ {col.minimum_inference_tier}</span>
+											<span class="lq-columns-flag">tier ≤ {col.minimum_inference_tier}</span>
 										{/if}
 									</dt>
 									<dd>{col.query}</dd>

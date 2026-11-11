@@ -16,6 +16,7 @@
  *
  * - `output_format: table` requires >= 1 column
  *   (`_table_mode_requires_columns`);
+ * - column names must be unique after trimming and case normalization;
  * - each column needs a non-empty `name` and `query`
  *   (`ColumnSpec` `min_length=1`);
  * - `minimum_inference_tier` is an integer 1-5 or unset (`ge=1, le=5`);
@@ -57,8 +58,7 @@ export interface ColumnsValidation {
 	columnErrors: ColumnFieldErrors[];
 }
 
-export const MIN_ONE_COLUMN_ERROR =
-	'A table-mode skill needs at least one column.';
+export const MIN_ONE_COLUMN_ERROR = 'A table-mode skill needs at least one column.';
 export const EMPTY_NAME_ERROR = 'Column name is required.';
 export const EMPTY_QUERY_ERROR = 'Extraction query is required.';
 export const TIER_RANGE_ERROR = 'Tier must be between 1 and 5.';
@@ -78,9 +78,14 @@ export function newEditableColumn(): EditableColumn {
  * render inline errors next to the offending field.
  */
 export function validateColumns(columns: EditableColumn[]): ColumnsValidation {
+	const seen = new Set<string>();
 	const columnErrors: ColumnFieldErrors[] = columns.map((col) => {
 		const errs: ColumnFieldErrors = {};
-		if (!col.name.trim()) errs.name = EMPTY_NAME_ERROR;
+		const name = col.name.trim();
+		const key = name.toLowerCase();
+		if (!name) errs.name = EMPTY_NAME_ERROR;
+		else if (seen.has(key)) errs.name = `Duplicate column name: ${name}.`;
+		else seen.add(key);
 		if (!col.query.trim()) errs.query = EMPTY_QUERY_ERROR;
 		const tier = col.minimum_inference_tier;
 		if (tier !== null && (!Number.isInteger(tier) || tier < 1 || tier > 5)) {
@@ -89,8 +94,7 @@ export function validateColumns(columns: EditableColumn[]): ColumnsValidation {
 		return errs;
 	});
 	const listError = columns.length === 0 ? MIN_ONE_COLUMN_ERROR : null;
-	const valid =
-		listError === null && columnErrors.every((e) => Object.keys(e).length === 0);
+	const valid = listError === null && columnErrors.every((e) => Object.keys(e).length === 0);
 	return { valid, listError, columnErrors };
 }
 
@@ -137,13 +141,37 @@ export function modeFromExtra(extra: Record<string, unknown> | null | undefined)
 	return extra && extra['output_format'] === 'table' ? 'table' : 'prose';
 }
 
+/** Normalize the practical JSON scalars accepted by Pydantic's bool parser. */
+export function normalizeColumnEnsemble(raw: unknown): boolean | null {
+	if (typeof raw === 'boolean') return raw;
+	if (raw === 0) return false;
+	if (raw === 1) return true;
+	if (typeof raw === 'string') {
+		// Pydantic's aliases are case-insensitive, but not whitespace-trimmed.
+		const value = raw.toLowerCase();
+		if (['0', 'off', 'f', 'false', 'n', 'no'].includes(value)) return false;
+		if (['1', 'on', 't', 'true', 'y', 'yes'].includes(value)) return true;
+	}
+	return null;
+}
+
+/** Normalize stored integral tier strings without hiding invalid numeric tiers. */
+export function normalizeColumnTier(raw: unknown): number | null {
+	if (typeof raw === 'number') return raw;
+	if (typeof raw === 'boolean') return Number(raw);
+	if (typeof raw === 'string' && /^[+-]?\d+(?:\.0+)?$/.test(raw.trim())) {
+		const value = Number(raw);
+		if (Number.isInteger(value) && value >= 1 && value <= 5) return value;
+	}
+	return null;
+}
+
 /**
  * Defensively parse a raw `columns` value (from `frontmatter_extra` or
  * a localStorage draft) into editor rows. Non-array input or rows that
  * are not plain objects yield `null` / get skipped; missing overrides
- * normalize to `null` ("inherit"); non-integer tiers are kept only when
- * they are numbers so validation can flag them rather than silently
- * dropping user data.
+ * normalize to `null` ("inherit"); supported scalar coercions mirror the
+ * backend. Invalid numeric tiers remain visible to validation.
  */
 export function columnsFromRaw(raw: unknown): EditableColumn[] | null {
 	if (!Array.isArray(raw)) return null;
@@ -154,10 +182,8 @@ export function columnsFromRaw(raw: unknown): EditableColumn[] | null {
 		out.push({
 			name: typeof rec.name === 'string' ? rec.name : '',
 			query: typeof rec.query === 'string' ? rec.query : '',
-			ensemble_verification:
-				typeof rec.ensemble_verification === 'boolean' ? rec.ensemble_verification : null,
-			minimum_inference_tier:
-				typeof rec.minimum_inference_tier === 'number' ? rec.minimum_inference_tier : null
+			ensemble_verification: normalizeColumnEnsemble(rec.ensemble_verification),
+			minimum_inference_tier: normalizeColumnTier(rec.minimum_inference_tier)
 		});
 	}
 	return out;
@@ -167,10 +193,11 @@ export function columnsFromRaw(raw: unknown): EditableColumn[] | null {
  * Build the next `frontmatter_extra` for the chosen mode, preserving
  * unrelated extension keys (jurisdiction, icon, inputs, …).
  *
- * - `table` → sets `output_format: 'table'` + the serialized columns.
- * - `prose` → strips `columns`, and strips `output_format` only when
- *   it was `'table'` (a hand-set `output_format: 'report'` etc. is not
- *   this surface's key to remove).
+ * An unchanged editor projection preserves the stored spec exactly, including
+ * whitespace, explicit nulls and extension fields the editor does not expose.
+ * Only an actual column edit or mode change serializes a new table spec.
+ * Prose removes table fields only on a Table-to-Prose transition; dormant
+ * columns and hand-set non-table formats belong to the existing skill.
  */
 export function buildFrontmatterExtra(
 	prev: Record<string, unknown> | null | undefined,
@@ -179,11 +206,29 @@ export function buildFrontmatterExtra(
 ): Record<string, unknown> {
 	const base: Record<string, unknown> = { ...(prev ?? {}) };
 	if (mode === 'table') {
+		const parsed = columnsFromRaw(prev?.['columns']);
+		const initial = parsed && parsed.length > 0 ? parsed : [newEditableColumn()];
+		if (
+			modeFromExtra(prev) === 'table' &&
+			columns.length === initial.length &&
+			columns.every((column, index) => {
+				const original = initial[index];
+				return (
+					column.name === original.name &&
+					column.query === original.query &&
+					column.ensemble_verification === original.ensemble_verification &&
+					column.minimum_inference_tier === original.minimum_inference_tier
+				);
+			})
+		)
+			return base;
 		base['output_format'] = 'table';
 		base['columns'] = serializeColumns(columns);
 		return base;
 	}
-	delete base['columns'];
-	if (base['output_format'] === 'table') delete base['output_format'];
+	if (base['output_format'] === 'table') {
+		delete base['columns'];
+		delete base['output_format'];
+	}
 	return base;
 }

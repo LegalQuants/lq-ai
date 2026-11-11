@@ -36,6 +36,35 @@ version renders for you; everyone else, including the skill's original
 author, keeps seeing the built-in. Nothing here touches this repository
 or requires a PR.
 
+## Saved table skills
+
+In the Skill Creator, choose **Table** to author reusable extraction
+columns. Give each column a unique name and a query, then choose any ensemble
+or inference-tier overrides. **Inherit** leaves the column override
+unset, using the skill's default or the deployment default. Lower tier
+numbers are stricter. Use the up/down buttons to set column order.
+
+The columns are stored with the personal or team skill in the database
+under `frontmatter_extra.output_format` and `frontmatter_extra.columns`.
+They belong in the database backup, not the built-in skill directory.
+An empty table-only body is saved with a short explanation of the table
+workflow; existing prose is preserved.
+
+Open a table skill to read its columns, then choose **Use in Tabular
+Review** to preselect it. Each new execution snapshots the saved column
+spec. Editing the skill changes future runs, not previous results.
+Changing only its title or description leaves stored columns and other
+metadata untouched. Switching explicitly from Table to Prose removes
+the active table spec.
+
+Built-ins remain read-only. If a personal or team skill overrides a built-in
+slug, the list labels that override and links to the active version rather
+than presenting it as the built-in. **Fork as my own** creates an editable copy
+with its table columns and skill-level defaults. New forks have separate
+drafts; reloading an in-progress fork resumes that draft. The skills
+list can filter by output format and sort by your recent chat usage or
+name; the chosen filter and sort are kept in the URL.
+
 ## Team skills
 
 The API also supports team-owned skills, with team-admin checks for

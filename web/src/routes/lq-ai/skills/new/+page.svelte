@@ -51,7 +51,7 @@
 	import { listUserSkills, createUserSkill } from '$lib/lq-ai/api/userSkills';
 	import SkillWizard from '$lib/lq-ai/components/SkillWizard.svelte';
 	import { stashStorageKey } from '$lib/lq-ai/components/CaptureSkillModal.svelte';
-	import { forkTableSeed } from '$lib/lq-ai/skills/builtinsBrowser';
+	import { forkTableSeed, type TableSkillDefaults } from '$lib/lq-ai/skills/builtinsBrowser';
 	import type { EditableColumn, SkillOutputMode } from '$lib/lq-ai/skills/tableColumns';
 	import type { UserSkillCreate } from '$lib/lq-ai/types';
 
@@ -69,6 +69,7 @@
 		/** DE-298 — table-mode fork seed (mode + columns from the source). */
 		outputMode?: SkillOutputMode;
 		columns?: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	}
 
 	let initial: WizardInitial = {};
@@ -146,7 +147,13 @@
 				// Intentionally NOT seeding `jurisdiction` from the source —
 				// the wizard doesn't surface that field today (see header
 				// comment for the rationale).
-				draftKey = `fork-${forkSlug}-${newDraftKey()}`;
+				draftKey = explicitDraftKey ?? `fork-${forkSlug}-${newDraftKey()}`;
+				// Give each fresh fork its own draft, but keep that draft on reload.
+				if (!explicitDraftKey) {
+					const url = new URL($page.url);
+					url.searchParams.set('draft', draftKey);
+					await goto(url.pathname + url.search, { replaceState: true, noScroll: true });
+				}
 			} else if (captureKey) {
 				try {
 					const stash = localStorage.getItem(stashStorageKey(captureKey));

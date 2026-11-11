@@ -1,3 +1,60 @@
+<script context="module" lang="ts">
+	import { buildFrontmatterExtra } from '$lib/lq-ai/skills/tableColumns';
+
+	export interface SkillEditForm {
+		displayName: string;
+		description: string;
+		body: string;
+		version: string;
+		tagsInput: string;
+		outputMode: SkillOutputMode;
+		columns: EditableColumn[];
+	}
+
+	function parseTags(raw: string): string[] {
+		return raw
+			.split(',')
+			.map((t) => t.trim())
+			.filter((t) => t.length > 0);
+	}
+
+	export function buildEditChangeSet(
+		row: UserSkill | null,
+		form: SkillEditForm
+	): Partial<{
+		display_name: string;
+		description: string;
+		body: string;
+		version: string;
+		tags: string[];
+		frontmatter_extra: Record<string, unknown>;
+	}> {
+		if (!row) return {};
+		const { displayName, description, body, version, tagsInput, outputMode, columns } = form;
+		const diff: ReturnType<typeof buildEditChangeSet> = {};
+		const trimmedDisplay = displayName.trim();
+		if (trimmedDisplay !== row.display_name) diff.display_name = trimmedDisplay;
+		const trimmedDescription = description.trim();
+		if (trimmedDescription !== row.description) diff.description = trimmedDescription;
+		if (body !== row.body) diff.body = body;
+		const trimmedVersion = version.trim();
+		if (trimmedVersion && trimmedVersion !== row.version) diff.version = trimmedVersion;
+		const newTags = parseTags(tagsInput);
+		const oldTags = row.tags ?? [];
+		if (newTags.length !== oldTags.length || newTags.some((t, i) => oldTags[i] !== t)) {
+			diff.tags = newTags;
+		}
+		// Preserve the stored spec unless the mode or editable columns changed.
+		// Metadata-only saves must not normalize or drop existing frontmatter.
+		const prevExtra = row.frontmatter_extra ?? {};
+		const newExtra = buildFrontmatterExtra(prevExtra, outputMode, columns);
+		if (JSON.stringify(newExtra) !== JSON.stringify(prevExtra)) {
+			diff.frontmatter_extra = newExtra;
+		}
+		return diff;
+	}
+</script>
+
 <script lang="ts">
 	/**
 	 * /lq-ai/skills/[id]/edit — edit an existing user-scope skill (D8 / ADR 0012).
@@ -19,7 +76,6 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import ColumnEditor from '$lib/lq-ai/components/ColumnEditor.svelte';
 	import {
-		buildFrontmatterExtra,
 		columnsFromRaw,
 		modeFromExtra,
 		newEditableColumn,
@@ -65,9 +121,7 @@
 			]);
 			row = skill;
 			builtinSlugs = new Set(builtins.map((s: SkillSummary) => s.name));
-			teamNamesById = new Map(
-				(myTeams as TeamSummary[]).map((t) => [t.id, t.name])
-			);
+			teamNamesById = new Map((myTeams as TeamSummary[]).map((t) => [t.id, t.name]));
 			displayName = skill.display_name;
 			description = skill.description;
 			version = skill.version;
@@ -75,13 +129,12 @@
 			body = skill.body;
 			outputMode = modeFromExtra(skill.frontmatter_extra);
 			const loadedColumns = columnsFromRaw(skill.frontmatter_extra?.['columns']);
-			columns =
-				loadedColumns && loadedColumns.length > 0 ? loadedColumns : [newEditableColumn()];
+			columns = loadedColumns && loadedColumns.length > 0 ? loadedColumns : [newEditableColumn()];
 			showColumnErrors = false;
 		} catch (e) {
 			console.error('user-skills/edit: load failed', e);
 			if (e instanceof LQAIApiError && e.status === 404) {
-				loadError = 'That skill no longer exists, or it isn\'t one of yours.';
+				loadError = "That skill no longer exists, or it isn't one of yours.";
 			} else {
 				loadError = e instanceof Error ? e.message : 'Failed to load the skill.';
 			}
@@ -90,59 +143,27 @@
 		}
 	}
 
-	function parseTags(raw: string): string[] {
-		return raw
-			.split(',')
-			.map((t) => t.trim())
-			.filter((t) => t.length > 0);
-	}
-
-	function changeSet(): Partial<{
-		display_name: string;
-		description: string;
-		body: string;
-		version: string;
-		tags: string[];
-		frontmatter_extra: Record<string, unknown>;
-	}> {
-		if (!row) return {};
-		const diff: ReturnType<typeof changeSet> = {};
-		const trimmedDisplay = displayName.trim();
-		if (trimmedDisplay !== row.display_name) diff.display_name = trimmedDisplay;
-		const trimmedDescription = description.trim();
-		if (trimmedDescription !== row.description) diff.description = trimmedDescription;
-		if (body !== row.body) diff.body = body;
-		const trimmedVersion = version.trim();
-		if (trimmedVersion && trimmedVersion !== row.version) diff.version = trimmedVersion;
-		const newTags = parseTags(tagsInput);
-		const oldTags = row.tags ?? [];
-		if (
-			newTags.length !== oldTags.length ||
-			newTags.some((t, i) => oldTags[i] !== t)
-		) {
-			diff.tags = newTags;
-		}
-		// DE-297 — table-mode: rebuild the extra block (preserving
-		// unrelated keys) and send it only when it actually moved, so an
-		// idempotent re-save still writes no audit row.
-		const prevExtra = row.frontmatter_extra ?? {};
-		const newExtra = buildFrontmatterExtra(prevExtra, outputMode, columns);
-		if (JSON.stringify(newExtra) !== JSON.stringify(prevExtra)) {
-			diff.frontmatter_extra = newExtra;
-		}
-		return diff;
+	function changeSet() {
+		return buildEditChangeSet(row, {
+			displayName,
+			description,
+			body,
+			version,
+			tagsInput,
+			outputMode,
+			columns
+		});
 	}
 
 	async function save(): Promise<void> {
 		if (!row) return;
-		// Mirror — never widen — the backend's table-mode validation: a
-		// spec the server would 422 never leaves the page (DE-297).
-		if (outputMode === 'table' && !validateColumns(columns).valid) {
+		const diff = changeSet();
+		// Validate a new spec, not an untouched legacy spec on a metadata-only save.
+		if (diff.frontmatter_extra && outputMode === 'table' && !validateColumns(columns).valid) {
 			showColumnErrors = true;
 			submitError = 'Fix the column errors before saving.';
 			return;
 		}
-		const diff = changeSet();
 		if (Object.keys(diff).length === 0) {
 			saveOk = 'Nothing to save — no changes.';
 			return;
@@ -214,12 +235,7 @@
 				</p>
 			{/if}
 		</div>
-		<a
-			href="/lq-ai/skills"
-			class="lq-btn-secondary lq-text-caption"
-		>
-			Back
-		</a>
+		<a href="/lq-ai/skills" class="lq-btn-secondary lq-text-caption"> Back </a>
 	</header>
 
 	{#if justCreated}
@@ -249,9 +265,9 @@
 			>
 				This skill shadows the built-in <code class="font-mono">{row.slug}</code>.
 				{#if row.scope === 'team'}
-					When any member of this team attaches it to a chat, the team's version shapes the
-					system prompt — the built-in is hidden for them. A user-scope shadow at the same slug
-					(per-user) would in turn take precedence over the team version.
+					When any member of this team attaches it to a chat, the team's version shapes the system
+					prompt — the built-in is hidden for them. A user-scope shadow at the same slug (per-user)
+					would in turn take precedence over the team version.
 				{:else}
 					When you attach it to a chat, your version shapes the system prompt — the built-in is
 					hidden for you. Other users still see the built-in unless they're in a team that also
@@ -334,7 +350,9 @@
 						maxlength="50"
 						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
 					/>
-					<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">Bump on edits; the audit log records before/after.</p>
+					<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+						Bump on edits; the audit log records before/after.
+					</p>
 				</label>
 				<label class="block">
 					<span class="lq-text-label">Tags (comma-separated)</span>
@@ -348,11 +366,7 @@
 
 			<div class="block">
 				<span class="lq-text-label">Output</span>
-				<div
-					class="mt-1 flex items-center gap-4"
-					role="radiogroup"
-					aria-label="output mode"
-				>
+				<div class="mt-1 flex items-center gap-4" role="radiogroup" aria-label="output mode">
 					<label class="flex items-center gap-1.5 text-sm cursor-pointer">
 						<input
 							type="radio"
@@ -375,8 +389,8 @@
 					</label>
 				</div>
 				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
-					Table-mode skills produce a row-per-document grid in the Tabular Review
-					wizard; each column defines one extraction query.
+					Table-mode skills produce a row-per-document grid in the Tabular Review wizard; each
+					column defines one extraction query.
 				</p>
 			</div>
 
@@ -445,7 +459,9 @@
 		display: inline-flex;
 		align-items: center;
 	}
-	.lq-btn-secondary:hover { background: var(--lq-inset); }
+	.lq-btn-secondary:hover {
+		background: var(--lq-inset);
+	}
 
 	.lq-btn-danger {
 		background: transparent;
@@ -456,5 +472,7 @@
 		font-size: 12px;
 		cursor: pointer;
 	}
-	.lq-btn-danger:hover { background: var(--lq-error-soft); }
+	.lq-btn-danger:hover {
+		background: var(--lq-error-soft);
+	}
 </style>

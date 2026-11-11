@@ -34,6 +34,7 @@
 	let rows: UserSkill[] = [];
 	let builtinSlugs = new Set<string>();
 	let builtins: SkillSummary[] = [];
+	let activeScopes = new Map<string, string>();
 	let recentSlugs: string[] = [];
 	let teamNamesById = new Map<string, string>();
 	let loading = false;
@@ -44,10 +45,11 @@
 		loading = true;
 		listError = null;
 		try {
-			const [mine, builtinList, myTeams, recents] = await Promise.all([
+			const [mine, builtinList, myTeams, activeSkills, recents] = await Promise.all([
 				userSkillsApi.listUserSkills('all'),
 				skillsApi.listSkills('builtin'),
 				teamsApi.listMyTeams(),
+				skillsApi.listSkills(),
 				// DE-298 — per-user recents (messages.applied_skills ordering)
 				// via the autocomplete endpoint's empty-query mode. Tolerant:
 				// a recents failure degrades to alphabetical, never blocks the page.
@@ -61,6 +63,7 @@
 			]);
 			rows = mine;
 			builtins = builtinList;
+			activeScopes = new Map(activeSkills.map((s) => [s.name, s.scope]));
 			builtinSlugs = new Set(builtinList.map((s: SkillSummary) => s.name));
 			recentSlugs = recents;
 			teamNamesById = new Map(
@@ -88,6 +91,8 @@
 		try {
 			await userSkillsApi.deleteUserSkill(row.id);
 			rows = rows.filter((r) => r.id !== row.id);
+			// Archiving a shadow can expose a team version or the built-in.
+			await load();
 		} catch (e) {
 			console.error('user-skills: archive failed', e);
 			actionError = e instanceof Error ? e.message : 'Failed to archive skill.';
@@ -274,13 +279,15 @@
 							<div class="flex items-start justify-between gap-3">
 								<div class="min-w-0">
 									<div class="flex items-center gap-2 flex-wrap">
-										<a
-											href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}
-											class="font-medium lq-text-body lq-link"
-											data-testid="lq-ai-builtin-skill-link"
-										>
-											{s.title ?? s.name}
-										</a>
+										{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
+											<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
+										{:else}
+											<a
+												href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}
+												class="font-medium lq-text-body lq-link"
+												data-testid="lq-ai-builtin-skill-link"
+											>{s.title ?? s.name}</a>
+										{/if}
 										{#if normalizeFormat(s.output_format) !== FORMAT_PROSE}
 											<span data-testid="lq-ai-table-badge">
 												<TrustPill variant="tier" label={chipLabel(normalizeFormat(s.output_format))} />
@@ -288,6 +295,12 @@
 										{/if}
 									</div>
 									<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+									{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
+										<p class="lq-text-caption" data-testid="lq-ai-builtin-shadow-notice">
+											Your {activeScopes.get(s.name) === 'user' ? 'personal' : 'team'} version overrides this built-in.
+											<a class="lq-link" href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}>Open active version</a>
+										</p>
+									{/if}
 									{#if s.description}
 										<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
 									{/if}

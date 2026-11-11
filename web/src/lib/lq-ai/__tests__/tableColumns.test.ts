@@ -21,6 +21,8 @@ import {
 	modeFromExtra,
 	moveColumn,
 	newEditableColumn,
+	normalizeColumnEnsemble,
+	normalizeColumnTier,
 	serializeColumns,
 	validateColumns,
 	type EditableColumn
@@ -69,6 +71,28 @@ describe('validateColumns', () => {
 			expect(v.valid).toBe(false);
 			expect(v.columnErrors[0].tier).toBe(TIER_RANGE_ERROR);
 		}
+	});
+
+	it.each(['Term', ' term ', 'TERM'])(
+		'rejects duplicate column names after trim/case normalization: %s',
+		(name) => {
+			const result = validateColumns([col(), col({ name }), col({ name: 'Law' })]);
+			expect(result.valid).toBe(false);
+			expect(result.columnErrors).toEqual([
+				{},
+				{ name: `Duplicate column name: ${name.trim()}.` },
+				{}
+			]);
+		}
+	);
+
+	it('allows distinct names and keeps required-name errors for blank names', () => {
+		expect(validateColumns([col(), col({ name: 'Termination' })]).valid).toBe(true);
+		const result = validateColumns([col({ name: '' }), col({ name: '  ' })]);
+		expect(result.columnErrors.map((error) => error.name)).toEqual([
+			EMPTY_NAME_ERROR,
+			EMPTY_NAME_ERROR
+		]);
 	});
 
 	it('accepts every in-range tier and null (inherit)', () => {
@@ -199,5 +223,168 @@ describe('buildFrontmatterExtra', () => {
 		expect(JSON.stringify(buildFrontmatterExtra(prev, 'prose', [newEditableColumn()]))).toBe(
 			JSON.stringify(prev)
 		);
+	});
+});
+
+describe('metadata-only edit preservation', () => {
+	it.each(['report', 'issues_list', 'custom-format', undefined])(
+		'preserves dormant columns and unrelated extensions in prose (%s)',
+		(outputFormat) => {
+			const prev = {
+				...(outputFormat === undefined ? {} : { output_format: outputFormat }),
+				columns: [{ name: '  Term  ', query: '  q\n', minimum_inference_tier: null }],
+				inputs: [{ name: 'agreement', required: true }],
+				custom: { nested: ['retain', null] }
+			};
+			const result = buildFrontmatterExtra(prev, 'prose', [newEditableColumn()]);
+			expect(JSON.stringify(result)).toBe(JSON.stringify(prev));
+			expect(result.columns).toBe(prev.columns);
+		}
+	);
+
+	it('preserves raw table specs when editor fields are unchanged', () => {
+		const prev = {
+			output_format: 'table',
+			columns: [
+				{
+					query: '  Extract the term.\n',
+					name: '  Term  ',
+					ensemble_verification: null,
+					minimum_inference_tier: null,
+					custom: { retained: true }
+				},
+				{ name: 'Law', query: 'Find the law.', ensemble_verification: false }
+			],
+			jurisdiction: 'sg',
+			custom: { nested: ['retain', null] }
+		};
+		const original = JSON.stringify(prev);
+		const result = buildFrontmatterExtra(prev, 'table', columnsFromRaw(prev.columns)!);
+		expect(JSON.stringify(result)).toBe(original);
+		expect(result.columns).toBe(prev.columns);
+		expect(JSON.stringify(prev)).toBe(original);
+	});
+
+	it.each([undefined, [], ['legacy'], [{ name: 'Term' }]])(
+		'preserves legacy table data rather than repairing it on an unrelated save: %j',
+		(raw) => {
+			const prev = { output_format: 'table', columns: raw };
+			const parsed = columnsFromRaw(raw);
+			const editor = parsed?.length ? parsed : [newEditableColumn()];
+			expect(buildFrontmatterExtra(prev, 'table', editor)).toEqual(prev);
+		}
+	);
+
+	it.each([
+		{ name: 'Changed' },
+		{ query: 'Changed query' },
+		{ ensemble_verification: false },
+		{ minimum_inference_tier: 3 }
+	])('persists an intentional column field edit: %j', (change) => {
+		const prev = { output_format: 'table', columns: serializeColumns([col()]), icon: 'keep' };
+		const edited = [col(change)];
+		expect(buildFrontmatterExtra(prev, 'table', edited)).toEqual({
+			...prev,
+			columns: serializeColumns(edited)
+		});
+		expect(prev.columns).toEqual(serializeColumns([col()]));
+	});
+
+	it('persists adding, removing and reordering columns', () => {
+		const columns = [col(), col({ name: 'Law' })];
+		const prev = { output_format: 'table', columns: serializeColumns(columns), custom: 'keep' };
+		for (const edited of [
+			columns.slice(0, 1),
+			[...columns, col({ name: 'Date' })],
+			moveColumn(columns, 1, -1)
+		]) {
+			expect(buildFrontmatterExtra(prev, 'table', edited)).toEqual({
+				...prev,
+				columns: serializeColumns(edited)
+			});
+		}
+	});
+
+	it('persists a Prose-to-Table transition even with unchanged dormant columns', () => {
+		const prev = { output_format: 'report', columns: serializeColumns([col()]), custom: 'keep' };
+		expect(buildFrontmatterExtra(prev, 'table', columnsFromRaw(prev.columns)!)).toEqual({
+			...prev,
+			output_format: 'table'
+		});
+	});
+});
+
+describe('stored column scalar normalization', () => {
+	it.each([false, 0, '0', 'off', 'f', 'false', 'n', 'no', 'FALSE', 'Off'])(
+		'normalizes false alias %j',
+		(raw) => {
+			expect(normalizeColumnEnsemble(raw)).toBe(false);
+		}
+	);
+	it.each([true, 1, '1', 'on', 't', 'true', 'y', 'yes', 'TRUE', 'Yes'])(
+		'normalizes true alias %j',
+		(raw) => {
+			expect(normalizeColumnEnsemble(raw)).toBe(true);
+		}
+	);
+	it.each([null, undefined, '', ' false ', 'sometimes', 2, [], {}])(
+		'does not coerce unsupported boolean input %j',
+		(raw) => {
+			expect(normalizeColumnEnsemble(raw)).toBeNull();
+		}
+	);
+	it.each([
+		['1', 1],
+		['2', 2],
+		[' 3 ', 3],
+		['+4', 4],
+		['5.0', 5],
+		[true, 1]
+	])('normalizes tier %j to %j', (raw, expected) => {
+		expect(normalizeColumnTier(raw)).toBe(expected);
+	});
+	it.each([0, 6, 2.5, NaN, Infinity])('retains invalid numeric tier %j for validation', (raw) => {
+		expect(normalizeColumnTier(raw)).toBe(raw);
+		expect(validateColumns([col({ minimum_inference_tier: normalizeColumnTier(raw) })]).valid).toBe(
+			false
+		);
+	});
+	it.each([null, undefined, '', 'four', '2.5', '0x2', '2e0', [], {}])(
+		'does not coerce unsupported tier %j',
+		(raw) => {
+			expect(normalizeColumnTier(raw)).toBeNull();
+		}
+	);
+	it('preserves raw metadata on no-op saves and retains coerced values on intentional edits', () => {
+		const prev = {
+			output_format: 'table',
+			columns: [
+				{
+					name: 'Term',
+					query: 'Original query',
+					ensemble_verification: 'false',
+					minimum_inference_tier: '2'
+				}
+			],
+			icon: 'keep'
+		};
+		const parsed = columnsFromRaw(prev.columns)!;
+		expect(parsed[0]).toEqual(
+			col({ query: 'Original query', ensemble_verification: false, minimum_inference_tier: 2 })
+		);
+		expect(buildFrontmatterExtra(prev, 'table', parsed).columns).toBe(prev.columns);
+		parsed[0].query = 'Changed query';
+		expect(buildFrontmatterExtra(prev, 'table', parsed)).toEqual({
+			...prev,
+			columns: [
+				{
+					name: 'Term',
+					query: 'Changed query',
+					ensemble_verification: false,
+					minimum_inference_tier: 2
+				}
+			]
+		});
+		expect(prev.columns[0].ensemble_verification).toBe('false');
 	});
 });

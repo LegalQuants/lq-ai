@@ -38,6 +38,7 @@
 	 */
 	import type { UserSkillCreate } from '../types';
 	import { kebab } from '../util/slug';
+	import { tableDefaultsFromRaw, type TableSkillDefaults } from '../skills/builtinsBrowser';
 	import {
 		buildFrontmatterExtra,
 		columnsFromRaw,
@@ -72,6 +73,7 @@
 		outputMode: SkillOutputMode;
 		/** DE-297 — table-mode column rows; ignored in prose mode. */
 		columns: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 		saving: boolean;
 	}
 
@@ -88,6 +90,7 @@
 		ownerTeamId: string;
 		outputMode: SkillOutputMode;
 		columns: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	}
 
 	const SLUG_RE = /^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$|^[a-z0-9]$/;
@@ -165,7 +168,7 @@
 			forked_from: forkedFrom
 		};
 		if (isTable) {
-			payload.frontmatter_extra = buildFrontmatterExtra({}, 'table', state.columns);
+			payload.frontmatter_extra = buildFrontmatterExtra({ ...tableDefaultsFromRaw(state.tableDefaults) }, 'table', state.columns);
 		}
 		return payload;
 	}
@@ -183,7 +186,8 @@
 			scope: state.scope,
 			ownerTeamId: state.ownerTeamId,
 			outputMode: state.outputMode,
-			columns: state.columns
+			columns: state.columns,
+			tableDefaults: tableDefaultsFromRaw(state.tableDefaults)
 		};
 	}
 
@@ -233,6 +237,7 @@
 		outputMode?: SkillOutputMode;
 		/** DE-298 — fork-seeded column rows for a table-mode source. */
 		columns?: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	} = {};
 	export let draftKey: string | null = null;
 	export let onSave: (payload: UserSkillCreate) => Promise<string>;
@@ -255,6 +260,7 @@
 	// choosing 'table' swaps the body editor for the column list. A fork
 	// of a table-mode source seeds both via `initial` (DE-298).
 	let outputMode: SkillOutputMode = initial.outputMode ?? 'prose';
+	let tableDefaults = tableDefaultsFromRaw(initial.tableDefaults);
 	let columns: EditableColumn[] =
 		initial.columns && initial.columns.length > 0 ? initial.columns : [newEditableColumn()];
 	// `forked_from` is write-once at create time per ADR 0012; we capture
@@ -288,6 +294,7 @@
 		ownerTeamId,
 		outputMode,
 		columns,
+		tableDefaults,
 		saving
 	} as WizardFormState;
 	$: saveable = canSave(formState);
@@ -348,6 +355,8 @@
 		outputMode;
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		columns;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		tableDefaults;
 		scheduleAutosave();
 	}
 
@@ -379,6 +388,7 @@
 				if (d.scope === 'user' || d.scope === 'team') scope = d.scope;
 				if (typeof d.ownerTeamId === 'string') ownerTeamId = d.ownerTeamId;
 				if (d.outputMode === 'prose' || d.outputMode === 'table') outputMode = d.outputMode;
+				tableDefaults = tableDefaultsFromRaw(d.tableDefaults);
 				const restoredColumns = columnsFromRaw(d.columns);
 				if (restoredColumns && restoredColumns.length > 0) columns = restoredColumns;
 			}
@@ -594,6 +604,18 @@
 		</div>
 
 		{#if outputMode === 'table'}
+			{#if tableDefaults.ensemble_verification !== undefined || tableDefaults.minimum_inference_tier !== undefined}
+				<p class="lq-text-caption" data-testid="lq-ai-table-defaults">
+					Inherited skill defaults:
+					{#if tableDefaults.ensemble_verification !== undefined}
+						ensemble {tableDefaults.ensemble_verification ? 'on' : 'off'}.
+					{/if}
+					{#if tableDefaults.minimum_inference_tier !== undefined}
+						Maximum tier number {tableDefaults.minimum_inference_tier}.
+					{/if}
+					A column override takes precedence.
+				</p>
+			{/if}
 			<ColumnEditor bind:columns />
 		{:else}
 			<textarea

@@ -16,7 +16,8 @@ import {
 	matchesFormat,
 	normalizeFormat,
 	sortFromParam,
-	sortSkillRows
+	sortSkillRows,
+	tableDefaultsFromRaw
 } from '../skills/builtinsBrowser';
 
 describe('builtinsBrowser helpers (DE-298)', () => {
@@ -25,6 +26,9 @@ describe('builtinsBrowser helpers (DE-298)', () => {
 			expect(normalizeFormat(undefined)).toBe(FORMAT_PROSE);
 			expect(normalizeFormat(null)).toBe(FORMAT_PROSE);
 			expect(normalizeFormat('   ')).toBe(FORMAT_PROSE);
+			for (const value of [{ custom: true }, 42, true, ['table']]) {
+				expect(normalizeFormat(value)).toBe(FORMAT_PROSE);
+			}
 		});
 
 		it('lowercases and trims declared formats', () => {
@@ -193,4 +197,34 @@ describe('builtinsBrowser helpers (DE-298)', () => {
 			expect(forkTableSeed({ output_format: 'table', content_yaml: 'name: x\n' })).toBeNull();
 		});
 	});
+	it('keeps the all sentinel unique for a legacy output format named all', () => {
+		expect(formatChips(['all', 'table'])).toEqual(['all', 'table']);
+	});
+
+	it('preserves skill-level defaults and explicit per-column overrides when forking', () => {
+		const seed = forkTableSeed({
+			output_format: 'table',
+			content_yaml: 'lq_ai:\n  ensemble_verification: true\n  minimum_inference_tier: 2\n  columns:\n    - name: Term\n      query: Q\n    - name: Term\n      query: Q2\n      ensemble_verification: false\n      minimum_inference_tier: 4\n'
+		});
+		expect(seed?.tableDefaults).toEqual({ ensemble_verification: true, minimum_inference_tier: 2 });
+		expect(seed?.columns[0].ensemble_verification).toBeNull();
+		expect(seed?.columns[1]).toMatchObject({ ensemble_verification: false, minimum_inference_tier: 4 });
+	});
+
+	it('retains explicit false defaults while ignoring malformed legacy defaults', () => {
+		expect(tableDefaultsFromRaw({ ensemble_verification: false, minimum_inference_tier: 5 })).toEqual({ ensemble_verification: false, minimum_inference_tier: 5 });
+		for (const value of [null, [], 'bad', { ensemble_verification: 'invalid', minimum_inference_tier: 6 }, { minimum_inference_tier: 1.5 }]) {
+			expect(tableDefaultsFromRaw(value)).toEqual({});
+		}
+	});
+
+	it('retains API-coerced column and skill defaults while forking', () => {
+		const seed = forkTableSeed({
+			output_format: 'table',
+			content_yaml: 'lq_ai:\n  ensemble_verification: "true"\n  minimum_inference_tier: "2"\n  columns:\n    - name: Term\n      query: Q\n      ensemble_verification: "false"\n      minimum_inference_tier: "4"\n'
+		});
+		expect(seed?.tableDefaults).toEqual({ ensemble_verification: true, minimum_inference_tier: 2 });
+		expect(seed?.columns[0]).toMatchObject({ ensemble_verification: false, minimum_inference_tier: 4 });
+	});
+
 });

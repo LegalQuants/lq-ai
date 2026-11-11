@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.skills.capabilities import ReferenceReadResult, SkillCapabilities
 
@@ -90,6 +90,14 @@ class ColumnSpec(BaseModel):
         "refuses higher-numbered ones. High-stakes columns can demand Tier 1 "
         "or 2 while routine columns leave the floor unset.",
     )
+
+    @field_validator("name", "query")
+    @classmethod
+    def _reject_blank_text(cls, value: str) -> str:
+        """Match authoring UI validation without rewriting valid text."""
+        if not value.strip():
+            raise ValueError("must contain non-whitespace text")
+        return value
 
 
 class LQAIFrontmatter(BaseModel):
@@ -191,7 +199,34 @@ class LQAIFrontmatter(BaseModel):
                 "output_format: table requires a non-empty 'columns' list "
                 "(see docs/skill-authoring-guide.md §Table-mode skills)"
             )
+        if self.output_format == "table":
+            seen: set[str] = set()
+            for column in self.columns or []:
+                # Match the ad-hoc wizard: trimmed, case-insensitive names.
+                key = column.name.strip().lower()
+                if key in seen:
+                    raise ValueError(f"Duplicate column name: {column.name.strip()}.")
+                seen.add(key)
         return self
+
+
+_TABLE_MODE_EXTRA_KEYS = frozenset(
+    {"output_format", "columns", "minimum_inference_tier", "ensemble_verification"}
+)
+
+
+def parse_table_skill_extra(extra: dict[str, Any]) -> LQAIFrontmatter | None:
+    """Validate only explicit table-mode metadata, leaving extension JSON opaque.
+
+    Authoring and runtime must use the same projection: unrelated keys may
+    coincide with built-in frontmatter fields without following their schema.
+    Non-table skills retain the arbitrary-JSON extension contract.
+    """
+    if extra.get("output_format") != "table":
+        return None
+    return LQAIFrontmatter.model_validate(
+        {key: value for key, value in extra.items() if key in _TABLE_MODE_EXTRA_KEYS}
+    )
 
 
 class SkillFrontmatter(BaseModel):

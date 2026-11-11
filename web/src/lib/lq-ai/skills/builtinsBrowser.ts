@@ -23,7 +23,7 @@
 import { parse } from 'yaml';
 
 import type { Skill } from '../types';
-import { columnsFromRaw, type EditableColumn, type SkillOutputMode } from './tableColumns';
+import { columnsFromRaw, normalizeColumnEnsemble, normalizeColumnTier, type EditableColumn, type SkillOutputMode } from './tableColumns';
 
 // ---------------------------------------------------------------------------
 // 1. Output-format chip filter
@@ -40,8 +40,8 @@ export const FORMAT_PROSE = 'prose';
  * blank formats read as "prose" — the skill produces conversational
  * output, which is what an undeclared format means in practice.
  */
-export function normalizeFormat(outputFormat: string | null | undefined): string {
-	const v = (outputFormat ?? '').trim().toLowerCase();
+export function normalizeFormat(outputFormat: unknown): string {
+	const v = typeof outputFormat === 'string' ? outputFormat.trim().toLowerCase() : '';
 	return v === '' ? FORMAT_PROSE : v;
 }
 
@@ -52,7 +52,7 @@ export function normalizeFormat(outputFormat: string | null | undefined): string
  * chip without a code change.
  */
 export function formatChips(formats: Array<string | null | undefined>): string[] {
-	const distinct = new Set(formats.map(normalizeFormat));
+	const distinct = new Set(formats.map(normalizeFormat).filter((format) => format !== FORMAT_ALL));
 	return [FORMAT_ALL, ...[...distinct].sort((a, b) => a.localeCompare(b))];
 }
 
@@ -130,31 +130,60 @@ export function sortSkillRows<T>(
  * recognisable column list — callers treat that as "no columns to
  * seed", never an error.
  */
-export function columnsFromContentYaml(
-	contentYaml: string | null | undefined
-): EditableColumn[] | null {
+function frontmatterFromYaml(contentYaml: string | null | undefined): Record<string, unknown> | null {
 	if (!contentYaml) return null;
-	let doc: unknown;
 	try {
-		doc = parse(contentYaml);
+		const doc: unknown = parse(contentYaml);
+		return doc !== null && typeof doc === 'object' && !Array.isArray(doc)
+			? doc as Record<string, unknown>
+			: null;
 	} catch {
 		return null;
 	}
-	if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) return null;
-	const root = doc as Record<string, unknown>;
-	const lqAi = root['lq_ai'];
-	if (lqAi !== null && typeof lqAi === 'object' && !Array.isArray(lqAi)) {
-		const nested = columnsFromRaw((lqAi as Record<string, unknown>)['columns']);
-		if (nested && nested.length > 0) return nested;
-	}
+}
+
+function tableNamespace(root: Record<string, unknown>): Record<string, unknown> {
+	const nested = root['lq_ai'];
+	return nested !== null && typeof nested === 'object' && !Array.isArray(nested)
+		? nested as Record<string, unknown>
+		: root;
+}
+
+export function columnsFromContentYaml(
+	contentYaml: string | null | undefined
+): EditableColumn[] | null {
+	const root = frontmatterFromYaml(contentYaml);
+	if (!root) return null;
+	const nested = columnsFromRaw(tableNamespace(root)['columns']);
+	if (nested && nested.length > 0) return nested;
 	const topLevel = columnsFromRaw(root['columns']);
 	return topLevel && topLevel.length > 0 ? topLevel : null;
+}
+
+/** Skill-level defaults must survive a fork, not silently become deployment defaults. */
+export interface TableSkillDefaults {
+	ensemble_verification?: boolean;
+	minimum_inference_tier?: number;
+}
+
+export function tableDefaultsFromRaw(raw: unknown): TableSkillDefaults {
+	if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {};
+	const rec = raw as Record<string, unknown>;
+	const defaults: TableSkillDefaults = {};
+	const ensemble = normalizeColumnEnsemble(rec.ensemble_verification);
+	if (ensemble !== null) defaults.ensemble_verification = ensemble;
+	const tier = normalizeColumnTier(rec.minimum_inference_tier);
+	if (typeof tier === 'number' && Number.isInteger(tier) && tier >= 1 && tier <= 5) {
+		defaults.minimum_inference_tier = tier;
+	}
+	return defaults;
 }
 
 /** Wizard seed for a fork source's output mode + columns. */
 export interface ForkTableSeed {
 	outputMode: SkillOutputMode;
 	columns: EditableColumn[];
+	tableDefaults: TableSkillDefaults;
 }
 
 /**
@@ -170,5 +199,7 @@ export function forkTableSeed(
 	if (normalizeFormat(source.output_format) !== 'table') return null;
 	const columns = columnsFromContentYaml(source.content_yaml);
 	if (!columns) return null;
-	return { outputMode: 'table', columns };
+	const root = frontmatterFromYaml(source.content_yaml);
+	const tableDefaults = root ? tableDefaultsFromRaw(tableNamespace(root)) : {};
+	return { outputMode: 'table', columns, tableDefaults };
 }

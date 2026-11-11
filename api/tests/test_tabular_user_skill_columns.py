@@ -241,8 +241,9 @@ async def test_create_table_mode_with_empty_columns_returns_422(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("query", ["", " ", "\t\n"])
 async def test_create_column_with_empty_query_returns_422(
-    client: AsyncClient, user_a: User
+    client: AsyncClient, user_a: User, query: str
 ) -> None:
     resp = await client.post(
         "/api/v1/user-skills",
@@ -250,7 +251,7 @@ async def test_create_column_with_empty_query_returns_422(
         json=_table_skill_body(
             frontmatter_extra={
                 "output_format": "table",
-                "columns": [{"name": "Term", "query": ""}],
+                "columns": [{"name": "Term", "query": query}],
             }
         ),
     )
@@ -457,9 +458,15 @@ async def test_skill_level_ensemble_fallback_bakes_into_user_columns(
         frontmatter_extra={
             "output_format": "table",
             "ensemble_verification": True,
+            "minimum_inference_tier": 2,
             "columns": [
                 {"name": "Term", "query": "What is the term?"},
-                {"name": "Venue", "query": "What is the venue?", "ensemble_verification": False},
+                {
+                    "name": "Venue",
+                    "query": "What is the venue?",
+                    "ensemble_verification": False,
+                    "minimum_inference_tier": 4,
+                },
             ],
         },
     )
@@ -476,6 +483,8 @@ async def test_skill_level_ensemble_fallback_bakes_into_user_columns(
     columns = resp.json()["columns"]
     assert columns[0]["ensemble_verification"] is True  # inherited
     assert columns[1]["ensemble_verification"] is False  # explicit override kept
+    assert columns[0]["minimum_inference_tier"] == 2
+    assert columns[1]["minimum_inference_tier"] == 4
 
 
 class _StubGateway:
@@ -510,3 +519,292 @@ async def test_preview_cost_resolves_user_skill_columns(
     assert resp.status_code == 200, resp.text
     # 2 documents x 2 user-skill columns = 4 cells.
     assert resp.json()["cells_count"] == 4
+
+
+@pytest.mark.parametrize("field", ["name", "query"])
+@pytest.mark.parametrize("blank", [" ", "\t\n", "\u2003"])
+def test_column_spec_rejects_whitespace_only(field: str, blank: str) -> None:
+    values = {"name": " Term ", "query": " What is the term? "}
+    values[field] = blank
+    with pytest.raises(ValidationError):
+        ColumnSpec.model_validate(values)
+
+
+def test_column_spec_preserves_nonblank_text() -> None:
+    column = ColumnSpec(name=" Term ", query="\nWhat is the term?\n")
+    assert column.name == " Term "
+    assert column.query == "\nWhat is the term?\n"
+
+
+@pytest.mark.parametrize("output_format", [None, "report", {"custom": True}])
+def test_non_table_metadata_is_opaque(output_format: object) -> None:
+    from app.api.user_skills import _validate_frontmatter_extra
+    from app.skills.schema import parse_table_skill_extra
+
+    extra = {
+        "columns": {"custom": "metadata"},
+        "minimum_inference_tier": "custom",
+        "ensemble_verification": ["custom"],
+    }
+    if output_format is not None:
+        extra["output_format"] = output_format
+    assert _validate_frontmatter_extra(extra) is extra
+    assert parse_table_skill_extra(extra) is None
+
+
+def test_table_authoring_and_hydration_share_projection() -> None:
+    from app.api.tabular import _columns_from_user_skill_row
+    from app.api.user_skills import _validate_frontmatter_extra
+
+    extra = {
+        "output_format": "table",
+        "columns": TABLE_COLUMNS,
+        "tags": {"custom": True},
+        "capabilities": "not-built-in-capabilities",
+        "title": ["custom", "title"],
+    }
+    assert _validate_frontmatter_extra(extra) is extra
+    row = UserSkill(frontmatter_extra=extra)
+    columns = _columns_from_user_skill_row(row, skill_name="grid")
+    assert [column.name for column in columns] == ["Term", "Governing law"]
+    assert row.frontmatter_extra == extra
+
+
+@pytest.mark.parametrize("output_format", [None, "report"])
+def test_runtime_requires_explicit_table_mode(output_format: str | None) -> None:
+    from fastapi import HTTPException
+
+    from app.api.tabular import _columns_from_user_skill_row
+
+    row = UserSkill(frontmatter_extra={"output_format": output_format, "columns": TABLE_COLUMNS})
+    with pytest.raises(HTTPException) as exc:
+        _columns_from_user_skill_row(row, skill_name="grid")
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.integration
+async def test_create_patch_preserve_non_table_extension_metadata(
+    client: AsyncClient, user_a: User
+) -> None:
+    extra = {"columns": "custom", "minimum_inference_tier": {"arbitrary": True}}
+    created = await client.post(
+        "/api/v1/user-skills",
+        headers=_bearer(user_a),
+        json=_table_skill_body(frontmatter_extra=extra),
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["frontmatter_extra"] == extra
+    extra = {"output_format": "report", "ensemble_verification": ["opaque"]}
+    patched = await client.patch(
+        f"/api/v1/user-skills/{created.json()['id']}",
+        headers=_bearer(user_a),
+        json={"frontmatter_extra": extra},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["frontmatter_extra"] == extra
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("scope", ["user", "team"])
+async def test_skill_resolution_enforces_caller_boundary(
+    client: AsyncClient, db_session: AsyncSession, user_a: User, scope: str
+) -> None:
+    from app.models.team import Team, TeamMember
+
+    other = await _make_user(db_session)
+    owner_fields = {"owner_user_id": other.id}
+    team = None
+    if scope == "team":
+        team = Team(
+            name="Grid team", slug=f"grid-{uuid.uuid4().hex[:8]}", created_by_user_id=other.id
+        )
+        db_session.add(team)
+        await db_session.flush()
+        db_session.add(
+            TeamMember(team_id=team.id, user_id=other.id, role="admin", added_by_user_id=other.id)
+        )
+        owner_fields = {"owner_team_id": team.id}
+    skill = UserSkill(
+        scope=scope,
+        **owner_fields,
+        slug="private-grid",
+        display_name="Private grid",
+        description="Access boundary test",
+        version="1.0.0",
+        tags=[],
+        body="Extract columns.",
+        frontmatter_extra={"output_format": "table", "columns": TABLE_COLUMNS},
+    )
+    db_session.add(skill)
+    await db_session.flush()
+    doc = await _make_document(db_session, owner=user_a)
+    request = {"document_ids": [str(doc.id)], "skill_name": "private-grid"}
+    denied = await client.post("/api/v1/tabular/execute", headers=_bearer(user_a), json=request)
+    assert denied.status_code == 404, denied.text
+    if team is not None:
+        db_session.add(
+            TeamMember(team_id=team.id, user_id=user_a.id, role="member", added_by_user_id=other.id)
+        )
+        await db_session.flush()
+        allowed = await client.post(
+            "/api/v1/tabular/execute", headers=_bearer(user_a), json=request
+        )
+        assert allowed.status_code == 202, allowed.text
+        assert [column["name"] for column in allowed.json()["columns"]] == ["Term", "Governing law"]
+
+
+@pytest.mark.integration
+async def test_table_extension_metadata_survives_create_patch_and_execute(
+    client: AsyncClient, db_session: AsyncSession, user_a: User
+) -> None:
+    extra = {
+        "output_format": "table",
+        "columns": TABLE_COLUMNS,
+        "tags": {"custom": True},
+        "capabilities": "custom",
+    }
+    created = await client.post(
+        "/api/v1/user-skills",
+        headers=_bearer(user_a),
+        json=_table_skill_body(frontmatter_extra=extra),
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["frontmatter_extra"] == extra
+    extra["title"] = ["arbitrary", "title"]
+    patched = await client.patch(
+        f"/api/v1/user-skills/{created.json()['id']}",
+        headers=_bearer(user_a),
+        json={"frontmatter_extra": extra},
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["frontmatter_extra"] == extra
+    doc = await _make_document(db_session, owner=user_a)
+    executed = await client.post(
+        "/api/v1/tabular/execute",
+        headers=_bearer(user_a),
+        json={"document_ids": [str(doc.id)], "skill_name": "contract-grid"},
+    )
+    assert executed.status_code == 202, executed.text
+    assert [column["name"] for column in executed.json()["columns"]] == ["Term", "Governing law"]
+
+
+async def test_builtin_resolution_snapshots_skill_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from app.api import skills, tabular
+    from app.skills.schema import LQAIFrontmatter
+
+    lq = LQAIFrontmatter.model_validate(
+        {
+            "output_format": "table",
+            "ensemble_verification": True,
+            "minimum_inference_tier": 2,
+            "columns": [
+                {"name": "Term", "query": "What is the term?"},
+                {
+                    "name": "Law",
+                    "query": "Which law?",
+                    "ensemble_verification": False,
+                    "minimum_inference_tier": 4,
+                },
+            ],
+        }
+    )
+    record = SimpleNamespace(frontmatter=SimpleNamespace(lq_ai=lq))
+    registry = SimpleNamespace(current=lambda: {"builtin-grid": record})
+    monkeypatch.setattr(tabular, "_registry", lambda request: registry)
+    monkeypatch.setattr(skills, "_load_user_shadow", AsyncMock(return_value=None))
+    monkeypatch.setattr(skills, "_load_team_shadow", AsyncMock(return_value=None))
+    _, columns = await tabular._resolve_columns(
+        None,
+        None,
+        user=User(id=uuid.uuid4()),
+        skill_name="builtin-grid",
+        ad_hoc=None,
+    )
+    assert columns[0].ensemble_verification is True
+    assert columns[0].minimum_inference_tier == 2
+    assert columns[1].ensemble_verification is False
+    assert columns[1].minimum_inference_tier == 4
+    # Snapshot baking must not mutate the shared registry defaults.
+    assert lq.columns is not None
+    assert lq.columns[0].minimum_inference_tier is None
+    lq.output_format = "report"
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        await tabular._resolve_columns(
+            None,
+            None,
+            user=User(id=uuid.uuid4()),
+            skill_name="builtin-grid",
+            ad_hoc=None,
+        )
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("duplicate_name", ["Term", "term", " TERM "])
+async def test_duplicate_column_names_rejected_on_create_patch_and_legacy_run(
+    client: AsyncClient, db_session: AsyncSession, user_a: User, duplicate_name: str
+) -> None:
+    extra = {
+        "output_format": "table",
+        "columns": [
+            {"name": "Term", "query": "What is the term?"},
+            {"name": duplicate_name, "query": "When does it end?"},
+        ],
+    }
+    rejected = await client.post(
+        "/api/v1/user-skills",
+        headers=_bearer(user_a),
+        json=_table_skill_body(frontmatter_extra=extra),
+    )
+    assert rejected.status_code == 422, rejected.text
+    assert "Duplicate column name" in rejected.json()["detail"]
+    created = await client.post(
+        "/api/v1/user-skills",
+        headers=_bearer(user_a),
+        json=_table_skill_body(),
+    )
+    assert created.status_code == 201, created.text
+    skill_id = created.json()["id"]
+    rejected_patch = await client.patch(
+        f"/api/v1/user-skills/{skill_id}",
+        headers=_bearer(user_a),
+        json={"frontmatter_extra": extra},
+    )
+    assert rejected_patch.status_code == 422, rejected_patch.text
+    assert "Duplicate column name" in rejected_patch.json()["detail"]
+    detail = await client.get(f"/api/v1/user-skills/{skill_id}", headers=_bearer(user_a))
+    assert detail.json()["frontmatter_extra"]["columns"] == TABLE_COLUMNS
+    # Existing stored duplicates remain readable/editable, but cannot start a new run.
+    row = await db_session.get(UserSkill, uuid.UUID(skill_id))
+    assert row is not None
+    row.frontmatter_extra = extra
+    await db_session.flush()
+    detail = await client.get(f"/api/v1/user-skills/{skill_id}", headers=_bearer(user_a))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["frontmatter_extra"] == extra
+    doc = await _make_document(db_session, owner=user_a)
+    rejected_run = await client.post(
+        "/api/v1/tabular/execute",
+        headers=_bearer(user_a),
+        json={"document_ids": [str(doc.id)], "skill_name": "contract-grid"},
+    )
+    assert rejected_run.status_code == 400, rejected_run.text
+    assert "invalid column spec" in rejected_run.json()["detail"]
+
+
+def test_non_table_duplicate_column_metadata_remains_opaque() -> None:
+    from app.api.user_skills import _validate_frontmatter_extra
+
+    extra = {
+        "output_format": "report",
+        "columns": [
+            {"name": "Term", "query": "One"},
+            {"name": "term", "query": "Two"},
+        ],
+    }
+    assert _validate_frontmatter_extra(extra) is extra

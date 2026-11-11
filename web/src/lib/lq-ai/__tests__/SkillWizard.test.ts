@@ -448,3 +448,20 @@ describe('SkillWizard.serializeDraft / loadDraft (round-trip)', () => {
 		expect(loadDraft('[]')).toBe(null);
 	});
 });
+
+
+describe('SkillWizard table fork defaults', () => {
+	it('persists defaults through draft serialization and payload without changing inherit', () => {
+		const defaults = { ensemble_verification: false, minimum_inference_tier: 2 };
+		const state = makeState({ outputMode: 'table', tableDefaults: defaults });
+		const restored = loadDraft(JSON.stringify(serializeDraft(state)));
+		expect(restored?.tableDefaults).toEqual(defaults);
+		const payload = buildPayload(makeState({ ...restored }), 'source-table');
+		expect(payload.frontmatter_extra).toMatchObject({ ...defaults, output_format: 'table' });
+		expect((payload.frontmatter_extra?.columns as Record<string, unknown>[])[0].ensemble_verification).toBeUndefined();
+	});
+
+	it('does not retain hidden table defaults after switching a fork to prose', () => {
+		expect(buildPayload(makeState({ tableDefaults: { ensemble_verification: true } }), 'source-table').frontmatter_extra).toBeUndefined();
+	});
+});

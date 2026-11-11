@@ -90,7 +90,7 @@ from app.schemas.tabular import (
     TabularResults,
 )
 from app.skills.registry import MutableSkillRegistry
-from app.skills.schema import LQAIFrontmatter
+from app.skills.schema import parse_table_skill_extra
 from app.tabular.bulk_ops import estimate_bulk_op_cost
 from app.tabular.cost import estimate_tabular_execution_cost
 from app.workers.queue import enqueue_tabular_bulk_op_job, enqueue_tabular_execution_job
@@ -126,22 +126,21 @@ def _registry(request: Request) -> MutableSkillRegistry:
     return holder
 
 
-def _bake_skill_ensemble(
-    columns: list[ColumnSpec], skill_ensemble: bool | None
+def _bake_skill_defaults(
+    columns: list[ColumnSpec],
+    skill_ensemble: bool | None,
+    skill_minimum_tier: int | None,
 ) -> list[ColumnSpec]:
-    """Bake the skill-level ``ensemble_verification`` fallback into each
-    column at the single resolution point (Decision C-1 snapshotting
-    posture) so both preview-cost and execute see a consistent snapshot.
+    """Snapshot skill defaults so preview and execution use the same values.
 
-    A column that didn't declare its own value (None) inherits the
-    skill-level value; an explicit True/False per column is left
-    untouched.
+    Columns with no value inherit the skill default. Explicit per-column
+    ensemble and tier overrides remain unchanged.
     """
-
-    if skill_ensemble is not None:
-        for col in columns:
-            if col.ensemble_verification is None:
-                col.ensemble_verification = skill_ensemble
+    for col in columns:
+        if col.ensemble_verification is None:
+            col.ensemble_verification = skill_ensemble
+        if col.minimum_inference_tier is None:
+            col.minimum_inference_tier = skill_minimum_tier
     return columns
 
 
@@ -158,7 +157,7 @@ def _columns_from_user_skill_row(row: UserSkill, *, skill_name: str) -> list[Col
 
     extra = dict(row.frontmatter_extra or {})
     try:
-        lq = LQAIFrontmatter.model_validate(extra)
+        lq = parse_table_skill_extra(extra)
     except ValidationError:
         raise HTTPException(
             status_code=400,
@@ -167,13 +166,13 @@ def _columns_from_user_skill_row(row: UserSkill, *, skill_name: str) -> list[Col
                 "from the skill editor before running a tabular review"
             ),
         ) from None
-    if not lq.columns:
+    if lq is None or not lq.columns:
         raise HTTPException(
             status_code=400,
             detail=f"skill {skill_name!r} has no columns (not a table-mode skill)",
         )
     resolved = [ColumnSpec.model_validate(col.model_dump()) for col in lq.columns]
-    return _bake_skill_ensemble(resolved, lq.ensemble_verification)
+    return _bake_skill_defaults(resolved, lq.ensemble_verification, lq.minimum_inference_tier)
 
 
 async def _resolve_columns(
@@ -227,7 +226,7 @@ async def _resolve_columns(
         if record is None:
             raise HTTPException(status_code=404, detail=f"skill {skill_name!r} not found")
         skill_columns = record.frontmatter.lq_ai.columns
-        if not skill_columns:
+        if record.frontmatter.lq_ai.output_format != "table" or not skill_columns:
             raise HTTPException(
                 status_code=400,
                 detail=f"skill {skill_name!r} has no columns (not a table-mode skill)",
@@ -236,8 +235,10 @@ async def _resolve_columns(
         # skill-side fields the wire schema doesn't honor are
         # stripped consistently.
         resolved = [ColumnSpec.model_validate(col.model_dump()) for col in skill_columns]
-        return skill_name, _bake_skill_ensemble(
-            resolved, record.frontmatter.lq_ai.ensemble_verification
+        return skill_name, _bake_skill_defaults(
+            resolved,
+            record.frontmatter.lq_ai.ensemble_verification,
+            record.frontmatter.lq_ai.minimum_inference_tier,
         )
 
     # ad_hoc branch — the request-validation min_length=1 on columns

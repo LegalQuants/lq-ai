@@ -10331,17 +10331,17 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Arbitrary ``lq_ai:`` extension keys, EXCEPT the table-mode
-            authoring subset (DE-297): when ``output_format`` /
-            ``columns`` / ``minimum_inference_tier`` /
-            ``ensemble_verification`` are present they are validated
-            against the same schema built-in SKILL.md frontmatter
-            parses with — ``output_format: 'table'`` requires a
-            non-empty ``columns`` list, each column needs a non-empty
-            ``name`` + ``query``, and per-column
-            ``minimum_inference_tier`` must be 1–5. 422 with a
-            ``frontmatter_extra is not a valid skill spec: ...`` detail
-            on violation.
+            Arbitrary ``lq_ai:`` extension keys. Only explicit
+            ``output_format: 'table'`` activates validation of the
+            table subset (DE-297): ``output_format``, ``columns``,
+            ``minimum_inference_tier`` and ``ensemble_verification``.
+            The same projection is used when previewing or running a
+            table skill; unrelated extension keys remain untouched.
+            Table mode requires a non-empty ``columns`` list, each
+            column needs a non-blank ``name`` and ``query``, names must
+            be unique after trimming and case folding, and tier
+            values must be integers 1–5. Invalid table specs return
+            422. Non-table metadata retains the arbitrary-JSON contract.
         scope:
           type: string
           enum: [user, team]
@@ -10384,10 +10384,10 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Same table-mode validation as on create (DE-297): the
-            ``output_format`` / ``columns`` / ``minimum_inference_tier``
-            / ``ensemble_verification`` subset must parse as a valid
-            skill spec; 422 otherwise.
+            Same table-only validation as on create (DE-297), activated
+            only by explicit ``output_format: 'table'``. Non-table
+            metadata and unrelated extension keys remain unrestricted
+            within the existing JSON size limit.
         slash_alias:
           type: string
           nullable: true
