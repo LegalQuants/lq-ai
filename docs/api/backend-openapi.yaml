@@ -3168,9 +3168,14 @@ paths:
         ``GET /api/v1/playbook-executions/{execution_id}`` until they
         see a terminal status (``completed`` or ``error``).
 
-        Authorization: caller must be an admin or the playbook's
-        author, and own the target document's parent file. If
-        ``project_id`` is supplied, caller must also own the project.
+        Authorization: active users may execute any non-deleted playbook
+        visible to them: built-ins or their own authored playbooks for
+        non-admins, and all playbooks for admins. Non-admins must own the
+        target document's parent file and, if ``project_id`` is supplied,
+        the project. Admins retain their ownership bypass, but document
+        matter restrictions and write access to an explicit project
+        apply to all callers. Built-in editing/deletion restrictions
+        are unchanged.
       requestBody:
         required: true
         content:
