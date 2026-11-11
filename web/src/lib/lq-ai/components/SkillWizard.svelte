@@ -608,14 +608,14 @@
 		margin-bottom: 4px;
 	}
 	.required {
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 		font-style: normal;
 	}
 	input,
 	textarea {
 		width: 100%;
 		padding: 8px;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		font-size: 14px;
 		font-family: inherit;
@@ -625,7 +625,7 @@
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 	}
 	.error {
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 		font-size: 12px;
 	}
 	.inline-error {
@@ -640,7 +640,7 @@
 		font-size: 13px;
 	}
 	.hint {
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		font-size: 13px;
 		margin: 0;
 	}
@@ -650,7 +650,7 @@
 	.advanced summary {
 		cursor: pointer;
 		font-size: 13px;
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		padding: 8px 0;
 	}
 	.actions {
@@ -660,27 +660,27 @@
 		justify-content: flex-end;
 		margin-top: 24px;
 		padding-top: 16px;
-		border-top: 1px solid var(--lq-border, #e5e7eb);
+		border-top: 1px solid var(--lq-border);
 	}
 	.status-slot {
 		margin-right: auto;
 		min-height: 1.2em;
 		font-size: 13px;
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 	}
 	.status {
-		color: var(--lq-accent, #1f7a6b);
+		color: var(--lq-accent);
 	}
 	.ghost {
 		background: transparent;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		padding: 8px 16px;
 		border-radius: 6px;
 		cursor: pointer;
 		font-size: 14px;
 	}
 	.primary {
-		background: var(--lq-accent, #1f7a6b);
+		background: var(--lq-accent);
 		color: white;
 		border: 0;
 		padding: 8px 16px;

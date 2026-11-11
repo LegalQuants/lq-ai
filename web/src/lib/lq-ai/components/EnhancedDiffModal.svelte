@@ -93,7 +93,7 @@
 		z-index: 60;
 	}
 	.diff-panel {
-		background: #fff;
+		background: var(--lq-canvas);
 		border-radius: 8px;
 		width: min(900px, 90vw);
 		max-height: 80vh;
@@ -106,7 +106,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 14px;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--lq-border);
 	}
 	header h2 {
 		font-size: 14px;
@@ -149,7 +149,7 @@
 		white-space: pre-wrap;
 		word-break: break-word;
 		background: #f9fafb;
-		border: 1px solid #e5e7eb;
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		padding: 10px;
 		color: #111827;

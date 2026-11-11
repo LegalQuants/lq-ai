@@ -213,7 +213,7 @@
 					>Orchestration chat (experimental)</a
 				>
 			{:else}
-				<button type="button" disabled class="text-sm text-gray-500">
+				<button type="button" disabled class="text-sm lq-t-text2">
 					Orchestration chat (experimental) — {chatAvailability === 'disabled'
 						? 'disabled by operator'
 						: chatAvailability === 'checking'
@@ -542,18 +542,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -616,27 +616,27 @@
 	}
 
 	.lq-status--running {
-		background: var(--lq-info-bg, #e8f4fd);
-		color: var(--lq-info-text, #0a5fa8);
-		border: 1px solid var(--lq-info-border, #9ed3f5);
+		background: var(--lq-info-bg);
+		color: var(--lq-info-text);
+		border: 1px solid var(--lq-info-border);
 	}
 
 	.lq-status--completed {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.lq-status--halted {
-		background: var(--lq-warning-bg, #fff8e1);
-		color: var(--lq-warning-text, #7a5a00);
-		border: 1px solid var(--lq-warning-border, #ffe08a);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
+		border: 1px solid var(--lq-warning-border);
 	}
 
 	.lq-status--failed {
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
-		border: 1px solid var(--lq-error-border, #fbb);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.cost-cell {
@@ -660,7 +660,7 @@
 	}
 
 	.action-link:hover {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button {
@@ -675,8 +675,8 @@
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {
@@ -810,8 +810,8 @@
 	.submit-error {
 		font-size: 13px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -874,5 +874,10 @@
 	.modal-btn-secondary:disabled {
 		opacity: 0.65;
 		cursor: not-allowed;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>

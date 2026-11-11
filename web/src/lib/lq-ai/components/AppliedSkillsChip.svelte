@@ -14,7 +14,7 @@
 		{#each appliedSkills as name}
 			<button
 				type="button"
-				class="inline-flex items-center px-2 py-0.5 rounded-full border border-indigo-300 bg-indigo-50 text-indigo-800 text-xs font-medium hover:bg-indigo-100 transition-colors"
+				class="inline-flex items-center px-2 py-0.5 rounded-full border lq-t-accent-border lq-t-accent-soft lq-t-accent text-xs font-medium lq-t-accent-border-hover transition-colors"
 				title={`This message used the ${name} skill`}
 				on:click={() => onSkillClicked?.(name)}
 			>
@@ -33,3 +33,19 @@
 		{/each}
 	</div>
 {/if}
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-accent {
+		color: var(--lq-accent);
+	}
+	.lq-t-accent-border {
+		border-color: var(--lq-accent-border);
+	}
+	.lq-t-accent-border-hover:hover {
+		background-color: var(--lq-accent-border);
+	}
+	.lq-t-accent-soft {
+		background-color: var(--lq-accent-soft);
+	}
+</style>
