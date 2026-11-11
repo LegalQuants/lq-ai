@@ -117,7 +117,7 @@
 
 	{#if listError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{listError}
@@ -125,7 +125,7 @@
 	{/if}
 	{#if actionError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{actionError}
@@ -275,7 +275,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -289,7 +289,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
@@ -303,7 +303,7 @@
 		background: transparent;
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
@@ -312,7 +312,7 @@
 
 	.lq-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 	.lq-link:hover { text-decoration: underline; }
 
@@ -345,5 +345,16 @@
 		background: var(--lq-inset);
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
 	}
 </style>

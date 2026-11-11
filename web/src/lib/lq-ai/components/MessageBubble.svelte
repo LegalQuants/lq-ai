@@ -231,10 +231,10 @@
 
 	$: bubbleClasses =
 		message.role === 'user'
-			? 'bg-indigo-600 text-white self-end'
+			? 'lq-t-user-bubble lq-t-text self-end'
 			: message.role === 'assistant'
-				? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700 self-start'
-				: 'bg-gray-100 text-gray-700 self-center text-sm';
+				? 'lq-t-canvas lq-t-text border lq-t-border self-start'
+				: 'lq-t-inset lq-t-text2 self-center text-sm';
 
 	// A run's answer is model output built from documents the run read, so it is
 	// rendered more strictly than an ordinary reply: Markdown structure is kept, raw
@@ -288,7 +288,7 @@
 						{@html rendered}
 					</div>
 					{#if isStreaming}
-						<div class="mt-1 text-xs text-gray-500 italic">Streaming…</div>
+						<div class="mt-1 text-xs lq-t-text2 italic">Streaming…</div>
 					{/if}
 				{:else}
 					<div class="whitespace-pre-wrap text-sm" data-testid="lq-ai-message-content">
@@ -361,7 +361,7 @@
 						{#if $captureAffordanceInline}
 							<button
 								type="button"
-								class="text-base leading-none px-2 py-1 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+								class="text-base leading-none px-2 py-1 rounded lq-t-text2 lq-t-hover disabled:opacity-40 disabled:cursor-not-allowed"
 								aria-label={isStreaming
 									? 'Capture as skill (available when streaming completes)'
 									: 'Capture as skill'}
@@ -400,7 +400,7 @@
 
 				{#if message.error_code}
 					<div
-						class="mt-2 px-2 py-1 rounded border border-rose-300 bg-rose-50 text-rose-800 text-xs max-w-full"
+						class="mt-2 px-2 py-1 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-xs max-w-full"
 						data-testid="lq-ai-message-error"
 					>
 						Error: <strong>{message.error_code}</strong>. The assistant message was persisted with
@@ -439,3 +439,39 @@
 		{/if}
 	</LqStack>
 {/if}
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-hover:hover {
+		background-color: var(--lq-surface-hover);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	/* The person's own message: ink on the muted surface, not an ink fill (ADR 0045,
+	   the redesign pictures; tokens.json: lq-surface is the user's message bubble). */
+	.lq-t-user-bubble {
+		background-color: var(--lq-surface-muted);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+</style>

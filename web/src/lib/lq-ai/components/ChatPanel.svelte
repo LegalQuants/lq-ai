@@ -218,6 +218,13 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
+	import ChatDetailsPanel from './ChatDetailsPanel.svelte';
+	import { readShellSwitch } from '$lib/lq-ai/shell';
+	import {
+		clearShellContext,
+		publishShellContext,
+		revealRightSidebar
+	} from '$lib/lq-ai/rightSidebar';
 	import LqButton from './shared/LqButton.svelte';
 	import LqSwitch from './shared/LqSwitch.svelte';
 	import LqGroup from './shared/LqGroup.svelte';
@@ -1501,6 +1508,59 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
+	// Interface-redesign P1.4, behind the developer switch ($lib/lq-ai/shell).
+	// With the switch on, the attached files and the receipts move into the
+	// shell's shared right sidebar (same components, same props) and the
+	// chat's title into its page header. With the switch off nothing here
+	// publishes and the panels render beside the chat as before.
+	let sidebarShell = false;
+	const shellOwner = Symbol('ChatPanel');
+	onMount(() => {
+		sidebarShell = readShellSwitch() === 'sidebar';
+	});
+	onDestroy(() => clearShellContext(shellOwner));
+	$: if (sidebarShell)
+		publishShellContext(
+			shellOwner,
+			activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
+			activeChat
+				? {
+						label: 'Chat details',
+						component: ChatDetailsPanel,
+						props: {
+							chatId: activeChat.id,
+							chatFiles,
+							newHarness: harnessChosen,
+							projectFiles,
+							uploading,
+							attachLimitReached,
+							onUpload: uploadAttached,
+							onDetach: detachFile,
+							compact: !!projectIdFilter,
+							receiptsOpen: receiptsDrawerOpen,
+							onCloseReceipts: () => (receiptsDrawerOpen = false)
+						}
+					}
+				: null
+		);
+
+	// P1.3b, switch on only: the left sidebar links to `/lq-ai/chats?id=…`, which
+	// changes `initialChatId` while this page stays mounted. Open that chat. The
+	// matter page passes its own selection here and keeps today's behaviour.
+	let urlChatSeen = initialChatId;
+	$: if (sidebarShell && !projectIdFilter && initialChatId !== urlChatSeen) {
+		urlChatSeen = initialChatId;
+		if (initialChatId && initialChatId !== activeChat?.id) void openUrlChat(initialChatId);
+	}
+	async function openUrlChat(id: string): Promise<void> {
+		try {
+			const known = get(chatsStore).find((c) => c.id === id);
+			await selectChat(known ?? (await chatsApi.getChat(id)));
+		} catch (e) {
+			console.error('lq-ai: failed to open the chat from the address', e);
+		}
+	}
+
 	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
 	// active chat changes (and again after a run ends or a run is proposed). New
 	// harness is one of the chat's models: the choice is remembered per chat like any
@@ -1647,16 +1707,16 @@
 
 	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
-			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
+			class="px-4 py-2 border-b lq-t-border flex items-center justify-between"
 			data-testid="lq-ai-chat-header"
 		>
 			{#if activeChat}
 				<div>
-					<LqTitle order={5}>
+					<LqTitle order={5} size="16" leading="tight">
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
-						<p class="text-xs text-gray-500">
+						<p class="text-xs lq-t-text2">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
 								activeChat.project_id}
 						</p>
@@ -1671,7 +1731,7 @@
 					{/if}
 				</div>
 			{:else}
-				<LqText size="sm" tone="secondary">Pick or create a chat to start.</LqText>
+				<LqText size="sm" tone="secondary" leading="snug">Pick or create a chat to start.</LqText>
 			{/if}
 		</div>
 
@@ -1696,7 +1756,7 @@
 
 		{#if activeChat}
 			<div
-				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
+				class="border-t lq-t-border p-3 space-y-2"
 				class:lq-composer-fit={selectedRunProfile !== null}
 				data-testid="lq-ai-composer"
 			>
@@ -1736,7 +1796,7 @@
 									title="Keep the skills applied here active for follow-up messages in this chat. Off by default; a new chat starts fresh."
 									data-testid="lq-ai-sticky-toggle"
 								/>
-								<LqText size="xs" tone="secondary">Keep skills on</LqText>
+								<LqText size="xs" tone="secondary" leading="snug">Keep skills on</LqText>
 							</LqGroup>
 						{/if}
 					</div>
@@ -1889,7 +1949,10 @@
 							type="button"
 							aria-label="Toggle receipts drawer"
 							title="Toggle receipts"
-							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
+							on:click={() => {
+								receiptsDrawerOpen = !receiptsDrawerOpen;
+								if (sidebarShell && receiptsDrawerOpen) revealRightSidebar();
+							}}
 							data-testid="lq-ai-receipts-toggle"
 						>
 							<IconListDetails size={14} aria-hidden="true" />
@@ -1947,26 +2010,28 @@
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
 
-	{#if activeChat}
-		<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
-			<AttachedFilesPanel
-				{chatFiles}
-				newHarness={harnessChosen}
-				{projectFiles}
-				{uploading}
-				{attachLimitReached}
-				onUpload={uploadAttached}
-				onDetach={detachFile}
-			/>
-		</CompactPanel>
-	{/if}
+	{#if !sidebarShell}
+		{#if activeChat}
+			<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
+				<AttachedFilesPanel
+					{chatFiles}
+					newHarness={harnessChosen}
+					{projectFiles}
+					{uploading}
+					{attachLimitReached}
+					onUpload={uploadAttached}
+					onDetach={detachFile}
+				/>
+			</CompactPanel>
+		{/if}
 
-	{#if activeChat && receiptsDrawerOpen}
-		<ReceiptsDrawer
-			bind:open={receiptsDrawerOpen}
-			chatId={activeChat.id}
-			onClose={() => (receiptsDrawerOpen = false)}
-		/>
+		{#if activeChat && receiptsDrawerOpen}
+			<ReceiptsDrawer
+				bind:open={receiptsDrawerOpen}
+				chatId={activeChat.id}
+				onClose={() => (receiptsDrawerOpen = false)}
+			/>
+		{/if}
 	{/if}
 </div>
 
@@ -2072,9 +2137,9 @@
 	.lq-composer {
 		background: var(--lq-canvas);
 		color: var(--lq-text);
-		border: 1.5px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg);
-		padding: 12px;
+		border: 1.5px solid var(--lq-border-strong);
+		border-radius: var(--lq-radius-composer);
+		padding: 12px 16px;
 	}
 	.lq-composer:focus {
 		border-color: var(--lq-accent);
@@ -2082,5 +2147,13 @@
 	}
 	.lq-composer::placeholder {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>

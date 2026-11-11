@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { preferences } from '$lib/lq-ai/stores/preferences';
+	import LqText from './shared/LqText.svelte';
 
 	$: mode = $preferences.featured_tools;
 
@@ -73,7 +74,7 @@
 
 {#if mode === 'prominent'}
 	<section style="margin-bottom: var(--lq-space-6);">
-		<p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Featured tools</p>
+		<LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Featured tools</LqText>
 		<div class="tools-grid">
 			{#each tools as tool (tool.id)}
 				<a
@@ -83,15 +84,13 @@
 					data-testid="lq-nav-{tool.id}"
 				>
 					<span class="tool-icon" aria-hidden="true">{tool.icon}</span>
-					<strong class="lq-text-panel-h" style="display: block; margin-bottom: var(--lq-space-1);"
-						>{tool.title}</strong
-					>
-					<p
-						class="lq-text-body-sm"
-						style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-3);"
+					<LqText as="strong" size="16" weight="semibold" tone="primary" style="display: block; margin-bottom: var(--lq-space-1);"
+						>{tool.title}</LqText>
+					<LqText as="p" size="13.5" tone="secondary"
+						style="margin-bottom: var(--lq-space-3);"
 					>
 						{tool.description}
-					</p>
+					</LqText>
 					<span class="tool-cta">{tool.cta} →</span>
 				</a>
 			{/each}
@@ -101,7 +100,7 @@
 	<section
 		style="margin-bottom: var(--lq-space-6); display: flex; gap: var(--lq-space-2); flex-wrap: wrap; align-items: center;"
 	>
-		<span class="lq-text-label" style="margin-right: var(--lq-space-1);">Tools:</span>
+		<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-right: var(--lq-space-1);">Tools:</LqText>
 		{#each tools as tool (tool.id)}
 			<a
 				href={tool.href}
@@ -157,7 +156,7 @@
 		gap: var(--lq-space-1);
 		padding: var(--lq-space-1) var(--lq-space-3);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-canvas);
 		font-size: 13.5px;
 		color: var(--lq-text);

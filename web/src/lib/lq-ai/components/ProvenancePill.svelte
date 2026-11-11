@@ -44,11 +44,11 @@
 		return KIND_DESCRIPTION[kind];
 	}
 
-	export type ProvenanceTone = 'sage' | 'slate' | 'amber';
+	export type ProvenanceTone = 'sage' | 'slate' | 'governance';
 
+	/** A tier mismatch is a governance signal, drawn at least as loudly as a matching tier. */
 	export function toneFor(kind: ProvenanceKind, tierMismatch: boolean): ProvenanceTone {
-		if (kind === 'tier') return tierMismatch ? 'amber' : 'slate';
-		if (kind === 'caselaw') return 'slate';
+		if (kind === 'tier') return tierMismatch ? 'governance' : 'slate';
 		return 'sage';
 	}
 </script>
@@ -94,23 +94,29 @@
 	.lq-prov-summary {
 		font-weight: 500;
 	}
-	.lq-prov-tone-sage {
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-		border-color: var(--lq-accent-border);
-	}
+	/* ADR 0045: sage is a neutral outline; slate (the tier) adds a governance dot. */
+	.lq-prov-tone-sage,
 	.lq-prov-tone-slate {
-		background: var(--lq-tier-soft);
-		color: var(--lq-tier);
-		border-color: var(--lq-tier-border);
+		background: var(--lq-canvas);
+		color: var(--lq-text);
+		border-color: var(--lq-border);
 	}
-	.lq-prov-tone-amber {
-		background: var(--lq-warn-soft);
-		color: var(--lq-warn);
-		border-color: var(--lq-warn-border);
+	.lq-prov-tone-slate::before {
+		content: '';
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--lq-governance);
+		flex: none;
+	}
+	/* A tier mismatch: governance text and edge on the governance tint. */
+	.lq-prov-tone-governance {
+		background: var(--lq-governance-soft);
+		color: var(--lq-governance);
+		border-color: var(--lq-governance-border);
 	}
 	.lq-prov-pill:hover {
-		filter: brightness(0.97);
+		opacity: 0.85;
 	}
 	.lq-prov-pill:focus-visible {
 		outline: 2px solid var(--lq-accent);
