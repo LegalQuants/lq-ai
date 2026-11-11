@@ -26,6 +26,8 @@ helper from ``test_tabular_endpoints.py``.
 
 from __future__ import annotations
 
+import csv
+import io
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -33,6 +35,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from openpyxl import load_workbook  # type: ignore[import-untyped]
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -651,6 +654,103 @@ async def test_skill_resolution_enforces_caller_boundary(
         )
         assert allowed.status_code == 202, allowed.text
         assert [column["name"] for column in allowed.json()["columns"]] == ["Term", "Governing law"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("export_format", ["xlsx", "csv"])
+async def test_shared_table_skill_exports_formula_like_text_as_literal(
+    client: AsyncClient, db_session: AsyncSession, user_a: User, export_format: str
+) -> None:
+    from app.models.team import Team, TeamMember
+
+    admin = await _make_user(db_session)
+    team = Team(
+        name="Export team", slug=f"export-{uuid.uuid4().hex[:8]}", created_by_user_id=admin.id
+    )
+    db_session.add(team)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            TeamMember(team_id=team.id, user_id=user.id, role=role, added_by_user_id=admin.id)
+            for user, role in [(admin, "admin"), (user_a, "member")]
+        ]
+    )
+    await db_session.flush()
+
+    formula_name = "=1+1"
+    literal_name = 'Term, "in months"; note'
+    formula_value = "=2+2"
+    document_name = "=1+1.pdf"
+    prefixed_name = "  \t\uff0b1+1"
+    payload = _table_skill_body(
+        scope="team",
+        owner_team_id=str(team.id),
+        frontmatter_extra={
+            "output_format": "table",
+            "columns": [
+                {"name": formula_name, "query": "Find the term."},
+                {"name": literal_name, "query": "Find the notice period."},
+                {"name": prefixed_name, "query": "Find the renewal term."},
+            ],
+        },
+    )
+    created = await client.post("/api/v1/user-skills", headers=_bearer(admin), json=payload)
+    assert created.status_code == 201, created.text
+
+    doc = await _make_document(db_session, owner=user_a)
+    headers = _bearer(user_a)
+    accepted = await client.post(
+        "/api/v1/tabular/execute",
+        headers=headers,
+        json={"document_ids": [str(doc.id)], "skill_name": created.json()["slug"]},
+    )
+    assert accepted.status_code == 202, accepted.text
+    assert [column["name"] for column in accepted.json()["columns"]] == [
+        formula_name,
+        literal_name,
+        prefixed_name,
+    ]
+    execution_id = uuid.UUID(accepted.json()["id"])
+    execution = await db_session.get(TabularExecution, execution_id)
+    assert execution is not None
+    execution.status = "completed"
+    execution.results = {
+        "rows": [
+            {
+                "document_id": str(doc.id),
+                "document_name": document_name,
+                "cells": {
+                    formula_name: {"value": formula_value, "confidence": "high"},
+                    literal_name: {"value": "24 months", "confidence": "high"},
+                },
+            }
+        ]
+    }
+    await db_session.flush()
+
+    exported = await client.get(
+        f"/api/v1/tabular/executions/{execution_id}/export",
+        params={"format": export_format},
+        headers=headers,
+    )
+    assert exported.status_code == 200, exported.text
+    if export_format == "xlsx":
+        sheet = load_workbook(io.BytesIO(exported.content)).active
+        assert sheet is not None
+        assert sheet["B1"].value == formula_name
+        assert sheet["B1"].data_type == "s"
+        assert sheet["C1"].value == literal_name
+        assert sheet["D1"].value == prefixed_name
+        assert sheet["A2"].value == document_name
+        assert sheet["A2"].data_type == "s"
+        assert sheet["B2"].value == formula_value
+        assert sheet["B2"].data_type == "s"
+        assert sheet["C2"].value == "24 months"
+    else:
+        assert list(csv.reader(io.StringIO(exported.text))) == [
+            ["Document", f"`{formula_name}", literal_name, f"`{prefixed_name}", "citation_links"],
+            [f"`{document_name}", f"`{formula_value}", "24 months", "", ""],
+        ]
 
 
 @pytest.mark.integration

@@ -56,6 +56,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
@@ -1043,15 +1044,17 @@ def _build_xlsx(*, columns: list[ColumnSpec], results: TabularResults) -> bytes:
     # Header row.
     ws.cell(row=1, column=1, value="Document")
     for ci, name in enumerate(column_names, start=2):
-        ws.cell(row=1, column=ci, value=name)
+        # Store user-controlled values as text, including names starting with '='.
+        ws.cell(row=1, column=ci, value=name).data_type = "s"
 
     # Data rows.
     for ri, grid_row in enumerate(results.rows, start=2):
-        ws.cell(row=ri, column=1, value=grid_row.document_name)
+        ws.cell(row=ri, column=1, value=grid_row.document_name).data_type = "s"
         for ci, name in enumerate(column_names, start=2):
             cell_data = grid_row.cells.get(name)
             value = _cell_display_value(cell_data)
             xlsx_cell = ws.cell(row=ri, column=ci, value=value)
+            xlsx_cell.data_type = "s"
             if cell_data and cell_data.citations:
                 xlsx_cell.comment = _build_xlsx_comment(cell_data.citations)
 
@@ -1070,9 +1073,9 @@ def _build_csv(*, columns: list[ColumnSpec], results: TabularResults) -> str:
     """
 
     out = io.StringIO()
-    writer = csv.writer(out)
+    writer = csv.writer(out, quoting=csv.QUOTE_ALL)
     column_names = [c.name for c in columns]
-    writer.writerow(["Document", *column_names, "citation_links"])
+    writer.writerow(["Document", *(_csv_literal(name) for name in column_names), "citation_links"])
 
     for grid_row in results.rows:
         row_values: list[str] = [grid_row.document_name]
@@ -1083,9 +1086,22 @@ def _build_csv(*, columns: list[ColumnSpec], results: TabularResults) -> str:
             if cell_data and cell_data.citations:
                 row_citations.extend(f"{name}:{c.citation_id}" for c in cell_data.citations)
         row_values.append(";".join(row_citations))
-        writer.writerow(row_values)
+        writer.writerow(_csv_literal(value) for value in row_values)
 
     return out.getvalue()
+
+
+# Match formula prefixes, including full-width variants, after characters a
+# spreadsheet may skip or interpret as text markers.
+_CSV_FORMULA_PREFIX = re.compile(r"^[\s\x00-\x1f\ufeff']*[=+\-@\t\r\n\uff1d\uff0b\uff0d\uff20]")
+
+
+def _csv_literal(value: str) -> str:
+    """Give formula-like CSV fields a visible text prefix."""
+    # A literal backtick survives as part of the imported cell value.
+    if _CSV_FORMULA_PREFIX.match(value):
+        return f"`{value}"
+    return value
 
 
 def _cell_display_value(cell_data: object) -> str:

@@ -147,6 +147,8 @@ The confirmation modal is mandatory above a ~$1.00 threshold (Decision C-5).
 - **XLSX** — each grid cell with at least one citation carries an openpyxl `Comment` listing the citation ids + confidences (up to 5 per comment; the cell retains the full count). Operators hover any cell in Excel / Numbers / Google Sheets to see the sources.
 - **CSV** — a trailing `citation_links` column per row carries a semicolon-separated list of `"<column_name>:<citation_id>"` pairs across the row's cells; empty when no cell in the row had citations.
 
+XLSX stores exported text as literal text. CSV adds a visible backtick to formula-like fields so spreadsheet apps treat them as text.
+
 Exports use the same provenance resolver as GET and cancellation. For minting-vintage executions (`m3-c2-v2`), CSV citation links and XLSX comments contain the real minted citation IDs; unlocated cells have no citation, including executions that minted zero rows. Genuine legacy executions retain their display-only bridge IDs. XLSX comments retain full citation IDs. Source passages and highlights remain available in the result dialog.
 
 ---
