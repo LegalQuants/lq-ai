@@ -82,7 +82,7 @@ dependencies = [
     # offsets being preserved from the first ingestion (see ADR 0006).
     # AGPL-3.0 — server-side use only; not redistributed as a library.
     # Boundary documented in PRD §1519 and §7.2.
-    "pymupdf>=1.24,<2",
+    "pymupdf>=1.24,<3",
     # Docling: structure-aware parsing (titles, tables, paragraphs).
     # MIT-licensed; produces a structured representation we stash in
     # `documents.structured_content` for M2 consumption. M1 chunker
