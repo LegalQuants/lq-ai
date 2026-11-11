@@ -1,6 +1,6 @@
 # ADR 0045 — The LQ.AI shell redesign: colour, themes, type and navigation
 
-**Status:** Proposed (2026-11-09). First draft 25 October 2026, revised 9 November.
+**Status:** Proposed (2026-11-09). First draft 25 October 2026, revised 9 and 11 November.
 **Revised 9 November:** four rulings by Houfu (the grey token's name, the type-class migration, the
 light field-edge value, and a darker light governance orange), and the committee's 25 October
 palette asks, answered in
@@ -225,9 +225,10 @@ Accepted, this ADR is that decision, and only for the following changes:
 | 16 px | text in the message box |
 | 20 px | page titles |
 | 24 px | large headings (Learn articles) |
-| 32 px | the Home greeting |
+| 26 px | the Home greeting (Houfu, 11 November; the pictures show 32 px) |
 
-- **Weights** are 400, 500, 600 and 700. Other sizes in the pictures (11.5, 15, 15.5, 17, 19 and
+- **Weights** are 400, 500, 600 and 700. Page titles are 700 and the Home greeting is 600, as
+  `DESIGN.md` gives them (Houfu, 11 November); panel and card titles stay 600. Other sizes in the pictures (11.5, 15, 15.5, 17, 19 and
   30 px) are one-offs and snap to the nearest step.
 
 ### 5. Shape and icons
