@@ -19,7 +19,7 @@ live, a person must accept it on a configured provider; see
 
 **Status.** New harness shipped as experimental in v0.9.1. Both profile
 switches default to off. See the [ADR 0038 decision and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
-for the acceptance and security-path review of the merged implementation.
+for the security-path review of the merged implementation and the open ratification question.
 Design, and what was and was not verified:
 [plan](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). This runbook
 replaces the one written for the first build, which had a profile control beside the model

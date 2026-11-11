@@ -2283,7 +2283,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 #### DE-406 — Minimize the panes of the matter workspace
 
-**Status:** Open. Raised by the maintainer on 2026-10-09 while using New harness (ADR 0038) in a matter chat.
+**Status:** Open. Raised by the maintainer on 2026-10-09 while using New harness (ADR 0038, proposed) in a matter chat.
 
 **Priority:** P2 · **Effort:** M
 
@@ -2295,7 +2295,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 #### DE-407 — Better recall for a run's knowledge-base search
 
-**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038, ruling 7.
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 7.
 
 **Priority:** P2 · **Effort:** M
 
@@ -2307,7 +2307,7 @@ Entries are tagged with priority (P1 = should be addressed in v1.5; P2 = good fo
 
 #### DE-408 — Move the resource routes and the chat path onto the access module
 
-**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038, ruling 11. Depends on ADR 0038 D8, which is not built.
+**Status:** Open. Deferred by the maintainer's ruling of 2026-10-09 on ADR 0038 (proposed), ruling 11. Depends on ADR 0038 D8, which is not built.
 
 **Priority:** P2 · **Effort:** L
 
@@ -4180,8 +4180,8 @@ and M4 single-agent/multi-agent classification are superseded by ADR 0035.
 #### Governed runs in chat — deferred (DE-410 to DE-420)
 
 Recorded from the [plan's Deferred section](plans/issue-662-c1-governed-runs-in-chat.md#deferred)
-and from the deferred items in [ADR 0038 D7](adr/0038-governed-runs-in-chat.md).
-The maintainer asked on
+and from the items ADR 0038 D7 lists as not built, while
+[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed. The maintainer asked on
 2026-10-13 that they be numbered. ADR 0038 does not decide any of them, and none is
 implemented. The priorities and efforts below are provisional: they are the drafter's
 estimates, and the maintainer sets them. A query embedding for the knowledge-base search,

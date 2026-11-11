@@ -3,7 +3,7 @@
 **Status:** Historical build plan, superseded in part on 2026-10-07 and 2026-10-08.
 The revised design shipped as experimental in v0.9.1. See [ADR 0038's decision
 and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
-for the acceptance scope and [Implementation status](#implementation-status) for the
+for the open ratification question and [Implementation status](#implementation-status) for the
 build evidence.
 **Date:** 2026-10-06. **Baseline inspected:** `5e128d5ba`. The plan was written
 from a read of the code. The implementation status was rewritten on 2026-10-09 and
@@ -702,7 +702,7 @@ which this branch makes.
 - **Merge review.** The [#599 merge receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3)
   records the security-path review at `ca96056` and 10 of 10 CI checks passing.
   It also records committee ratification. See the [ADR decision and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
-  for the scope of the experimental acceptance and the later revisions.
+  for the open question about the scope of committee ratification.
 - **Choices inside the rulings.** The maintainer ruled on all eleven of the ADR's open
   questions. Rulings 4, 6 and 10 were built on choices he has not ruled on, which the
   ADR lists under each. D8, the access module, is proposed and not built.

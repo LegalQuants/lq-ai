@@ -4,16 +4,15 @@
 **Date:** 2026-09-12 · **Updated:** 2026-09-20
 **Tracks:** [Issue #563](https://github.com/LegalQuants/lq-ai/issues/563)
 
-**Accepted experimental follow-on:** [ADR 0038](0038-governed-runs-in-chat.md) defines
+**Proposed follow-on:** [ADR 0038](0038-governed-runs-in-chat.md) proposes
 an experimental orchestrator model in the main chat, tool calls for approved children,
 and runs on the owner's documents and knowledge bases.
 
-**Amendment as merged (2026-10-14):** [ADR 0038 D1](0038-governed-runs-in-chat.md#d1--a-run-is-a-turn-in-the-chat-thread-started-by-choosing-new-harness)
-changes D1 and D2 so that a root may answer without a batch and may belong to no
+**Proposed amendment (2026-10-09, widened 2026-10-12):** [ADR 0038 D1](0038-governed-runs-in-chat.md#d1--a-run-is-a-turn-in-the-chat-thread-started-by-choosing-new-harness)
+would change D1 and D2 so that a root may answer without a batch and may belong to no
 project, and D3 so that a file a keyword search finds counts as selected once the owner
-approves a plan that grants the search. See the
-[decision and review record](0038-governed-runs-in-chat.md#decision-and-review-record)
-for the scope of the experimental acceptance.
+approves a plan that grants the search. It gives the words. It is not in force until ADR
+0038 is ratified; until then the decision below stands as written.
 
 ## Context
 
