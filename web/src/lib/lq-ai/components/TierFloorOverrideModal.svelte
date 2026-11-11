@@ -152,7 +152,7 @@
 		z-index: 1000;
 	}
 	.modal {
-		background: #fff;
+		background: var(--lq-canvas);
 		padding: 24px;
 		border-radius: 8px;
 		width: min(500px, 90vw);
@@ -163,7 +163,7 @@
 	}
 	p {
 		font-size: 13px;
-		color: #4b5563;
+		color: var(--lq-text-secondary);
 		margin: 0 0 12px 0;
 	}
 	label {
@@ -204,7 +204,7 @@
 	}
 	.primary {
 		background: #4338ca;
-		color: #fff;
+		color: var(--lq-canvas);
 		border: 0;
 		padding: 6px 14px;
 		border-radius: 4px;
@@ -212,7 +212,7 @@
 		font-size: 13px;
 	}
 	.primary:disabled {
-		background: #9ca3af;
+		background: var(--lq-text-tertiary);
 		cursor: not-allowed;
 	}
 	.cancel {

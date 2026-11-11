@@ -134,7 +134,7 @@
 	.lq-btn-ghost {
 		background: transparent;
 		color: #1f2937;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: var(--lq-radius);
 		padding: 8px 16px;
 		font-size: 14px;
@@ -144,25 +144,25 @@
 		align-items: center;
 	}
 	.lq-btn-ghost:hover {
-		background: var(--lq-accent-soft, #e8f4ec);
+		background: var(--lq-accent-soft);
 	}
 	/* C5 (PR6d) — tool-usage metadata row */
 	.lq-tool-usage {
-		margin-top: var(--lq-space-3, 12px);
+		margin-top: var(--lq-space-3);
 		font-size: 13px;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 	}
 	.lq-tool-usage-label {
 		font-weight: 500;
-		color: var(--lq-text-primary, #111827);
+		color: var(--lq-text-primary);
 	}
 	.lq-tool-usage-warning {
-		margin-top: var(--lq-space-2, 8px);
+		margin-top: var(--lq-space-2);
 		padding: 6px 10px;
-		border-radius: var(--lq-radius, 6px);
-		background: var(--lq-warning-soft, #fffbeb);
-		border: 1px solid var(--lq-warning-border, #fcd34d);
-		color: var(--lq-warning-text, #92400e);
+		border-radius: var(--lq-radius);
+		background: var(--lq-warning-soft);
+		border: 1px solid var(--lq-warning-border);
+		color: var(--lq-warning-text);
 		font-size: 13px;
 	}
 </style>
