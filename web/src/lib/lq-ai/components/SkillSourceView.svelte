@@ -10,6 +10,8 @@
 		SkillResourceFile
 	} from '$lib/lq-ai/types';
 	import SkillResources from './SkillResources.svelte';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	export let slug: string;
 	export let contentMd: string;
@@ -72,7 +74,14 @@
 <div class="lq-source-view">
 	{#if referenceFiles.length > 0}
 		<section class="lq-source-section">
-			<h2 class="lq-text-label">Preloaded references</h2>
+			<LqTitle
+				order={2}
+				size="12"
+				weight="semibold"
+				tone="tertiary"
+				transform="uppercase"
+				tracking="wide">Preloaded references</LqTitle
+			>
 			{#each referenceFiles as file (file.path)}
 				<details>
 					<summary>{file.path}</summary>
@@ -84,7 +93,14 @@
 	<SkillResources {slug} files={onDemandFiles} {referenceReadEnabled} />
 	{#if scriptFiles.length > 0}
 		<section class="lq-source-section">
-			<h2 class="lq-text-label">Bundled helpers</h2>
+			<LqTitle
+				order={2}
+				size="12"
+				weight="semibold"
+				tone="tertiary"
+				transform="uppercase"
+				tracking="wide">Bundled helpers</LqTitle
+			>
 			{#each scriptFiles as file (file.path)}
 				<details>
 					<summary>{file.path}</summary>
@@ -95,28 +111,57 @@
 	{/if}
 	<section class="lq-source-section">
 		<div class="lq-source-section-header">
-			<h2 class="lq-text-label">Frontmatter</h2>
+			<LqTitle
+				order={2}
+				size="12"
+				weight="semibold"
+				tone="tertiary"
+				transform="uppercase"
+				tracking="wide">Frontmatter</LqTitle
+			>
 			<button type="button" class="lq-copy-btn" on:click={copyRaw}>{copyLabel}</button>
 		</div>
 		<pre class="lq-yaml-block">{contentYaml}</pre>
 	</section>
 
 	<section class="lq-source-section">
-		<h2 class="lq-text-label">Body</h2>
+		<LqTitle
+			order={2}
+			size="12"
+			weight="semibold"
+			tone="tertiary"
+			transform="uppercase"
+			tracking="wide">Body</LqTitle
+		>
 		<div class="lq-prose">
 			{@html renderedMd}
 		</div>
 	</section>
 
 	<section class="lq-source-section">
-		<h2 class="lq-text-label">Inputs</h2>
+		<LqTitle
+			order={2}
+			size="12"
+			weight="semibold"
+			tone="tertiary"
+			transform="uppercase"
+			tracking="wide">Inputs</LqTitle
+		>
 		{#if inputsLoading}
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading inputs…</p>
+			<LqText as="p" size="14" tone="secondary">Loading inputs…</LqText>
 		{:else if inputsError}
-			<p class="lq-text-body" style="color: var(--lq-error);">{inputsError}</p>
+			<LqText as="p" size="14" tone="danger">{inputsError}</LqText>
 		{:else if inputs && (inputs.required.length > 0 || inputs.optional.length > 0)}
 			{#if inputs.required.length > 0}
-				<h3 class="lq-text-label lq-inputs-subhead">Required</h3>
+				<LqTitle
+					order={3}
+					size="12"
+					weight="semibold"
+					tone="secondary"
+					transform="uppercase"
+					tracking="wide"
+					class="lq-inputs-subhead">Required</LqTitle
+				>
 				<ul class="lq-inputs-list">
 					{#each inputs.required as def (def.name)}
 						<li class="lq-input-row">
@@ -131,7 +176,15 @@
 				</ul>
 			{/if}
 			{#if inputs.optional.length > 0}
-				<h3 class="lq-text-label lq-inputs-subhead">Optional</h3>
+				<LqTitle
+					order={3}
+					size="12"
+					weight="semibold"
+					tone="secondary"
+					transform="uppercase"
+					tracking="wide"
+					class="lq-inputs-subhead">Optional</LqTitle
+				>
 				<ul class="lq-inputs-list">
 					{#each inputs.optional as def (def.name)}
 						<li class="lq-input-row">
@@ -149,9 +202,7 @@
 				</ul>
 			{/if}
 		{:else}
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">
-				(This skill declares no inputs.)
-			</p>
+			<LqText as="p" size="14" tone="secondary">(This skill declares no inputs.)</LqText>
 		{/if}
 	</section>
 </div>
@@ -191,7 +242,7 @@
 	.lq-copy-btn {
 		background: transparent;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 12px;
 		color: var(--lq-text-secondary);
@@ -239,9 +290,8 @@
 		margin-bottom: 0.75em;
 	}
 
-	.lq-inputs-subhead {
+	.lq-source-section :global(.lq-inputs-subhead) {
 		margin-top: var(--lq-space-3);
-		color: var(--lq-text-secondary);
 	}
 
 	.lq-inputs-list {
@@ -292,13 +342,13 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 2px 7px;
-		border-radius: var(--lq-radius-pill, 9999px);
+		border-radius: var(--lq-radius-pill);
 		font-size: 11px;
 		font-weight: 500;
 	}
 
 	.lq-pill-required {
-		background: var(--lq-accent-soft, rgba(79, 70, 229, 0.1));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent);
 	}

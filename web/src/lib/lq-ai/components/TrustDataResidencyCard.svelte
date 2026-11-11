@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 	/**
 	 * TrustDataResidencyCard — shows where data lives in a self-hosted deployment.
 	 *
@@ -31,21 +33,25 @@
 </script>
 
 <div class="lq-card">
-	<h3 class="lq-text-panel-h card-title">Where your data lives</h3>
+	<LqTitle order={3} size="16" weight="semibold" tone="primary" class="card-title"
+		>Where your data lives</LqTitle
+	>
 	<ul class="service-list">
 		{#each services as s}
 			<li class="service-row">
 				<div class="service-meta">
-					<span class="lq-text-body service-label">{s.label}</span>
-					<span class="lq-text-caption service-desc">{s.desc}</span>
+					<LqText as="span" size="14" weight="medium" tone="primary" class="service-label"
+						>{s.label}</LqText
+					>
+					<LqText as="span" size="12" tone="secondary" class="service-desc">{s.desc}</LqText>
 				</div>
 				<code class="host-badge">{s.host}</code>
 			</li>
 		{/each}
 	</ul>
-	<p class="lq-text-caption footer-note">
+	<LqText as="p" size="12" tone="tertiary" class="footer-note">
 		All four services run in the operator's environment. Provider API keys never leave the gateway.
-	</p>
+	</LqText>
 </div>
 
 <style>
@@ -59,7 +65,7 @@
 		gap: var(--lq-space-3);
 	}
 
-	.card-title {
+	.lq-card :global(.card-title) {
 		margin: 0;
 	}
 
@@ -92,15 +98,6 @@
 		min-width: 0;
 	}
 
-	.service-label {
-		color: var(--lq-text);
-		font-weight: 500;
-	}
-
-	.service-desc {
-		color: var(--lq-text-secondary);
-	}
-
 	.host-badge {
 		font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace;
 		font-size: 11px;
@@ -113,8 +110,7 @@
 		flex-shrink: 0;
 	}
 
-	.footer-note {
-		color: var(--lq-text-tertiary);
+	.lq-card :global(.footer-note) {
 		margin: 0;
 	}
 </style>

@@ -2,6 +2,8 @@
 	import { onMount } from 'svelte';
 	import TrustPill from './TrustPill.svelte';
 	import { listModels } from '../api/models';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	type CardState =
 		| { kind: 'loading' }
@@ -30,15 +32,15 @@
 </script>
 
 <div class="lq-card">
-	<h3 class="lq-text-panel-h card-title">Configured providers</h3>
+	<LqTitle order={3} size="16" weight="semibold" tone="primary" class="card-title">Configured providers</LqTitle>
 
 	{#if state.kind === 'loading'}
-		<p class="lq-text-body loading-msg">Reading provider list…</p>
+		<LqText as="p" size="14" tone="secondary" class="loading-msg">Reading provider list…</LqText>
 	{:else if state.kind === 'error'}
-		<p class="lq-text-body error-msg">{state.message}</p>
+		<LqText as="p" size="14" tone="secondary" class="error-msg">{state.message}</LqText>
 	{:else if state.kind === 'ready'}
 		{#if state.providers.length === 0}
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">No providers discovered. Check your gateway configuration.</p>
+			<LqText as="p" size="14" tone="secondary">No providers discovered. Check your gateway configuration.</LqText>
 		{:else}
 			<ul class="provider-list">
 				{#each state.providers as provider}
@@ -51,9 +53,9 @@
 		{/if}
 	{/if}
 
-	<p class="lq-text-caption footer-note">
+	<LqText as="p" size="12" tone="tertiary" class="footer-note">
 		Providers are configured in gateway.yaml. Operators can rotate, add, or remove providers without restarting the backend.
-	</p>
+	</LqText>
 </div>
 
 <style>
@@ -67,16 +69,8 @@
 		gap: var(--lq-space-3);
 	}
 
-	.card-title {
+	.lq-card :global(.card-title) {
 		margin: 0;
-	}
-
-	.loading-msg {
-		color: var(--lq-text-secondary);
-	}
-
-	.error-msg {
-		color: var(--lq-text-secondary);
 	}
 
 	.provider-list {
@@ -95,8 +89,7 @@
 		flex-wrap: wrap;
 	}
 
-	.footer-note {
-		color: var(--lq-text-tertiary);
+	.lq-card :global(.footer-note) {
 		margin: 0;
 	}
 </style>
