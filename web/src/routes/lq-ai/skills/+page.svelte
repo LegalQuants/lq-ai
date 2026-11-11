@@ -117,7 +117,7 @@
 
 	{#if listError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{listError}
@@ -125,7 +125,7 @@
 	{/if}
 	{#if actionError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{actionError}
@@ -345,5 +345,16 @@
 		background: var(--lq-inset);
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
 	}
 </style>

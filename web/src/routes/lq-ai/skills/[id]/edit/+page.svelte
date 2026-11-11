@@ -163,14 +163,14 @@
 					{#if row.scope === 'team' && row.owner_team_id}
 						·
 						<span
-							class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-sky-100 text-sky-900 dark:bg-sky-900 dark:text-sky-100"
+							class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide lq-t-info-bg lq-t-info-text"
 							data-testid="lq-ai-user-skill-edit-team-chip"
 						>
 							Team · {teamNamesById.get(row.owner_team_id) ?? 'unknown'}
 						</span>
 					{:else}
 						·
-						<span class="text-gray-500">Personal</span>
+						<span class="lq-t-text2">Personal</span>
 					{/if}
 				</p>
 			{/if}
@@ -185,7 +185,7 @@
 
 	{#if justCreated}
 		<div
-			class="mb-4 p-3 rounded border border-emerald-300 bg-emerald-50 text-emerald-900 text-sm dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100"
+			class="mb-4 p-3 rounded border lq-t-success-border lq-t-success-bg lq-t-success text-sm"
 			role="status"
 		>
 			Created. Tweak the body or version and Save to bump.
@@ -193,7 +193,7 @@
 	{/if}
 	{#if loadError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{loadError}
@@ -204,7 +204,7 @@
 	{:else if row}
 		{#if shadowsBuiltIn}
 			<div
-				class="mb-4 p-2 rounded border border-amber-300 bg-amber-50 text-amber-900 text-xs dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+				class="mb-4 p-2 rounded border lq-t-warning-border lq-t-warning-bg lq-t-warning-text text-xs"
 				role="status"
 				data-testid="lq-ai-user-skill-edit-shadow-warning"
 			>
@@ -222,7 +222,7 @@
 		{/if}
 		{#if submitError}
 			<div
-				class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+				class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 				role="alert"
 			>
 				{submitError}
@@ -230,7 +230,7 @@
 		{/if}
 		{#if actionError}
 			<div
-				class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+				class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 				role="alert"
 			>
 				{actionError}
@@ -238,7 +238,7 @@
 		{/if}
 		{#if saveOk}
 			<div
-				class="mb-4 p-3 rounded border border-emerald-300 bg-emerald-50 text-emerald-900 text-sm dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100"
+				class="mb-4 p-3 rounded border lq-t-success-border lq-t-success-bg lq-t-success text-sm"
 				role="status"
 				data-testid="lq-ai-user-skill-edit-saved"
 			>
@@ -257,7 +257,7 @@
 					type="text"
 					readonly
 					value={row.slug}
-					class="mt-1 w-full rounded border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 text-sm font-mono text-gray-600"
+					class="mt-1 w-full rounded lq-t-border lq-t-inset text-sm font-mono lq-t-text2"
 				/>
 				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
 					Slugs are immutable in D8 — archive and recreate if you need a different one.
@@ -271,7 +271,7 @@
 					bind:value={displayName}
 					required
 					maxlength="200"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm"
 				/>
 			</label>
 
@@ -282,7 +282,7 @@
 					bind:value={description}
 					required
 					maxlength="2000"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm"
 				/>
 			</label>
 
@@ -293,7 +293,7 @@
 						type="text"
 						bind:value={version}
 						maxlength="50"
-						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
+						class="mt-1 w-full rounded lq-t-border-strong text-sm font-mono"
 					/>
 					<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">Bump on edits; the audit log records before/after.</p>
 				</label>
@@ -302,7 +302,7 @@
 					<input
 						type="text"
 						bind:value={tagsInput}
-						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+						class="mt-1 w-full rounded lq-t-border-strong text-sm"
 					/>
 				</label>
 			</div>
@@ -314,7 +314,7 @@
 					rows="16"
 					required
 					maxlength="200000"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm font-mono"
 				></textarea>
 			</label>
 
@@ -380,4 +380,51 @@
 		cursor: pointer;
 	}
 	.lq-btn-danger:hover { background: var(--lq-error-soft); }
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-info-bg {
+		background-color: var(--lq-info-bg);
+	}
+	.lq-t-info-text {
+		color: var(--lq-info-text);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-success {
+		color: var(--lq-success);
+	}
+	.lq-t-success-bg {
+		background-color: var(--lq-success-bg);
+	}
+	.lq-t-success-border {
+		border-color: var(--lq-success-border);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+	.lq-t-warning-bg {
+		background-color: var(--lq-warning-bg);
+	}
+	.lq-t-warning-border {
+		border-color: var(--lq-warning-border);
+	}
+	.lq-t-warning-text {
+		color: var(--lq-warning-text);
+	}
 </style>

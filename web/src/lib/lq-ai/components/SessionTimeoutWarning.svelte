@@ -23,8 +23,8 @@
 		bottom: var(--lq-space-4);
 		right: var(--lq-space-4);
 		background: var(--lq-canvas);
-		border: 1px solid var(--lq-warn-border, var(--lq-border));
-		border-left: 3px solid var(--lq-warn, #d97706);
+		border: 1px solid var(--lq-warn-border);
+		border-left: 3px solid var(--lq-warn);
 		border-radius: var(--lq-radius-lg);
 		padding: var(--lq-space-4);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);

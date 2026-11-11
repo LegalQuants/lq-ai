@@ -20,6 +20,8 @@
 	import AmbientTrustChrome from '$lib/lq-ai/components/AmbientTrustChrome.svelte';
 	import SessionTimeoutWarning from '$lib/lq-ai/components/SessionTimeoutWarning.svelte';
 	import NotificationBell from '$lib/lq-ai/components/NotificationBell.svelte';
+	import ShellSidebar from '$lib/lq-ai/components/ShellSidebar.svelte';
+	import { readShellSwitch, type ShellVariant } from '$lib/lq-ai/shell';
 	import { autonomousChromeEnabled, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
@@ -65,6 +67,14 @@
 
 	let activityHandler: (() => void) | null = null;
 
+	// Developer-only switch for the redesigned chrome (see $lib/lq-ai/shell).
+	// Off by default; sign-in and forced password change keep today's chrome.
+	let shell: ShellVariant = 'tabs';
+	onMount(() => {
+		shell = readShellSwitch();
+	});
+	$: sidebarChrome = shell === 'sidebar' && !isAuthExempt(pathname);
+
 	onMount(() => {
 		// Layouts survive client-side sign-in/navigation. Sync each new signed-in user,
 		// and let the store discard responses from an earlier session.
@@ -98,8 +108,10 @@
 </script>
 
 {#if booted}
-	<div class="lq-shell">
-		{#if !isAuthExempt(pathname)}
+	<div class="lq-shell" class:lq-shell-sidebar={sidebarChrome}>
+		{#if sidebarChrome}
+			<ShellSidebar user={$auth.user ?? null} {pathname} />
+		{:else if !isAuthExempt(pathname)}
 			<header class="lq-topbar">
 				<a class="lq-brand" href="/lq-ai">
 					<span class="lq-brand-lq">LQ</span>.AI
@@ -117,7 +129,9 @@
 		<main id="lq-main">
 			<slot />
 		</main>
-		<DualBrandingFooter />
+		{#if !sidebarChrome}
+			<DualBrandingFooter />
+		{/if}
 		<SessionTimeoutWarning />
 	</div>
 {/if}
@@ -144,4 +158,6 @@
 	}
 	.lq-brand-lq { color: var(--lq-accent); }
 	main { flex: 1; min-height: 0; overflow-y: auto; }
+	.lq-shell-sidebar { flex-direction: row; }
+	.lq-shell-sidebar main { min-width: 0; }
 </style>
