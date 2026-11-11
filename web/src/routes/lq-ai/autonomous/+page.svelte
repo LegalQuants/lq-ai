@@ -32,6 +32,7 @@
 	import type { SkillSummary } from '$lib/lq-ai/types';
 	import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
 	import { formatCost, formatCreatedAt, isHaltable, statusPillClass } from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let sessions: AutonomousSessionRead[] = [];
 	let loading = false;
@@ -199,7 +200,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div class="page-header-copy">
-				<h1 class="lq-text-page-h">Autonomous sessions</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Autonomous sessions</LqTitle>
 				<p class="page-intro">
 					Audit what LQVern did — every autonomous run, its cost, current phase, and terminal state.
 					Running sessions can be halted inline. Select a row to view the full receipt.
@@ -213,7 +214,7 @@
 					>Orchestration chat (experimental)</a
 				>
 			{:else}
-				<button type="button" disabled class="text-sm text-gray-500">
+				<button type="button" disabled class="text-sm lq-t-text2">
 					Orchestration chat (experimental) — {chatAvailability === 'disabled'
 						? 'disabled by operator'
 						: chatAvailability === 'checking'
@@ -313,7 +314,14 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div class="modal-panel" on:click|stopPropagation on:keydown|stopPropagation>
-			<h2 id="run-modal-title" class="lq-text-page-h modal-title">Run a skill or playbook once</h2>
+			<LqTitle
+				order={2}
+				size="20"
+				weight="bold"
+				tone="primary"
+				id="run-modal-title"
+				class="modal-title">Run a skill or playbook once</LqTitle
+			>
 			<p class="modal-hint modal-lede">
 				This runs once now so you can see the result before arming a schedule or watch.
 			</p>
@@ -522,7 +530,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -532,7 +540,7 @@
 	}
 
 	.new-button:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.new-button:disabled {
@@ -542,18 +550,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -570,7 +578,7 @@
 	.empty-link {
 		font-style: normal;
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 
 	.empty-link:hover {
@@ -616,27 +624,27 @@
 	}
 
 	.lq-status--running {
-		background: var(--lq-info-bg, #e8f4fd);
-		color: var(--lq-info-text, #0a5fa8);
-		border: 1px solid var(--lq-info-border, #9ed3f5);
+		background: var(--lq-info-bg);
+		color: var(--lq-info-text);
+		border: 1px solid var(--lq-info-border);
 	}
 
 	.lq-status--completed {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.lq-status--halted {
-		background: var(--lq-warning-bg, #fff8e1);
-		color: var(--lq-warning-text, #7a5a00);
-		border: 1px solid var(--lq-warning-border, #ffe08a);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
+		border: 1px solid var(--lq-warning-border);
 	}
 
 	.lq-status--failed {
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
-		border: 1px solid var(--lq-error-border, #fbb);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.cost-cell {
@@ -660,12 +668,12 @@
 	}
 
 	.action-link:hover {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -675,8 +683,8 @@
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {
@@ -709,7 +717,7 @@
 		overflow-y: auto;
 	}
 
-	.modal-title {
+	.modal-panel :global(.modal-title) {
 		margin: 0 0 var(--lq-space-2);
 	}
 
@@ -756,7 +764,7 @@
 	.modal-input,
 	.modal-select {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -810,8 +818,8 @@
 	.submit-error {
 		font-size: 13px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -830,7 +838,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -838,7 +846,7 @@
 	}
 
 	.modal-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.modal-btn-primary:focus-visible {
@@ -855,7 +863,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -874,5 +882,10 @@
 	.modal-btn-secondary:disabled {
 		opacity: 0.65;
 		cursor: not-allowed;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>

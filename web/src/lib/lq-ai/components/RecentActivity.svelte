@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { chatsApi, projectsApi } from '$lib/lq-ai/api';
   import type { Chat, Project } from '$lib/lq-ai/types';
+  import LqText from './shared/LqText.svelte';
 
   let chats: Chat[] = [];
   let loadingChats = true;
@@ -47,49 +48,49 @@
 <section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters} style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--lq-space-4); margin-bottom: var(--lq-space-6);">
   <!-- Recent chats -->
   <div class="activity-card">
-    <p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Recent chats</p>
+    <LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Recent chats</LqText>
 
     {#if loading}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-secondary);">Loading…</p>
+      <LqText as="p" size="13.5" tone="secondary">Loading…</LqText>
     {:else if error}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">Could not load recent chats.</p>
+      <LqText as="p" size="13.5" tone="tertiary">Could not load recent chats.</LqText>
     {:else if chats.length === 0}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No chats yet. <a href="/lq-ai/chats" style="color: var(--lq-accent); text-decoration: none;">Start one →</a></p>
+      <LqText as="p" size="13.5" tone="tertiary">No chats yet. <a href="/lq-ai/chats" style="color: var(--lq-accent); text-decoration: underline;">Start one →</a></LqText>
     {:else}
       <ul class="chat-list">
         {#each chats as chat (chat.id)}
           <li>
             <a href="/lq-ai/chats" class="chat-row">
-              <span class="chat-title lq-text-body-sm">{chat.title || 'Untitled chat'}</span>
-              <span class="chat-date lq-text-caption">{formatDate(chat.updated_at)}</span>
+              <LqText as="span" size="13.5" class="chat-title">{chat.title || 'Untitled chat'}</LqText>
+              <LqText as="span" size="12" tone="tertiary" class="chat-date">{formatDate(chat.updated_at)}</LqText>
             </a>
           </li>
         {/each}
       </ul>
-      <a href="/lq-ai/chats" class="view-all lq-text-body-sm">View all chats →</a>
+      <LqText as="a" size="13.5" tone="accent" href="/lq-ai/chats" class="view-all">View all chats →</LqText>
     {/if}
   </div>
 
   <!-- Recent matters -->
   <div class="activity-card">
-    <p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Recent matters</p>
+    <LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Recent matters</LqText>
 
     {#if loadingMatters}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-secondary);">Loading…</p>
+      <LqText as="p" size="13.5" tone="secondary">Loading…</LqText>
     {:else if matters.length === 0}
-      <p class="lq-text-body-sm" style="color: var(--lq-text-tertiary);">No matters yet. <a href="/lq-ai/matters" style="color: var(--lq-accent); text-decoration: none;">+ Start a matter</a></p>
+      <LqText as="p" size="13.5" tone="tertiary">No matters yet. <a href="/lq-ai/matters" style="color: var(--lq-accent); text-decoration: underline;">+ Start a matter</a></LqText>
     {:else}
       <ul class="chat-list">
         {#each matters as matter (matter.id)}
           <li>
             <a href="/lq-ai/matters/{matter.id}" class="chat-row">
-              <span class="chat-title lq-text-body-sm">{matter.name}</span>
-              <span class="chat-date lq-text-caption">{formatDate(matter.updated_at)}</span>
+              <LqText as="span" size="13.5" class="chat-title">{matter.name}</LqText>
+              <LqText as="span" size="12" tone="tertiary" class="chat-date">{formatDate(matter.updated_at)}</LqText>
             </a>
           </li>
         {/each}
       </ul>
-      <a href="/lq-ai/matters" class="view-all lq-text-body-sm">View all matters →</a>
+      <LqText as="a" size="13.5" tone="accent" href="/lq-ai/matters" class="view-all">View all matters →</LqText>
     {/if}
   </div>
 </section>
@@ -119,25 +120,24 @@
     color: var(--lq-text);
   }
   .chat-list li:last-child .chat-row { border-bottom: none; }
-  .chat-row:hover .chat-title { color: var(--lq-accent); }
+  .chat-row:hover :global(.chat-title) { color: var(--lq-accent); }
 
-  .chat-title {
+  .chat-row :global(.chat-title) {
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--lq-text);
   }
 
-  .chat-date {
+  .chat-row :global(.chat-date) {
     flex-shrink: 0;
-    color: var(--lq-text-tertiary);
   }
 
-  .view-all {
-    color: var(--lq-accent);
+  .activity-card :global(.view-all) {
     text-decoration: none;
   }
-  .view-all:hover { text-decoration: underline; }
+  .activity-card :global(.view-all:hover) { text-decoration: underline; }
 
   @media (max-width: 640px) {
     section {

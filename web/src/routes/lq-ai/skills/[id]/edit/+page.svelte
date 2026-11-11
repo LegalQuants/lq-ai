@@ -18,6 +18,8 @@
 	import { userSkillsApi, skillsApi, teamsApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { UserSkill, SkillSummary, TeamSummary } from '$lib/lq-ai/types';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let row: UserSkill | null = null;
 	let builtinSlugs = new Set<string>();
@@ -156,28 +158,28 @@
 <div class="p-4 max-w-3xl mx-auto" data-testid="lq-ai-user-skill-edit">
 	<header class="mb-4 flex items-center justify-between">
 		<div>
-			<h1 class="lq-text-page-h">Edit skill</h1>
+			<LqTitle order={1} size="20" weight="bold" tone="primary">Edit skill</LqTitle>
 			{#if row}
-				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+				<LqText as="p" size="12" tone="tertiary" class="mt-1">
 					<code class="font-mono">{row.slug}</code> · v{row.version}
 					{#if row.scope === 'team' && row.owner_team_id}
 						·
 						<span
-							class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide bg-sky-100 text-sky-900 dark:bg-sky-900 dark:text-sky-100"
+							class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide lq-t-info-bg lq-t-info-text"
 							data-testid="lq-ai-user-skill-edit-team-chip"
 						>
 							Team · {teamNamesById.get(row.owner_team_id) ?? 'unknown'}
 						</span>
 					{:else}
 						·
-						<span class="text-gray-500">Personal</span>
+						<span class="lq-t-text2">Personal</span>
 					{/if}
-				</p>
+				</LqText>
 			{/if}
 		</div>
 		<a
 			href="/lq-ai/skills"
-			class="lq-btn-secondary lq-text-caption"
+			class="lq-btn-secondary"
 		>
 			Back
 		</a>
@@ -185,7 +187,7 @@
 
 	{#if justCreated}
 		<div
-			class="mb-4 p-3 rounded border border-emerald-300 bg-emerald-50 text-emerald-900 text-sm dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100"
+			class="mb-4 p-3 rounded border lq-t-success-border lq-t-success-bg lq-t-success text-sm"
 			role="status"
 		>
 			Created. Tweak the body or version and Save to bump.
@@ -193,18 +195,18 @@
 	{/if}
 	{#if loadError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{loadError}
 		</div>
 	{/if}
 	{#if loading}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</p>
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
 	{:else if row}
 		{#if shadowsBuiltIn}
 			<div
-				class="mb-4 p-2 rounded border border-amber-300 bg-amber-50 text-amber-900 text-xs dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+				class="mb-4 p-2 rounded border lq-t-warning-border lq-t-warning-bg lq-t-warning-text text-xs"
 				role="status"
 				data-testid="lq-ai-user-skill-edit-shadow-warning"
 			>
@@ -222,7 +224,7 @@
 		{/if}
 		{#if submitError}
 			<div
-				class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+				class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 				role="alert"
 			>
 				{submitError}
@@ -230,7 +232,7 @@
 		{/if}
 		{#if actionError}
 			<div
-				class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+				class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 				role="alert"
 			>
 				{actionError}
@@ -238,7 +240,7 @@
 		{/if}
 		{#if saveOk}
 			<div
-				class="mb-4 p-3 rounded border border-emerald-300 bg-emerald-50 text-emerald-900 text-sm dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100"
+				class="mb-4 p-3 rounded border lq-t-success-border lq-t-success-bg lq-t-success text-sm"
 				role="status"
 				data-testid="lq-ai-user-skill-edit-saved"
 			>
@@ -252,76 +254,76 @@
 			data-testid="lq-ai-user-skill-edit-form"
 		>
 			<label class="block">
-				<span class="lq-text-label">Slug</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Slug</LqText>
 				<input
 					type="text"
 					readonly
 					value={row.slug}
-					class="mt-1 w-full rounded border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-900 text-sm font-mono text-gray-600"
+					class="mt-1 w-full rounded lq-t-border lq-t-inset text-sm font-mono lq-t-text2"
 				/>
-				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+				<LqText as="p" size="12" tone="tertiary" class="mt-1">
 					Slugs are immutable in D8 — archive and recreate if you need a different one.
-				</p>
+				</LqText>
 			</label>
 
 			<label class="block">
-				<span class="lq-text-label">Display name</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Display name</LqText>
 				<input
 					type="text"
 					bind:value={displayName}
 					required
 					maxlength="200"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm"
 				/>
 			</label>
 
 			<label class="block">
-				<span class="lq-text-label">Description</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Description</LqText>
 				<input
 					type="text"
 					bind:value={description}
 					required
 					maxlength="2000"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm"
 				/>
 			</label>
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				<label class="block">
-					<span class="lq-text-label">Version</span>
+					<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Version</LqText>
 					<input
 						type="text"
 						bind:value={version}
 						maxlength="50"
-						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
+						class="mt-1 w-full rounded lq-t-border-strong text-sm font-mono"
 					/>
-					<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">Bump on edits; the audit log records before/after.</p>
+					<LqText as="p" size="12" tone="tertiary" class="mt-1">Bump on edits; the audit log records before/after.</LqText>
 				</label>
 				<label class="block">
-					<span class="lq-text-label">Tags (comma-separated)</span>
+					<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Tags (comma-separated)</LqText>
 					<input
 						type="text"
 						bind:value={tagsInput}
-						class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm"
+						class="mt-1 w-full rounded lq-t-border-strong text-sm"
 					/>
 				</label>
 			</div>
 
 			<label class="block">
-				<span class="lq-text-label">Body (Markdown system prompt)</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Body (Markdown system prompt)</LqText>
 				<textarea
 					bind:value={body}
 					rows="16"
 					required
 					maxlength="200000"
-					class="mt-1 w-full rounded border-gray-300 dark:border-gray-700 dark:bg-gray-900 text-sm font-mono"
+					class="mt-1 w-full rounded lq-t-border-strong text-sm font-mono"
 				></textarea>
 			</label>
 
 			<div class="flex items-center justify-between pt-2">
 				<button
 					type="button"
-					class="lq-btn-danger lq-text-caption"
+					class="lq-btn-danger"
 					on:click={archive}
 					data-testid="lq-ai-user-skill-edit-archive-btn"
 				>
@@ -330,7 +332,7 @@
 				<button
 					type="submit"
 					disabled={submitting}
-					class="lq-btn-primary lq-text-caption"
+					class="lq-btn-primary"
 					data-testid="lq-ai-user-skill-edit-save-btn"
 				>
 					{submitting ? 'Saving…' : 'Save changes'}
@@ -345,7 +347,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -360,7 +362,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
@@ -374,10 +376,57 @@
 		background: transparent;
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
 	}
 	.lq-btn-danger:hover { background: var(--lq-error-soft); }
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-info-bg {
+		background-color: var(--lq-info-bg);
+	}
+	.lq-t-info-text {
+		color: var(--lq-info-text);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-success {
+		color: var(--lq-success);
+	}
+	.lq-t-success-bg {
+		background-color: var(--lq-success-bg);
+	}
+	.lq-t-success-border {
+		border-color: var(--lq-success-border);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+	.lq-t-warning-bg {
+		background-color: var(--lq-warning-bg);
+	}
+	.lq-t-warning-border {
+		border-color: var(--lq-warning-border);
+	}
+	.lq-t-warning-text {
+		color: var(--lq-warning-text);
+	}
 </style>

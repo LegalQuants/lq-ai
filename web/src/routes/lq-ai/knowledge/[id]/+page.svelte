@@ -115,6 +115,8 @@
 	import { uploadFile, getFile } from '$lib/lq-ai/api/files';
 	import { apiRequest, LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { KnowledgeBase as KB, KnowledgeBaseFile as KBFile } from '$lib/lq-ai/types';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let kb: KB | null = null;
 	let files: KBFile[] = [];
@@ -298,21 +300,21 @@
 			<a href="/lq-ai/knowledge" class="lq-link">← Back to knowledge bases</a>
 		</p>
 	{:else if loading && !kb}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading knowledge base…</p>
+		<LqText as="p" size="14" tone="secondary">Loading knowledge base…</LqText>
 	{:else if kb}
 		<header class="lq-kb-header">
 			<div>
-				<p class="lq-text-caption">
+				<LqText as="p" size="12" tone="tertiary">
 					<a href="/lq-ai/knowledge" class="lq-link">← Knowledge bases</a>
-				</p>
-				<h1 class="lq-text-page-h">
+				</LqText>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">
 					{kb.name}
 					{#if kb.archived_at}
 						<span class="lq-archived-pill" data-testid="lq-ai-knowledge-archived-pill">
 							Archived
 						</span>
 					{/if}
-				</h1>
+				</LqTitle>
 				{#if kb.description}
 					<p class="lq-kb-desc">{kb.description}</p>
 				{/if}
@@ -353,11 +355,11 @@
 		<section class="lq-kb-section" aria-label="Upload document">
 			<div class="lq-upload-card">
 				<div>
-					<h2 class="lq-text-section-h">Upload a document</h2>
-					<p class="lq-text-caption" style="color: var(--lq-text-tertiary); margin: 4px 0 0 0;">
+					<LqTitle order={2} size="14.5" weight="semibold" tone="primary">Upload a document</LqTitle>
+					<LqText as="p" size="12" tone="tertiary" style="margin: 4px 0 0 0;">
 						PDF only for v0.1.0. After upload finishes the document is
 						parsed + chunked + indexed before being attached to this KB.
-					</p>
+					</LqText>
 				</div>
 				<div class="lq-upload-actions">
 					<button
@@ -382,26 +384,26 @@
 
 		<section class="lq-kb-section" aria-label="Documents in this knowledge base">
 			<div class="lq-section-head">
-				<h2 class="lq-text-section-h">Documents</h2>
+				<LqTitle order={2} size="14.5" weight="semibold" tone="primary">Documents</LqTitle>
 			</div>
 
 			{#if files.length === 0}
 				<div class="lq-empty-state">
-					<p class="lq-text-body" style="color: var(--lq-text-secondary);">
+					<LqText as="p" size="14" tone="secondary">
 						No documents yet. Upload one to seed this knowledge base.
-					</p>
+					</LqText>
 				</div>
 			{:else}
 				<div class="lq-table-wrap">
 					<table class="lq-doc-table">
 						<thead>
 							<tr>
-								<th class="lq-text-label">Filename</th>
-								<th class="lq-text-label">Status</th>
-								<th class="lq-text-label">Size</th>
-								<th class="lq-text-label">Pages</th>
-								<th class="lq-text-label">Attached</th>
-								<th class="lq-text-label" style="text-align: right;">Actions</th>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Filename</LqText>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Status</LqText>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Size</LqText>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Pages</LqText>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Attached</LqText>
+								<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="text-align: right;">Actions</LqText>
 							</tr>
 						</thead>
 						<tbody>
@@ -423,9 +425,9 @@
 									</td>
 									<td class="lq-tabular">{formatBytes(file.size_bytes)}</td>
 									<td class="lq-tabular">{file.page_count ?? '—'}</td>
-									<td class="lq-text-caption" style="color: var(--lq-text-tertiary);">
+									<LqText as="td" size="12" tone="tertiary">
 										{shortDateTime(file.attached_at)}
-									</td>
+									</LqText>
 									<td style="text-align: right;">
 										<button
 											type="button"
@@ -550,8 +552,8 @@
 		background: var(--lq-inset);
 	}
 
-	.lq-doc-table th,
-	.lq-doc-table td {
+	.lq-doc-table :global(th),
+	.lq-doc-table :global(td) {
 		padding: var(--lq-space-2) var(--lq-space-3);
 		text-align: left;
 		vertical-align: top;
@@ -638,7 +640,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -649,7 +651,7 @@
 	}
 
 	.lq-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.lq-btn-primary:disabled {
@@ -661,7 +663,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;
@@ -680,7 +682,7 @@
 		background: transparent;
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;
@@ -697,7 +699,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 12px;
 		cursor: pointer;

@@ -317,7 +317,7 @@
 	.plain {
 		background: var(--lq-canvas);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 0.25rem 0.6rem;
 		font-size: 0.75rem;
 		cursor: pointer;

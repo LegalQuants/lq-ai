@@ -6,6 +6,8 @@
   import MatterRailKnowledge from './MatterRailKnowledge.svelte';
   import MatterRailSkills from './MatterRailSkills.svelte';
   import { onMount } from 'svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
   export let activeChatId: string | undefined = undefined;
@@ -54,14 +56,14 @@
 
   <section class="rail-section">
     <header class="rail-section-header">
-      <h3 class="lq-text-panel-h rail-section-title">Chats</h3>
+      <LqTitle order={3} size="16" weight="semibold" tone="primary" class="rail-section-title">Chats</LqTitle>
       <button type="button" class="rail-btn-sm" on:click={newChat}>+ New</button>
     </header>
 
     {#if loadingChats}
-      <p class="lq-text-caption rail-empty">Loading chats…</p>
+      <LqText as="p" size="12" tone="tertiary" class="rail-empty">Loading chats…</LqText>
     {:else if chats.length === 0}
-      <p class="lq-text-caption rail-empty">No chats yet.</p>
+      <LqText as="p" size="12" tone="tertiary" class="rail-empty">No chats yet.</LqText>
     {:else}
       <ul class="rail-chat-list" role="listbox" aria-label="Matter chats">
         {#each chats as chat (chat.id)}
@@ -72,10 +74,10 @@
               class:rail-chat-item--active={chat.id === activeChatId}
               on:click={() => (activeChatId = chat.id)}
             >
-              <span class="lq-text-body-sm rail-chat-title">{chat.title || 'Untitled chat'}</span>
-              <span class="lq-text-caption rail-chat-date">
+              <LqText as="span" size="13.5" tone="primary" class="rail-chat-title">{chat.title || 'Untitled chat'}</LqText>
+              <LqText as="span" size="12" tone="tertiary" class="rail-chat-date">
                 {new Date(chat.updated_at ?? chat.created_at).toLocaleDateString()}
-              </span>
+              </LqText>
             </button>
           </li>
         {/each}
@@ -119,12 +121,11 @@
     gap: var(--lq-space-2);
   }
 
-  .rail-section-title {
+  .rail-section-header :global(.rail-section-title) {
     margin: 0;
   }
 
-  .rail-empty {
-    color: var(--lq-text-tertiary);
+  .rail-section :global(.rail-empty) {
     padding: var(--lq-space-2) 0;
   }
 
@@ -135,7 +136,7 @@
     color: var(--lq-accent);
     background: transparent;
     border: 1px solid var(--lq-accent-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: 2px 10px;
     cursor: pointer;
     line-height: 1.6;
@@ -190,15 +191,10 @@
     outline-offset: 2px;
   }
 
-  .rail-chat-title {
-    color: var(--lq-text);
+  .rail-chat-item :global(.rail-chat-title) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
-  }
-
-  .rail-chat-date {
-    color: var(--lq-text-tertiary);
   }
 </style>

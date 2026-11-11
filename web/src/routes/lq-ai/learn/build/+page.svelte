@@ -1,3 +1,8 @@
+<script lang="ts">
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+</script>
+
 <!--
   /lq-ai/learn/build — "How to Build" contributor page.
 
@@ -9,11 +14,11 @@
 <main class="lq-learn-build-page" data-testid="lq-ai-learn-build-page">
 	<header class="lq-page-header">
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
-		<h1 class="lq-text-page-h">How to Build</h1>
-		<p class="lq-text-body lq-page-intro">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">How to Build</LqTitle>
+		<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-page-intro">
 			Everything you need to go from curious to contributor — whether you're a practicing
 			attorney, a security engineer, or a developer looking for a well-scoped first PR.
-		</p>
+		</LqText>
 	</header>
 
 	<div class="lq-build-sections">
@@ -21,7 +26,7 @@
 		<!-- 1: Contribution path -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-path">
 			<h2 class="lq-section-h">The contribution path</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Contributions arrive two ways: GitHub Issues for bug reports and feature requests;
 				Pull Requests for code, skill, and documentation contributions. The engineering
 				process — DCO sign-off, imperative-mood commit messages, PR template — is in
@@ -30,19 +35,19 @@
 				merged" section is the contract: if the acceptance criteria are checked off and the
 				substance review passes, the PR merges. Ambiguities get resolved in writing on the
 				issue thread before work begins — not during review.
-			</p>
+			</LqText>
 		</section>
 
 		<!-- 2: Skill contribution -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-skill">
 			<h2 class="lq-section-h">Want to contribute a skill? Start here.</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Skills are the canonical artifact of value in LQ.AI (PRD §7.1). A skill is a
 				structured SKILL.md file that captures: a system prompt, an input schema, reference
 				documents, and at least one worked example that a practicing attorney can evaluate.
 				Skills containing legal substance are not ordinary code contributions — they go
 				through an attestation review to ensure accuracy.
-			</p>
+			</LqText>
 			<div class="lq-build-steps">
 				<div class="lq-build-step">
 					<span class="lq-build-step-n">1</span>
@@ -97,7 +102,7 @@
 					title="Skill Format Explorer — SKILL.md editor and validation"
 					loading="lazy"
 					data-testid="learn-playground-skill-format"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -113,14 +118,14 @@
 		<!-- 3: Mini-PRDs -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-mini-prds">
 			<h2 class="lq-section-h">Curated mini-PRDs (shortest-path contributions)</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Seven contributions where the foundation is already in source, the gaps are named
 				in source, and the path to merge is short. Each mini-PRD includes explicit
 				acceptance criteria and a contributor profile so you can decide whether to start
 				with the same information the maintainer team has. Full list with effort estimates
 				at
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/contribute/EASIEST-CONTRIBUTIONS.md" class="lq-link" target="_blank" rel="noopener noreferrer">docs/contribute/EASIEST-CONTRIBUTIONS.md</a>.
-			</p>
+			</LqText>
 			<div class="lq-mini-prd-list">
 				<div class="lq-mini-prd">
 					<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/contribute/mini-prds/procurement-readiness-pack.md" class="lq-mini-prd-title lq-link" target="_blank" rel="noopener noreferrer">Procurement-Readiness Pack</a>
@@ -163,13 +168,13 @@
 		<!-- 3b: Dev-facing visualizations -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-dev-viz">
 			<h2 class="lq-section-h">Before you open a PR: what must pass, and how to trace it</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Two interactive maps help you ship a change that merges cleanly. The test landscape shows
 				every gate a PR must clear before merge — unit, integration, end-to-end, lint, type-check,
 				and coverage — and where each one lives. The observability trace shows the OpenTelemetry
 				span tree a single chat-send produces, so you can see exactly where to add instrumentation
 				for a new surface.
-			</p>
+			</LqText>
 			<div class="lq-build-links">
 				<a href="/learn/playgrounds/test-landscape.html" class="lq-link" target="_blank" rel="noopener noreferrer">Test landscape: what must pass before merge ↗</a>
 				<span class="lq-sep">·</span>
@@ -182,13 +187,13 @@
 		<!-- 3c: Anatomy of an aligned agentic flow (M4) -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-agentic-flow">
 			<h2 class="lq-section-h">Anatomy of an aligned agentic flow (M4)</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				<strong>Shipped in M4.</strong> When you contribute an autonomous flow — a single agent that
 				acts without a human approving each step — transparency moves from "you can read the prompt" to "you
 				can audit the behavior." Four obligations make a flow aligned. The authoritative how-to is the
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/LQVern/agentic-flow-alignment-guide.md" class="lq-link" target="_blank" rel="noopener noreferrer">agentic-flow-alignment-guide.md</a>;
 				this is the condensed checklist.
-			</p>
+			</LqText>
 			<div class="lq-build-steps">
 				<div class="lq-build-step">
 					<span class="lq-build-step-n">1</span>
@@ -233,11 +238,11 @@
 		<!-- 4: Roadmap -->
 		<section class="lq-build-section" data-testid="lq-ai-learn-build-section-roadmap">
 			<h2 class="lq-section-h">The roadmap</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				LQ.AI follows a milestone-based roadmap. M1 shipped the foundation; M2 and M3 each added a
 				named capability layer on top. M1, M2, M3, and the M4 Autonomous Layer are all shipped; the
 				Contract Relationship graph remains deferred future work.
-			</p>
+			</LqText>
 			<div class="lq-roadmap-list">
 				<div class="lq-roadmap-item lq-roadmap-item--shipped">
 					<div class="lq-roadmap-pill">M1</div>
@@ -278,10 +283,10 @@
 					</div>
 				</div>
 			</div>
-			<p class="lq-text-body lq-roadmap-note">
+			<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-roadmap-note">
 				Full deferred-enhancement list with wire-format specs for contributor-ready items:
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/PRD.md#9-deferred-enhancements-and-identified-future-work" class="lq-link" target="_blank" rel="noopener noreferrer">PRD §9</a>.
-			</p>
+			</LqText>
 		</section>
 
 		<!-- 5: GitHub links -->
@@ -352,9 +357,7 @@
 		margin-bottom: var(--lq-space-6);
 	}
 
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
-		margin-top: var(--lq-space-2);
+	.lq-page-header :global(.lq-page-intro) {
 		max-width: 64ch;
 		line-height: 1.6;
 	}
@@ -382,13 +385,6 @@
 		font-weight: 600;
 		color: var(--lq-text);
 		margin: 0;
-	}
-
-	.lq-text-body {
-		margin: 0;
-		font-size: 14px;
-		line-height: 1.6;
-		color: var(--lq-text);
 	}
 
 	.lq-link {
@@ -549,8 +545,7 @@
 		border-color: var(--lq-border);
 	}
 
-	.lq-roadmap-note {
-		color: var(--lq-text-secondary);
+	.lq-build-section :global(.lq-roadmap-note) {
 		margin-top: var(--lq-space-2);
 	}
 

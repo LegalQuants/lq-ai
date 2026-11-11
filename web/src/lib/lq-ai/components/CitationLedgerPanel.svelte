@@ -48,7 +48,7 @@
 {#if open}
 	<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+		class="fixed inset-0 z-50 flex items-center justify-center lq-t-backdrop p-4"
 		on:click={handleBackdropClick}
 		on:keydown={handleKeydown}
 		role="dialog"
@@ -59,7 +59,7 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
 		<div
-			class="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-w-lg w-full lq-ledger-panel"
+			class="lq-t-canvas rounded-lg shadow-xl border lq-t-border max-w-lg w-full lq-ledger-panel"
 			on:click|stopPropagation
 			data-testid="lq-ledger-panel"
 		>
@@ -141,7 +141,7 @@
 		color: var(--lq-text-secondary);
 		cursor: pointer;
 		padding: 0 2px;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 	}
 	.lq-ledger-close:hover {
 		color: var(--lq-text);
@@ -176,5 +176,16 @@
 		font-style: italic;
 		text-align: center;
 		margin: 0;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-backdrop {
+		background-color: rgba(0, 0, 0, 0.4);
+	}
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
 	}
 </style>
