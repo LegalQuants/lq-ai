@@ -12,6 +12,7 @@ import { render } from 'svelte/server';
 import LqToneIcon, { LQ_TONE_ICON_NAME } from '../components/shared/LqToneIcon.svelte';
 import LqAlert from '../components/shared/LqAlert.svelte';
 import MatterCard from '../components/MatterCard.svelte';
+import AttachedSkillPill from '../components/AttachedSkillPill.svelte';
 import ShellSidebar from '../components/ShellSidebar.svelte';
 import { createSidebarLists } from '../sidebarLists';
 import type { Project } from '../types';
@@ -117,16 +118,29 @@ describe('a privileged matter carries a lock', () => {
 	});
 });
 
+describe("a skill's icon", () => {
+	const pill = (icon: string | null) =>
+		render(AttachedSkillPill, { props: { skill: { slug: 's', title: 'NDA review', icon } } as never })
+			.body;
+
+	it('falls back to a hidden Tabler icon when the skill has none', () => {
+		const html = pill(null);
+		expect(html).toMatch(svgWith('tool'));
+		expect(html).toMatch(/<span class="lq-skill-pill__icon[^"]*" aria-hidden="true">/);
+		expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
+	});
+
+	it("shows the skill's own authored icon exactly as written, with no fallback", () => {
+		const html = pill('🛡️');
+		expect(html).toContain('🛡️');
+		expect(html).not.toContain('tabler-icon-tool');
+	});
+});
+
 describe('no emoji as icons in the LQ.AI shell', () => {
-	// Left until a later step or a ruling: the tab row until S1-8 removes it, the run
-	// panel's state marks (its render tests forbid any <svg>), and the fallback beside a
-	// skill's own emoji icon (skill data).
-	const ALLOWED = new Set([
-		'lib/lq-ai/tabs.ts',
-		'lib/lq-ai/components/run/RunLine.svelte',
-		'lib/lq-ai/components/AttachedSkillPill.svelte',
-		'lib/lq-ai/components/SlashPopover.svelte'
-	]);
+	// Left until S1-8 removes it: the tab row. (A skill's own emoji icon is skill data, read
+	// from the skill at run time, so it is not in this source.)
+	const ALLOWED = new Set(['lib/lq-ai/tabs.ts']);
 	const src = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 	const walk = (dir: string): string[] =>
 		readdirSync(dir).flatMap((f) => {

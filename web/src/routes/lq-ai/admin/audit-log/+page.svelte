@@ -254,7 +254,7 @@
 				{#each rows as r (r.id)}
 					<tr
 						class="lq-row align-top"
-						class:lq-t-warning-bg={r.privilege_marked}
+						class:lq-privileged-row={r.privilege_marked}
 					>
 						<LqText as="td" size="12" tone="tertiary" class="px-2 py-1 font-mono whitespace-nowrap">{formatTimestamp(r.timestamp)}</LqText>
 						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.action}</LqText>
@@ -266,7 +266,7 @@
 						</LqText>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
-								<span class="px-1.5 py-0.5 rounded lq-t-warning-strong-bg lq-t-warning-text text-[10px]">
+								<span class="lq-privilege-chip px-1.5 py-0.5 rounded text-[10px]">
 									<IconLock size={10} stroke={2} aria-hidden="true" />
 									{r.privilege_basis ?? 'yes'}
 								</span>
@@ -366,13 +366,17 @@
 	.lq-t-error-strong {
 		color: var(--lq-error-text);
 	}
-	.lq-t-warning-bg {
-		background-color: var(--lq-warning-bg);
+	/* A privilege-marked entry is governance (ADR 0045 §1): the governance tint on the row,
+	   and a chip in governance text and edge with the lock. */
+	.lq-privileged-row {
+		background-color: var(--lq-governance-soft);
 	}
-	.lq-t-warning-strong-bg {
-		background-color: var(--lq-warning-border);
-	}
-	.lq-t-warning-text {
-		color: var(--lq-warning-text);
+	.lq-privilege-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		background-color: var(--lq-governance-soft);
+		color: var(--lq-governance);
+		border: 1px solid var(--lq-governance-border);
 	}
 </style>

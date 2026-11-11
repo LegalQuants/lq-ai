@@ -76,6 +76,22 @@ describe('governance signals (ADR 0045 §1)', () => {
 		expect(css).not.toMatch(/--lq-(warn|text)\b/);
 	});
 
+	it("draws the audit log's privilege-marked rows in governance, with the lock", () => {
+		const page = readFileSync(
+			join(components, '../../../routes/lq-ai/admin/audit-log/+page.svelte'),
+			'utf8'
+		);
+		expect(page).toContain('class:lq-privileged-row={r.privilege_marked}');
+		expect(rule(page, '.lq-privileged-row')).toContain(
+			'background-color: var(--lq-governance-soft)'
+		);
+		const chip = rule(page, '.lq-privilege-chip');
+		expect(chip).toContain('color: var(--lq-governance)');
+		expect(chip).toContain('border: 1px solid var(--lq-governance-border)');
+		expect(page).toMatch(/lq-privilege-chip[^>]*>\s*<IconLock[^>]*aria-hidden="true"/);
+		expect(page).not.toMatch(/--lq-warn(ing)?\b/);
+	});
+
 	it('draws the model picker as a neutral control with a governance tier chip', () => {
 		const src = source('ModelPicker.svelte');
 		expect(rule(src, '.lq-model-pill')).not.toMatch(/--lq-(tier|governance)/);

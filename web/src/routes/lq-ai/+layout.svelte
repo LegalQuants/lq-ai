@@ -155,6 +155,10 @@
 	   here doesn't disturb it. min-height: 0 lets flex children shrink
 	   correctly inside the column. */
 	.lq-shell { background: var(--lq-canvas); color: var(--lq-text); height: 100vh; display: flex; flex-direction: column; }
+	/* Tailwind's preflight makes every svg a block. LQ.AI's Tabler icons sit in a line of text
+	   (a note's warning icon, an icon in a sentence), so they flow inline with it; in a flex
+	   row they are flex items either way (ADR 0045 §5, S1-3b). */
+	.lq-shell :global(.tabler-icon) { display: inline-block; vertical-align: -0.125em; }
 	.lq-topbar {
 		display: flex; align-items: center; justify-content: space-between;
 		padding: var(--lq-space-3) var(--lq-space-4);

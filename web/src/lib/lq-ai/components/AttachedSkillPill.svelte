@@ -28,9 +28,12 @@
 		return `Remove ${title}`;
 	}
 
-	/** Glyph to display when the skill omits a custom icon. */
-	export function displayIcon(icon: string | null | undefined): string {
-		return icon ? icon : '📜';
+	/**
+	 * The skill's own icon, exactly as the skill author wrote it (skill data), or null when
+	 * it has none; the pill then draws the Tabler fallback (ADR 0045 §5).
+	 */
+	export function displayIcon(icon: string | null | undefined): string | null {
+		return icon ? icon : null;
 	}
 
 	/**
@@ -48,7 +51,7 @@
 </script>
 
 <script lang="ts">
-	import { IconX } from '@tabler/icons-svelte';
+	import { IconTool, IconX } from '@tabler/icons-svelte';
 	export let skill: AttachedSkill;
 	export let onRemove: ((slug: string) => void) | undefined = undefined;
 
@@ -57,7 +60,9 @@
 </script>
 
 <span class="lq-skill-pill" role="status">
-	<span class="lq-skill-pill__icon" aria-hidden="true">{icon}</span>
+	<span class="lq-skill-pill__icon" aria-hidden="true"
+		>{#if icon}{icon}{:else}<IconTool size={12} stroke={1.75} />{/if}</span
+	>
 	<span class="lq-skill-pill__title">{skill.title}</span>
 	<button
 		type="button"

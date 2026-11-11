@@ -56,5 +56,6 @@
 	:global(.lq-tone-icon) {
 		flex: none;
 		vertical-align: -0.125em;
+		margin-inline-end: 0.25em;
 	}
 </style>
