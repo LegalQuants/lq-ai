@@ -24,6 +24,7 @@
 	import { autonomousApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousNotificationRead } from '$lib/lq-ai/api/autonomous';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -164,7 +165,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div>
-				<h1 class="lq-text-page-h">Notifications</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Notifications</LqTitle>
 				<p class="page-intro">
 					In-app notifications from LQVern autonomous sessions. Click an unread item or use "Mark
 					read" to dismiss it. Email delivery is handled separately per your notification settings.
@@ -376,7 +377,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -388,12 +389,12 @@
 	}
 
 	.filter-toggle:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 		color: var(--lq-text);
 	}
 
 	.filter-toggle--active {
-		background: var(--lq-accent-soft, rgba(var(--lq-accent-rgb, 59, 130, 246), 0.1));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 		border-color: var(--lq-accent);
 	}
@@ -407,7 +408,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -416,7 +417,7 @@
 	}
 
 	.mark-all-button:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.mark-all-button:disabled {
@@ -430,18 +431,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -485,11 +486,11 @@
 	}
 
 	.notification-row--unread {
-		background: var(--lq-accent-soft, rgba(59, 130, 246, 0.04));
+		background: var(--lq-accent-soft);
 	}
 
 	.notification-row--unread:has(.row-click-target:hover) {
-		background: var(--lq-accent-soft, rgba(59, 130, 246, 0.08));
+		background: var(--lq-accent-soft);
 	}
 
 	/* Full-row transparent button for unread click-to-read */
@@ -600,7 +601,7 @@
 		font-weight: 500;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		background: var(--lq-inset, rgba(0, 0, 0, 0.04));
+		background: var(--lq-inset);
 		color: var(--lq-text-tertiary);
 		border: 1px solid var(--lq-border);
 	}
@@ -642,7 +643,7 @@
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -653,7 +654,7 @@
 	}
 
 	.action-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button:disabled {

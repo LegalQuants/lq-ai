@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * /lq-ai/admin/community-skills — DE-263 community skill installer.
 	 *
@@ -28,6 +29,7 @@
 		installConfirmMessage,
 		shortSha
 	} from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let catalog: CommunityCatalogResponse | null = null;
 	let loading = false;
@@ -162,7 +164,7 @@
 
 <div class="community-skills-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Community skills</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Community skills</LqTitle>
 		<p class="page-intro">
 			Review a community skill, then install a fixed version for a team or yourself. Team members
 			can use shared skills; team admins manage them. Source declarations are shown separately from
@@ -203,6 +205,7 @@
 
 	{#if catalog && catalog.load_errors.length > 0}
 		<div class="warn-banner" role="alert">
+			<LqToneIcon tone="warning" />
 			<strong
 				>{catalog.load_errors.length} catalog entr{catalog.load_errors.length === 1 ? 'y' : 'ies'} failed
 				to parse and cannot be installed:</strong
@@ -420,18 +423,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.warn-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-warning-bg, #fff8e1);
-		color: var(--lq-warning-text, #7a5c00);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-warning-border, #f0d78c);
+		border: 1px solid var(--lq-warning-border);
 		font-size: 13px;
 	}
 
@@ -442,10 +445,10 @@
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -461,9 +464,9 @@
 		flex: 1;
 		max-width: 32rem;
 		padding: var(--lq-space-2) var(--lq-space-3);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		font-size: 14px;
 	}
 
@@ -543,9 +546,9 @@
 		display: inline-block;
 		padding: 1px var(--lq-space-2);
 		border-radius: 999px;
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 		font-size: 11px;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -554,7 +557,7 @@
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -572,7 +575,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
@@ -633,7 +636,7 @@
 		padding: var(--lq-space-3);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		font-size: 12.5px;
 		line-height: 1.5;
 		white-space: pre-wrap;

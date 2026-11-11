@@ -325,7 +325,7 @@ describe('Wave B v2 — new surfaces', () => {
 		cy.contains('button[role="tab"]', 'View source').click();
 		cy.contains('button[role="tab"]', 'View source').should('have.attr', 'aria-selected', 'true');
 
-		// SkillSourceView renders a "Frontmatter" section heading (h2.lq-text-label)
+		// SkillSourceView renders a "Frontmatter" section heading (an LqTitle h2)
 		cy.contains('h2', 'Frontmatter').should('be.visible');
 	});
 

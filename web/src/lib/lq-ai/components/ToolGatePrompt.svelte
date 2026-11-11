@@ -29,6 +29,7 @@
 </script>
 
 <script lang="ts">
+	import { IconAlertTriangle, IconShield, IconLock, IconFileText, IconLink } from '@tabler/icons-svelte';
 	import type { ToolConfirmationRequiredFrame, McpAuthorizationRequiredFrame } from '../types';
 	// Note: confirmHeading / tierChipLabel / connectBody / connectButtonLabel are
 	// declared in the module-context script above; Svelte merges the two blocks
@@ -62,7 +63,9 @@
 {#if variant === 'confirm' && confirm}
 	<div class="tool-gate" data-testid="tool-gate-confirm">
 		<div class="header">
-			<span class="icon" aria-hidden="true">{confirm.destructive ? '⚠️' : '🛡'}</span>
+			<span class="icon" aria-hidden="true"
+				>{#if confirm.destructive}<IconAlertTriangle size={16} stroke={1.75} aria-hidden="true" />{:else}<IconShield size={16} stroke={1.75} aria-hidden="true" />{/if}</span
+			>
 			<strong>{confirmHeading(confirm.destructive)}</strong>
 		</div>
 		<p class="body">
@@ -92,17 +95,23 @@
 			</button>
 		</div>
 		<div class="pills">
-			<span class="pill pill-tier" data-testid="tool-gate-tier">🔒 {tierChipLabel(confirm.tier)}</span>
+			<span class="pill pill-tier" data-testid="tool-gate-tier"
+				><IconLock size={12} stroke={1.75} aria-hidden="true" /> {tierChipLabel(confirm.tier)}</span
+			>
 			{#if confirm.destructive}
-				<span class="pill pill-destructive" data-testid="tool-gate-destructive">⚠️ destructive</span>
+				<span class="pill pill-destructive" data-testid="tool-gate-destructive"
+					><IconAlertTriangle size={12} stroke={1.75} aria-hidden="true" /> destructive</span
+				>
 			{/if}
-			<span class="pill pill-audited">📜 audited</span>
+			<span class="pill pill-audited"
+				><IconFileText size={12} stroke={1.75} aria-hidden="true" /> audited</span
+			>
 		</div>
 	</div>
 {:else if variant === 'connect' && connect}
 	<div class="tool-gate" data-testid="tool-gate-connect-card">
 		<div class="header">
-			<span class="icon" aria-hidden="true">🔗</span>
+			<span class="icon" aria-hidden="true"><IconLink size={16} stroke={1.75} aria-hidden="true" /></span>
 			<strong>Connection needed</strong>
 		</div>
 		<p class="body">{connectBody(connect.server)}</p>
@@ -122,8 +131,8 @@
 
 <style>
 	.tool-gate {
-		background: #eef2ff;
-		border: 1px solid #6366f1;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
 		border-radius: 8px;
 		padding: 12px;
 		margin-bottom: 8px;
@@ -138,23 +147,24 @@
 		font-size: 16px;
 	}
 	strong {
-		color: #3730a3;
+		color: var(--lq-text);
 	}
 	.body {
 		font-size: 13px;
-		color: #312e81;
+		color: var(--lq-text);
 		line-height: 1.5;
 		margin: 0 0 8px 0;
 	}
 	.tool {
-		background: #e0e7ff;
+		background: var(--lq-surface-muted);
 		padding: 1px 5px;
 		border-radius: 4px;
 		font-size: 12px;
 	}
 	.args {
-		background: #1e1b4b;
-		color: #c7d2fe;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text);
+		font-family: var(--lq-font-mono);
 		font-size: 11px;
 		line-height: 1.4;
 		padding: 8px;
@@ -171,20 +181,20 @@
 		margin-bottom: 8px;
 	}
 	.primary {
-		background: #4338ca;
-		color: #fff;
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.secondary {
-		background: #fff;
-		color: #4338ca;
-		border: 1px solid #4338ca;
+		background: var(--lq-canvas);
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent);
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
@@ -204,15 +214,15 @@
 		font-size: 10px;
 	}
 	.pill-tier {
-		background: #e0e7ff;
-		color: #3730a3;
+		background: var(--lq-surface-muted);
+		color: var(--lq-governance);
 	}
 	.pill-destructive {
-		background: #fee2e2;
-		color: #991b1b;
+		background: var(--lq-danger-soft);
+		color: var(--lq-danger);
 	}
 	.pill-audited {
-		background: #dbeafe;
-		color: #1e40af;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 	}
 </style>

@@ -37,6 +37,8 @@ import RunKnowledgeBases from '../../components/run/RunKnowledgeBases.svelte';
 import RunMessage from '../../components/run/RunMessage.svelte';
 import RunNoPlanRow from '../../components/run/RunNoPlanRow.svelte';
 import RunModePanel from '../../components/run/RunModePanel.svelte';
+import RunLine from '../../components/run/RunLine.svelte';
+import { IconCheck, IconLock } from '@tabler/icons-svelte';
 import MessageList from '../../components/MessageList.svelte';
 import ModelPicker from '../../components/ModelPicker.svelte';
 import RunPlanCard from '../../components/run/RunPlanCard.svelte';
@@ -68,6 +70,7 @@ import {
 	withRun
 } from './fixtures';
 import { HOSTILE_STRINGS, elementsIn } from './hostile';
+import { RUN_OWN_ICONS, isOwnIcon, withoutOwnIcons } from './ownIcons';
 import { startTags, withoutComments } from './source';
 
 // ---- rendering and reading the markup ------------------------------------------------------------
@@ -271,7 +274,8 @@ function renderBoth(build: (say: (label: string) => string) => string): Pair {
 function expectOnlyText(pair: Pair, shown: string[], label: string): void {
 	const { hostile, plain, words } = pair;
 	expect(elements(hostile), `${label}: the same elements and attributes`).toEqual(elements(plain));
-	page(hostile, label).hides(/<(?:img|script|svg|iframe|object|embed|a)\b/i);
+	// No svg but the run components' own Tabler icons, each matched exactly (./ownIcons).
+	page(withoutOwnIcons(hostile), label).hides(/<(?:img|script|svg|iframe|object|embed|a)\b/i);
 	const names = elements(hostile)
 		.flatMap((tag) => tag.slice(tag.indexOf('[') + 1, -1).split(','))
 		.filter(Boolean);
@@ -316,6 +320,50 @@ describe('the check itself', () => {
 	it('catches a link that was made', () => {
 		const link = `<p class="a" id="b" href="javascript:alert(1)">${escapeText(token)}</p>`;
 		expect(() => expectOnlyText(pairWith(link), ['text'], 'link')).toThrow();
+	});
+
+	// S1-3b: the run components draw their own Tabler icons. The guard lets exactly those
+	// through and still catches every other svg, even one that is on the plain page too.
+	const own = markup(IconCheck, { size: 12, stroke: 2, 'aria-hidden': 'true' });
+	const both = (svg: string): Pair => ({
+		hostile: `<p class="a" id="b">${svg}${escapeText(token)}</p>`,
+		plain: `<p class="a" id="b">${svg}plain text 1</p>`,
+		words
+	});
+
+	it("passes the run components' own Tabler icons", () => {
+		expect(isOwnIcon(own.replace(/<!--[^>]*-->/g, ''))).toBe(true);
+		expect(() => expectOnlyText(both(own), ['text'], 'own icon')).not.toThrow();
+	});
+
+	it('catches an svg that is not one of them, even when the plain page has it too', () => {
+		const forged = [
+			['an svg from the text', '<svg onload="alert(1)"></svg>'],
+			[
+				'the class borrowed',
+				'<svg class="tabler-icon tabler-icon-check" aria-hidden="true"><script>alert(1)</script></svg>'
+			],
+			['an icon not on the list', markup(IconLock, { size: 12, 'aria-hidden': 'true' })],
+			['an own icon with a handler', own.replace('<svg ', '<svg onload="alert(1)" ')],
+			['an own icon with a link', own.replace('<svg ', '<svg href="javascript:alert(1)" ')],
+			['an own icon not hidden', own.replace(' aria-hidden="true"', '')],
+			['an own icon with its body changed', own.replace('</svg>', '<use href="#x"></use></svg>')]
+		];
+		for (const [what, svg] of forged) {
+			expect(isOwnIcon(svg.replace(/<!--[^>]*-->/g, '')), what).toBe(false);
+			expect(() => expectOnlyText(both(svg), ['text'], what), what).toThrow();
+		}
+	});
+
+	it('lists only the icons the run components draw', () => {
+		expect(Object.keys(RUN_OWN_ICONS).sort()).toEqual([
+			'alert-triangle',
+			'check',
+			'circle',
+			'circle-dot',
+			'minus',
+			'square'
+		]);
 	});
 
 	it('catches text that is not shown at all', () => {
@@ -644,12 +692,16 @@ describe('the composer says why a profile cannot be used', () => {
 				};
 				const reason = unavailableReason(profile);
 				expect(reason).toBeTruthy();
-				const shown = page(markup(RunModePanel, { profile }), `${code} ${reason_text}`);
+				const html = markup(RunModePanel, { profile });
+				const shown = page(html, `${code} ${reason_text}`);
 				if (code === 'active_run') {
 					// The notice above the strip names the active run; the strip does not repeat it.
 					shown.hides('role="alert"');
 				} else {
-					shown.shows(`role="alert">${escapeText(reason!)}</p>`);
+					// The reason follows the note's own warning icon (S1-3b), as text.
+					page(withoutComments(withoutOwnIcons(html)), code).shows(
+						`role="alert"> ${escapeText(reason!)}</p>`
+					);
 				}
 			}
 		}
@@ -2972,7 +3024,8 @@ describe('the receipt page of a run the orchestrator answered by itself', () => 
 			value.direct_answer = hostile;
 			const html = receipt(value);
 			expect(html.match(/<pre class="answer-text">/g), hostile).toHaveLength(1);
-			page(html, hostile).hides(/<(?:img|script|iframe|svg)\b/i);
+			// No svg but the run components' own Tabler icons, each matched exactly (./ownIcons).
+			page(withoutOwnIcons(html), hostile).hides(/<(?:img|script|iframe|svg)\b/i);
 		}
 	});
 });
@@ -3424,5 +3477,47 @@ describe('the strip’s list of tools the tasks may use', () => {
 		};
 		const html = settled(bare(markup(RunModePanel, { profile: only, selectedDocuments: 0 })));
 		expect(toolsRow(html).trim()).toBe('none');
+	});
+});
+
+// ---- S1-3b: RunLine's own marks, and hostile text beside them ------------------------------------
+
+describe('RunLine draws its state with a Tabler icon and shows untrusted text as text', () => {
+	const MARK: Record<string, string> = {
+		done: 'check',
+		current: 'circle-dot',
+		pending: 'circle',
+		stopped: 'square',
+		skipped: 'minus'
+	};
+
+	for (const [state, name] of Object.entries(MARK))
+		it(`${state}: tabler-icon-${name}, hidden, the word in text`, () => {
+			const html = markup(RunLine, { state, label: 'Read the MSA' });
+			expect(html).toMatch(
+				new RegExp(`<svg(?=[^>]*tabler-icon-${name}\\b)(?=[^>]*aria-hidden="true")`)
+			);
+			expect(withoutOwnIcons(html)).not.toMatch(/<svg\b/);
+			expect(html).toMatch(/<span class="sr-only[^"]*">\(/);
+		});
+
+	it('a hostile label or summary next to the mark is escaped exactly as before', () => {
+		for (const hostile of HOSTILE_STRINGS) {
+			const html = markup(RunLine, {
+				state: 'done',
+				label: hostile,
+				summary: hostile,
+				meta: hostile
+			});
+			const plain = markup(RunLine, {
+				state: 'done',
+				label: 'plain',
+				summary: 'plain',
+				meta: 'plain'
+			});
+			expect(elements(html), hostile).toEqual(elements(plain));
+			page(withoutOwnIcons(html), hostile).hides(/<(?:img|script|svg|iframe|object|embed|a)\b/i);
+			expect(isShown(html, hostile), hostile).toBe(true);
+		}
 	});
 });

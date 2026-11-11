@@ -5,6 +5,7 @@
 	import { mfaDisable, mfaEnable, mfaSetup } from '../api/auth';
 	import type { MfaSetupResponse } from '../types';
 	import { get } from 'svelte/store';
+	import LqText from './shared/LqText.svelte';
 
 	type MfaState =
 		| { kind: 'idle'; alreadyEnrolled: boolean }
@@ -99,7 +100,7 @@
 		{#if state.alreadyEnrolled}
 			<div class="status-row status-row--enabled">
 				<span class="status-badge status-badge--on">MFA enabled</span>
-				<p class="lq-text-body">Your account is protected with a time-based one-time password (TOTP).</p>
+				<LqText as="p" size="14" tone="primary">Your account is protected with a time-based one-time password (TOTP).</LqText>
 				<button type="button" class="lq-btn-secondary" on:click={beginDisable}>
 					Disable MFA
 				</button>
@@ -107,7 +108,7 @@
 		{:else}
 			<div class="status-row">
 				<span class="status-badge status-badge--off">MFA not enabled</span>
-				<p class="lq-text-body">Add a second factor to protect your account with an authenticator app.</p>
+				<LqText as="p" size="14" tone="primary">Add a second factor to protect your account with an authenticator app.</LqText>
 				<button type="button" class="lq-btn-primary" on:click={startSetup}>
 					Set up MFA
 				</button>
@@ -115,13 +116,13 @@
 		{/if}
 
 	{:else if state.kind === 'setting-up'}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Generating your TOTP secret…</p>
+		<LqText as="p" size="14" tone="secondary">Generating your TOTP secret…</LqText>
 
 	{:else if state.kind === 'verifying' && verifying}
 		<div class="verify-section">
-			<p class="lq-text-body" style="margin-bottom: var(--lq-space-4);">
+			<LqText as="p" size="14" tone="primary" style="margin-bottom: var(--lq-space-4);">
 				Scan with your authenticator app, or enter the secret manually.
-			</p>
+			</LqText>
 
 			<div class="secret-block">
 				<p class="field-label">Authenticator URI</p>
@@ -151,9 +152,9 @@
 
 			<div class="recovery-section">
 				<p class="field-label">Recovery codes — print or save these now</p>
-				<p class="lq-text-caption" style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-2);">
+				<LqText as="p" size="12" tone="secondary" style="margin-bottom: var(--lq-space-2);">
 					Each code can only be used once. Store them somewhere safe — you cannot view them again.
-				</p>
+				</LqText>
 				<div class="recovery-grid">
 					{#each verifying.recovery_codes as rc}
 						<code class="mono-block mono-block--sm">{rc}</code>
@@ -193,7 +194,7 @@
 	{:else if state.kind === 'enabled'}
 		<div class="status-row status-row--enabled">
 			<span class="status-badge status-badge--on">MFA enabled</span>
-			<p class="lq-text-body">Your account is protected with a time-based one-time password (TOTP).</p>
+			<LqText as="p" size="14" tone="primary">Your account is protected with a time-based one-time password (TOTP).</LqText>
 			<button type="button" class="lq-btn-secondary" on:click={beginDisable}>
 				Disable MFA
 			</button>
@@ -201,9 +202,9 @@
 
 	{:else if state.kind === 'disabling' && disabling}
 		<div class="disable-form">
-			<p class="lq-text-body" style="margin-bottom: var(--lq-space-4);">
+			<LqText as="p" size="14" tone="primary" style="margin-bottom: var(--lq-space-4);">
 				Enter your current password and an active MFA code to disable two-factor authentication.
-			</p>
+			</LqText>
 			<label class="field-label" for="dis-password">Current password</label>
 			<input
 				id="dis-password"
@@ -384,13 +385,13 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 	}
-	.lq-btn-primary:hover { filter: brightness(0.95); }
+	.lq-btn-primary:hover { opacity: 0.85; }
 	.lq-btn-primary:focus-visible { outline: 2px solid var(--lq-accent); outline-offset: 2px; }
 	.lq-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -398,7 +399,7 @@
 		background: var(--lq-canvas);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -411,7 +412,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		cursor: pointer;

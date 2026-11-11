@@ -9,6 +9,14 @@ import {
 	KIND_DESCRIPTION
 } from '../components/ReceiptsList.svelte';
 import type { ReceiptEvent, ReceiptEventKind } from '../api/receipts';
+import {
+	IconBrain,
+	IconFileText,
+	IconPaperclip,
+	IconShield,
+	IconTool,
+	IconUser
+} from '@tabler/icons-svelte';
 
 describe('ReceiptsList helpers', () => {
 	it('formatTimestamp returns HH:MM:SS', () => {
@@ -75,10 +83,13 @@ describe('ReceiptsList helpers', () => {
 		expect(ALL_KINDS).toEqual(['message', 'inference', 'audit', 'skill', 'retrieval', 'error']);
 	});
 
-	it('KIND_ICONS maps each kind to an emoji', () => {
-		expect(KIND_ICONS.message).toBe('👤');
-		expect(KIND_ICONS.retrieval).toBe('📎');
-		expect(KIND_ICONS.error).toBe('🛡');
+	it('KIND_ICONS maps each kind to a Tabler line icon, not an emoji (ADR 0045 §5)', () => {
+		expect(KIND_ICONS.message).toBe(IconUser);
+		expect(KIND_ICONS.inference).toBe(IconBrain);
+		expect(KIND_ICONS.audit).toBe(IconFileText);
+		expect(KIND_ICONS.skill).toBe(IconTool);
+		expect(KIND_ICONS.retrieval).toBe(IconPaperclip);
+		expect(KIND_ICONS.error).toBe(IconShield);
 	});
 
 	it('KIND_LABELS maps each kind to a chip label', () => {

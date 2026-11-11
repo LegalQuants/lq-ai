@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconGitFork } from '@tabler/icons-svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -9,6 +11,8 @@
 	import SkillSourceView from '$lib/lq-ai/components/SkillSourceView.svelte';
 	import SkillTryItTab from '$lib/lq-ai/components/SkillTryItTab.svelte';
 	import SkillVersionsTab from '$lib/lq-ai/components/SkillVersionsTab.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	type Tab = 'use' | 'source' | 'try' | 'versions';
 	const VALID: Tab[] = ['use', 'source', 'try', 'versions'];
@@ -47,25 +51,25 @@
 
 <main style="padding: var(--lq-space-6); max-width: 1100px; margin: 0 auto;">
 	{#if error}
-		<p class="lq-text-body" style="color: var(--lq-error);">Couldn't load skill: {error}</p>
+		<LqText as="p" size="14" tone="danger">Couldn't load skill: {error}</LqText>
 	{:else if skill}
 		<header
 			style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: var(--lq-space-4);"
 		>
 			<div>
-				<h1 class="lq-text-page-h">{skill.title ?? skill.name}</h1>
-				<p
-					class="lq-text-caption"
-					style="color: var(--lq-text-tertiary); margin-top: var(--lq-space-1);"
+				<LqTitle order={1} size="20" weight="bold" tone="primary"
+					>{skill.title ?? skill.name}</LqTitle
 				>
+				<LqText as="p" size="12" tone="tertiary" style="margin-top: var(--lq-space-1);">
 					{skill.name}{skill.version ? ` · v${skill.version}` : ''}
-				</p>
+				</LqText>
 			</div>
 			<div style="display: flex; gap: 8px;">
 				<a
 					href={`/lq-ai/skills/new?fork=${encodeURIComponent(skill.name)}`}
 					class="lq-btn-ghost"
-					aria-label={`Fork ${skill.title ?? skill.name} as my own`}>🔱 Fork as my own</a
+					aria-label={`Fork ${skill.title ?? skill.name} as my own`}
+					><IconGitFork size={14} stroke={1.75} aria-hidden="true" /> Fork as my own</a
 				>
 				{#if skill.scope !== 'builtin'}
 					<a href={`/lq-ai/skills/${encodeURIComponent(skill.name)}/edit`} class="lq-btn-primary"
@@ -79,16 +83,17 @@
 
 		<div style="margin-top: var(--lq-space-4);">
 			{#if activeTab === 'use'}
-				<article class="lq-text-body" style="white-space: pre-wrap;">
+				<LqText as="article" size="14" tone="primary" style="white-space: pre-wrap;">
 					{skill.description ?? '(no description)'}
-				</article>
+				</LqText>
 				{#if usageNote.uses.length > 0}
 					<div class="lq-tool-usage" data-testid="skill-tool-usage">
 						<span class="lq-tool-usage-label">Uses:</span>
 						{usageNote.uses.join(', ')}
 						{#if usageNote.warning}
 							<p class="lq-tool-usage-warning" data-testid="skill-tool-usage-warning">
-								⚠ {usageNote.warning}
+								<LqToneIcon tone="warning" />
+								{usageNote.warning}
 							</p>
 						{/if}
 					</div>
@@ -110,7 +115,7 @@
 			{/if}
 		</div>
 	{:else}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading skill…</p>
+		<LqText as="p" size="14" tone="secondary">Loading skill…</LqText>
 	{/if}
 </main>
 
@@ -119,7 +124,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -133,9 +138,9 @@
 	}
 	.lq-btn-ghost {
 		background: transparent;
-		color: #1f2937;
-		border: 1px solid var(--lq-border, #e5e7eb);
-		border-radius: var(--lq-radius);
+		color: var(--lq-text);
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -144,25 +149,25 @@
 		align-items: center;
 	}
 	.lq-btn-ghost:hover {
-		background: var(--lq-accent-soft, #e8f4ec);
+		background: var(--lq-accent-soft);
 	}
 	/* C5 (PR6d) — tool-usage metadata row */
 	.lq-tool-usage {
-		margin-top: var(--lq-space-3, 12px);
+		margin-top: var(--lq-space-3);
 		font-size: 13px;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 	}
 	.lq-tool-usage-label {
 		font-weight: 500;
-		color: var(--lq-text-primary, #111827);
+		color: var(--lq-text-primary);
 	}
 	.lq-tool-usage-warning {
-		margin-top: var(--lq-space-2, 8px);
+		margin-top: var(--lq-space-2);
 		padding: 6px 10px;
-		border-radius: var(--lq-radius, 6px);
-		background: var(--lq-warning-soft, #fffbeb);
-		border: 1px solid var(--lq-warning-border, #fcd34d);
-		color: var(--lq-warning-text, #92400e);
+		border-radius: var(--lq-radius);
+		background: var(--lq-warning-soft);
+		border: 1px solid var(--lq-warning-border);
+		color: var(--lq-warning-text);
 		font-size: 13px;
 	}
 </style>

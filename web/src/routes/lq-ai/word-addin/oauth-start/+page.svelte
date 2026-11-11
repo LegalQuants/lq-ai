@@ -151,7 +151,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: var(--lq-bg, #f7f9fc);
+		background: var(--lq-bg, #f9f9fa);
 		padding: var(--lq-space-4, 16px);
 		font-family:
 			'Segoe UI',
@@ -165,9 +165,9 @@
 	.oauth-card {
 		width: 100%;
 		max-width: 360px;
-		background: var(--lq-surface, white);
-		border: 1px solid var(--lq-border, #e1e5ec);
-		border-radius: 8px;
+		background: var(--lq-surface, #ffffff);
+		border: 1px solid var(--lq-border, #e4e4e7);
+		border-radius: 16px;
 		padding: var(--lq-space-5, 20px);
 		display: flex;
 		flex-direction: column;
@@ -189,8 +189,8 @@
 		justify-content: center;
 		width: 36px;
 		height: 36px;
-		border-radius: 8px;
-		background: var(--lq-accent, #2563eb);
+		border-radius: 10px;
+		background: var(--lq-accent, #111114);
 		color: white;
 		font-weight: 700;
 		font-size: 13px;
@@ -206,7 +206,7 @@
 	.oauth-subtitle {
 		margin: 0;
 		font-size: 13px;
-		color: var(--lq-text-secondary, #5a6472);
+		color: var(--lq-text-secondary, #4f5158);
 	}
 
 	.oauth-form {
@@ -228,26 +228,26 @@
 
 	.form-row input {
 		padding: 8px 10px;
-		border: 1px solid var(--lq-border, #e1e5ec);
-		border-radius: 4px;
-		background: var(--lq-bg, white);
-		color: var(--lq-text, #1f2329);
+		border: 1px solid var(--lq-border, #e4e4e7);
+		border-radius: 12px;
+		background: var(--lq-bg, #ffffff);
+		color: var(--lq-text, #111114);
 		font-size: 14px;
 		font-family: inherit;
 	}
 
 	.form-row input:focus {
-		outline: 2px solid var(--lq-accent, #2563eb);
+		outline: 2px solid var(--lq-accent, #111114);
 		outline-offset: -1px;
-		border-color: var(--lq-accent, #2563eb);
+		border-color: var(--lq-accent, #111114);
 	}
 
 	.oauth-submit {
 		margin-top: 4px;
-		background: var(--lq-accent, #2563eb);
+		background: var(--lq-accent, #111114);
 		color: white;
 		border: none;
-		border-radius: 4px;
+		border-radius: 999px;
 		padding: 9px 14px;
 		font-weight: 500;
 		font-size: 14px;
@@ -267,20 +267,20 @@
 	.oauth-status {
 		margin: 0;
 		padding: 8px 10px;
-		border-radius: 4px;
+		border-radius: 12px;
 		font-size: 13px;
 	}
 
 	.oauth-status-error {
-		background: var(--lq-error-bg, #fef2f2);
-		color: var(--lq-error-text, #991b1b);
-		border: 1px solid var(--lq-error-border, #fecaca);
+		background: var(--lq-error-bg, #f9eded);
+		color: var(--lq-error-text, #b42318);
+		border: 1px solid var(--lq-error-border, #ecc8c5);
 	}
 
 	.oauth-footnote {
 		margin: 0;
 		font-size: 12px;
-		color: var(--lq-text-secondary, #5a6472);
+		color: var(--lq-text-secondary, #4f5158);
 		text-align: center;
 		line-height: 1.5;
 	}

@@ -1,5 +1,15 @@
 <script lang="ts">
 	import { preferences } from '$lib/lq-ai/stores/preferences';
+	import LqText from './shared/LqText.svelte';
+	import {
+		IconBooks,
+		IconClipboardList,
+		IconPlayerPlay,
+		IconRobot,
+		IconSparkles,
+		IconTable,
+		IconTool
+	} from '@tabler/icons-svelte';
 
 	$: mode = $preferences.featured_tools;
 
@@ -14,7 +24,7 @@
 		{
 			id: 'enhance',
 			title: 'Enhance Prompt',
-			icon: '✨',
+			icon: IconSparkles,
 			description: 'Rewrite and strengthen your prompt before sending.',
 			cta: 'Try it',
 			href: '/lq-ai/chats'
@@ -22,7 +32,7 @@
 		{
 			id: 'skill-creator',
 			title: 'Skill Creator',
-			icon: '🛠',
+			icon: IconTool,
 			description: 'Build a reusable skill from any prompt or template.',
 			cta: 'Create',
 			href: '/lq-ai/skills/new'
@@ -30,7 +40,7 @@
 		{
 			id: 'knowledge',
 			title: 'Knowledge',
-			icon: '📚',
+			icon: IconBooks,
 			description: 'Attach a knowledge base to ground responses in your docs.',
 			cta: 'Browse',
 			href: '/lq-ai/knowledge'
@@ -38,7 +48,7 @@
 		{
 			id: 'playbooks',
 			title: 'Playbooks',
-			icon: '📋',
+			icon: IconClipboardList,
 			description: 'Review a contract against your standard positions with citations and redlines.',
 			cta: 'Run',
 			href: '/lq-ai/playbooks'
@@ -46,7 +56,7 @@
 		{
 			id: 'tabular',
 			title: 'Tabular Review',
-			icon: '📊',
+			icon: IconTable,
 			description: 'Run a column spec across multiple documents — every cell grounded by the Citation Engine.',
 			cta: 'Start',
 			href: '/lq-ai/tabular'
@@ -54,7 +64,7 @@
 		{
 			id: 'apply-skill',
 			title: 'Apply a Skill',
-			icon: '▶',
+			icon: IconPlayerPlay,
 			description: 'Run a saved skill on a document or message.',
 			cta: 'Apply',
 			href: '/lq-ai/skills'
@@ -62,7 +72,7 @@
 		{
 			id: 'autonomous',
 			title: 'Autonomous',
-			icon: '🤖',
+			icon: IconRobot,
 			description:
 				'Let LQ.AI run a skill or playbook on a schedule or when documents arrive (opt-in, off by default).',
 			cta: $preferences.autonomous_enabled ? 'Open' : 'Turn on',
@@ -73,7 +83,7 @@
 
 {#if mode === 'prominent'}
 	<section style="margin-bottom: var(--lq-space-6);">
-		<p class="lq-text-label" style="margin-bottom: var(--lq-space-3);">Featured tools</p>
+		<LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Featured tools</LqText>
 		<div class="tools-grid">
 			{#each tools as tool (tool.id)}
 				<a
@@ -82,16 +92,14 @@
 					aria-label={tool.title}
 					data-testid="lq-nav-{tool.id}"
 				>
-					<span class="tool-icon" aria-hidden="true">{tool.icon}</span>
-					<strong class="lq-text-panel-h" style="display: block; margin-bottom: var(--lq-space-1);"
-						>{tool.title}</strong
-					>
-					<p
-						class="lq-text-body-sm"
-						style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-3);"
+					<span class="tool-icon" aria-hidden="true"><svelte:component this={tool.icon} size={20} stroke={1.75} /></span>
+					<LqText as="strong" size="16" weight="semibold" tone="primary" style="display: block; margin-bottom: var(--lq-space-1);"
+						>{tool.title}</LqText>
+					<LqText as="p" size="13.5" tone="secondary"
+						style="margin-bottom: var(--lq-space-3);"
 					>
 						{tool.description}
-					</p>
+					</LqText>
 					<span class="tool-cta">{tool.cta} →</span>
 				</a>
 			{/each}
@@ -101,7 +109,7 @@
 	<section
 		style="margin-bottom: var(--lq-space-6); display: flex; gap: var(--lq-space-2); flex-wrap: wrap; align-items: center;"
 	>
-		<span class="lq-text-label" style="margin-right: var(--lq-space-1);">Tools:</span>
+		<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-right: var(--lq-space-1);">Tools:</LqText>
 		{#each tools as tool (tool.id)}
 			<a
 				href={tool.href}
@@ -109,7 +117,7 @@
 				aria-label={tool.title}
 				data-testid="lq-nav-{tool.id}"
 			>
-				<span aria-hidden="true">{tool.icon}</span>
+				<span class="tool-icon-inline" aria-hidden="true"><svelte:component this={tool.icon} size={14} stroke={1.75} /></span>
 				{tool.title}
 			</a>
 		{/each}
@@ -138,8 +146,11 @@
 		border-color: var(--lq-accent-border);
 	}
 
+	.tool-icon-inline {
+		display: inline-flex;
+		vertical-align: -2px;
+	}
 	.tool-icon {
-		font-size: 20px;
 		margin-bottom: var(--lq-space-2);
 		display: block;
 	}
@@ -157,7 +168,7 @@
 		gap: var(--lq-space-1);
 		padding: var(--lq-space-1) var(--lq-space-3);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-canvas);
 		font-size: 13.5px;
 		color: var(--lq-text);

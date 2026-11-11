@@ -312,6 +312,8 @@
 		width: 100%;
 		text-align: left;
 		margin: 0.5rem 0;
+		/* A two-line selectable row, not a button shape: the list-tile radius. */
+		border-radius: var(--lq-radius-input);
 	}
 	.matter span,
 	.member span {
@@ -339,7 +341,7 @@
 	select,
 	textarea {
 		padding: 0.55rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -354,7 +356,7 @@
 		padding: 0.55rem 0.75rem;
 		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		color: var(--lq-text);
 	}
 	button:disabled {
@@ -367,7 +369,7 @@
 		outline-offset: 2px;
 	}
 	.error {
-		color: var(--lq-danger, #b42318);
+		color: var(--lq-danger);
 	}
 	.notice {
 		color: var(--lq-text);

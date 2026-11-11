@@ -4,11 +4,12 @@
 	import DevRoleManagementCard from '$lib/lq-ai/components/DevRoleManagementCard.svelte';
 	import DevForkCallout from '$lib/lq-ai/components/DevForkCallout.svelte';
 	import DevSkillResourcePolicyCard from '$lib/lq-ai/components/DevSkillResourcePolicyCard.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
 
 <div class="dev-page">
 	<div class="dev-page-header">
-		<h1 class="lq-text-page-h">Developer Support</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Developer Support</LqTitle>
 		<p class="dev-page-intro">
 			Operator and ecosystem-developer-facing tools for working with the LQ.AI API directly. Bring
 			your own frontend — this is where you start.

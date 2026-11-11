@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	/**
 	 * AliasForm — modal/inline form for create + edit (D0.5).
 	 *
@@ -92,17 +93,17 @@
 </script>
 
 <form
-	class="space-y-3 p-4 border border-gray-200 rounded-md bg-white"
+	class="space-y-3 p-4 border lq-t-border rounded-md lq-t-canvas"
 	on:submit|preventDefault={submit}
 	data-testid="lq-ai-alias-form"
 >
-	<div class="text-sm font-semibold text-gray-800">
+	<div class="text-sm font-semibold lq-t-text">
 		{isEdit ? `Edit alias “${alias?.name}”` : 'New alias'}
 	</div>
 
 	{#if serverError}
 		<div
-			class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+			class="text-sm lq-t-error lq-t-error-bg border lq-t-error-border rounded px-2 py-1"
 			data-testid="lq-ai-alias-form-error"
 		>
 			{serverError}
@@ -111,26 +112,26 @@
 
 	{#if !isEdit}
 		<div>
-			<label for="alias-name" class="text-xs font-medium text-gray-600">Name</label>
+			<label for="alias-name" class="text-xs font-medium lq-t-text2">Name</label>
 			<input
 				id="alias-name"
 				type="text"
-				class="w-full text-sm border border-gray-300 rounded px-2 py-1"
+				class="w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 				bind:value={name}
 				placeholder="smart, fast, my-budget-alias"
 				data-testid="lq-ai-alias-form-name"
 			/>
 			{#if nameError}
-				<p class="text-xs text-rose-700 mt-1">{nameError}</p>
+				<p class="text-xs lq-t-error mt-1">{nameError}</p>
 			{/if}
 		</div>
 	{/if}
 
 	<div>
-		<label for="alias-provider" class="text-xs font-medium text-gray-600">Provider</label>
+		<label for="alias-provider" class="text-xs font-medium lq-t-text2">Provider</label>
 		<select
 			id="alias-provider"
-			class="w-full text-sm border border-gray-300 rounded px-2 py-1"
+			class="w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 			bind:value={provider}
 			data-testid="lq-ai-alias-form-provider"
 		>
@@ -140,16 +141,16 @@
 			{/each}
 		</select>
 		{#if providerError}
-			<p class="text-xs text-rose-700 mt-1">{providerError}</p>
+			<p class="text-xs lq-t-error mt-1">{providerError}</p>
 		{/if}
 	</div>
 
 	<div>
-		<label for="alias-model" class="text-xs font-medium text-gray-600">Model</label>
+		<label for="alias-model" class="text-xs font-medium lq-t-text2">Model</label>
 		<input
 			id="alias-model"
 			type="text"
-			class="w-full text-sm border border-gray-300 rounded px-2 py-1 font-mono"
+			class="w-full text-sm border lq-t-border-strong rounded px-2 py-1 font-mono"
 			bind:value={model}
 			placeholder="claude-sonnet-4-6, gpt-4o, llama3.1:8b"
 			list="alias-model-options"
@@ -161,16 +162,16 @@
 			{/each}
 		</datalist>
 		{#if modelError}
-			<p class="text-xs text-rose-700 mt-1">{modelError}</p>
+			<p class="text-xs lq-t-error mt-1">{modelError}</p>
 		{/if}
 	</div>
 
 	<div>
 		<div class="flex items-center justify-between">
-			<span class="text-xs font-medium text-gray-600">Fallback chain</span>
+			<span class="text-xs font-medium lq-t-text2">Fallback chain</span>
 			<button
 				type="button"
-				class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+				class="text-xs px-2 py-1 rounded border lq-t-border-strong lq-t-hover"
 				on:click={addFallback}
 				data-testid="lq-ai-alias-form-add-fallback"
 			>
@@ -178,12 +179,12 @@
 			</button>
 		</div>
 		{#if fallbacks.length === 0}
-			<p class="text-xs text-gray-500 mt-1">No fallbacks. Primary provider must be reachable.</p>
+			<p class="text-xs lq-t-text2 mt-1">No fallbacks. Primary provider must be reachable.</p>
 		{/if}
 		{#each fallbacks as fb, idx}
 			<div class="flex items-center gap-2 mt-2" data-testid="lq-ai-alias-form-fallback-row">
 				<select
-					class="flex-1 text-xs border border-gray-300 rounded px-2 py-1"
+					class="flex-1 text-xs border lq-t-border-strong rounded px-2 py-1"
 					bind:value={fb.provider}
 				>
 					<option value="">— provider —</option>
@@ -193,17 +194,17 @@
 				</select>
 				<input
 					type="text"
-					class="flex-1 text-xs border border-gray-300 rounded px-2 py-1 font-mono"
+					class="flex-1 text-xs border lq-t-border-strong rounded px-2 py-1 font-mono"
 					bind:value={fb.model}
 					placeholder="model-id"
 				/>
 				<button
 					type="button"
-					class="text-xs px-2 py-1 text-rose-700 hover:bg-rose-50 rounded"
+					class="text-xs px-2 py-1 lq-t-error lq-t-error-hover rounded"
 					on:click={() => removeFallback(idx)}
 					aria-label="Remove fallback"
 				>
-					×
+					<IconX size={14} stroke={1.75} aria-hidden="true" />
 				</button>
 			</div>
 		{/each}
@@ -212,7 +213,7 @@
 	<div class="flex items-center justify-end gap-2 pt-2">
 		<button
 			type="button"
-			class="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
+			class="text-sm px-3 py-1 rounded border lq-t-border-strong lq-t-hover"
 			on:click={onCancel}
 			data-testid="lq-ai-alias-form-cancel"
 		>
@@ -220,7 +221,7 @@
 		</button>
 		<button
 			type="submit"
-			class="text-sm px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+			class="text-sm px-3 py-1 rounded lq-t-primary-bg lq-t-on-accent lq-t-primary-hover disabled:opacity-50"
 			disabled={submitting}
 			data-testid="lq-ai-alias-form-submit"
 		>
@@ -228,3 +229,46 @@
 		</button>
 	</div>
 </form>
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-hover:hover {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-hover:hover {
+		background-color: var(--lq-surface-hover);
+	}
+	.lq-t-on-accent {
+		color: var(--lq-on-accent);
+	}
+	.lq-t-primary-bg {
+		background-color: var(--lq-accent);
+	}
+	.lq-t-primary-hover:hover {
+		opacity: 0.85;
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+</style>

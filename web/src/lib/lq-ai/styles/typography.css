@@ -1,27 +1,28 @@
 /*
- * Practice typography — Inter variable + LQ.AI type scale.
+ * Practice typography — the system typeface + LQ.AI type scale.
  * Loaded by the /lq-ai/* layout only (not globally) per ADR 0009.
+ *
+ * ADR 0045 §4: SF on Apple devices, Segoe UI on Windows, the platform's
+ * sans-serif elsewhere. No web font is shipped.
  */
-@import '@fontsource-variable/inter/index.css';
 
 :root {
-  --lq-font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --lq-font-numeric: 'Inter Variable', monospace;
-  font-variant-numeric: tabular-nums;
+  --lq-font-sans: -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;
+  --lq-font-numeric: var(--lq-font-sans);
+  --lq-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
 .lq-shell {
   font-family: var(--lq-font-sans);
   color: var(--lq-text);
+  /* Was on :root, where it leaked to Open WebUI's pages after a client-side visit
+     to /lq-ai. Content portaled out of the shell can opt in with .lq-tabular. */
+  font-variant-numeric: tabular-nums;
 }
 
-/* Type scale per spec §5.4. */
-.lq-text-label    { font-size: 12px;   font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--lq-text-tertiary); }
-.lq-text-caption  { font-size: 12px;   color: var(--lq-text-tertiary); }
-.lq-text-body-sm  { font-size: 13.5px; color: var(--lq-text); }
-.lq-text-body     { font-size: 14px;   color: var(--lq-text); }
-.lq-text-panel-h  { font-size: 16px;   font-weight: 600; color: var(--lq-text); }
-.lq-text-page-h   { font-size: 18px;   font-weight: 600; color: var(--lq-text); }
-.lq-text-welcome  { font-size: 22px;   font-weight: 500; color: var(--lq-text); }
+/* The type scale (ADR 0045 §4) lives in LqText and LqTitle
+   (components/shared/types.ts, LQ_TYPE_SCALE). The .lq-text-label, -caption,
+   -body-sm, -body, -panel-h, -page-h and -welcome classes were migrated to them
+   and removed; the token guard keeps them out. */
 
 .lq-tabular { font-variant-numeric: tabular-nums; }

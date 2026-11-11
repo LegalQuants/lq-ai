@@ -182,7 +182,7 @@
 		cursor: default;
 	}
 	.lq-m2-cite-chip:focus-visible {
-		outline: 2px solid var(--lq-accent, #4338ca);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 1px;
 	}
 
@@ -211,46 +211,32 @@
 	/* verified-exact + verified-tolerant: emerald (green, WCAG AA against light + dark chat bgs) */
 	.state-verified-exact,
 	.state-verified-tolerant {
-		color: #047857; /* emerald-700 */
-		background-color: rgba(16, 185, 129, 0.08); /* emerald-500 @ 8% */
-		border-color: rgba(16, 185, 129, 0.32);
+		color: var(--lq-text);
+		background-color: var(--lq-surface-muted);
+		border-color: var(--lq-border-strong);
 	}
 	.state-verified-exact:hover,
 	.state-verified-tolerant:hover {
-		background-color: rgba(16, 185, 129, 0.16);
-	}
-	:global(.dark) .state-verified-exact,
-	:global(.dark) .state-verified-tolerant {
-		color: #6ee7b7; /* emerald-300 */
-		background-color: rgba(16, 185, 129, 0.12);
-		border-color: rgba(16, 185, 129, 0.36);
+		background-color: var(--lq-selected);
 	}
 
 	/* verified-paraphrase: amber (yellow). Distinct from the green cluster. */
 	.state-verified-paraphrase {
-		color: #b45309; /* amber-700 */
-		background-color: rgba(245, 158, 11, 0.08); /* amber-500 @ 8% */
-		border-color: rgba(245, 158, 11, 0.32);
+		color: var(--lq-text);
+		background-color: var(--lq-surface-muted);
+		border-color: var(--lq-border-strong);
+		border-style: dashed;
 	}
 	.state-verified-paraphrase:hover {
-		background-color: rgba(245, 158, 11, 0.16);
-	}
-	:global(.dark) .state-verified-paraphrase {
-		color: #fcd34d; /* amber-300 */
-		background-color: rgba(245, 158, 11, 0.12);
-		border-color: rgba(245, 158, 11, 0.36);
+		background-color: var(--lq-selected);
 	}
 
 	/* unverified: greyed text + clear [unverified] tag. Not interactive. */
 	.state-unverified {
-		color: #6b7280; /* gray-500 */
-		background-color: rgba(107, 114, 128, 0.08);
-		border-color: rgba(107, 114, 128, 0.32);
-	}
-	:global(.dark) .state-unverified {
-		color: #9ca3af; /* gray-400 */
-		background-color: rgba(107, 114, 128, 0.16);
-		border-color: rgba(107, 114, 128, 0.36);
+		color: var(--lq-text-tertiary);
+		background-color: var(--lq-canvas);
+		border-color: var(--lq-border);
+		border-style: dotted;
 	}
 
 	/* Inline counterpart — the `decorateCitationsInline` action injects
@@ -264,17 +250,15 @@
 	}
 	:global(.lq-cite-inline-verified-exact),
 	:global(.lq-cite-inline-verified-tolerant) {
-		text-decoration-color: #10b981; /* emerald-500 */
+		text-decoration-color: var(--lq-text);
 	}
 	:global(.lq-cite-inline-verified-paraphrase) {
-		text-decoration-color: #f59e0b; /* amber-500 */
+		text-decoration-color: var(--lq-text-secondary);
+		text-decoration-style: dashed;
 	}
 	:global(.lq-cite-inline-unverified) {
-		color: #6b7280; /* gray-500 */
-		text-decoration-color: #9ca3af; /* gray-400 */
+		color: var(--lq-text-tertiary);
+		text-decoration-color: var(--lq-text-tertiary); /* gray-400 */
 		text-decoration-style: dotted;
-	}
-	:global(.dark .lq-cite-inline-unverified) {
-		color: #9ca3af; /* gray-400 */
 	}
 </style>

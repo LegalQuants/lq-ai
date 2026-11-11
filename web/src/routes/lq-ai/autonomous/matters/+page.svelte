@@ -33,6 +33,7 @@
 		validateIntakeForm,
 		type IntakeFormState
 	} from './intake-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// Form state
@@ -137,7 +138,7 @@
 
 <div class="matters-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Describe your matter</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Describe your matter</LqTitle>
 		<p class="page-intro">
 			Describe what you need done and pick the skill or playbook that guides the analysis. LQVern
 			runs once, plans against your description, and stops at the cost cap (R4). You are redirected
@@ -395,7 +396,7 @@
 	.intake-select,
 	.intake-textarea {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -469,7 +470,7 @@
 		color: var(--lq-accent);
 		background: transparent;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-1) var(--lq-space-2);
 		cursor: pointer;
 	}
@@ -477,8 +478,8 @@
 	.submit-error {
 		font-size: 13px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -497,7 +498,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -505,7 +506,7 @@
 	}
 
 	.intake-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.intake-btn-primary:focus-visible {

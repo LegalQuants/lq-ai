@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconLock } from '@tabler/icons-svelte';
 	/**
 	 * /lq-ai/admin/audit-log — admin audit-log filter + paginated view (D3-coverage).
 	 *
@@ -20,6 +21,8 @@
 	import { auditLogApi } from '$lib/lq-ai/api';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import type { AuditLogEntry, AuditLogFilters } from '$lib/lq-ai/api/auditLog';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let rows: AuditLogEntry[] = [];
 	let nextCursor: string | null = null;
@@ -120,11 +123,11 @@
 
 <div class="p-4 max-w-7xl mx-auto" data-testid="lq-ai-admin-audit-log">
 	<header class="mb-4">
-		<h1 class="lq-text-page-h">Audit log</h1>
-		<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Audit log</LqTitle>
+		<LqText as="p" size="12" tone="tertiary" class="mt-1">
 			Every state-changing API call writes one row here (PRD §5.3). Filters compose with AND;
 			leaving a field blank means "any". Most-recent rows first.
-		</p>
+		</LqText>
 	</header>
 
 	<form
@@ -133,10 +136,10 @@
 		data-testid="lq-ai-admin-audit-log-filters"
 	>
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Privilege</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Privilege</LqText>
 			<select
 				bind:value={privilegeMarked}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-privilege"
 			>
 				<option value="any">Any</option>
@@ -146,10 +149,10 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Routed tier</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Routed tier</LqText>
 			<select
 				bind:value={routedTier}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-tier"
 			>
 				<option value="">Any</option>
@@ -162,43 +165,43 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Action (exact)</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Action (exact)</LqText>
 			<input
 				type="text"
 				placeholder="e.g. chat.message_sent"
 				bind:value={action}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-action"
 			/>
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">User ID (UUID)</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">User ID (UUID)</LqText>
 			<input
 				type="text"
 				placeholder="00000000-0000-…"
 				bind:value={userId}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm font-mono"
+				class="rounded lq-t-border-strong text-sm font-mono"
 				data-testid="lq-ai-audit-filter-user"
 			/>
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Since</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Since</LqText>
 			<input
 				type="datetime-local"
 				bind:value={since}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-since"
 			/>
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Until</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Until</LqText>
 			<input
 				type="datetime-local"
 				bind:value={until}
-				class="rounded border-gray-300 dark:border-gray-700 dark:bg-gray-800 text-sm"
+				class="rounded lq-t-border-strong text-sm"
 				data-testid="lq-ai-audit-filter-until"
 			/>
 		</label>
@@ -206,7 +209,7 @@
 		<div class="col-span-full flex items-center gap-2 justify-end">
 			<button
 				type="button"
-				class="lq-btn-secondary lq-text-body-sm"
+				class="lq-btn-secondary"
 				on:click={resetFilters}
 				data-testid="lq-ai-audit-filter-reset"
 			>
@@ -214,7 +217,7 @@
 			</button>
 			<button
 				type="submit"
-				class="lq-btn-primary lq-text-body-sm"
+				class="lq-btn-primary"
 				disabled={loading}
 				data-testid="lq-ai-audit-filter-apply"
 			>
@@ -225,7 +228,7 @@
 
 	{#if listError}
 		<div
-			class="px-3 py-2 rounded border border-rose-300 bg-rose-50 text-rose-800 text-sm mb-3"
+			class="px-3 py-2 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm mb-3"
 			data-testid="lq-ai-admin-audit-log-error"
 		>
 			{listError}
@@ -233,66 +236,67 @@
 	{/if}
 
 	<div class="lq-table-wrap overflow-x-auto">
-		<table class="min-w-full lq-text-body" data-testid="lq-ai-admin-audit-log-table">
+		<LqText as="table" size="14" tone="primary" class="min-w-full" data-testid="lq-ai-admin-audit-log-table">
 			<thead class="lq-thead">
 				<tr>
-					<th class="px-2 py-1 text-left lq-text-label">Timestamp</th>
-					<th class="px-2 py-1 text-left lq-text-label">Action</th>
-					<th class="px-2 py-1 text-left lq-text-label">User</th>
-					<th class="px-2 py-1 text-left lq-text-label">Resource</th>
-					<th class="px-2 py-1 text-left lq-text-label">Priv</th>
-					<th class="px-2 py-1 text-left lq-text-label">Tier</th>
-					<th class="px-2 py-1 text-left lq-text-label">Provider</th>
-					<th class="px-2 py-1 text-left lq-text-label">IP</th>
-					<th class="px-2 py-1 text-left lq-text-label">Details</th>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Timestamp</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Action</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">User</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Resource</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Priv</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Tier</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Provider</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">IP</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Details</LqText>
 				</tr>
 			</thead>
 			<tbody>
 				{#each rows as r (r.id)}
 					<tr
 						class="lq-row align-top"
-						class:bg-amber-50={r.privilege_marked}
+						class:lq-privileged-row={r.privilege_marked}
 					>
-						<td class="px-2 py-1 font-mono whitespace-nowrap lq-text-caption" style="color: var(--lq-text-tertiary);">{formatTimestamp(r.timestamp)}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.action}</td>
-						<td class="px-2 py-1 font-mono truncate max-w-[12ch] lq-text-body" title={r.user_id ?? ''}>
+						<LqText as="td" size="12" tone="tertiary" class="px-2 py-1 font-mono whitespace-nowrap">{formatTimestamp(r.timestamp)}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.action}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono truncate max-w-[12ch]" title={r.user_id ?? ''}>
 							{r.user_id ?? '—'}
-						</td>
-						<td class="px-2 py-1 lq-text-body">
+						</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1">
 							{r.resource_type}{r.resource_id ? `/${r.resource_id.slice(0, 8)}…` : ''}
-						</td>
+						</LqText>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
-								<span class="px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 text-[10px]">
+								<span class="lq-privilege-chip px-1.5 py-0.5 rounded text-[10px]">
+									<IconLock size={10} stroke={2} aria-hidden="true" />
 									{r.privilege_basis ?? 'yes'}
 								</span>
 							{:else}
 								—
 							{/if}
 						</td>
-						<td class="px-2 py-1 lq-text-body">{r.routed_inference_tier ?? '—'}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.routed_provider ?? '—'}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.ip_address ?? '—'}</td>
-						<td class="px-2 py-1 font-mono truncate max-w-[28ch] lq-text-body" title={formatDetails(r.details)}>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1">{r.routed_inference_tier ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.routed_provider ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.ip_address ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono truncate max-w-[28ch]" title={formatDetails(r.details)}>
 							{formatDetails(r.details)}
-						</td>
+						</LqText>
 					</tr>
 				{:else}
 					<tr>
-						<td colspan="9" class="px-2 py-6 text-center lq-text-body" style="color: var(--lq-text-tertiary);">
+						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-center">
 							{loading ? 'Loading…' : 'No audit entries match.'}
-						</td>
+						</LqText>
 					</tr>
 				{/each}
 			</tbody>
-		</table>
+		</LqText>
 	</div>
 
 	{#if nextCursor}
 		<div class="flex justify-center mt-3">
 			<button
 				type="button"
-				class="lq-btn-secondary lq-text-body-sm"
+				class="lq-btn-secondary"
 				on:click={loadMore}
 				disabled={loading}
 				data-testid="lq-ai-admin-audit-log-load-more"
@@ -329,7 +333,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 14px;
 		font-weight: 500;
@@ -341,11 +345,38 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13.5px;
 		cursor: pointer;
 	}
 	.lq-btn-secondary:hover { background: var(--lq-inset); }
 	.lq-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	/* A privilege-marked entry is governance (ADR 0045 §1): the governance tint on the row,
+	   and a chip in governance text and edge with the lock. */
+	.lq-privileged-row {
+		background-color: var(--lq-governance-soft);
+	}
+	.lq-privilege-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		background-color: var(--lq-governance-soft);
+		color: var(--lq-governance);
+		border: 1px solid var(--lq-governance-border);
+	}
 </style>
