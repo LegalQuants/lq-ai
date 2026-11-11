@@ -1,18 +1,17 @@
 /**
  * The contextual right sidebar and the page header of the redesigned LQ.AI
  * shell (interface-redesign work plan, Annex B P1.4; proposed ADR 0045, C6,
- * C14, C19), behind the developer switch in `$lib/lq-ai/shell`.
+ * C14, C19).
  *
  * The layout hosts both: a header over the main column only, and a right
  * column beside it. A page fills them by publishing what it has open
  * (`publishShellContext`) and clears them when it goes away. With nothing
  * published the header and the sidebar are absent, so the middle column
- * widens. Nothing is published unless the switch is on, so with the switch
- * off nothing here renders.
+ * widens.
  *
  * The sidebar's open or closed state is remembered per page (pathname) in
  * one JSON map under `localStorage['lq-ai.right-sidebar']`. Every storage
- * access is guarded the same way as `readShellSwitch`: server-side
+ * access is guarded: server-side
  * rendering, blocked site data or a corrupt value fall back to the default
  * (open), and a failed write is ignored. On narrow screens the sidebar is a
  * sheet over the page: it starts closed and its state is not remembered.

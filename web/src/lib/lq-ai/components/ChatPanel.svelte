@@ -196,7 +196,6 @@
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
-	import AttachedFilesPanel from '$lib/lq-ai/components/AttachedFilesPanel.svelte';
 	import SkillPicker from '$lib/lq-ai/components/SkillPicker.svelte';
 	import ModelPicker from '$lib/lq-ai/components/ModelPicker.svelte';
 	import MessageList from '$lib/lq-ai/components/MessageList.svelte';
@@ -206,9 +205,7 @@
 	import EnhancePromptExpansion from '$lib/lq-ai/components/EnhancePromptExpansion.svelte';
 	import AttachKBModal from '$lib/lq-ai/components/AttachKBModal.svelte';
 	import TierFloorOverrideModal from '$lib/lq-ai/components/TierFloorOverrideModal.svelte';
-	import ReceiptsDrawer, {
-		readPersistedOpen as readReceiptsDrawerOpen
-	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
+	import { readPersistedOpen as readReceiptsDrawerOpen } from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
 	import RunActiveNotice from '$lib/lq-ai/components/run/RunActiveNotice.svelte';
 	import RunDocumentPicker from '$lib/lq-ai/components/run/RunDocumentPicker.svelte';
@@ -219,7 +216,6 @@
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
 	import ChatDetailsPanel from './ChatDetailsPanel.svelte';
-	import { readShellSwitch } from '$lib/lq-ai/shell';
 	import {
 		clearShellContext,
 		publishShellContext,
@@ -1508,47 +1504,41 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
-	// Interface-redesign P1.4, behind the developer switch ($lib/lq-ai/shell).
-	// With the switch on, the attached files and the receipts move into the
-	// shell's shared right sidebar (same components, same props) and the
-	// chat's title into its page header. With the switch off nothing here
-	// publishes and the panels render beside the chat as before.
-	let sidebarShell = false;
+	// Interface-redesign P1.4 (ADR 0045 §6): the attached files and the
+	// receipts live in the shell's shared right sidebar (same components, same
+	// props) and the chat's title in its page header. Every route that mounts
+	// this panel renders inside the LQ.AI layout, which hosts both.
 	const shellOwner = Symbol('ChatPanel');
-	onMount(() => {
-		sidebarShell = readShellSwitch() === 'sidebar';
-	});
 	onDestroy(() => clearShellContext(shellOwner));
-	$: if (sidebarShell)
-		publishShellContext(
-			shellOwner,
-			activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
-			activeChat
-				? {
-						label: 'Chat details',
-						component: ChatDetailsPanel,
-						props: {
-							chatId: activeChat.id,
-							chatFiles,
-							newHarness: harnessChosen,
-							projectFiles,
-							uploading,
-							attachLimitReached,
-							onUpload: uploadAttached,
-							onDetach: detachFile,
-							compact: !!projectIdFilter,
-							receiptsOpen: receiptsDrawerOpen,
-							onCloseReceipts: () => (receiptsDrawerOpen = false)
-						}
+	$: publishShellContext(
+		shellOwner,
+		activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
+		activeChat
+			? {
+					label: 'Chat details',
+					component: ChatDetailsPanel,
+					props: {
+						chatId: activeChat.id,
+						chatFiles,
+						newHarness: harnessChosen,
+						projectFiles,
+						uploading,
+						attachLimitReached,
+						onUpload: uploadAttached,
+						onDetach: detachFile,
+						compact: !!projectIdFilter,
+						receiptsOpen: receiptsDrawerOpen,
+						onCloseReceipts: () => (receiptsDrawerOpen = false)
 					}
-				: null
-		);
+				}
+			: null
+	);
 
-	// P1.3b, switch on only: the left sidebar links to `/lq-ai/chats?id=…`, which
+	// P1.3b: the left sidebar links to `/lq-ai/chats?id=…`, which
 	// changes `initialChatId` while this page stays mounted. Open that chat. The
 	// matter page passes its own selection here and keeps today's behaviour.
 	let urlChatSeen = initialChatId;
-	$: if (sidebarShell && !projectIdFilter && initialChatId !== urlChatSeen) {
+	$: if (!projectIdFilter && initialChatId !== urlChatSeen) {
 		urlChatSeen = initialChatId;
 		if (initialChatId && initialChatId !== activeChat?.id) void openUrlChat(initialChatId);
 	}
@@ -1951,7 +1941,7 @@
 							title="Toggle receipts"
 							on:click={() => {
 								receiptsDrawerOpen = !receiptsDrawerOpen;
-								if (sidebarShell && receiptsDrawerOpen) revealRightSidebar();
+								if (receiptsDrawerOpen) revealRightSidebar();
 							}}
 							data-testid="lq-ai-receipts-toggle"
 						>
@@ -2009,30 +1999,6 @@
 		{/if}
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
-
-	{#if !sidebarShell}
-		{#if activeChat}
-			<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
-				<AttachedFilesPanel
-					{chatFiles}
-					newHarness={harnessChosen}
-					{projectFiles}
-					{uploading}
-					{attachLimitReached}
-					onUpload={uploadAttached}
-					onDetach={detachFile}
-				/>
-			</CompactPanel>
-		{/if}
-
-		{#if activeChat && receiptsDrawerOpen}
-			<ReceiptsDrawer
-				bind:open={receiptsDrawerOpen}
-				chatId={activeChat.id}
-				onClose={() => (receiptsDrawerOpen = false)}
-			/>
-		{/if}
-	{/if}
 </div>
 
 {#if composerProjectId && attachKbModalOpen}

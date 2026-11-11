@@ -3,8 +3,8 @@
 	 * The page header of the redesigned LQ.AI shell (interface-redesign work
 	 * plan, Annex B P1.4; proposed ADR 0045 C14): a 52 px row over the main
 	 * column only, not over either sidebar. Rendered by
-	 * `routes/lq-ai/+layout.svelte` only while the developer switch is on, and
-	 * only when the current page published a title (`$lib/lq-ai/rightSidebar`).
+	 * `routes/lq-ai/+layout.svelte` on signed-in routes, and only when the
+	 * current page published a title (`$lib/lq-ai/rightSidebar`).
 	 *
 	 * When the page also published right-sidebar content, the header carries
 	 * the toggle that shows and hides it. The toggle is where focus returns

@@ -1,7 +1,7 @@
 /**
  * Recent matters with their chats, then other chats, for the left sidebar of
  * the redesigned LQ.AI shell (interface-redesign work plan, Annex B P1.3b;
- * C10), behind the developer switch in `./shell`.
+ * C10).
  *
  * Data comes from the existing list endpoints, two requests per refresh:
  * `GET /projects` (active matters; the per-user sandbox is excluded by the

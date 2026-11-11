@@ -3,7 +3,8 @@
  * 10 Nov): with the left sidebar collapsed to its strip, on a phone in
  * particular, the footer shows below the page; whenever the sidebar panel is
  * rendered, its foot carries it. Exactly one copy is on the page in every
- * state, and with the switch off nothing changes.
+ * state. The sign-in routes keep their minimal chrome, with the footer
+ * below the page as before.
  *
  * The layout itself renders nothing on the server (it waits for the sign-in
  * gate), so these tests render the two pieces it places, `ShellSidebar` and
@@ -24,7 +25,6 @@ import {
 	leftSidebarPageFor,
 	syncLeftSidebar
 } from '../leftSidebar';
-import { sidebarChromeOn } from '../shell';
 import type { User } from '../tabs';
 
 const FOOTER = 'data-testid="lq-ai-dual-branding-footer"';
@@ -50,7 +50,7 @@ function setState(state: { open: boolean; narrow: boolean }): void {
 	leftSidebarNarrow.set(state.narrow);
 }
 
-/** What the layout puts on the page with the switch on: the sidebar and the footer below the page. */
+/** What the layout puts on a signed-in page: the sidebar and the footer below the page. */
 function shellWithSidebar(): { sidebar: string; below: string } {
 	return {
 		sidebar: render(ShellSidebar, { props: { user: member, pathname: '/lq-ai' } }).body,
@@ -60,15 +60,6 @@ function shellWithSidebar(): { sidebar: string; below: string } {
 
 afterEach(() => setState({ open: true, narrow: false }));
 
-describe('sidebarChromeOn', () => {
-	it('is on only with the switch on and outside the sign-in routes', () => {
-		expect(sidebarChromeOn('sidebar', false)).toBe(true);
-		expect(sidebarChromeOn('sidebar', true)).toBe(false);
-		expect(sidebarChromeOn('tabs', false)).toBe(false);
-		expect(sidebarChromeOn('tabs', true)).toBe(false);
-	});
-});
-
 describe('attributionBelowPage', () => {
 	const states = [
 		{ open: true, narrow: false },
@@ -77,20 +68,9 @@ describe('attributionBelowPage', () => {
 		{ open: false, narrow: true }
 	];
 
-	it('always shows with the switch off, in every collapse state', () => {
+	it('always shows without the sidebar chrome (the sign-in routes), in every collapse state', () => {
 		for (const s of states)
-			expect(
-				attributionBelowPage({ sidebarChrome: sidebarChromeOn('tabs', false), ...s }),
-				JSON.stringify(s)
-			).toBe(true);
-	});
-
-	it('always shows on the sign-in routes with the switch on (they keep today’s chrome)', () => {
-		for (const s of states)
-			expect(
-				attributionBelowPage({ sidebarChrome: sidebarChromeOn('sidebar', true), ...s }),
-				JSON.stringify(s)
-			).toBe(true);
+			expect(attributionBelowPage({ sidebarChrome: false, ...s }), JSON.stringify(s)).toBe(true);
 	});
 
 	it('shows below the page when the sidebar is collapsed on a narrow screen', () => {
@@ -141,7 +121,7 @@ describe('exactly one attribution on the page (server render)', () => {
 		expect(count(sidebar) + count(below)).toBe(1);
 	});
 
-	it('switch off or a sign-in route: today’s footer, in every collapse state', () => {
+	it('a sign-in route: the footer below the page, in every collapse state', () => {
 		for (const open of [true, false])
 			for (const narrow of [true, false]) {
 				setState({ open, narrow });
@@ -206,8 +186,8 @@ describe('matter pages start with the sidebar collapsed (server render)', () => 
 	});
 });
 
-describe('switch off: unchanged', () => {
-	it('renders exactly today’s footer markup, with the wording unchanged', () => {
+describe('sign-in routes: the footer unchanged', () => {
+	it('renders exactly the footer markup, with the wording unchanged', () => {
 		setState({ open: false, narrow: true });
 		const below = stripMarkers(render(ShellAttribution, { props: { sidebarChrome: false } }).body);
 		const today = stripMarkers(render(DualBrandingFooter).body);

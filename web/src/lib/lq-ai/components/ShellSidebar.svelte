@@ -15,8 +15,8 @@
 	 * Left sidebar for the redesigned LQ.AI shell (interface-redesign work plan,
 	 * Annex B P1.3a and P1.3b).
 	 *
-	 * Rendered by `routes/lq-ai/+layout.svelte` in place of the top bar and tab
-	 * row, and only while the developer switch in `../shell.ts` is on. Rows,
+	 * Rendered by `routes/lq-ai/+layout.svelte` on every signed-in route (the
+	 * cutover, P1.3c, removed the top bar and tab row it replaced). Rows,
 	 * order, routes and who may see them all come from `../nav.ts`
 	 * (`visibleNav`, `activeNavItemFor`); this component decides nothing about
 	 * visibility. The layout keeps every gate (sign-in, forced password change,
@@ -109,7 +109,7 @@
 	/** The notification controller; created here when absent (tests pass one). */
 	export let notifications: ReturnType<typeof createNotificationBell> | null = null;
 
-	// Same source as the tab row's Autonomous tab: the Labs row follows that rule.
+	// Same source the tab row's Autonomous tab used: the Labs row follows that rule.
 	$: sections = visibleNav(user, { autonomousEnabled: $preferences.autonomous_enabled });
 	$: active = activeNavItemFor(pathname);
 	$: mainSections = sections.filter((s) => s.id !== 'foot');

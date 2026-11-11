@@ -1,7 +1,8 @@
 /**
  * The right sidebar, the page header and the chat's details rendered to HTML
  * in node (`svelte/server`), plus ChatPanel's test-id checklist
- * (interface-redesign P1.4, behind the developer switch).
+ * (interface-redesign P1.4; the cutover, P1.3c, made it the only place for
+ * the side panels).
  *
  * SSR runs every `$:` statement and no `onMount`, so the narrow-screen
  * detection is not exercised here (see rightSidebar.test.ts for the helpers).
@@ -183,7 +184,7 @@ describe('ChatDetailsPanel inside the sidebar (the moved panels keep every contr
 		expect(html).not.toContain('export-jsonl');
 	});
 
-	it('keeps ReceiptsDrawer its own landmark outside the sidebar (switch off)', () => {
+	it('keeps ReceiptsDrawer its own landmark when rendered outside the sidebar', () => {
 		const body = render(ReceiptsDrawer, { props: { open: true, chatId: 'c1' } }).body;
 		expect(body).toMatch(
 			/<aside[^>]*class="receipts-drawer[^"]*"[^>]*aria-label="Receipts drawer"/
@@ -219,33 +220,23 @@ describe('ChatPanel test-id checklist', () => {
 		'lq-ai-sticky-toggle'
 	];
 
-	/** The one block the switch hides: the panels beside the chat. */
-	const switchBlock = (() => {
-		const start = markup.indexOf('{#if !sidebarShell}');
-		expect(start, 'switch block').toBeGreaterThan(-1);
-		let depth = 0;
-		const re = /\{#if\b|\{\/if\}/g;
-		re.lastIndex = start;
-		for (let m = re.exec(markup); m; m = re.exec(markup)) {
-			depth += m[0] === '{/if}' ? -1 : 1;
-			if (depth === 0) return markup.slice(start, m.index + m[0].length);
-		}
-		throw new Error('unclosed switch block');
-	})();
-
 	it('still carries each of its 18 test ids exactly once', () => {
 		const found = [...markup.matchAll(/data-testid="([^"]+)"/g)].map((m) => m[1]).sort();
 		expect(found).toEqual([...CHAT_PANEL_TEST_IDS].sort());
 	});
 
-	it('hides none of them with the switch on: the switch only moves the side panels', () => {
-		for (const id of CHAT_PANEL_TEST_IDS) expect(switchBlock).not.toContain(id);
-		expect(switchBlock).toContain('<AttachedFilesPanel');
-		expect(switchBlock).toContain('<ReceiptsDrawer');
-		expect((markup.match(/\{#if !sidebarShell\}/g) ?? []).length).toBe(1);
+	it('renders the side panels only through the right sidebar, always', () => {
+		// The cutover removed the switch and the copy of the panels beside the chat.
+		expect(markup).not.toContain('<AttachedFilesPanel');
+		expect(markup).not.toContain('<ReceiptsDrawer');
+		expect(source).not.toContain('sidebarShell');
+		expect(source).not.toContain('readShellSwitch');
+		// Published on every change, not behind a condition.
+		expect(source).toMatch(/\$: publishShellContext\(\n\t\tshellOwner,/);
+		expect(source).toContain('component: ChatDetailsPanel');
 	});
 
-	it('gives the sidebar the same panel props it renders with the switch off', () => {
+	it('gives the sidebar the panel props the panels had beside the chat', () => {
 		for (const prop of [
 			'chatFiles',
 			'projectFiles',

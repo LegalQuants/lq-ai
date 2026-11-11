@@ -1,12 +1,11 @@
 <script lang="ts">
 	/**
-	 * What a chat shows in the right sidebar while the developer switch is on
+	 * What a chat shows in the right sidebar
 	 * (interface-redesign work plan, Annex B P1.4): the same
 	 * `AttachedFilesPanel` (inside the same `CompactPanel` as today) and,
 	 * when the receipts toggle has it open, the same `ReceiptsDrawer`, with
-	 * the same props ChatPanel passes them with the switch off. Only the place
-	 * changes: ChatPanel publishes this component to the shared right sidebar
-	 * instead of rendering the two panels beside the chat column.
+	 * the props ChatPanel passed them when they sat beside the chat column.
+	 * ChatPanel publishes this component to the shared right sidebar.
 	 */
 	import type { FileMeta } from '../types';
 	import AttachedFilesPanel from './AttachedFilesPanel.svelte';

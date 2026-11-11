@@ -1,12 +1,11 @@
 /**
  * Open and collapsed state of the left sidebar in the redesigned LQ.AI shell
- * (interface-redesign work plan, Annex B P1.3b), behind the developer switch
- * in `./shell`.
+ * (interface-redesign work plan, Annex B P1.3b; ADR 0045 §6).
  *
  * Wide screens: the sidebar is a column, open or collapsed to a thin strip
  * that keeps its toggle (and the notification bell when Automations is on).
  * The choice is remembered in `localStorage['lq-ai.left-sidebar']`, every
- * access guarded as in `./shell` and `./rightSidebar`: server-side rendering,
+ * access guarded as in `./rightSidebar`: server-side rendering,
  * blocked site data or an unknown value fall back to open, and a failed write
  * is ignored.
  *
@@ -106,7 +105,7 @@ export function leftSidebarMode(state: { open: boolean; narrow: boolean }): Left
 
 /**
  * Whether the layout renders the ADR 0001 attribution footer below the page.
- * With the redesigned chrome off it always does (today's footer). With it on,
+ * Without the sidebar chrome (the sign-in routes) it always does. With it,
  * the sidebar panel carries the footer in its foot whenever the panel is
  * rendered (open on a wide screen, or over the page on a narrow one); when the
  * sidebar is collapsed to its strip, at any width, the footer goes below the

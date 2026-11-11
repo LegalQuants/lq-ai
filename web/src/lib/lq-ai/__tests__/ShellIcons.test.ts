@@ -138,8 +138,9 @@ describe("a skill's icon", () => {
 });
 
 describe('no emoji as icons in the LQ.AI shell', () => {
-	// Left until S1-8 removes it: the tab row. (A skill's own emoji icon is skill data, read
-	// from the skill at run time, so it is not in this source.)
+	// The tab definitions: no longer rendered since the cutover (P1.3c) unmounted the tab
+	// row; the file goes in P3.1. (A skill's own emoji icon is skill data, read from the
+	// skill at run time, so it is not in this source.)
 	const ALLOWED = new Set(['lib/lq-ai/tabs.ts']);
 	const src = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 	const walk = (dir: string): string[] =>

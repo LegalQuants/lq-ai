@@ -1,13 +1,13 @@
 /**
  * Sidebar navigation model for the redesigned LQ.AI shell.
  *
- * Data only. Nothing renders from this file yet: `TopTabBar` keeps rendering
- * from `TABS` in `./tabs`. The left sidebar (interface-redesign work plan,
- * Annex B item P1.3) renders from `NAV`; the cutover that removes the tab row
- * retires `TABS`. Until then the two models share one visibility rule
- * (`isVisibleUnder`), and `nav.test.ts` checks that they agree for every
- * destination both know, so the gates the tab row enforces today (admin-only
- * rows, the Autonomous opt-in) cannot drift while the sidebar is built.
+ * Data only. The left sidebar (`components/ShellSidebar.svelte`; interface-
+ * redesign work plan, Annex B item P1.3) renders from `NAV`. The tab row it
+ * replaced is no longer mounted (P1.3c); its `TABS` model in `./tabs` stays
+ * until the files are removed (P3.1). The two models share one visibility
+ * rule (`isVisibleUnder`), and `nav.test.ts` checks that they agree for every
+ * destination both know, so the gates the tab row enforced (admin-only rows,
+ * the Autonomous opt-in) carry over to the sidebar unchanged.
  *
  * The order and grouping follow the redesign decisions (CHANGES.md): C7 the
  * order, C8 Customise, C10 matters and chats in the sidebar, C11 "New" at the
@@ -143,7 +143,7 @@ export const NAV: readonly NavSection[] = [
         route: '/lq-ai/settings/account',
         matches: '/lq-ai/settings',
         visibility: 'all',
-        note: 'C30. Replaces the top bar’s Appearance shortcut; Appearance stays a tab of this page.'
+        note: 'C30. Replaces the old top bar’s Appearance shortcut; Appearance stays a tab of this page.'
       }
     ]
   }

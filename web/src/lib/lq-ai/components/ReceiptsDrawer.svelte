@@ -34,7 +34,7 @@
   export let chatId: string;
   export let onClose: () => void = () => {};
   /**
-   * True inside the shell's right sidebar (developer switch, Annex B P1.4):
+   * True inside the shell's right sidebar (Annex B P1.4):
    * a section of that sidebar instead of its own complementary landmark,
    * at the sidebar's width.
    */

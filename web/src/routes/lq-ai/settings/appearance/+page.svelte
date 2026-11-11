@@ -91,7 +91,7 @@
 
 <SettingsToggleGroup
 	label="Trust pills"
-	description="The ambient indicators in the top bar."
+	description="The ambient trust indicators."
 	value={$preferences.trust_pills}
 	options={[
 		{
