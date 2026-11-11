@@ -1251,6 +1251,10 @@ paths:
         - name: tag
           in: query
           schema: {type: string}
+        - name: recent_only
+          in: query
+          description: Only used skills, ordered by the caller's chat history.
+          schema: {type: boolean, default: false}
       responses:
         '200':
           description: Skills

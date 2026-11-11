@@ -81,6 +81,9 @@ function runTable(slug: string, names: string[], preselected = false) {
 	byTestId('lq-tabwiz-next').click();
 	if (preselected) byTestId('lq-tabwiz-skill-select').should('have.value', slug);
 	else byTestId('lq-tabwiz-skill-select').select(slug);
+	byTestId('lq-tabwiz-view-columns').should('have.attr', 'target', '_blank');
+	byTestId('lq-tabwiz-view-columns').should('have.attr', 'rel', 'noopener');
+	byTestId('lq-tabwiz-view-columns').should('have.attr', 'href', `/lq-ai/skills/${slug}`);
 	byTestId('lq-tabwiz-next').click();
 	cy.wait('@preview').its('request.body').should('include', { skill_name: slug });
 	byTestId('lq-tabwiz-preview-cells').should('contain.text', '2');
@@ -160,13 +163,15 @@ describe('Table skill authoring and built-in discovery (mocked HTTP)', () => {
 			description: row.description,
 			output_format: row.frontmatter_extra.output_format
 		});
-		cy.intercept('GET', '**/api/v1/skills*', (req) =>
-			req.reply(
-				req.query.scope === 'builtin'
-					? builtins
-					: [...builtins.filter((b) => !rows.some((r) => r.slug === b.name)), ...rows.map(summary)]
-			)
-		);
+		cy.intercept('GET', '**/api/v1/skills*', (req) => {
+			if (req.query.recent_only === 'true') {
+				req.reply([builtins[1]]);
+			} else if (req.query.scope === 'builtin') {
+				req.reply(builtins);
+			} else {
+				req.reply([...builtins.filter((b) => !rows.some((r) => r.slug === b.name)), ...rows.map(summary)]);
+			}
+		});
 		cy.intercept('GET', '**/api/v1/skills/*', (req) => {
 			const slug = req.url.split('/').pop();
 			const row = rows.find((r) => r.slug === slug);
@@ -179,9 +184,6 @@ describe('Table skill authoring and built-in discovery (mocked HTTP)', () => {
 						}
 					: builtins.find((b) => b.name === slug)
 			);
-		});
-		cy.intercept('GET', '**/api/v1/skills/autocomplete*', {
-			results: [{ slug: 'zulu-table' }, { slug: 'alpha-table' }]
 		});
 		cy.intercept('GET', '**/api/v1/knowledge-bases', [{ id: 'kb1', name: 'Fixture documents' }]);
 		cy.intercept('GET', '**/api/v1/knowledge-bases/kb1/files', [
@@ -352,6 +354,19 @@ describe('Table skill authoring and built-in discovery (mocked HTTP)', () => {
 		byTestId('lq-ai-skill-column').should('have.length', 2);
 		byTestId('lq-ai-skill-column').eq(1).should('contain.text', 'Which law governs?');
 		byTestId('lq-ai-skill-use-in-tabular').should('be.visible');
+	});
+
+	it('restores a fork draft with no columns without reseeding them', () => {
+		visit('/lq-ai/skills/new?fork=alpha-table');
+		byTestId('lq-ai-column-row').should('have.length', 2);
+		byTestId('lq-ai-column-remove').first().click();
+		byTestId('lq-ai-column-remove').first().click();
+		byTestId('lq-ai-wizard-save-draft').click();
+		cy.reload();
+		byTestId('lq-ai-wizard-mode-table').should('be.checked');
+		byTestId('lq-ai-column-row').should('not.exist');
+		byTestId('lq-ai-column-list-error').should('be.visible');
+		byTestId('lq-ai-wizard-save').should('be.disabled');
 	});
 	it('labels a shadow, opens its personal version, and restores the built-in after archive', () => {
 		visit('/lq-ai/skills/new?fork=alpha-table');

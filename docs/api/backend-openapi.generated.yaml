@@ -17220,6 +17220,15 @@ paths:
           - type: string
           - type: 'null'
           title: Tag
+      - description: Only used skills, ordered by the caller's chat history.
+        in: query
+        name: recent_only
+        required: false
+        schema:
+          default: false
+          description: Only used skills, ordered by the caller's chat history.
+          title: Recent Only
+          type: boolean
       responses:
         '200':
           content:

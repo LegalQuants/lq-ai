@@ -8,11 +8,8 @@
  *    the frontmatter declares none), derive the chip set from the rows
  *    actually present, and round-trip the active chip through the
  *    ``?format=`` URL param.
- * 2. Recently-used sort — order rows by the caller's per-user recents
- *    (``GET /skills/autocomplete`` with empty ``q`` returns the
- *    ``messages.applied_skills`` recents block first, then an
- *    alphabetical fill). Rows absent from that response fall back to
- *    alphabetical-by-title, so never-used skills stay stably ordered.
+ * 2. Recently-used sort — order rows by the caller's chat usage from
+ *    ``GET /skills?recent_only=true``. Rows without history sort by title.
  * 3. Fork seeding for table-mode skills — extract ``lq_ai.columns``
  *    from a source skill's ``content_yaml`` (the only place built-ins
  *    carry their column spec on the wire) into `EditableColumn` rows so
@@ -87,7 +84,7 @@ export function sortFromParam(param: string | null): SkillSort {
 /**
  * Sort rows for the browser. ``sort === 'name'`` is plain
  * alphabetical-by-title. ``sort === 'recent'`` orders by position in
- * ``recentSlugs`` (the autocomplete recents response — most recent
+ * ``recentSlugs`` (the catalog recents response — most recent
  * first); rows not in that list come after, alphabetical by title, so
  * a brand-new user with no chat activity sees a stable A–Z list.
  *

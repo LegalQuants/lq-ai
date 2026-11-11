@@ -50,12 +50,10 @@
 				skillsApi.listSkills('builtin'),
 				teamsApi.listMyTeams(),
 				skillsApi.listSkills(),
-				// DE-298 — per-user recents (messages.applied_skills ordering)
-				// via the autocomplete endpoint's empty-query mode. Tolerant:
-				// a recents failure degrades to alphabetical, never blocks the page.
+				// Use actual per-user usage ranks; a failed lookup falls back to A–Z.
 				skillsApi
-					.autocompleteSkills('', 25)
-					.then((r) => r.results.map((item) => item.slug))
+					.listRecentlyUsedSkills()
+					.then((skills) => skills.map((skill) => skill.name))
 					.catch((e) => {
 						console.warn('user-skills: recents load failed', e);
 						return [] as string[];

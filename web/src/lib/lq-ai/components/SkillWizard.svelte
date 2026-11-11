@@ -390,7 +390,7 @@
 				if (d.outputMode === 'prose' || d.outputMode === 'table') outputMode = d.outputMode;
 				tableDefaults = tableDefaultsFromRaw(d.tableDefaults);
 				const restoredColumns = columnsFromRaw(d.columns);
-				if (restoredColumns && restoredColumns.length > 0) columns = restoredColumns;
+				if (restoredColumns !== null) columns = restoredColumns;
 			}
 		}
 		restored = true;

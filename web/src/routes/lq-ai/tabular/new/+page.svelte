@@ -425,8 +425,10 @@
 							class="lq-tabwiz__view-columns"
 							data-testid="lq-tabwiz-view-columns"
 							href={`/lq-ai/skills/${encodeURIComponent(selectedSkillName)}`}
+							target="_blank"
+							rel="noopener"
 						>
-							View columns
+							View columns (opens in a new tab)
 						</a>
 					{/if}
 				{/if}
