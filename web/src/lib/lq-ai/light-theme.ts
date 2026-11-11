@@ -1,8 +1,7 @@
-/** LQ.AI has a single light palette; upstream theme preferences do not apply. */
-export function isLQAIPath(pathname: string): boolean {
-	return pathname === '/lq-ai' || pathname.startsWith('/lq-ai/');
-}
-
+/**
+ * LQ.AI has a single light palette; upstream theme preferences do not apply.
+ * The route check that decides where this applies is `isLQAIPath` in `./paths`.
+ */
 export function applyLQAILightTheme(doc: Document): void {
 	const root = doc.documentElement;
 	root.classList.remove('dark', 'oled-dark', 'her');
