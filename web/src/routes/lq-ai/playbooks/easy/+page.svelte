@@ -547,9 +547,9 @@
 		   define `--lq-accent` on every theme, which collapsed the
 		   background to inherit (white) while the text stayed
 		   white-on-white. Matches the PlaybookExecuteModal pattern. */
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
-		border-color: var(--lq-accent, #4f46e5);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
+		border-color: var(--lq-accent);
 	}
 	.lq-easy-wizard__panel {
 		display: flex;
@@ -620,15 +620,15 @@
 	.lq-easy-wizard__file-remove {
 		background: none;
 		border: none;
-		color: var(--lq-error, #b91c1c);
+		color: var(--lq-error);
 		font-size: 0.8125rem;
 		cursor: pointer;
 	}
 	.lq-easy-wizard__error {
 		padding: 0.625rem 0.875rem;
-		background: var(--lq-error-soft, var(--lq-inset));
-		border: 1px solid var(--lq-error-border, var(--lq-border));
-		color: var(--lq-error, #b91c1c);
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
+		color: var(--lq-error);
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
 	}
@@ -664,8 +664,8 @@
 	.lq-easy-wizard__spinner {
 		width: 1.5rem;
 		height: 1.5rem;
-		border: 3px solid var(--lq-border, #e5e7eb);
-		border-top-color: var(--lq-accent, #4f46e5);
+		border: 3px solid var(--lq-border);
+		border-top-color: var(--lq-accent);
 		border-radius: 50%;
 		animation: lq-spin 1s linear infinite;
 	}
@@ -687,8 +687,8 @@
 		border: 1px solid transparent;
 	}
 	.lq-easy-wizard__btn--primary {
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 	}
 	.lq-easy-wizard__btn:disabled {
 		opacity: 0.5;

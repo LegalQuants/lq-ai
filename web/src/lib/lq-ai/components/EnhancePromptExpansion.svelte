@@ -425,9 +425,9 @@
 		gap: var(--lq-space-3);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		border-radius: var(--lq-radius);
-		background: var(--lq-warn-soft, #fef3c7);
-		border: 1px solid var(--lq-warn-border, #fcd34d);
-		color: var(--lq-warn, #92400e);
+		background: var(--lq-warn-soft);
+		border: 1px solid var(--lq-warn-border);
+		color: var(--lq-warn);
 	}
 	.lq-enhance-jit-msg { flex: 1; }
 	.lq-enhance-jit-dismiss { flex-shrink: 0; }
