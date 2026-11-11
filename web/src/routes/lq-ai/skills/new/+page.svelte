@@ -51,6 +51,8 @@
 	import { listUserSkills, createUserSkill } from '$lib/lq-ai/api/userSkills';
 	import SkillWizard from '$lib/lq-ai/components/SkillWizard.svelte';
 	import { stashStorageKey } from '$lib/lq-ai/components/CaptureSkillModal.svelte';
+	import { forkTableSeed, type TableSkillDefaults } from '$lib/lq-ai/skills/builtinsBrowser';
+	import type { EditableColumn, SkillOutputMode } from '$lib/lq-ai/skills/tableColumns';
 	import type { UserSkillCreate } from '$lib/lq-ai/types';
 
 	interface WizardInitial {
@@ -64,6 +66,10 @@
 		scope?: 'user' | 'team';
 		ownerTeamId?: string;
 		forkedFrom?: string | null;
+		/** DE-298 — table-mode fork seed (mode + columns from the source). */
+		outputMode?: SkillOutputMode;
+		columns?: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	}
 
 	let initial: WizardInitial = {};
@@ -120,6 +126,12 @@
 				// "name" but holds the slug — see types.ts:354). We use it
 				// for both the slug seed and the `forked_from` audit field.
 				const baseSlug = await uniqueSlug(`${source.name}-fork`);
+				// DE-298 — a table-mode source seeds the wizard's column
+				// editor from the source's `lq_ai.columns` frontmatter (the
+				// only wire surface where built-ins carry their column spec).
+				// Prose sources — and table sources whose columns can't be
+				// parsed — yield null and the wizard opens in prose mode.
+				const tableSeed = forkTableSeed(source);
 				initial = {
 					slug: baseSlug,
 					displayName: `${source.title ?? source.name} (fork)`,
@@ -129,12 +141,19 @@
 					slashAlias: null,
 					version: '1.0.0',
 					scope: 'user',
-					forkedFrom: source.name
+					forkedFrom: source.name,
+					...(tableSeed ?? {})
 				};
 				// Intentionally NOT seeding `jurisdiction` from the source —
 				// the wizard doesn't surface that field today (see header
 				// comment for the rationale).
-				draftKey = `fork-${forkSlug}-${newDraftKey()}`;
+				draftKey = explicitDraftKey ?? `fork-${forkSlug}-${newDraftKey()}`;
+				// Give each fresh fork its own draft, but keep that draft on reload.
+				if (!explicitDraftKey) {
+					const url = new URL($page.url);
+					url.searchParams.set('draft', draftKey);
+					await goto(url.pathname + url.search, { replaceState: true, noScroll: true });
+				}
 			} else if (captureKey) {
 				try {
 					const stash = localStorage.getItem(stashStorageKey(captureKey));

@@ -38,6 +38,25 @@
 	 */
 	import type { UserSkillCreate } from '../types';
 	import { kebab } from '../util/slug';
+	import { tableDefaultsFromRaw, type TableSkillDefaults } from '../skills/builtinsBrowser';
+	import {
+		buildFrontmatterExtra,
+		columnsFromRaw,
+		newEditableColumn,
+		validateColumns,
+		type EditableColumn,
+		type SkillOutputMode
+	} from '../skills/tableColumns';
+
+	/**
+	 * DE-297 — fallback body persisted for a table-mode skill when the
+	 * author leaves the (hidden) prose body empty. The backend requires a
+	 * non-empty ``body``; for table mode the columns are the work product,
+	 * so a documented placeholder satisfies the contract honestly.
+	 */
+	export const DEFAULT_TABLE_BODY =
+		'Table-mode skill: each column in the frontmatter `columns` list defines a ' +
+		'per-document extraction query. Run it from the Tabular Review wizard.';
 
 	/** Mutable form state — every input bound in the template, plus ``saving``. */
 	export interface WizardFormState {
@@ -50,6 +69,11 @@
 		version: string;
 		scope: 'user' | 'team';
 		ownerTeamId: string;
+		/** DE-297 — 'prose' keeps the body editor; 'table' swaps in the column list. */
+		outputMode: SkillOutputMode;
+		/** DE-297 — table-mode column rows; ignored in prose mode. */
+		columns: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 		saving: boolean;
 	}
 
@@ -64,6 +88,9 @@
 		version: string;
 		scope: 'user' | 'team';
 		ownerTeamId: string;
+		outputMode: SkillOutputMode;
+		columns: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	}
 
 	const SLUG_RE = /^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$|^[a-z0-9]$/;
@@ -96,7 +123,14 @@
 		if (!state.slug || !isSlugValid(state.slug)) return false;
 		if (!state.displayName.trim()) return false;
 		if (!state.description.trim()) return false;
-		if (!state.body.trim()) return false;
+		if (state.outputMode === 'table') {
+			// DE-297 — the column list replaces the body as the work
+			// product; it must mirror the backend's table-mode rules
+			// (min one column, non-empty name + query, tier 1-5).
+			if (!validateColumns(state.columns).valid) return false;
+		} else if (!state.body.trim()) {
+			return false;
+		}
 		if (!isSlashAliasValid(state.slashAlias)) return false;
 		if (state.scope === 'team' && !state.ownerTeamId) return false;
 		return true;
@@ -117,11 +151,15 @@
 			.map((t) => t.trim())
 			.filter(Boolean);
 		const slashAlias = state.slashAlias.trim();
-		return {
+		const isTable = state.outputMode === 'table';
+		const payload: UserSkillCreate = {
 			slug: state.slug,
 			display_name: state.displayName.trim(),
 			description: state.description.trim(),
-			body: state.body,
+			// Table mode hides the body editor; the backend still requires
+			// a non-empty body, so fall back to the documented placeholder
+			// when the author never wrote one (DE-297).
+			body: isTable && !state.body.trim() ? DEFAULT_TABLE_BODY : state.body,
 			version: state.version,
 			tags,
 			slash_alias: slashAlias === '' ? null : slashAlias,
@@ -129,6 +167,10 @@
 			owner_team_id: state.scope === 'team' ? state.ownerTeamId : null,
 			forked_from: forkedFrom
 		};
+		if (isTable) {
+			payload.frontmatter_extra = buildFrontmatterExtra({ ...tableDefaultsFromRaw(state.tableDefaults) }, 'table', state.columns);
+		}
+		return payload;
 	}
 
 	/** Snapshot the persistable subset of the form state. */
@@ -142,7 +184,10 @@
 			slashAlias: state.slashAlias,
 			version: state.version,
 			scope: state.scope,
-			ownerTeamId: state.ownerTeamId
+			ownerTeamId: state.ownerTeamId,
+			outputMode: state.outputMode,
+			columns: state.columns,
+			tableDefaults: tableDefaultsFromRaw(state.tableDefaults)
 		};
 	}
 
@@ -174,6 +219,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import SkillWizardSection from './SkillWizardSection.svelte';
 	import SkillTryItPane from './SkillTryItPane.svelte';
+	import ColumnEditor from './ColumnEditor.svelte';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 
 	export let initial: {
@@ -187,6 +233,11 @@
 		scope?: 'user' | 'team';
 		ownerTeamId?: string;
 		forkedFrom?: string | null;
+		/** DE-298 — fork-seeded output mode (table forks open in table mode). */
+		outputMode?: SkillOutputMode;
+		/** DE-298 — fork-seeded column rows for a table-mode source. */
+		columns?: EditableColumn[];
+		tableDefaults?: TableSkillDefaults;
 	} = {};
 	export let draftKey: string | null = null;
 	export let onSave: (payload: UserSkillCreate) => Promise<string>;
@@ -205,6 +256,13 @@
 	let version = initial.version ?? '1.0.0';
 	let scope: 'user' | 'team' = initial.scope ?? 'user';
 	let ownerTeamId = initial.ownerTeamId ?? '';
+	// DE-297 — output mode + table columns. New drafts start in prose;
+	// choosing 'table' swaps the body editor for the column list. A fork
+	// of a table-mode source seeds both via `initial` (DE-298).
+	let outputMode: SkillOutputMode = initial.outputMode ?? 'prose';
+	let tableDefaults = tableDefaultsFromRaw(initial.tableDefaults);
+	let columns: EditableColumn[] =
+		initial.columns && initial.columns.length > 0 ? initial.columns : [newEditableColumn()];
 	// `forked_from` is write-once at create time per ADR 0012; we capture
 	// it from `initial` and pass it through buildPayload verbatim.
 	const forkedFrom: string | null = initial.forkedFrom ?? null;
@@ -234,6 +292,9 @@
 		version,
 		scope,
 		ownerTeamId,
+		outputMode,
+		columns,
+		tableDefaults,
 		saving
 	} as WizardFormState;
 	$: saveable = canSave(formState);
@@ -290,6 +351,12 @@
 		scope;
 		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
 		ownerTeamId;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		outputMode;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		columns;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		tableDefaults;
 		scheduleAutosave();
 	}
 
@@ -320,6 +387,10 @@
 				if (typeof d.version === 'string') version = d.version;
 				if (d.scope === 'user' || d.scope === 'team') scope = d.scope;
 				if (typeof d.ownerTeamId === 'string') ownerTeamId = d.ownerTeamId;
+				if (d.outputMode === 'prose' || d.outputMode === 'table') outputMode = d.outputMode;
+				tableDefaults = tableDefaultsFromRaw(d.tableDefaults);
+				const restoredColumns = columnsFromRaw(d.columns);
+				if (restoredColumns !== null) columns = restoredColumns;
 			}
 		}
 		restored = true;
@@ -505,16 +576,57 @@
 	<SkillWizardSection
 		index={3}
 		title="What does it produce?"
-		hint="The skill body — instructions the model follows."
+		hint={outputMode === 'table'
+			? 'A row-per-document grid — each column defines one extraction query.'
+			: 'The skill body — instructions the model follows.'}
 	>
-		<textarea
-			class="body-textarea"
-			bind:value={body}
-			aria-label="body"
-			data-testid="lq-ai-wizard-body"
-			rows="14"
-			placeholder={'# NDA Review\nApply this skill when the user shares an NDA…'}
-		></textarea>
+		<div class="mode-selector" role="radiogroup" aria-label="output mode">
+			<label class="mode-option">
+				<input
+					type="radio"
+					name="lq-ai-wizard-output-mode"
+					value="prose"
+					bind:group={outputMode}
+					data-testid="lq-ai-wizard-mode-prose"
+				/>
+				<span>Prose (default)</span>
+			</label>
+			<label class="mode-option">
+				<input
+					type="radio"
+					name="lq-ai-wizard-output-mode"
+					value="table"
+					bind:group={outputMode}
+					data-testid="lq-ai-wizard-mode-table"
+				/>
+				<span>Table</span>
+			</label>
+		</div>
+
+		{#if outputMode === 'table'}
+			{#if tableDefaults.ensemble_verification !== undefined || tableDefaults.minimum_inference_tier !== undefined}
+				<p class="lq-text-caption" data-testid="lq-ai-table-defaults">
+					Inherited skill defaults:
+					{#if tableDefaults.ensemble_verification !== undefined}
+						ensemble {tableDefaults.ensemble_verification ? 'on' : 'off'}.
+					{/if}
+					{#if tableDefaults.minimum_inference_tier !== undefined}
+						Maximum tier number {tableDefaults.minimum_inference_tier}.
+					{/if}
+					A column override takes precedence.
+				</p>
+			{/if}
+			<ColumnEditor bind:columns />
+		{:else}
+			<textarea
+				class="body-textarea"
+				bind:value={body}
+				aria-label="body"
+				data-testid="lq-ai-wizard-body"
+				rows="14"
+				placeholder={'# NDA Review\nApply this skill when the user shares an NDA…'}
+			></textarea>
+		{/if}
 	</SkillWizardSection>
 
 	<SkillWizardSection
@@ -522,7 +634,12 @@
 		title="Try it out"
 		hint="Test against the sandbox. This conversation is non-billable."
 	>
-		{#if body.trim()}
+		{#if outputMode === 'table'}
+			<p class="hint" data-testid="lq-ai-wizard-tryout-table-hint">
+				Table-mode skills run from the Tabular Review wizard against a document
+				set — save the skill, then pick it at /lq-ai/tabular/new.
+			</p>
+		{:else if body.trim()}
 			<SkillTryItPane
 				draftBody={body}
 				draftSlug={slug || 'draft'}
@@ -623,6 +740,27 @@
 	}
 	.body-textarea {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	}
+	.mode-selector {
+		display: flex;
+		gap: 16px;
+		margin-bottom: 12px;
+	}
+	.mode-option {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: 0;
+		cursor: pointer;
+	}
+	.mode-option > input {
+		width: auto;
+	}
+	.mode-option > span {
+		display: inline;
+		font-size: 14px;
+		font-weight: 400;
+		margin-bottom: 0;
 	}
 	.error {
 		color: var(--lq-error, #b54848);

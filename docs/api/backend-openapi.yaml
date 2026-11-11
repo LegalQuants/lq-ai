@@ -1251,6 +1251,10 @@ paths:
         - name: tag
           in: query
           schema: {type: string}
+        - name: recent_only
+          in: query
+          description: Only used skills, ordered by the caller's chat history.
+          schema: {type: boolean, default: false}
       responses:
         '200':
           description: Skills
@@ -2807,6 +2811,10 @@ paths:
         breakdown (Phase C prep doc Decision C-5).
 
         Either ``skill_name`` or ``columns`` is required (not both).
+        ``skill_name`` resolves through the D8.1b stack (DE-297): the
+        caller's user-scope shadow first, then the newest accessible
+        team-scope shadow (columns read from ``frontmatter_extra``),
+        then the live skill registry built-in (``lq_ai.columns``).
         The estimator uses a rolling-average over recent
         ``purpose='tabular_extraction'`` routing-log rows; cold-start
         deployments see the conservative default per-cell cost until
@@ -2823,9 +2831,9 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TabularPreviewCostResponse'}
         '400':
-          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns / an invalid stored column spec.
         '404':
-          description: ``skill_name`` not found in the live skill registry.
+          description: ``skill_name`` matches neither a user/team shadow nor a registry built-in.
         '422':
           description: Validation error (empty ``document_ids``, malformed column spec, etc.).
         '401':
@@ -2848,6 +2856,11 @@ paths:
         ``document_ids`` (admins bypass). Cross-user / missing /
         soft-deleted documents collapse into 404.
 
+        ``skill_name`` resolves through the D8.1b stack (DE-297):
+        user shadow > team shadow > registry built-in — so a
+        user-authored table-mode skill runs with its own columns,
+        including when it shadows a built-in at the same slug.
+
         Execution completion does NOT mean every cell is correct —
         the result view's per-cell citation drawer is where the
         user-attorney validates extractions before relying on them.
@@ -2863,7 +2876,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/TabularExecution'}
         '400':
-          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns.
+          description: Both ``skill_name`` and ``columns`` provided, or skill has no columns / an invalid stored column spec.
         '404':
           description: One or more documents not found / not authorized, or skill not found.
         '422':
@@ -10318,7 +10331,21 @@ components:
         body: {type: string, minLength: 1, maxLength: 200000}
         version: {type: string, default: '1.0.0', maxLength: 50}
         tags: {type: array, items: {type: string}, maxItems: 20}
-        frontmatter_extra: {type: object, additionalProperties: true}
+        frontmatter_extra:
+          type: object
+          additionalProperties: true
+          description: |
+            Arbitrary ``lq_ai:`` extension keys. Only explicit
+            ``output_format: 'table'`` activates validation of the
+            table subset (DE-297): ``output_format``, ``columns``,
+            ``minimum_inference_tier`` and ``ensemble_verification``.
+            The same projection is used when previewing or running a
+            table skill; unrelated extension keys remain untouched.
+            Table mode requires a non-empty ``columns`` list, each
+            column needs a non-blank ``name`` and ``query``, names must
+            be unique after trimming and case folding, and tier
+            values must be integers 1–5. Invalid table specs return
+            422. Non-table metadata retains the arbitrary-JSON contract.
         scope:
           type: string
           enum: [user, team]
@@ -10357,7 +10384,14 @@ components:
         body: {type: string, minLength: 1, maxLength: 200000}
         version: {type: string, maxLength: 50}
         tags: {type: array, items: {type: string}, maxItems: 20}
-        frontmatter_extra: {type: object, additionalProperties: true}
+        frontmatter_extra:
+          type: object
+          additionalProperties: true
+          description: |
+            Same table-only validation as on create (DE-297), activated
+            only by explicit ``output_format: 'table'``. Non-table
+            metadata and unrelated extension keys remain unrestricted
+            within the existing JSON size limit.
         slash_alias:
           type: string
           nullable: true

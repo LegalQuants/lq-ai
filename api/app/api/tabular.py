@@ -29,12 +29,16 @@ information leakage), matching the M3-A6 Easy Playbook posture.
 Column-spec resolution
 ----------------------
 
-Either ``skill_name`` (resolved at execution start from the live
-:class:`SkillRegistry` by reading the skill's
-``lq_ai.columns``) OR ``columns`` (ad-hoc spec) is required. The
-resolved column list is snapshotted onto the row at request time
-(Decision C-1 snapshotting posture: re-rendering the grid a week
-later must be honest about what was actually run).
+Either ``skill_name`` OR ``columns`` (ad-hoc spec) is required. A
+``skill_name`` resolves through the D8.1b stack (DE-297): the caller's
+user-scope shadow first, then the newest team-scope shadow, then the
+live :class:`SkillRegistry` built-in. User/team rows carry their column
+spec in ``frontmatter_extra`` (validated at create/PATCH time against
+the same ``LQAIFrontmatter`` schema built-ins parse with); built-ins
+carry it in ``lq_ai.columns``. The resolved column list is snapshotted
+onto the row at request time (Decision C-1 snapshotting posture:
+re-rendering the grid a week later must be honest about what was
+actually run).
 
 Cost-preview shape
 ------------------
@@ -52,11 +56,13 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from pydantic import ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,6 +74,8 @@ from app.db.session import get_db
 from app.errors import Forbidden, NotFound
 from app.models.document import Document, DocumentChunk
 from app.models.tabular import TabularBulkOp, TabularCellCitation, TabularExecution
+from app.models.user import User
+from app.models.user_skill import UserSkill
 from app.schemas.tabular import (
     Citation,
     ColumnSpec,
@@ -83,6 +91,7 @@ from app.schemas.tabular import (
     TabularResults,
 )
 from app.skills.registry import MutableSkillRegistry
+from app.skills.schema import parse_table_skill_extra
 from app.tabular.bulk_ops import estimate_bulk_op_cost
 from app.tabular.cost import estimate_tabular_execution_cost
 from app.workers.queue import enqueue_tabular_bulk_op_job, enqueue_tabular_execution_job
@@ -118,17 +127,71 @@ def _registry(request: Request) -> MutableSkillRegistry:
     return holder
 
 
-def _resolve_columns(
+def _bake_skill_defaults(
+    columns: list[ColumnSpec],
+    skill_ensemble: bool | None,
+    skill_minimum_tier: int | None,
+) -> list[ColumnSpec]:
+    """Snapshot skill defaults so preview and execution use the same values.
+
+    Columns with no value inherit the skill default. Explicit per-column
+    ensemble and tier overrides remain unchanged.
+    """
+    for col in columns:
+        if col.ensemble_verification is None:
+            col.ensemble_verification = skill_ensemble
+        if col.minimum_inference_tier is None:
+            col.minimum_inference_tier = skill_minimum_tier
+    return columns
+
+
+def _columns_from_user_skill_row(row: UserSkill, *, skill_name: str) -> list[ColumnSpec]:
+    """Resolve a user/team-scope row's ``frontmatter_extra`` to columns.
+
+    DE-297 — the user-skill half of table-mode hydration. Parses the
+    extension keys through the same :class:`LQAIFrontmatter` model the
+    built-in loader uses, so both sources apply identical validation
+    (tier bounds, non-empty name/query). Create/PATCH already reject
+    invalid shapes; the re-parse here guards legacy rows written before
+    that validation landed — those surface as a 400, never a 500.
+    """
+
+    extra = dict(row.frontmatter_extra or {})
+    try:
+        lq = parse_table_skill_extra(extra)
+    except ValidationError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"skill {skill_name!r} has an invalid column spec; re-save it "
+                "from the skill editor before running a tabular review"
+            ),
+        ) from None
+    if lq is None or not lq.columns:
+        raise HTTPException(
+            status_code=400,
+            detail=f"skill {skill_name!r} has no columns (not a table-mode skill)",
+        )
+    resolved = [ColumnSpec.model_validate(col.model_dump()) for col in lq.columns]
+    return _bake_skill_defaults(resolved, lq.ensemble_verification, lq.minimum_inference_tier)
+
+
+async def _resolve_columns(
     request: Request,
+    db: AsyncSession,
     *,
+    user: User,
     skill_name: str | None,
     ad_hoc: list[ColumnSpec] | None,
 ) -> tuple[str | None, list[ColumnSpec]]:
     """Resolve the request's column spec to (skill_name, columns).
 
     Either ``skill_name`` OR ``ad_hoc`` must be supplied. When
-    ``skill_name`` is given, look up the registered skill's
-    ``lq_ai.columns`` and snapshot the list. When ``ad_hoc`` is
+    ``skill_name`` is given, resolve it through the D8.1b stack —
+    the caller's user-scope shadow, then the newest accessible
+    team-scope shadow, then the registered built-in (DE-297: user/team
+    rows carry their spec in ``frontmatter_extra``; built-ins in
+    ``lq_ai.columns``) — and snapshot the list. When ``ad_hoc`` is
     given, use it directly. Both-or-neither is a 400.
 
     Returns the resolved skill_name (None for ad-hoc) + a non-empty
@@ -149,11 +212,22 @@ def _resolve_columns(
         )
 
     if skill_name:
+        # Local import (matches app/api/internal.py) — the shadow
+        # loaders + resolution order live in skills.py; importing here
+        # keeps the tabular → skills edge one-way and explicit.
+        from app.api.skills import _load_team_shadow, _load_user_shadow
+
+        shadow = await _load_user_shadow(db, user_id=user.id, slug=skill_name)
+        if shadow is None:
+            shadow = await _load_team_shadow(db, user_id=user.id, slug=skill_name)
+        if shadow is not None:
+            return skill_name, _columns_from_user_skill_row(shadow, skill_name=skill_name)
+
         record = _registry(request).current().get(skill_name)
         if record is None:
             raise HTTPException(status_code=404, detail=f"skill {skill_name!r} not found")
         skill_columns = record.frontmatter.lq_ai.columns
-        if not skill_columns:
+        if record.frontmatter.lq_ai.output_format != "table" or not skill_columns:
             raise HTTPException(
                 status_code=400,
                 detail=f"skill {skill_name!r} has no columns (not a table-mode skill)",
@@ -162,18 +236,11 @@ def _resolve_columns(
         # skill-side fields the wire schema doesn't honor are
         # stripped consistently.
         resolved = [ColumnSpec.model_validate(col.model_dump()) for col in skill_columns]
-        # Bake the skill-level ensemble_verification fallback into each
-        # column at this single resolution point (Decision C-1
-        # snapshotting posture) so both preview-cost and execute see a
-        # consistent snapshot. A column that didn't declare its own
-        # value (None) inherits the skill-level value; an explicit
-        # True/False per column is left untouched.
-        skill_ensemble = record.frontmatter.lq_ai.ensemble_verification
-        if skill_ensemble is not None:
-            for col in resolved:
-                if col.ensemble_verification is None:
-                    col.ensemble_verification = skill_ensemble
-        return skill_name, resolved
+        return skill_name, _bake_skill_defaults(
+            resolved,
+            record.frontmatter.lq_ai.ensemble_verification,
+            record.frontmatter.lq_ai.minimum_inference_tier,
+        )
 
     # ad_hoc branch — the request-validation min_length=1 on columns
     # in TabularExecutionCreate already covers the empty case.
@@ -250,13 +317,17 @@ async def preview_tabular_cost(
     Authorization is the router-level ``get_active_user`` gate — any
     authenticated caller may preview costs against their own document
     selection. The document-ownership check is enforced at execute
-    time; preview doesn't load the documents.
+    time; preview doesn't load the documents. ``user`` also drives the
+    DE-297 skill-name resolution (the caller's user/team shadows take
+    precedence over a built-in at the same slug).
     """
 
     await require_document_matter_access(db, body.document_ids, user)
 
-    _, columns = _resolve_columns(
+    _, columns = await _resolve_columns(
         request,
+        db,
+        user=user,
         skill_name=body.skill_name,
         ad_hoc=body.columns,
     )
@@ -314,8 +385,10 @@ async def create_tabular_execution(
     if len(documents) != len(body.document_ids):
         raise HTTPException(status_code=404, detail="one or more documents not found")
 
-    resolved_skill_name, columns = _resolve_columns(
+    resolved_skill_name, columns = await _resolve_columns(
         request,
+        db,
+        user=user,
         skill_name=body.skill_name,
         ad_hoc=body.columns,
     )
@@ -971,15 +1044,17 @@ def _build_xlsx(*, columns: list[ColumnSpec], results: TabularResults) -> bytes:
     # Header row.
     ws.cell(row=1, column=1, value="Document")
     for ci, name in enumerate(column_names, start=2):
-        ws.cell(row=1, column=ci, value=name)
+        # Store user-controlled values as text, including names starting with '='.
+        ws.cell(row=1, column=ci, value=name).data_type = "s"
 
     # Data rows.
     for ri, grid_row in enumerate(results.rows, start=2):
-        ws.cell(row=ri, column=1, value=grid_row.document_name)
+        ws.cell(row=ri, column=1, value=grid_row.document_name).data_type = "s"
         for ci, name in enumerate(column_names, start=2):
             cell_data = grid_row.cells.get(name)
             value = _cell_display_value(cell_data)
             xlsx_cell = ws.cell(row=ri, column=ci, value=value)
+            xlsx_cell.data_type = "s"
             if cell_data and cell_data.citations:
                 xlsx_cell.comment = _build_xlsx_comment(cell_data.citations)
 
@@ -998,9 +1073,9 @@ def _build_csv(*, columns: list[ColumnSpec], results: TabularResults) -> str:
     """
 
     out = io.StringIO()
-    writer = csv.writer(out)
+    writer = csv.writer(out, quoting=csv.QUOTE_ALL)
     column_names = [c.name for c in columns]
-    writer.writerow(["Document", *column_names, "citation_links"])
+    writer.writerow(["Document", *(_csv_literal(name) for name in column_names), "citation_links"])
 
     for grid_row in results.rows:
         row_values: list[str] = [grid_row.document_name]
@@ -1011,9 +1086,22 @@ def _build_csv(*, columns: list[ColumnSpec], results: TabularResults) -> str:
             if cell_data and cell_data.citations:
                 row_citations.extend(f"{name}:{c.citation_id}" for c in cell_data.citations)
         row_values.append(";".join(row_citations))
-        writer.writerow(row_values)
+        writer.writerow(_csv_literal(value) for value in row_values)
 
     return out.getvalue()
+
+
+# Match formula prefixes, including full-width variants, after characters a
+# spreadsheet may skip or interpret as text markers.
+_CSV_FORMULA_PREFIX = re.compile(r"^[\s\x00-\x1f\ufeff']*[=+\-@\t\r\n\uff1d\uff0b\uff0d\uff20]")
+
+
+def _csv_literal(value: str) -> str:
+    """Give formula-like CSV fields a visible text prefix."""
+    # A literal backtick survives as part of the imported cell value.
+    if _CSV_FORMULA_PREFIX.match(value):
+        return f"`{value}"
+    return value
 
 
 def _cell_display_value(cell_data: object) -> str:

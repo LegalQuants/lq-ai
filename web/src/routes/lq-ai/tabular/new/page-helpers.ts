@@ -113,6 +113,21 @@ export function requiresCostConfirmation(estimatedCostUsd: string): boolean {
 	return n >= COST_CONFIRMATION_THRESHOLD_USD;
 }
 
+/**
+ * DE-298 — resolve the wizard's ``?skill=`` preselect param against the
+ * loaded table-mode skill list. Returns the slug only when it names a
+ * loaded skill; unknown / absent params return null so a stale deep
+ * link degrades to the normal "Choose…" picker rather than an
+ * invisible selection the select can't render.
+ */
+export function resolvePreselectedSkill(
+	param: string | null,
+	skills: Array<{ name: string }>
+): string | null {
+	if (!param) return null;
+	return skills.some((s) => s.name === param) ? param : null;
+}
+
 interface RequestBuilderInput {
 	documentIds: string[];
 	skillName: string | null;

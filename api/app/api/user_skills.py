@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,6 +44,7 @@ from app.models.audit import AuditLog
 from app.models.team import Team, TeamMember
 from app.models.user import User
 from app.models.user_skill import UserSkill
+from app.skills.schema import parse_table_skill_extra
 
 router = APIRouter(prefix="/user-skills", tags=["user-skills"])
 
@@ -249,12 +250,16 @@ def _validate_tags(tags: list[str]) -> list[str]:
 
 
 def _validate_frontmatter_extra(extra: dict[str, Any]) -> dict[str, Any]:
-    """Reject pathologically large extension blobs.
+    """Reject pathologically large extension blobs and invalid table specs.
 
-    Keys/values are arbitrary JSON; the only guard at this layer is a
-    serialized-size ceiling so a runaway client can't burn a JSONB
-    page on a single row. The Pydantic ``dict[str, Any]`` typing
-    already rejects non-dict bodies.
+    Keys/values are arbitrary JSON; the guards at this layer are:
+
+    * a serialized-size ceiling so a runaway client can't burn a JSONB
+      page on a single row (the Pydantic ``dict[str, Any]`` typing
+      already rejects non-dict bodies); and
+    * DE-297 table-mode parity — explicit ``output_format: table``
+      validates the table authoring subset through the same projection
+      used at runtime. Other extension metadata remains arbitrary JSON.
     """
 
     import json  # local — only this validator needs it
@@ -268,6 +273,18 @@ def _validate_frontmatter_extra(extra: dict[str, Any]) -> dict[str, Any]:
                 "serialized ceiling for a single user skill"
             ),
         )
+
+    try:
+        parse_table_skill_extra(extra)
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in err['loc']) or 'frontmatter_extra'}: {err['msg']}"
+            for err in exc.errors()
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=f"frontmatter_extra is not a valid skill spec: {problems}",
+        ) from None
     return extra
 
 
