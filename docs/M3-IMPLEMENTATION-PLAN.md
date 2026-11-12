@@ -355,7 +355,7 @@ The Playbook engine is the load-bearing substrate for two M3 tracks (Word Add-In
 
 The Word Add-In brings LQ.AI capabilities into Microsoft Word as an Office.js task pane. Phase B's **shipping plumbing in M3** (M3-B1 scaffold + M3-B2 OAuth + M3-B8 self-hosted JS bundle + version handshake) produces an installable, authenticated add-in distributable via Microsoft 365 Admin Center via the **unsigned-manifest** path. Two parallel scope-reductions land at v0.3.0:
 
-1. **The feature surface inside the task pane** (M3-B3 chat, M3-B4 skills with tracked-changes + comments rendering, M3-B5 playbook execution, M3-B6 Inference Tier badge) is descoped to M4 / community contribution per the 2026-05-21 close-out decision at the M3-A6 PR #57 close; see [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution).
+1. **The feature surface inside the task pane** (M3-B3 chat, M3-B4 skills with tracked-changes + comments rendering, M3-B5 playbook execution, M3-B6 Inference Tier badge) was descoped to M4 / community contribution per the 2026-05-21 close-out decision at the M3-A6 PR #57 close; see [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). M3-B3 (chat) has since shipped as a community contribution, narrower than originally scoped (see DE-287 and the M3-B3 task entry below for the delta); M3-B4/B5/B6 remain descoped.
 2. **M3-B7 (signed manifest + enterprise distribution package)** is descoped to a **community-led effort** per the 2026-05-21 PR #59 decision. Code-signing certificate procurement is real-world purchase + ongoing renewal work that couples the project's release cadence to a multi-week procurement clock; treating it as maintainer work overconstrains M3. The community organizes the procurement + funding (SignPath open-source sponsorship is the recommended first path; community-funded DigiCert EV or Sectigo OV are alternatives), LegalQuants holds the legal cert artifact, and the signing CI lands as a community PR once the cert is in hand. See [PRD §9 DE-295](PRD.md#de-295--word-add-in-code-signing-certificate--signed-manifest-ci-community-led) for the procurement plan + the v0.3.x → v0.3.y community-led signing rollout.
 
 Each descoped task below carries an inline status marker and retains its original scope text so a contributor picking up the work can claim it as a standalone PR against the plumbing.
@@ -369,7 +369,7 @@ Each descoped task below carries an inline status marker and retains its origina
   - `manifest.xml` — Office add-in manifest. Targets Word; declares OAuth scopes; references task pane HTML/JS at `{deployment_origin}/word-addin/taskpane.html`.
   - `src/taskpane/` — React 18 + TypeScript task pane shell. Office.js add-in convention is React; this is the **single allowed exception to the no-React-in-`web/` rule** ([CLAUDE.md](../CLAUDE.md)) because Word add-ins are Microsoft-conventionally React.
   - `src/commands/` — Office.js commands (toolbar buttons).
-  - `webpack.config.js` — bundles the add-in JS.
+  - `vite.config.ts` — bundles the add-in JS (Vite; see [ADR 0022](adr/0022-word-addin-vite-over-webpack.md)).
   - `package.json` — pins Office.js, React, TypeScript versions.
 - Task pane UI shell: header (LQ.AI logo + Inference Tier badge placeholder), tab strip (Chat / Skills / Playbooks), empty content area.
 - Manifest generation: a new admin UI flow at `/lq-ai/admin/word-addin` produces a deployment-specific `manifest.xml` with the operator's deployment URL injected. This is the manifest the operator distributes via M365 Admin Center.
@@ -417,9 +417,9 @@ Each descoped task below carries an inline status marker and retains its origina
 
 ### Task M3-B3 — Chat against the open document
 
-**Status:** **Descoped to M4 / community contribution** per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution). Scope retained below for a contributor claiming the task.
+**Status:** **SHIPPED**, as a community contribution against the M3 Phase B plumbing, per [PRD §9 DE-287](PRD.md#de-287--word-add-in-feature-surface-chat-skills-playbooks-tier-badge--deferred-to-m4--community-contribution) — see that entry for the full scope delta against the original plan below. Landed narrower than originally scoped in four ways: a new dedicated stateless endpoint instead of reusing `/api/v1/chat/completions`, non-streaming, click-to-scroll citations instead of the full 5-state Citation Engine UI (no server-side verification exists for an unpersisted Word document), and no selection-only context mode. Original scope retained below for a contributor picking up the remaining gaps (selection-only context, streaming, citation verification states).
 
-**Scope:**
+**Scope (as originally planned; see DE-287 for what actually shipped):**
 - Task pane Chat tab: chat UI that mirrors the web app's chat UI, scaled for the narrower task pane.
 - "Open document context" toggle: when on, the contents of the open Word document are passed as initial context to the chat (the document is treated as an attached file).
 - Selection-only context: when text is selected in Word, a "Use selection" affordance attaches just the selected text as context.
@@ -429,13 +429,13 @@ Each descoped task below carries an inline status marker and retains its origina
 
 **Dependencies:** M3-B2.
 
-**Output:** Users can chat with LQ.AI inside Word using the open document or a selection as context. Citations link back to spans in the doc.
+**Output (as shipped):** Users can chat with LQ.AI inside Word using the open document as context (whole-document only, no selection-only mode yet). Citations render as clickable inline Markdown links (`citation:<n>`) that scroll to and select the source paragraph via `docHelper.scrollToParagraph` — falling back to selecting the whole paragraph if the cited quote can't be found verbatim, since there's no server-side verification pass to catch a bad citation before it reaches the user.
 
 **Verification:**
-- Manual E2E: open a 5-page sample contract in Word; ask "what is the indemnification cap?"; verify the answer streams; verify citations highlight the right span when clicked.
-- Selection-only path: select a single clause; ask "is this favorable to us?"; verify only the selected clause is in context.
+- Manual E2E: open a multi-paragraph sample contract in Word; ask a grounded question; verify the answer renders as Markdown with at least one citation link; verify clicking a citation selects/scrolls to the correct paragraph.
+- Non-matching-quote path: verify a citation whose quote isn't an exact substring of its paragraph still falls back to selecting the whole paragraph rather than erroring.
 
-**Effort:** 8–10 hours.
+**Effort:** 8–10 hours originally estimated; selection-only context, streaming, and citation-verification states remain open for a follow-up contribution.
 
 ---
 
