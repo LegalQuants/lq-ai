@@ -426,7 +426,10 @@ class MessageCreateRequest(BaseModel):
     ``type:"file"`` binding is wired — see the ``skill_inputs`` note
     above). Populate ``file_ids`` for document context; populate
     ``skill_inputs`` for scalar skill parameters. Omitted / empty is
-    fully back-compatible (pre-existing wire shape unchanged)."""
+    unchanged for standalone chats. Matter chats also inherit ready, readable,
+    caller-owned matter files. Explicit ids come first, followed by inherited
+    ids in attachment order; duplicates count once toward the combined 16-file
+    cap. An oversized union is rejected before persistence or inference."""
 
     stream: bool = False
     """Whether to stream the response as SSE. ``False`` returns a single
@@ -585,12 +588,12 @@ class MessagePostResponse(BaseModel):
     applied_skills: list[str] = Field(default_factory=list)
     applied_file_ids: list[str] = Field(default_factory=list)
     """Donna: caller-owned file ids that were validated and forwarded to
-    the gateway as ``lq_ai_file_ids`` for this turn — the echo of
-    :attr:`MessageCreateRequest.file_ids`. Mirrors how ``applied_skills``
+    the gateway as ``lq_ai_file_ids`` for this turn — explicit attachments
+    plus eligible inherited matter files. Mirrors how ``applied_skills``
     is echoed, but turn-scoped: there is no ``messages.file_ids`` column,
     so this surfaces only on the send response (and the SSE ``complete``
     frame), not on rows read back via ``GET /chats/{id}/messages``. Empty
-    when no file_ids were attached."""
+    when neither explicit nor inherited files were attached."""
 
     attached_skill_names: list[str] = Field(default_factory=list)
     """Wave D.2 Task 2.7 — slugs the send-time slash fallback attached

@@ -1028,6 +1028,16 @@ Remaining implementation-level open questions (watch-trigger plumbing, notificat
 
 **M1 status:** Shipped. Matter (project) workspaces are wired end-to-end: create, list, detail view at `/lq-ai/matters/[id]`, attached files/skills/knowledge bases, the `privileged` flag, and `minimum_inference_tier`. An operator can verify at `api/app/api/projects.py`; Cypress E2E coverage is in `web/cypress/e2e/wave-c-matters.cy.ts`. Note: playbook attachment lands when Playbooks ship (M3). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface).
 
+**File inheritance (#672).** Chat sends resolve ready, readable caller-owned
+matter attachments in the API for all clients. Explicit per-message files come
+first, followed by matter files in attachment order, deduplicated within the
+existing 16-file cap. An oversized union is rejected before persistence or
+inference, rather than silently dropping context. Deleted, unready, screened,
+or otherwise unreadable matter files are excluded. Sharing a matter does not
+broaden file ownership permissions. Inherited files use the existing document
+context, audit and privacy routing paths; they appear in `applied_file_ids`.
+Skill inheritance and free-form context propagation remain separate work.
+
 **Matter sharing extension (replacement for PR #536, pending merge).** Matter-scoped
 roles (`lead`, `contributor`, `reader`, `blocked`) implement explicit grants and
 screens. Unscreened administrators manage policy without implicit content access,
