@@ -17,15 +17,14 @@ for, or that the answer is correct or complete. Before New harness is described 
 live, a person must accept it on a configured provider; see
 [Evidence and sign-off](#evidence-and-sign-off).
 
-**Status.** [ADR 0038](../adr/0038-governed-runs-in-chat.md) is Proposed,
-not ratified. The implementation has had no maintainer or security review. Both
-profile switches default to off. The direct answer, and a run in a chat that is in no matter, amend ADR 0035 D1 and
-D2, which are Accepted; ADR 0038 D1 gives the words, and they are ratified with it.
+**Status.** New harness shipped as experimental in v0.9.1. Both profile
+switches default to off. See the [ADR 0038 decision and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
+for the security-path review of the merged implementation and the open ratification question.
 Design, and what was and was not verified:
 [plan](../plans/issue-662-c1-governed-runs-in-chat.md#implementation-status). This runbook
 replaces the one written for the first build, which had a profile control beside the model
-picker. That build's recorded walkthrough was removed from the branch on 2026-10-10,
-and none of this build is recorded. The earlier stand-alone page, as released in 0.8.0, is covered by the
+picker. The [14 October walkthrough](../uat/adr38-runs-in-chat/README.md) records single
+runs driven by an agent on a local model. The earlier stand-alone page, as released in 0.8.0, is covered by the
 [ADR 0035 runbook](adr35-chat-uat.md).
 
 ## Setup
@@ -382,6 +381,6 @@ live. Record the provider and model used for UAT-06 to UAT-29.
 - Roles on runs (UAT-52 to UAT-54): **pending**.
 - Configured-provider run for New harness: **pending**. Provider/model: ______
 - Branch commit: ______ Accepted cases: ______ Defects / deferred cases: ______
-- Maintainer review: **pending**. Security review: **pending**. ADR 0038 ratification,
-  which carries the amendment to ADR 0035 D1, D2 and D3: **pending**.
+- Merge review: the [#599 receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3)
+  records the security-path review at `ca96056`. Human sign-off is tracked above.
 - Production enablement: **not approved by this UAT**.
