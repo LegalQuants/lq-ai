@@ -83,9 +83,46 @@ maintainer is a precondition for dating 1.0.
 - **Minutes are public.** Decisions, action items, and attendee lists are published
   as meeting records (see ADR 0022 for where they live). Raw transcripts and
   recordings are not published; the minutes are the record.
-- **Async ratification:** committee members who miss a call may register agreement
-  or objection on the posted minutes within 7 days. Silence after 7 days is assent
-  to the recorded decisions.
+- **Internal review and async ratification:** internal notes and the proposed public
+  version circulate internally after the meeting with an explicit deadline seven days
+  from circulation. All committee members, including those who missed the call, may
+  raise corrections or objections. If no objections are raised by the deadline, record
+  approval through the no-objection process (silence is assent). Resolve outstanding
+  objections before publication; the passage of the deadline alone is not evidence
+  that no objections were raised.
+- **Publication after approval:** Joel Kaufmann publishes the approved public version
+  to [lq-ai-community](https://github.com/LegalQuants/lq-ai-community) as time permits.
+  Public notes separately record internal circulation, the objection deadline, approval
+  date and basis, and GitHub publication. Publication does not restart the seven-day
+  window. Internal notes, discussion, and private review exchanges remain private.
+- **Corrections:** material changes to recorded decisions, attendee identification, or
+  publishable content require recirculation and a fresh seven-day window. Typographical
+  corrections do not restart it. Later corrections use issues or follow-up PRs and dated
+  entries, preserving the historical record.
+- **Publication safeguards:** public discussion and action ownership are anonymized;
+  attendee lists are confirmed by another attendee or the committee, with the reviewer
+  or approving body recorded. Exclude meeting access details, credentials, transcripts,
+  recordings, and confidential, privileged, or client-identifying material. Review
+  statements about identifiable individuals for accuracy and neutral phrasing.
+
+### Transition clarification (2026-10-13)
+
+The team approved the proposal in
+[lq-ai-community issue #3](https://github.com/LegalQuants/lq-ai-community/issues/3).
+**Proposed effective-date rule for review:** no calendar effective date was specified.
+Apply the clarified process to records first circulated internally on or after both
+coordinated PRs (this governance amendment and the community documentation update) merge.
+Until then, and for records already in review at that point, retain the previous
+seven-day window beginning at public posting. Record the actual effective date in a dated
+follow-up once both merges occur.
+
+Previously published records retain their posting dates and public objection deadlines,
+including September 27, 2026 for the August 30, September 6, and September 13 notes, and
+October 15, 2026 for the September 20 notes. Do not infer historical circulation or review
+dates, reopen or shorten existing windows, or infer ratification solely from an elapsed
+deadline. Add confirmed information as dated clarifications without silently rewriting
+prior entries. See the
+[community transition record](https://github.com/LegalQuants/lq-ai-community/blob/main/meetings/README.md#transition-clarification-2026-10-13).
 
 ## Claiming work
 

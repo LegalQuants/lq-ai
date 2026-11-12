@@ -43,9 +43,39 @@ No prior ADR, PRD section, or DE entry decides either question.
    candid, unpolished discussion not spoken for the public record. The
    published minutes are the record; transcripts remain with the
    participants.
-5. **Async ratification is the approval mechanism for minutes and
-   governance changes:** committee members absent from a call may
-   object on the posted record within 7 days; silence is assent.
+5. **Async ratification is the approval mechanism for minutes and governance changes.**
+   Under the clarification below, internal notes and the proposed public version
+   circulate internally with an explicit deadline seven days from circulation. All
+   committee members, including those absent from the call, may raise corrections or
+   objections. Record no-objection approval at the deadline or resolve outstanding
+   objections before publication; silence is assent. Publication does not restart the
+   review window. The canonical process is in [GOVERNANCE.md](../../GOVERNANCE.md#meetings).
+
+### Internal-review clarification (2026-10-13)
+
+The team approved [lq-ai-community issue #3](https://github.com/LegalQuants/lq-ai-community/issues/3).
+This amendment clarifies the review trigger; it does not change the original July 26
+acceptance date of this ADR. The original wording allowed objections on the posted record
+within seven days, and community instructions implemented that as public posting.
+
+Joel Kaufmann publishes approved public notes after internal review, as time permits.
+The public record separately identifies internal circulation, objection deadline,
+approval date and basis, and GitHub publication. Internal notes and private review
+exchanges remain private. Public discussion and action ownership remain anonymized;
+confirmed attendee lists and the existing publication safeguards remain required.
+
+Material changes to recorded decisions, attendee identification, or publishable content
+require recirculation and a fresh seven-day window; typographical corrections do not.
+Later corrections use issues or follow-up PRs and dated entries, preserving the original
+record. An elapsed deadline alone does not prove the absence or resolution of objections.
+
+**Proposed effective-date rule for review:** apply this clarification to records first
+circulated internally on or after both coordinated PRs merge, with no calendar date
+inferred. Previously published records and records already in review at transition retain
+the prior public-posting rule. Preserve existing deadlines and add historical circulation
+or approval dates only when confirmed. The detailed transition and the requirement to
+record the actual effective date after both merges are in
+[GOVERNANCE.md](../../GOVERNANCE.md#transition-clarification-2026-10-13).
 
 ## Alternatives considered
 
