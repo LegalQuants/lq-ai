@@ -9531,7 +9531,14 @@ components:
             Validated ids are forwarded to the gateway as `lq_ai_file_ids`
             alongside `lq_ai_skills` and echoed back as `applied_file_ids`
             on the response / SSE `complete` frame. Capped at 16 entries.
-            Omitted / empty is back-compatible.
+            Matter chats additionally inherit ready, readable caller-owned
+            matter files, even when this field is omitted. Explicit ids come
+            first; inherited ids follow in attachment order. Duplicates count
+            once toward the combined 16-file cap. An oversized union returns
+            400 before persistence or inference. Deleted, unready, screened,
+            or otherwise unreadable matter files are not inherited. Sharing
+            a matter does not expand file ownership access. Inherited skills
+            are not resolved by this path.
 
     MessagePostResponse:
       type: object
@@ -9575,7 +9582,7 @@ components:
           description: |
             Donna: caller-owned file ids that were validated and
             forwarded to the gateway as `lq_ai_file_ids` for this turn —
-            the echo of `MessageCreate.file_ids` (mirrors
+            explicit and eligible inherited matter attachments (mirrors
             `applied_skills`). Turn-scoped: there is no
             `messages.file_ids` column, so this surfaces only on the send
             response (and the SSE `complete` frame), not on rows read
@@ -9652,8 +9659,8 @@ components:
           items: {type: string, format: uuid}
           description: |
             Donna: caller-owned file ids forwarded to the gateway as
-            `lq_ai_file_ids` for this turn — the echo of
-            `MessageCreate.file_ids` (mirrors `applied_skills`).
+            `lq_ai_file_ids` for this turn — explicit and eligible inherited
+            matter attachments (mirrors `applied_skills`).
             Turn-scoped; not persisted. Empty when none attached.
         routed_inference_tier:
           type: integer

@@ -67,7 +67,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 # `trace` is for add_event() on the active span; spans use app.observability_helpers.
 from opentelemetry import trace
 from pydantic import BaseModel, ValidationError as PydanticValidationError
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import ActiveUser, is_privileged_reader
@@ -123,7 +123,7 @@ from app.models.inference import InferenceRoutingLog
 from app.models.knowledge import KnowledgeBase
 from app.models.message_tool_source import MessageToolSource
 from app.models.orchestration import OrchestrationRoot
-from app.models.project import Project
+from app.models.project import Project, ProjectFile
 from app.models.project_knowledge_base import ProjectKnowledgeBase
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
@@ -131,6 +131,7 @@ from app.observability_helpers import get_tracer, record_attributes
 from app.schemas.chats import (
     LIST_LIMIT_DEFAULT,
     LIST_LIMIT_MAX,
+    MESSAGE_FILE_IDS_MAX_LEN,
     ChatCreateRequest,
     ChatListResponse,
     ChatResponse,
@@ -602,10 +603,52 @@ async def _validate_owned_file_ids(
     return [str(fid) for fid in parsed]
 
 
+def _matter_file_scope(project_id: uuid.UUID, user: User) -> ColumnElement[bool]:
+    """Readable, ready matter attachments without expanding file ownership access."""
+    readable_projects = select(Project.id).where(matter_scope_filter(user))
+    return and_(
+        File.owner_id == user.id,
+        File.deleted_at.is_(None),
+        File.ingestion_status == "ready",
+        File.id.not_in(denied_file_ids(user.id)),
+        or_(File.project_id.is_(None), File.project_id.in_(readable_projects)),
+        File.id.in_(
+            select(ProjectFile.file_id).where(
+                ProjectFile.project_id == project_id,
+                ProjectFile.project_id.in_(readable_projects),
+            )
+        ),
+    )
+
+
+async def _load_matter_file_ids(
+    db: AsyncSession, project_id: uuid.UUID | None, user: User
+) -> list[str]:
+    """Return an ordered, bounded snapshot of eligible inherited attachments.
+
+    A cap-plus-one query permits rejecting an oversized union without loading
+    an unbounded matter. Explicit attachments retain their own 404 semantics.
+    """
+    if project_id is None:
+        return []
+    stmt = (
+        select(File.id)
+        .join(ProjectFile, ProjectFile.file_id == File.id)
+        .where(ProjectFile.project_id == project_id, _matter_file_scope(project_id, user))
+        .order_by(ProjectFile.attached_at, File.id)
+        .limit(MESSAGE_FILE_IDS_MAX_LEN + 1)
+    )
+    return [str(fid) for fid in (await db.scalars(stmt)).all()]
+
+
 async def _load_attached_file_contexts(
     db: AsyncSession,
     file_ids: list[str],
     owner_id: uuid.UUID,
+    *,
+    inherited_file_ids: list[str] | None = None,
+    inherited_project_id: uuid.UUID | None = None,
+    user: User | None = None,
 ) -> list[tuple[str, str]]:
     """Load ``(filename, content)`` for per-message attached files, in caller order.
 
@@ -653,6 +696,15 @@ async def _load_attached_file_contexts(
             File.deleted_at.is_(None),
         )
     )
+    # Recheck inherited-file scope in the same query that reads the text.
+    # This covers revocation, detachment and ingestion changes after selection;
+    # explicit attachments keep their existing behavior.
+    if inherited_file_ids:
+        assert inherited_project_id is not None and user is not None
+        inherited = [uuid.UUID(fid) for fid in inherited_file_ids]
+        stmt = stmt.where(
+            or_(File.id.not_in(inherited), _matter_file_scope(inherited_project_id, user))
+        )
     rows = (await db.execute(stmt)).all()
     by_id: dict[uuid.UUID, tuple[str, str]] = {}
     for row in rows:
@@ -1451,7 +1503,16 @@ async def send_message(
     # don't own. Validated ids forward to the gateway as
     # ``lq_ai_file_ids`` and echo back as ``applied_file_ids``. Empty /
     # omitted is a no-op (no DB round-trip) — back-compatible.
-    effective_file_ids = await _validate_owned_file_ids(db, payload.file_ids, user.id)
+    explicit_file_ids = await _validate_owned_file_ids(db, payload.file_ids, user.id)
+    inherited_project_id = chat.project_id
+    matter_file_ids = await _load_matter_file_ids(db, inherited_project_id, user)
+    inherited_file_ids = [fid for fid in matter_file_ids if fid not in explicit_file_ids]
+    effective_file_ids = explicit_file_ids + inherited_file_ids
+    if len(effective_file_ids) > MESSAGE_FILE_IDS_MAX_LEN:
+        raise ValidationError(
+            f"Chat attachments and inherited matter files exceed the {MESSAGE_FILE_IDS_MAX_LEN}-file limit. "
+            "Remove attachments from this message or matter before retrying."
+        )
 
     # Wave D.2 Task 3.0 — merge legacy ``skills`` with new
     # ``attached_skills``. Each ``attached_skills`` entry is XOR'd at
@@ -1713,9 +1774,28 @@ async def send_message(
     # exactly like the retrieval block. Injecting here — before the final
     # ``user`` turn and at the single ``gw_messages`` build site — covers
     # both the streaming and non-streaming dispatch paths.
-    attached_file_contexts = await _load_attached_file_contexts(
-        db, list(effective_file_ids), user.id
-    )
+    # The persistence commit above refreshes the chat. Never combine the old
+    # matter's files with a new matter's privacy/routing settings after a move.
+    if inherited_file_ids:
+        if chat.project_id != inherited_project_id:
+            inherited_file_ids = []
+        else:
+            still_readable = set(await _load_matter_file_ids(db, inherited_project_id, user))
+            inherited_file_ids = [fid for fid in inherited_file_ids if fid in still_readable]
+        effective_file_ids = explicit_file_ids + inherited_file_ids
+    if inherited_file_ids:
+        attached_file_contexts = await _load_attached_file_contexts(
+            db,
+            list(effective_file_ids),
+            user.id,
+            inherited_file_ids=inherited_file_ids,
+            inherited_project_id=inherited_project_id,
+            user=user,
+        )
+    else:
+        attached_file_contexts = await _load_attached_file_contexts(
+            db, list(effective_file_ids), user.id
+        )
     if attached_file_contexts:
         attached_block = _format_attached_files_block(attached_file_contexts)
         gw_messages.append(
