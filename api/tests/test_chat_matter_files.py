@@ -178,6 +178,7 @@ async def test_matter_only_file_reaches_model_and_audit(
             )
         )
     ).scalar_one()
+    assert audit.details is not None
     assert audit.details["file_ids"] == [str(file.id)]
     assert "23 March" not in json.dumps(audit.details)
 
