@@ -13,6 +13,7 @@ import LqToneIcon, { LQ_TONE_ICON_NAME } from '../components/shared/LqToneIcon.s
 import LqAlert from '../components/shared/LqAlert.svelte';
 import MatterCard from '../components/MatterCard.svelte';
 import AttachedSkillPill from '../components/AttachedSkillPill.svelte';
+import ColumnEditor from '../components/ColumnEditor.svelte';
 import ShellSidebar from '../components/ShellSidebar.svelte';
 import { createSidebarLists } from '../sidebarLists';
 import type { Project } from '../types';
@@ -134,6 +135,19 @@ describe("a skill's icon", () => {
 		const html = pill('🛡️');
 		expect(html).toContain('🛡️');
 		expect(html).not.toContain('tabler-icon-tool');
+	});
+});
+
+describe('ColumnEditor: reorder buttons draw Tabler arrows', () => {
+	it('draws arrow-up and arrow-down, hidden, behind the buttons own names', () => {
+		const columns = [
+			{ name: 'Term', query: 'q', ensemble_verification: null, minimum_inference_tier: null }
+		];
+		const html = render(ColumnEditor, { props: { columns } as never }).body;
+		expect(html).toMatch(svgWith('arrow-up', 'aria-hidden="true"'));
+		expect(html).toMatch(svgWith('arrow-down', 'aria-hidden="true"'));
+		expect(html).toContain('aria-label="move column 1 up"');
+		expect(html).not.toMatch(/[↑↓]/);
 	});
 });
 

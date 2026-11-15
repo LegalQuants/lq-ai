@@ -21,6 +21,7 @@
 	 * Validation mirrors — never widens — the backend schema; see the
 	 * header of `../skills/tableColumns.ts`.
 	 */
+	import { IconArrowUp, IconArrowDown } from '@tabler/icons-svelte';
 	import {
 		newEditableColumn,
 		moveColumn,
@@ -87,7 +88,7 @@
 						data-testid="lq-ai-column-up"
 						on:click={() => move(i, -1)}
 					>
-						↑
+						<IconArrowUp size={14} stroke={1.75} aria-hidden="true" />
 					</button>
 					<button
 						type="button"
@@ -97,7 +98,7 @@
 						data-testid="lq-ai-column-down"
 						on:click={() => move(i, 1)}
 					>
-						↓
+						<IconArrowDown size={14} stroke={1.75} aria-hidden="true" />
 					</button>
 					<button
 						type="button"
