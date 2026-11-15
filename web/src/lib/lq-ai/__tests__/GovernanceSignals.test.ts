@@ -73,6 +73,18 @@ describe('governance signals (ADR 0045 §1)', () => {
 		expect(badges![0]).toContain('tone="sage"');
 	});
 
+	it("keeps the skills list's shadow and team chips out of the governance tone", () => {
+		const page = readFileSync(
+			join(components, '..', '..', '..', 'routes', 'lq-ai', 'skills', '+page.svelte'),
+			'utf8'
+		);
+		for (const testId of ['lq-ai-user-skill-shadow-chip', 'lq-ai-user-skill-team-chip']) {
+			const chip = new RegExp(`data-testid="${testId}"[^>]*>\\s*<TrustPill([^>]*)/>`).exec(page);
+			expect(chip, `${testId} wraps a TrustPill`).not.toBeNull();
+			expect(chip![1], testId).toContain('tone="sage"');
+		}
+	});
+
 	it('draws a tier mismatch in the governance colour, a matching tier with the dot', () => {
 		const pill = (tierMismatch: boolean) =>
 			render(ProvenancePill, { props: { kind: 'tier', summary: 'Tier 2', tierMismatch } }).body;
