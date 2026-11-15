@@ -249,7 +249,7 @@
 	select {
 		width: 100%;
 		padding: 8px;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		font-size: 14px;
 		font-family: inherit;
@@ -275,7 +275,7 @@
 		background: transparent;
 		border: 1px solid var(--lq-border);
 		padding: 4px 10px;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 13px;
 	}
