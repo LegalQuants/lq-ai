@@ -440,8 +440,8 @@
 		background: var(--lq-inset);
 	}
 	.lq-chip[data-active='true'] {
-		background: var(--lq-accent-soft, var(--lq-inset));
-		border-color: var(--lq-accent, var(--lq-border));
+		background: var(--lq-accent-soft);
+		border-color: var(--lq-accent);
 		color: var(--lq-text);
 	}
 

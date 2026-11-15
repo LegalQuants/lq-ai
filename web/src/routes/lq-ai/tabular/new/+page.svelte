@@ -723,7 +723,7 @@
 	.lq-tabwiz__view-columns {
 		align-self: flex-start;
 		font-size: 0.875rem;
-		color: var(--lq-accent, #4f46e5);
+		color: var(--lq-accent);
 		text-decoration: underline;
 	}
 	.lq-tabwiz__adhoc {

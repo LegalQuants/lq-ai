@@ -190,11 +190,11 @@
 	}
 	/* DE-298 — read-only column spec */
 	.lq-columns {
-		margin-top: var(--lq-space-4, 16px);
-		padding: var(--lq-space-4, 16px);
-		border: 1px solid var(--lq-border, #e5e7eb);
-		border-radius: var(--lq-radius, 6px);
-		background: var(--lq-surface, transparent);
+		margin-top: var(--lq-space-4);
+		padding: var(--lq-space-4);
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius);
+		background: var(--lq-surface);
 	}
 	.lq-columns-title {
 		margin: 0;
@@ -202,16 +202,16 @@
 		font-weight: 600;
 	}
 	.lq-columns-hint {
-		margin: var(--lq-space-1, 4px) 0 0;
+		margin: var(--lq-space-1) 0 0;
 		font-size: 13px;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 	}
 	.lq-columns-list {
-		margin: var(--lq-space-3, 12px) 0 0;
+		margin: var(--lq-space-3) 0 0;
 	}
 	.lq-columns-row {
-		padding: var(--lq-space-2, 8px) 0;
-		border-top: 1px solid var(--lq-border, #e5e7eb);
+		padding: var(--lq-space-2) 0;
+		border-top: 1px solid var(--lq-border);
 	}
 	.lq-columns-row dt {
 		font-weight: 600;
@@ -222,9 +222,9 @@
 		flex-wrap: wrap;
 	}
 	.lq-columns-row dd {
-		margin: var(--lq-space-1, 4px) 0 0;
+		margin: var(--lq-space-1) 0 0;
 		font-size: 13px;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 		white-space: pre-wrap;
 	}
 	.lq-columns-flag {
@@ -232,8 +232,8 @@
 		font-weight: 500;
 		padding: 1px 8px;
 		border-radius: 999px;
-		border: 1px solid var(--lq-border, #e5e7eb);
-		color: var(--lq-text-secondary, #6b7280);
+		border: 1px solid var(--lq-border);
+		color: var(--lq-text-secondary);
 	}
 
 	/* C5 (PR6d) — tool-usage metadata row */
