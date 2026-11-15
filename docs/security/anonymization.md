@@ -79,8 +79,8 @@ The gateway's `AnalyzerEngine` runs with this configuration (`gateway/app/anonym
 | `ORGANIZATION` | Presidio default (spaCy NER) | Corporate entities, firms, agencies. | Surfaces under Presidio's `ORG` label internally. |
 | `EMAIL_ADDRESS` | Presidio default | Counsel email, party email in correspondence. | Requires a recognized TLD; `.example` test addresses won't match. |
 | `PHONE_NUMBER` | Presidio default | Contact numbers in correspondence. | US conventions catch best; international support varies. |
-| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Pseudonyms carry the detector label verbatim (`US_BANK_NUMBER_0001`); there is no rename to an `ACCOUNT_NUMBER` domain. |
-| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Pseudonyms carry the detector label verbatim (`LOCATION_0001`); there is no rename to an `ADDRESS` domain. |
+| `US_BANK_NUMBER` | Presidio default | Bank account numbers in settlement statements, escrow docs. | Substituted in the `ACCOUNT_NUMBER` pseudonym domain (for example, `ACCOUNT_NUMBER_0001`). |
+| `LOCATION` | Presidio default (spaCy NER) | Addresses, courthouses, jurisdictions. | Substituted in the `ADDRESS` pseudonym domain (for example, `ADDRESS_0001`). |
 | `CASE_NUMBER` | **Custom** — `CaseNumberRecognizer` | Federal/state reporter cites (`Smith v. Jones, 123 F.3d 456 (9th Cir. 2024)`), `In re X` form, docket numbers (`Case No. 1:24-cv-00123`). | Requires structural anchoring; bare case captions intentionally not matched. |
 | `MATTER_NUMBER` | **Custom** — `MatterNumberRecognizer` | Alpha-year-sequence (`LQ-2026-0042`), dotted (`2026.0042`). | Deployment-specific; defaults are conservative — extend per the "Customizing" section below. |
 
@@ -168,7 +168,7 @@ If the deployment needs an entity type that isn't in Presidio's vocabulary (e.g.
 
 1. Create the recognizer with `supported_entity="CLIENT_CODE"`.
 2. Register it in `engine.py`.
-3. The new entity type flows through to `PseudonymMapper.assign("CLIENT_CODE", ...)` and gets pseudonyms like `CLIENT_CODE_0001`.
+3. The new entity type flows through to `PseudonymMapper.assign("CLIENT_CODE", ...)` and gets pseudonyms like `CLIENT_CODE_0001`, unless the type appears in the pseudonym-domain remap table (`PSEUDONYM_DOMAINS` in `engine.py`), which today remaps only `LOCATION` → `ADDRESS` and `US_BANK_NUMBER` → `ACCOUNT_NUMBER`.
 
 No further configuration is needed — the pseudonym format is generic per-entity-type.
 
@@ -287,7 +287,7 @@ Pinning tests:
 
 ## Pseudonym format
 
-Every assigned pseudonym follows `{ENTITY_TYPE}_{NNNN}` with a 4-digit zero-padded counter (`PERSON_0001`, `MATTER_NUMBER_0042`). Counters increment per entity type independently within a single request; mappings never persist across requests (the `PseudonymMapper` instance is dropped on response).
+Every assigned pseudonym follows `{ENTITY_TYPE}_{NNNN}` with a 4-digit zero-padded counter (`PERSON_0001`, `MATTER_NUMBER_0042`). The `{ENTITY_TYPE}` prefix is the entity's *pseudonym domain*: Presidio's `LOCATION` and `US_BANK_NUMBER` labels are remapped to `ADDRESS` and `ACCOUNT_NUMBER` at assign time (`PSEUDONYM_DOMAINS` in `engine.py`); every other type uses its recognizer label as-is. Counters increment per entity type independently within a single request; mappings never persist across requests (the `PseudonymMapper` instance is dropped on response).
 
 The format is locked by M2-A3. Operators who need a different format (longer counter, different separator) can fork the `PseudonymMapper.assign` implementation, but the existing format is what M2-B3 middleware + M2-C3 round-trip tests target.
 

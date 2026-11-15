@@ -135,7 +135,19 @@ Squash-and-merge is the default; merge commits are reserved for cases where the 
 
 ## Sign-off (Developer Certificate of Origin)
 
-LQ.AI uses the [Developer Certificate of Origin (DCO)](https://developercertificate.org/) — not a CLA. The DCO is a lightweight assertion that you have the right to contribute the work under the project's Apache 2.0 license. Industry standard, sufficient legal cover, no separate paperwork.
+Submissions to [LegalQuants/lq-ai](https://github.com/LegalQuants/lq-ai) are contributions to
+the **LQ.AI project**. LQ.AI requires the
+[Developer Certificate of Origin (DCO)](https://developercertificate.org/) sign-off and does
+not ask contributors to enter a separate LQ.AI CLA. The DCO certifies your right to submit
+the work under the applicable licence; it does not replace existing licence terms.
+
+The Open WebUI licence and CLA retained under `web/` are inherited upstream documents.
+Their scope is not resolved by LQ.AI's sign-off process. Read
+[Contribution scope and upstream provenance](docs/contribute/contribution-scope.md) before
+submitting changes involving inherited or mixed-origin material, or if the upstream CLA's
+wording leaves you unsure which terms apply.
+That note also gives the
+[file-specific submission terms for the #749 ledger fix](docs/contribute/contribution-scope.md#file-specific-submission-terms-for-749).
 
 Every commit must be signed off:
 
@@ -478,7 +490,13 @@ Reports of unacceptable behavior go to conduct@legalquants.com. Reports are conf
 
 ## License
 
-By contributing to LQ.AI, you agree that your contributions will be licensed under the project's [Apache License 2.0](LICENSE). The DCO sign-off (above) is your assertion that you have the right to contribute the work under that license.
+Original contributions to LQ.AI are submitted under the project's
+[Apache License 2.0](LICENSE). Inherited Open WebUI and other third-party material retain
+their applicable licences and notices; the root licence is not a blanket licence for every
+file in this repository. Changes that copy, adapt, or modify such material need their
+provenance and applicable terms checked. See
+[Contribution scope and upstream provenance](docs/contribute/contribution-scope.md), including
+how to ask a maintainer about an unresolved scope question before submitting a patch.
 
 ---
 

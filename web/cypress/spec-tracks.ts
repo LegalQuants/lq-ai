@@ -12,6 +12,7 @@ export const DETERMINISTIC_SPECS = [
 	'cypress/e2e/m3-c-tabular-review.cy.ts',
 	'cypress/e2e/m4-autonomous.cy.ts',
 	'cypress/e2e/lq-ai-skill-workspaces.cy.ts',
+	'cypress/e2e/lq-ai-table-skill-flow.cy.ts',
 	'cypress/e2e/matter-intake.cy.ts',
 	'cypress/e2e/lq-ai-matter-proposals.cy.ts',
 	'cypress/e2e/de263-community-skills.cy.ts',
