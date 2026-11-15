@@ -14,6 +14,11 @@ export async function listSkills(scope?: 'builtin' | 'user' | 'team'): Promise<S
 	return apiRequest<SkillSummary[]>(`/skills${qs}`);
 }
 
+/** GET /api/v1/skills?recent_only=true — actual caller-scoped usage order. */
+export async function listRecentlyUsedSkills(): Promise<SkillSummary[]> {
+	return apiRequest<SkillSummary[]>('/skills?recent_only=true');
+}
+
 /** GET /api/v1/skills/{name}/inputs — canonical input definitions resolved user > team > built-in. */
 export async function getInputs(name: string): Promise<SkillInputs> {
 	return apiRequest<SkillInputs>(`/skills/${encodeURIComponent(name)}/inputs`);
