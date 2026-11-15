@@ -366,6 +366,7 @@
 									<span class="ml-2" data-testid="lq-ai-user-skill-shadow-chip">
 										<TrustPill
 											variant="tier"
+											tone="sage"
 											label="Shadows built-in"
 										/>
 									</span>
@@ -376,6 +377,7 @@
 									<span data-testid="lq-ai-user-skill-team-chip" title="Team-scope skill — visible to every member of this team.">
 										<TrustPill
 											variant="tier"
+											tone="sage"
 											label={`Team · ${row.owner_team_id ? (teamNamesById.get(row.owner_team_id) ?? 'unknown') : 'unknown'}`}
 										/>
 									</span>
