@@ -273,6 +273,9 @@ async def list_skills(
     db: Annotated[AsyncSession, Depends(get_db)],
     scope: str = Query(default="all", pattern="^(builtin|user|team|all)$"),
     tag: str | None = Query(default=None),
+    recent_only: Annotated[
+        bool, Query(description="Only used skills, ordered by the caller's chat history.")
+    ] = False,
 ) -> JSONResponse:
     """Return summaries for skills visible to the caller.
 
@@ -301,22 +304,19 @@ async def list_skills(
     shadowed_slugs.update(r.slug for r in team_rows)
     if tag is not None:
         merged_rows = [r for r in merged_rows if tag in (r.tags or [])]
-    user_summaries = [_summary_from_user_skill(r) for r in merged_rows]
-
-    if scope in ("user", "team"):
-        return JSONResponse(content=user_summaries)
-
-    internal = _run_orchestrator_skills()
-    builtin_summaries = [
-        filter_summary_for_response(s)
-        for s in registry.list_summaries(tag=tag)
-        if s.name not in shadowed_slugs and s.name not in internal
-    ]
-
-    if scope == "builtin":
-        return JSONResponse(content=builtin_summaries)
-
-    return JSONResponse(content=user_summaries + builtin_summaries)
+    summaries = [_summary_from_user_skill(r) for r in merged_rows]
+    if scope in ("builtin", "all"):
+        internal = _run_orchestrator_skills()
+        summaries.extend(
+            filter_summary_for_response(s)
+            for s in registry.list_summaries(tag=tag)
+            if s.name not in shadowed_slugs and s.name not in internal
+        )
+    if recent_only:
+        by_slug = {summary["name"]: summary for summary in summaries}
+        slugs = await _recent_attached_skill_slugs(db, user_id=user.id, limit=None)
+        summaries = [by_slug[slug] for slug in slugs if slug in by_slug]
+    return JSONResponse(content=summaries)
 
 
 # ---------------------------------------------------------------------------
@@ -493,9 +493,9 @@ async def _recent_attached_skill_slugs(
     db: AsyncSession,
     *,
     user_id: object,  # uuid.UUID — typed at call site
-    limit: int,
+    limit: int | None,
 ) -> list[str]:
-    """Return the caller's N most-recently-used distinct skill slugs.
+    """Return the caller's distinct used skill slugs in recency order.
 
     Reads from ``messages.applied_skills`` (text[]) joined to the chat's
     owner. Skills are filesystem-canonical (ADR 0007) so this array column
@@ -503,8 +503,8 @@ async def _recent_attached_skill_slugs(
     unnests, groups by slug, and orders by the most-recent message
     ``created_at`` per slug.
 
-    The result is **just slugs** — the caller maps them onto the merged
-    catalog to recover the title/scope/etc. shape autocomplete needs.
+    The caller maps these slugs onto its visible catalog. Autocomplete
+    caps the list, while the catalog needs all ranks across format filters.
     """
 
     skill_col = func.unnest(Message.applied_skills).label("slug")

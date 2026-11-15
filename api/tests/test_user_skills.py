@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.main import app
 from app.models import AuditLog, User, UserSkill
+from app.models.chat import Chat, Message
 from app.models.team import Team, TeamMember
 from app.security import create_access_token, hash_password
 from app.skills import load_registry
@@ -118,6 +120,68 @@ def _post_body(**overrides: object) -> dict[str, object]:
 # ---------------------------------------------------------------------------
 # /user-skills: create + list + get
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_catalog_recents_exclude_unused_skills_and_keep_ranks_beyond_autocomplete_limit(
+    client: AsyncClient, db_session: AsyncSession, user_a: User, user_b: User
+) -> None:
+    path = "/api/v1/skills"
+    headers = _bearer(user_a)
+    params = {"recent_only": "true"}
+    empty = await client.get(path, headers=headers, params=params)
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    slugs = [f"used-skill-{index:02}" for index in range(27)]
+    db_session.add_all(
+        UserSkill(
+            scope="user",
+            owner_user_id=user_a.id,
+            slug=slug,
+            display_name=slug,
+            description="Catalog sorting fixture",
+            body="Fixture prompt",
+            frontmatter_extra={"output_format": "table" if index < 2 else "prose"},
+        )
+        for index, slug in enumerate([*slugs, "unused-skill"])
+    )
+    mine = Chat(owner_id=user_a.id)
+    other = Chat(owner_id=user_b.id)
+    db_session.add_all([mine, other])
+    await db_session.flush()
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    db_session.add_all(
+        Message(
+            chat_id=mine.id,
+            role="assistant",
+            kind="ai",
+            content="Fixture result",
+            applied_skills=[slug],
+            created_at=start + timedelta(minutes=index),
+        )
+        for index, slug in enumerate(slugs)
+    )
+    db_session.add(
+        Message(
+            chat_id=other.id,
+            role="assistant",
+            kind="ai",
+            content="Fixture result",
+            applied_skills=[slugs[0], "unused-skill"],
+            created_at=start + timedelta(days=1),
+        )
+    )
+    await db_session.flush()
+
+    recent = await client.get(path, headers=headers, params=params)
+    assert recent.status_code == 200, recent.text
+    assert [row["name"] for row in recent.json()] == slugs[::-1]
+    assert [row["name"] for row in recent.json() if row["output_format"] == "table"] == slugs[1::-1]
+
+    default = await client.get(path, headers=headers)
+    assert default.status_code == 200, default.text
+    assert "unused-skill" in {row["name"] for row in default.json()}
 
 
 @pytest.mark.integration
