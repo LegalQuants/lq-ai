@@ -234,7 +234,7 @@
 				{/each}
 			</div>
 			<div class="lq-chip-row" role="group" aria-label="Sort skills">
-				<span class="lq-text-caption" style="color: var(--lq-text-tertiary);">Sort:</span>
+				<LqText as="span" size="12" tone="tertiary">Sort:</LqText>
 				<button
 					type="button"
 					class="lq-chip"
@@ -261,17 +261,17 @@
 
 	{#if !loading && builtins.length > 0}
 		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
-			<h2 class="lq-text-h4 mb-2">Built-in skills</h2>
-			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
+			<LqTitle order={2} size="14.5" weight="semibold" tone="primary" class="mb-2">Built-in skills</LqTitle>
+			<LqText as="p" size="12" tone="secondary" class="mb-3">
 				Read-only skills that ship with LQ.AI. Open one to read its description
 				(and column spec for table-mode skills), run it from the
 				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>,
 				or fork it into an editable copy of your own.
-			</p>
+			</LqText>
 			{#if visibleBuiltins.length === 0}
-				<p class="lq-text-caption" style="color: var(--lq-text-tertiary);" data-testid="lq-ai-builtin-empty-filtered">
+				<LqText as="p" size="12" tone="tertiary" data-testid="lq-ai-builtin-empty-filtered">
 					No built-in skills match the "{chipLabel(activeFormat)}" filter.
-				</p>
+				</LqText>
 			{:else}
 				<ul class="lq-table-skill-list">
 					{#each visibleBuiltins as s (s.name)}
@@ -280,13 +280,17 @@
 								<div class="min-w-0">
 									<div class="flex items-center gap-2 flex-wrap">
 										{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
-											<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
+											<LqText as="span" size="14" weight="medium" tone="primary">{s.title ?? s.name}</LqText>
 										{:else}
-											<a
+											<LqText
+												as="a"
+												size="14"
+												weight="medium"
+												tone="accent"
 												href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}
-												class="font-medium lq-text-body lq-link"
+												class="lq-link"
 												data-testid="lq-ai-builtin-skill-link"
-											>{s.title ?? s.name}</a>
+											>{s.title ?? s.name}</LqText>
 										{/if}
 										{#if normalizeFormat(s.output_format) !== FORMAT_PROSE}
 											<span data-testid="lq-ai-table-badge">
@@ -294,15 +298,15 @@
 											</span>
 										{/if}
 									</div>
-									<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+									<LqText as="code" size="12" tone="secondary" class="font-mono">{s.name}</LqText>
 									{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
-										<p class="lq-text-caption" data-testid="lq-ai-builtin-shadow-notice">
+										<LqText as="p" size="12" tone="tertiary" data-testid="lq-ai-builtin-shadow-notice">
 											Your {activeScopes.get(s.name) === 'user' ? 'personal' : 'team'} version overrides this built-in.
 											<a class="lq-link" href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}>Open active version</a>
-										</p>
+										</LqText>
 									{/if}
 									{#if s.description}
-										<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
+										<LqText as="p" size="12" tone="tertiary" class="mt-1 line-clamp-2">{s.description}</LqText>
 									{/if}
 								</div>
 							</div>
@@ -328,13 +332,14 @@
 			</LqText>
 		</div>
 	{:else if visibleRows.length === 0}
-		<p
-			class="lq-text-caption"
-			style="color: var(--lq-text-tertiary);"
+		<LqText
+			as="p"
+			size="12"
+			tone="tertiary"
 			data-testid="lq-ai-user-skills-empty-filtered"
 		>
 			None of your skills match the "{chipLabel(activeFormat)}" filter.
-		</p>
+		</LqText>
 	{:else}
 		<div class="lq-table-wrap overflow-x-auto">
 			<LqText as="table" size="13.5" tone="primary" class="min-w-full">
@@ -505,6 +510,10 @@
 		text-decoration: underline;
 	}
 	.lq-link:hover { text-decoration: underline; }
+	/* The built-in title link is an LqText, so the scoped .lq-link rule no longer reaches it. */
+	.lq-table-skill-card :global(.lq-link) {
+		text-decoration: underline;
+	}
 
 	.lq-empty-state {
 		border-radius: var(--lq-radius-lg);

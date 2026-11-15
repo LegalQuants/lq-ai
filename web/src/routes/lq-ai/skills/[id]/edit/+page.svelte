@@ -365,7 +365,7 @@
 			</div>
 
 			<div class="block">
-				<span class="lq-text-label">Output</span>
+				<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide">Output</LqText>
 				<div class="mt-1 flex items-center gap-4" role="radiogroup" aria-label="output mode">
 					<label class="flex items-center gap-1.5 text-sm cursor-pointer">
 						<input
@@ -388,10 +388,10 @@
 						Table
 					</label>
 				</div>
-				<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+				<LqText as="p" size="12" tone="tertiary" class="mt-1">
 					Table-mode skills produce a row-per-document grid in the Tabular Review wizard; each
 					column defines one extraction query.
-				</p>
+				</LqText>
 			</div>
 
 			{#if outputMode === 'table'}
