@@ -2,6 +2,7 @@
 	import { IconX } from '@tabler/icons-svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import {
@@ -27,6 +28,7 @@
 		isLastStep,
 		validateDocumentsStep,
 		validateColumnsStep,
+		resolvePreselectedSkill,
 		requiresCostConfirmation,
 		buildPreviewRequest,
 		buildExecuteRequest,
@@ -264,6 +266,17 @@
 
 	onMount(async () => {
 		await Promise.all([loadKBs(), loadTableSkills()]);
+		// DE-298 — the skill detail page's "Use in Tabular Review" CTA
+		// deep-links here with ?skill=<slug>; preselect it when it names a
+		// loaded table-mode skill.
+		const preselect = resolvePreselectedSkill(
+			$page.url.searchParams.get('skill'),
+			allTableSkills
+		);
+		if (preselect) {
+			columnsMode = 'skill';
+			selectedSkillName = preselect;
+		}
 	});
 </script>
 
@@ -408,6 +421,16 @@
 						{#if s?.description}
 							<p class="lq-tabwiz__skill-desc">{s.description}</p>
 						{/if}
+						<!-- DE-298 — read-only detail page shows the full column spec. -->
+						<a
+							class="lq-tabwiz__view-columns"
+							data-testid="lq-tabwiz-view-columns"
+							href={`/lq-ai/skills/${encodeURIComponent(selectedSkillName)}`}
+							target="_blank"
+							rel="noopener"
+						>
+							View columns (opens in a new tab)
+						</a>
 					{/if}
 				{/if}
 			{:else}
@@ -697,6 +720,12 @@
 		margin: 0.25rem 0 0;
 		color: var(--lq-text-secondary);
 		font-size: 0.875rem;
+	}
+	.lq-tabwiz__view-columns {
+		align-self: flex-start;
+		font-size: 0.875rem;
+		color: var(--lq-accent);
+		text-decoration: underline;
 	}
 	.lq-tabwiz__adhoc {
 		width: 100%;
