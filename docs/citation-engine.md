@@ -115,6 +115,11 @@ Per M2-D1 Decision F, Stage 4 ensemble methods render as
 The fifth state (`system-error`) was deferred from M2-C2 per Decision H
 and is reserved in the type union for forward compatibility.
 
+Citation Ledger rows retain document and caselaw identities and prefer a source's label or tool
+name. Otherwise, rows show the source kind with its non-empty external reference as plain text,
+wrapping long references on narrow screens. Missing or blank references fall back to the kind;
+references alone do not create source links or change verification status.
+
 ## Activation (Stage 4 only)
 
 Stages 1-3 always run on every citation. Stage 4 is opt-in. Three
