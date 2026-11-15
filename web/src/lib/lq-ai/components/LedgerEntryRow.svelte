@@ -22,7 +22,8 @@
 		if (src.kind === 'kb_document') return 'Document';
 		if (src.kind === 'caselaw')
 			return `Opinion ${src.opinion_id ?? ''} · cluster ${src.cluster_id ?? ''}`.trim();
-		return src.label ?? src.tool ?? src.kind;
+		const externalRef = src.external_ref?.trim();
+		return src.label ?? src.tool ?? (externalRef ? `${src.kind} · ${externalRef}` : src.kind);
 	}
 </script>
 
@@ -179,6 +180,8 @@
 	}
 
 	.lq-ledger-identity {
+		min-width: 0;
+		overflow-wrap: anywhere;
 		font-size: 13px;
 		font-weight: 500;
 		color: var(--lq-text);
