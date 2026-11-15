@@ -149,7 +149,7 @@ recorded; capturing it on the post span is a future enhancement, not a shipped c
 | `anonymization.tier` | Inference tier at the time of the anonymization decision (recorded on every `pre` span) |
 | `anonymization.skip_reason` | Present when the pass is skipped; one of `disabled` (config off), `tier_floor` (routed tier not in `apply_at_tiers`), `privileged` (privileged matter), `request_opt_out` (`anonymize=false` on the request) |
 | `anonymization.entity_count` | Integer count of entities detected (`0` when skipped) |
-| `anonymization.entity_types` | Sorted list of entity type labels (e.g., `PERSON,MATTER_NUMBER`). **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). Recorded only when the pass actually runs (not on the skip path). |
+| `anonymization.entity_types` | Sorted list of pseudonym-domain labels (e.g., `PERSON`, `MATTER_NUMBER`). `LOCATION` is reported as `ADDRESS` and `US_BANK_NUMBER` as `ACCOUNT_NUMBER`; other labels are unchanged. **Never raw entity values** — see [§4](#4-anonymization-and-telemetry). Recorded only when the pass actually runs (not on the skip path). |
 
 **Span event on `anonymization.pre`:**
 
