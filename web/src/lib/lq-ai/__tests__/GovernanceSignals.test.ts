@@ -63,6 +63,16 @@ describe('governance signals (ADR 0045 §1)', () => {
 		);
 	});
 
+	it("keeps the skills list's output-format badge out of the governance tone", () => {
+		const page = readFileSync(
+			join(components, '..', '..', '..', 'routes', 'lq-ai', 'skills', '+page.svelte'),
+			'utf8'
+		);
+		const badges = page.match(/<TrustPill[^>]*label=\{chipLabel\(normalizeFormat\([^>]*\/>/g);
+		expect(badges, 'the format badge is a TrustPill').toHaveLength(1);
+		expect(badges![0]).toContain('tone="sage"');
+	});
+
 	it('draws a tier mismatch in the governance colour, a matching tier with the dot', () => {
 		const pill = (tierMismatch: boolean) =>
 			render(ProvenancePill, { props: { kind: 'tier', summary: 'Tier 2', tierMismatch } }).body;
