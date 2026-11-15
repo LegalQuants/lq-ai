@@ -187,9 +187,9 @@ def test_pre_anonymize_multiline_entity_substitutes_across_newline() -> None:
 
     assert mapper is not None
     assert req.messages[0].content == (
-        "Contract counterparty:\nLOCATION_0001\n\nSignatory: John Doe"
+        "Contract counterparty:\nADDRESS_0001\n\nSignatory: John Doe"
     )
-    assert mapper.reverse()["LOCATION_0001"] == multiline_address
+    assert mapper.reverse()["ADDRESS_0001"] == multiline_address
 
 
 @pytest.mark.unit
@@ -198,9 +198,9 @@ def test_post_anonymize_rehydrates_multiline_entity_with_newlines_preserved() ->
 
     multiline_address = "Acme Corp\n123 Main St\nNew York, NY 10001"
     mapper = PseudonymMapper()
-    mapper.assign("LOCATION", multiline_address)
+    mapper.assign("ADDRESS", multiline_address)
 
-    response = _make_response(content="The counterparty at LOCATION_0001 signed the agreement.")
+    response = _make_response(content="The counterparty at ADDRESS_0001 signed the agreement.")
     post_anonymize_response(
         response=response,
         mapper=mapper,
