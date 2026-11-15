@@ -288,7 +288,7 @@
 										{/if}
 										{#if normalizeFormat(s.output_format) !== FORMAT_PROSE}
 											<span data-testid="lq-ai-table-badge">
-												<TrustPill variant="tier" label={chipLabel(normalizeFormat(s.output_format))} />
+												<TrustPill variant="tier" tone="sage" label={chipLabel(normalizeFormat(s.output_format))} />
 											</span>
 										{/if}
 									</div>
