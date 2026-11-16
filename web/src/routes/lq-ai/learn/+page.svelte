@@ -1,3 +1,8 @@
+<script lang="ts">
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+</script>
+
 <!--
   /lq-ai/learn — Learn surface landing page.
 
@@ -8,15 +13,15 @@
 
 <main class="lq-learn-page" data-testid="lq-ai-learn-page">
 	<header class="lq-page-header">
-		<h1 class="lq-text-page-h">Learn</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Learn</LqTitle>
 		<div class="lq-learn-intro">
-			<p class="lq-text-body lq-learn-intro-p">
+			<LqText as="p" size="14" tone="secondary" class="lq-learn-intro-p">
 				A guided introduction to LQ.AI for everyone — practicing attorneys curious about what the
 				project does, security and procurement teams evaluating it for deployment, engineers
 				exploring the architecture, and anyone considering contributing a skill. The three sections
 				below address a different question: what it does, how it works, and how to contribute.
-			</p>
-			<p class="lq-text-body lq-learn-intro-p">
+			</LqText>
+			<LqText as="p" size="14" tone="secondary" class="lq-learn-intro-p">
 				Every claim on these pages is backed by a path to verify it in the codebase. If the docs say
 				something the code does not do, the code is canonical — please
 				<a
@@ -25,7 +30,7 @@
 					target="_blank"
 					rel="noopener noreferrer">open an issue</a
 				>.
-			</p>
+			</LqText>
 		</div>
 	</header>
 
@@ -89,8 +94,7 @@
 		max-width: 68ch;
 	}
 
-	.lq-learn-intro-p {
-		color: var(--lq-text-secondary);
+	.lq-learn-intro :global(.lq-learn-intro-p) {
 		line-height: 1.6;
 	}
 

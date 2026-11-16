@@ -3,15 +3,17 @@
 	import TrustProvidersCard from '$lib/lq-ai/components/TrustProvidersCard.svelte';
 	import TrustExternalTurnsCard from '$lib/lq-ai/components/TrustExternalTurnsCard.svelte';
 	import TrustArtifactsCard from '$lib/lq-ai/components/TrustArtifactsCard.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
 
 <div class="trust-page">
 	<div class="trust-header">
-		<h1 class="lq-text-page-h">Trust &amp; Privacy</h1>
-		<p class="lq-text-body intro-body">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Trust &amp; Privacy</LqTitle>
+		<LqText as="p" size="14" tone="secondary" class="intro-body">
 			This is what we know about your deployment. Every claim here links to an artifact you can
 			verify in this repo or on your operator's machine.
-		</p>
+		</LqText>
 	</div>
 
 	<div class="trust-grid">
@@ -38,8 +40,7 @@
 		gap: var(--lq-space-2);
 	}
 
-	.intro-body {
-		color: var(--lq-text-secondary);
+	.trust-header :global(.intro-body) {
 		max-width: 680px;
 	}
 

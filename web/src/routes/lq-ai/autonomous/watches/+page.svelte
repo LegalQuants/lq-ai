@@ -35,6 +35,7 @@
 	import type { Playbook } from '$lib/lq-ai/types';
 	import type { SkillSummary } from '$lib/lq-ai/types';
 	import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// List state
@@ -307,7 +308,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div>
-				<h1 class="lq-text-page-h">Watches</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Watches</LqTitle>
 				<p class="page-intro">
 					Document-arrival triggers. When a new file lands in a watched Knowledge Base, LQVern runs
 					the assigned playbook or skill automatically. The Knowledge Base is set at creation and
@@ -432,7 +433,7 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div class="modal-panel" on:click|stopPropagation on:keydown|stopPropagation>
-			<h2 id="watch-modal-title" class="lq-text-page-h modal-title">New watch</h2>
+			<LqTitle order={2} size="20" weight="bold" tone="primary" id="watch-modal-title" class="modal-title">New watch</LqTitle>
 
 			<form on:submit|preventDefault={handleSubmit} class="modal-form" novalidate>
 				<!-- Knowledge base (required + immutable after creation) -->
@@ -644,18 +645,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -671,7 +672,7 @@
 
 	.empty-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 		font-style: normal;
 	}
 
@@ -687,7 +688,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -697,7 +698,7 @@
 	}
 
 	.new-button:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.new-button:disabled {
@@ -778,13 +779,13 @@
 	}
 
 	.status-badge--enabled {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.status-badge--disabled {
-		background: var(--lq-inset, rgba(0, 0, 0, 0.04));
+		background: var(--lq-inset);
 		color: var(--lq-text-tertiary);
 		border: 1px solid var(--lq-border);
 	}
@@ -797,7 +798,7 @@
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -808,12 +809,12 @@
 	}
 
 	.action-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {
@@ -846,7 +847,7 @@
 		overflow-y: auto;
 	}
 
-	.modal-title {
+	.modal-panel :global(.modal-title) {
 		margin: 0 0 var(--lq-space-5);
 	}
 
@@ -889,7 +890,7 @@
 	.modal-input,
 	.modal-select {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -953,8 +954,8 @@
 	.submit-error {
 		font-size: 13px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -973,7 +974,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -981,7 +982,7 @@
 	}
 
 	.modal-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.modal-btn-primary:focus-visible {
@@ -998,7 +999,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;

@@ -81,7 +81,7 @@
 						{group.project?.name ?? 'Without a project'}
 						{#if group.project?.privileged}
 							<span
-								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700 align-middle"
+								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold lq-t-error-soft lq-t-error align-middle"
 								title="Privileged matter — minimum_inference_tier enforced"
 							>
 								PRIVILEGED
@@ -164,14 +164,14 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 	}
 	.lq-btn-primary:hover {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 	.lq-btn-primary:focus-visible {
 		outline: 2px solid var(--lq-accent);
@@ -215,13 +215,20 @@
 		background: var(--lq-accent-soft);
 	}
 	.lq-chat-row--active {
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-		border-left: 2px solid var(--lq-accent);
-		padding-left: 18px;
+		background: var(--lq-selected);
+		color: var(--lq-text);
+		font-weight: 500;
 	}
 
 	.lq-empty-hint {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-soft {
+		background-color: var(--lq-error-soft);
 	}
 </style>

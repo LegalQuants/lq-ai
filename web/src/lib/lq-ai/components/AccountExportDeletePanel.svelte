@@ -4,6 +4,8 @@
 	import { auth } from '../auth/store';
 	import { cancelDeletion, getExportJob, requestDeletion, startExport } from '../api/users';
 	import type { DeleteScheduledResponse, ExportJob } from '../types';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	// ----- Export state -----
 
@@ -141,9 +143,9 @@
 	<!-- ── Export section ─────────────────────────────── -->
 	<section class="aed-section">
 		<h3 class="section-title">Export my data</h3>
-		<p class="lq-text-body" style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-3);">
+		<LqText as="p" size="14" tone="secondary" style="margin-bottom: var(--lq-space-3);">
 			Download a copy of all your data — chats, files, skills, and account information. Exports expire after 24 hours.
-		</p>
+		</LqText>
 
 		{#if exportState.kind === 'idle'}
 			<button type="button" class="lq-btn-secondary" on:click={handleStartExport}>
@@ -164,9 +166,9 @@
 				>
 					Download (.zip)
 				</a>
-				<p class="lq-text-caption" style="margin-top: var(--lq-space-2); color: var(--lq-text-tertiary);">
+				<LqText as="p" size="12" tone="tertiary" style="margin-top: var(--lq-space-2);">
 					Link expires in 24 hours.
-				</p>
+				</LqText>
 			</div>
 
 		{:else if exportState.kind === 'failed'}
@@ -187,9 +189,9 @@
 	<!-- ── Delete section ────────────────────────────── -->
 	<section class="aed-section">
 		<h3 class="section-title">Delete my account</h3>
-		<p class="lq-text-body" style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-3);">
+		<LqText as="p" size="14" tone="secondary" style="margin-bottom: var(--lq-space-3);">
 			Schedule your account for permanent deletion. You have a grace period to cancel by signing back in.
-		</p>
+		</LqText>
 
 		{#if deleteState.kind === 'idle'}
 			<button type="button" class="lq-btn-danger" on:click={openConfirm}>
@@ -241,12 +243,12 @@
 		on:keydown={(e) => e.key === 'Escape' && closeConfirm()}
 	>
 		<div class="modal" role="document">
-			<h2 id="delete-confirm-title" class="lq-text-page-h" style="margin-bottom: var(--lq-space-4);">
+			<LqTitle order={2} size="20" weight="bold" tone="primary" id="delete-confirm-title" style="margin-bottom: var(--lq-space-4);">
 				Delete account
-			</h2>
-			<p class="lq-text-body" style="margin-bottom: var(--lq-space-4);">
+			</LqTitle>
+			<LqText as="p" size="14" tone="primary" style="margin-bottom: var(--lq-space-4);">
 				This will schedule your account for permanent deletion. To confirm, type your email address below.
-			</p>
+			</LqText>
 			<label class="field-label" for="confirm-email">
 				Type <strong>{userEmail}</strong> to confirm
 			</label>
@@ -369,7 +371,7 @@
 		background: var(--lq-canvas);
 		color: var(--lq-error);
 		border: 1.5px solid var(--lq-error);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -383,20 +385,20 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 	}
-	.lq-btn-primary:hover { filter: brightness(0.95); }
+	.lq-btn-primary:hover { opacity: 0.85; }
 	.lq-btn-primary:focus-visible { outline: 2px solid var(--lq-accent); outline-offset: 2px; }
 
 	.lq-btn-secondary {
 		background: var(--lq-canvas);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		font-weight: 500;
@@ -409,7 +411,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		cursor: pointer;

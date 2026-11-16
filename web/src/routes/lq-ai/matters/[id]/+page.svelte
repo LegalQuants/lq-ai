@@ -10,6 +10,8 @@
 	import CompactPanel from '$lib/lq-ai/components/CompactPanel.svelte';
 	import { bannerVisible } from './proposal-helpers';
 	import { createProposalInbox } from './proposal-inbox';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let matter: Project | null = null;
 	let loading = true;
@@ -91,24 +93,30 @@
 </script>
 
 {#if loading}
-	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-text-secondary);">
+	<LqText as="p" size="14" tone="secondary" style="padding: var(--lq-space-6);">
 		Loading matter...
-	</p>
+	</LqText>
 {:else if error || !matter}
-	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-error, #b91c1c);">
+	<LqText as="p" size="14" tone="danger" style="padding: var(--lq-space-6);">
 		{error ?? 'Matter not found'}
-	</p>
+	</LqText>
 {:else}
 	<div class="matter-page">
 		{#if showProposalBanner}
 			<section class="proposal-banner" aria-label="Context proposals">
 				<header class="proposal-banner-header">
-					<h2 class="lq-text-panel-h proposal-banner-title">Context proposals</h2>
+					<LqTitle
+						order={2}
+						size="16"
+						weight="semibold"
+						tone="primary"
+						class="proposal-banner-title">Context proposals</LqTitle
+					>
 					{#if proposals.length > 0}
-						<span class="lq-text-caption proposal-banner-count">
+						<LqText as="span" size="12" tone="secondary" class="proposal-banner-count">
 							{$inbox.totalCount} pending — showing {proposals.length}. Accept to append to this
 							matter's context, or reject to discard.
-						</span>
+						</LqText>
 					{/if}
 				</header>
 
@@ -128,9 +136,9 @@
 							<li class="proposal-row">
 								<div class="proposal-body">
 									<p class="proposal-text">{proposal.suggested_md}</p>
-									<span class="lq-text-caption proposal-date">
+									<LqText as="span" size="12" tone="secondary" class="proposal-date">
 										Proposed {new Date(proposal.created_at).toLocaleDateString()}
-									</span>
+									</LqText>
 								</div>
 								<div class="proposal-actions">
 									<button
@@ -243,12 +251,8 @@
 		flex-wrap: wrap;
 	}
 
-	.proposal-banner-title {
+	.proposal-banner-header :global(.proposal-banner-title) {
 		margin: 0;
-	}
-
-	.proposal-banner-count {
-		color: var(--lq-text-secondary);
 	}
 
 	.proposal-message {
@@ -258,15 +262,15 @@
 	}
 
 	.proposal-message--error {
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
-		border: 1px solid var(--lq-error-border, #fbb);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.proposal-message--success {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border: 1px solid var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.proposal-list {
@@ -286,7 +290,7 @@
 		border: 1px solid var(--lq-border);
 		border-left: 3px solid var(--lq-accent);
 		border-radius: 6px;
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.03));
+		background: var(--lq-surface-hover);
 	}
 
 	.proposal-body {
@@ -306,10 +310,6 @@
 		word-break: break-word;
 	}
 
-	.proposal-date {
-		color: var(--lq-text-secondary);
-	}
-
 	.proposal-actions {
 		display: flex;
 		gap: var(--lq-space-2);
@@ -318,7 +318,7 @@
 
 	.proposal-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -329,7 +329,7 @@
 	}
 
 	.proposal-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.proposal-button--primary {
@@ -344,8 +344,8 @@
 	}
 
 	.proposal-button--danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.proposal-button:disabled {

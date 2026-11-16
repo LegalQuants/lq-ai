@@ -1,5 +1,7 @@
 <script lang="ts">
   import { auth } from '$lib/lq-ai/auth/store';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   $: user = $auth.user;
   $: displayName = user?.display_name || user?.email || 'there';
@@ -10,6 +12,6 @@
 </script>
 
 <header style="margin-bottom: var(--lq-space-6);">
-  <h1 class="lq-text-welcome">Welcome back, {displayName}</h1>
-  <p class="lq-text-caption" style="color: var(--lq-text-tertiary);">{dayOfWeek}, {dateString}</p>
+  <LqTitle order={1} size="26" weight="semibold" tone="primary">Welcome back, {displayName}</LqTitle>
+  <LqText as="p" size="12" tone="tertiary">{dayOfWeek}, {dateString}</LqText>
 </header>

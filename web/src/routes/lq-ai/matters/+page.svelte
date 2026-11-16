@@ -4,6 +4,8 @@
   import type { Project } from '$lib/lq-ai/types';
   import MatterCard from '$lib/lq-ai/components/MatterCard.svelte';
   import NewMatterModal from '$lib/lq-ai/components/NewMatterModal.svelte';
+  import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+  import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
   let matters: Project[] = [];
   let loading = true;
@@ -32,12 +34,12 @@
 
 <main class="mtr-page">
   <header class="mtr-header">
-    <h1 class="lq-text-page-h">Matters</h1>
+    <LqTitle order={1} size="20" weight="bold" tone="primary">Matters</LqTitle>
     <div class="mtr-header__actions">
-      <label class="lq-text-caption mtr-archived-toggle">
+      <LqText as="label" size="12" tone="secondary" class="mtr-archived-toggle">
         <input type="checkbox" bind:checked={archivedFilter} on:change={refresh} />
         Show archived
-      </label>
+      </LqText>
       <button type="button" class="mtr-btn-primary" on:click={openNewModal}>
         + New matter
       </button>
@@ -45,16 +47,16 @@
   </header>
 
   {#if loading}
-    <p class="lq-text-body mtr-state-msg">Loading matters…</p>
+    <LqText as="p" size="14" tone="secondary" class="mtr-state-msg">Loading matters…</LqText>
   {:else if error}
-    <p class="lq-text-body mtr-state-msg mtr-state-msg--error">
+    <LqText as="p" size="14" tone="danger" class="mtr-state-msg mtr-state-msg--error">
       Couldn't load matters: {error}
-    </p>
+    </LqText>
   {:else if matters.length === 0}
     <section class="mtr-empty-state">
-      <p class="lq-text-body mtr-empty-state__copy">
+      <LqText as="p" size="14" tone="secondary" class="mtr-empty-state__copy">
         {archivedFilter ? 'No archived matters.' : "You don't have any matters yet."}
-      </p>
+      </LqText>
       {#if !archivedFilter}
         <button type="button" class="mtr-btn-primary" on:click={openNewModal}>
           + Start your first matter
@@ -99,11 +101,10 @@
     align-items: center;
   }
 
-  .mtr-archived-toggle {
+  .mtr-header__actions :global(.mtr-archived-toggle) {
     display: inline-flex;
     gap: var(--lq-space-2);
     align-items: center;
-    color: var(--lq-text-secondary);
     cursor: pointer;
   }
 
@@ -111,7 +112,7 @@
     background: var(--lq-accent);
     color: white;
     border: 0;
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-2) var(--lq-space-4);
     cursor: pointer;
     font-weight: 500;
@@ -120,7 +121,7 @@
   }
 
   .mtr-btn-primary:hover {
-    filter: brightness(0.95);
+    opacity: 0.85;
   }
 
   .mtr-btn-primary:focus-visible {
@@ -128,13 +129,8 @@
     outline-offset: 2px;
   }
 
-  .mtr-state-msg {
-    color: var(--lq-text-secondary);
+  .mtr-page :global(.mtr-state-msg) {
     padding: var(--lq-space-4) 0;
-  }
-
-  .mtr-state-msg--error {
-    color: var(--lq-error);
   }
 
   .mtr-empty-state {
@@ -142,8 +138,7 @@
     padding: var(--lq-space-8) var(--lq-space-4);
   }
 
-  .mtr-empty-state__copy {
-    color: var(--lq-text-secondary);
+  .mtr-empty-state :global(.mtr-empty-state__copy) {
     margin-bottom: var(--lq-space-4);
   }
 

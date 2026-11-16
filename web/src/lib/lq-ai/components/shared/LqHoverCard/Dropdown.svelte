@@ -89,8 +89,8 @@
 	.lq-hovercard-dropdown {
 		position: fixed;
 		z-index: 50;
-		background: var(--lq-canvas, #fff);
-		border: 1px solid var(--lq-border, #e5e7eb);
-		border-radius: var(--lq-radius-lg, 8px);
+		background: var(--lq-canvas, #ffffff);
+		border: 1px solid var(--lq-border, #e4e4e7);
+		border-radius: var(--lq-radius-card, 16px);
 	}
 </style>

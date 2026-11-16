@@ -19,6 +19,8 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { UserSkill, SkillSummary, TeamSummary } from '$lib/lq-ai/types';
 	import TrustPill from '$lib/lq-ai/components/TrustPill.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 	import {
 		FORMAT_ALL,
 		FORMAT_PROSE,
@@ -172,11 +174,11 @@
 <div class="p-4 max-w-5xl mx-auto" data-testid="lq-ai-user-skills">
 	<header class="mb-4 flex items-center justify-between">
 		<div>
-			<h1 class="lq-text-page-h">My skills</h1>
-			<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+			<LqTitle order={1} size="20" weight="bold" tone="primary">My skills</LqTitle>
+			<LqText as="p" size="12" tone="tertiary" class="mt-1">
 				Skills you can edit — your personal skills, plus team skills for any team where you're an
 				admin. A skill at the same slug as a built-in shadows the built-in for the relevant scope.
-			</p>
+			</LqText>
 		</div>
 		<div class="flex gap-2">
 			<a href="/lq-ai/skills/workspaces" class="lq-btn-secondary text-xs">Saved work</a>
@@ -198,7 +200,7 @@
 
 	{#if listError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{listError}
@@ -206,7 +208,7 @@
 	{/if}
 	{#if actionError}
 		<div
-			class="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-rose-900 text-sm dark:border-rose-700 dark:bg-rose-950 dark:text-rose-100"
+			class="mb-4 p-3 rounded border lq-t-error-border lq-t-error-bg lq-t-error-strong text-sm"
 			role="alert"
 		>
 			{actionError}
@@ -232,7 +234,7 @@
 				{/each}
 			</div>
 			<div class="lq-chip-row" role="group" aria-label="Sort skills">
-				<span class="lq-text-caption" style="color: var(--lq-text-tertiary);">Sort:</span>
+				<LqText as="span" size="12" tone="tertiary">Sort:</LqText>
 				<button
 					type="button"
 					class="lq-chip"
@@ -259,17 +261,17 @@
 
 	{#if !loading && builtins.length > 0}
 		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
-			<h2 class="lq-text-h4 mb-2">Built-in skills</h2>
-			<p class="lq-text-caption mb-3" style="color: var(--lq-text-secondary);">
+			<LqTitle order={2} size="14.5" weight="semibold" tone="primary" class="mb-2">Built-in skills</LqTitle>
+			<LqText as="p" size="12" tone="secondary" class="mb-3">
 				Read-only skills that ship with LQ.AI. Open one to read its description
 				(and column spec for table-mode skills), run it from the
 				<a href="/lq-ai/tabular/new" class="lq-link">Tabular Review wizard</a>,
 				or fork it into an editable copy of your own.
-			</p>
+			</LqText>
 			{#if visibleBuiltins.length === 0}
-				<p class="lq-text-caption" style="color: var(--lq-text-tertiary);" data-testid="lq-ai-builtin-empty-filtered">
+				<LqText as="p" size="12" tone="tertiary" data-testid="lq-ai-builtin-empty-filtered">
 					No built-in skills match the "{chipLabel(activeFormat)}" filter.
-				</p>
+				</LqText>
 			{:else}
 				<ul class="lq-table-skill-list">
 					{#each visibleBuiltins as s (s.name)}
@@ -278,29 +280,33 @@
 								<div class="min-w-0">
 									<div class="flex items-center gap-2 flex-wrap">
 										{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
-											<span class="font-medium lq-text-body">{s.title ?? s.name}</span>
+											<LqText as="span" size="14" weight="medium" tone="primary">{s.title ?? s.name}</LqText>
 										{:else}
-											<a
+											<LqText
+												as="a"
+												size="14"
+												weight="medium"
+												tone="accent"
 												href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}
-												class="font-medium lq-text-body lq-link"
+												class="lq-link"
 												data-testid="lq-ai-builtin-skill-link"
-											>{s.title ?? s.name}</a>
+											>{s.title ?? s.name}</LqText>
 										{/if}
 										{#if normalizeFormat(s.output_format) !== FORMAT_PROSE}
 											<span data-testid="lq-ai-table-badge">
-												<TrustPill variant="tier" label={chipLabel(normalizeFormat(s.output_format))} />
+												<TrustPill variant="tier" tone="sage" label={chipLabel(normalizeFormat(s.output_format))} />
 											</span>
 										{/if}
 									</div>
-									<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{s.name}</code>
+									<LqText as="code" size="12" tone="secondary" class="font-mono">{s.name}</LqText>
 									{#if activeScopes.get(s.name) === 'user' || activeScopes.get(s.name) === 'team'}
-										<p class="lq-text-caption" data-testid="lq-ai-builtin-shadow-notice">
+										<LqText as="p" size="12" tone="tertiary" data-testid="lq-ai-builtin-shadow-notice">
 											Your {activeScopes.get(s.name) === 'user' ? 'personal' : 'team'} version overrides this built-in.
 											<a class="lq-link" href={`/lq-ai/skills/${encodeURIComponent(s.name)}`}>Open active version</a>
-										</p>
+										</LqText>
 									{/if}
 									{#if s.description}
-										<p class="lq-text-caption mt-1 line-clamp-2" style="color: var(--lq-text-tertiary);">{s.description}</p>
+										<LqText as="p" size="12" tone="tertiary" class="mt-1 line-clamp-2">{s.description}</LqText>
 									{/if}
 								</div>
 							</div>
@@ -312,38 +318,39 @@
 	{/if}
 
 	{#if loading}
-		<p class="lq-text-body" style="color: var(--lq-text-secondary);">Loading…</p>
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
 	{:else if rows.length === 0}
 		<div
 			class="lq-empty-state p-6 text-center"
 		>
-			<p class="lq-text-body" style="color: var(--lq-text-secondary);">You haven't created any skills yet.</p>
-			<p class="mt-2 lq-text-body">
+			<LqText as="p" size="14" tone="secondary">You haven't created any skills yet.</LqText>
+			<LqText as="p" size="14" tone="primary" class="mt-2">
 				<a href="/lq-ai/skills/new" class="lq-link">
 					Create your first skill
 				</a>
 				, or fork a built-in from the picker.
-			</p>
+			</LqText>
 		</div>
 	{:else if visibleRows.length === 0}
-		<p
-			class="lq-text-caption"
-			style="color: var(--lq-text-tertiary);"
+		<LqText
+			as="p"
+			size="12"
+			tone="tertiary"
 			data-testid="lq-ai-user-skills-empty-filtered"
 		>
 			None of your skills match the "{chipLabel(activeFormat)}" filter.
-		</p>
+		</LqText>
 	{:else}
 		<div class="lq-table-wrap overflow-x-auto">
-			<table class="min-w-full lq-text-body-sm">
+			<LqText as="table" size="13.5" tone="primary" class="min-w-full">
 				<thead class="lq-thead">
 					<tr>
-						<th class="text-left px-3 py-2 lq-text-label">Title</th>
-						<th class="text-left px-3 py-2 lq-text-label">Slug</th>
-						<th class="text-left px-3 py-2 lq-text-label">Scope</th>
-						<th class="text-left px-3 py-2 lq-text-label">Version</th>
-						<th class="text-left px-3 py-2 lq-text-label">Updated</th>
-						<th class="text-right px-3 py-2 lq-text-label">Actions</th>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Title</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Slug</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Scope</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Version</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Updated</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-right px-3 py-2">Actions</LqText>
 					</tr>
 				</thead>
 				<tbody class="lq-tbody">
@@ -357,15 +364,16 @@
 									{row.display_name}
 								</a>
 								{#if row.description}
-									<div class="lq-text-caption mt-0.5 line-clamp-1" style="color: var(--lq-text-tertiary);">{row.description}</div>
+									<LqText as="div" size="12" tone="tertiary" class="mt-0.5 line-clamp-1">{row.description}</LqText>
 								{/if}
 							</td>
 							<td class="px-3 py-2">
-								<code class="lq-text-caption font-mono" style="color: var(--lq-text-secondary);">{row.slug}</code>
+								<LqText as="code" size="12" tone="secondary" class="font-mono">{row.slug}</LqText>
 								{#if builtinSlugs.has(row.slug)}
 									<span class="ml-2" data-testid="lq-ai-user-skill-shadow-chip">
 										<TrustPill
 											variant="tier"
+											tone="sage"
 											label="Shadows built-in"
 										/>
 									</span>
@@ -376,6 +384,7 @@
 									<span data-testid="lq-ai-user-skill-team-chip" title="Team-scope skill — visible to every member of this team.">
 										<TrustPill
 											variant="tier"
+											tone="sage"
 											label={`Team · ${row.owner_team_id ? (teamNamesById.get(row.owner_team_id) ?? 'unknown') : 'unknown'}`}
 										/>
 									</span>
@@ -385,18 +394,18 @@
 									</span>
 								{/if}
 							</td>
-							<td class="px-3 py-2 lq-tabular lq-text-caption" style="color: var(--lq-text-secondary);">{row.version}</td>
-							<td class="px-3 py-2 lq-text-caption" style="color: var(--lq-text-tertiary);">{shortDate(row.updated_at)}</td>
+							<LqText as="td" size="12" tone="secondary" class="px-3 py-2 lq-tabular">{row.version}</LqText>
+							<LqText as="td" size="12" tone="tertiary" class="px-3 py-2">{shortDate(row.updated_at)}</LqText>
 							<td class="px-3 py-2 text-right whitespace-nowrap">
 								<a
 									href={`/lq-ai/skills/${row.id}/edit`}
-									class="lq-btn-secondary lq-text-caption"
+									class="lq-btn-secondary"
 								>
 									Edit
 								</a>
 								<button
 									type="button"
-									class="ml-1 lq-btn-danger lq-text-caption"
+									class="ml-1 lq-btn-danger"
 									on:click={() => archive(row)}
 									data-testid="lq-ai-user-skill-archive-btn"
 								>
@@ -406,7 +415,7 @@
 						</tr>
 					{/each}
 				</tbody>
-			</table>
+			</LqText>
 		</div>
 	{/if}
 </div>
@@ -440,8 +449,8 @@
 		background: var(--lq-inset);
 	}
 	.lq-chip[data-active='true'] {
-		background: var(--lq-accent-soft, var(--lq-inset));
-		border-color: var(--lq-accent, var(--lq-border));
+		background: var(--lq-accent-soft);
+		border-color: var(--lq-accent);
 		color: var(--lq-text);
 	}
 
@@ -463,7 +472,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -477,7 +486,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
@@ -491,7 +500,7 @@
 		background: transparent;
 		color: var(--lq-error);
 		border: 1px solid var(--lq-error);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 12px;
 		cursor: pointer;
@@ -500,9 +509,13 @@
 
 	.lq-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 	.lq-link:hover { text-decoration: underline; }
+	/* The built-in title link is an LqText, so the scoped .lq-link rule no longer reaches it. */
+	.lq-table-skill-card :global(.lq-link) {
+		text-decoration: underline;
+	}
 
 	.lq-empty-state {
 		border-radius: var(--lq-radius-lg);
@@ -533,5 +546,16 @@
 		background: var(--lq-inset);
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
 	}
 </style>

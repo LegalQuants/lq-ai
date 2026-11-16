@@ -1,3 +1,8 @@
+<script lang="ts">
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+</script>
+
 <!--
   /lq-ai/learn/compare — "How It Compares" condensed vendor-neutral comparison.
 
@@ -16,8 +21,8 @@
 <main class="lq-learn-compare-page" data-testid="lq-ai-learn-compare-page">
 	<header class="lq-page-header">
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
-		<h1 class="lq-text-page-h">How It Compares</h1>
-		<p class="lq-text-body lq-page-intro">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">How It Compares</LqTitle>
+		<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-page-intro">
 			A category of proprietary legal-tech products has begun describing its AI output as
 			"fiduciary-grade" — verified, trustworthy, defensible. That's the right bar. Where this
 			comparison differs is the axis it measures on: <strong>verifiability, not capability.</strong>
@@ -25,7 +30,7 @@
 			it claims, it is closed-source, so the claim cannot be independently checked or forked by the user
 			relying on it. Every LQ.AI row below resolves to one or more clickable artifacts — a design record,
 			a source file, and/or an interactive playground you can drive yourself.
-		</p>
+		</LqText>
 	</header>
 
 	<section class="lq-compare-truths" data-testid="lq-ai-learn-compare-truths">
@@ -33,44 +38,44 @@
 		<div class="lq-truths-grid">
 			<div class="lq-truth-card">
 				<h3 class="lq-truth-h">1. Demonstrable vs. asserted</h3>
-				<p class="lq-text-body">
+				<LqText as="p" size="14" tone="primary" leading="relaxed">
 					Every LQ.AI checkmark resolves to a clickable artifact — an ADR, the source file that
 					implements it, and a playground that lets you drive the logic yourself. A proprietary
 					product's equivalent checkmark is a marketing or support-page claim; there is no file you
 					are allowed to open to check it. The difference isn't effort — it's that only one side
 					lets you look.
-				</p>
+				</LqText>
 			</div>
 			<div class="lq-truth-card">
 				<h3 class="lq-truth-h">2. Show-the-work vs. trust-us</h3>
-				<p class="lq-text-body">
+				<LqText as="p" size="14" tone="primary" leading="relaxed">
 					An opaque "this citation is good law" or "this output is verified" verdict is
 					architecturally un-inspectable in a closed system — there is no mechanism by which a user
 					could ever see the reasoning, only the label. LQ.AI's citation and treatment layers derive
 					their verdicts from passages the system actually read and expose the derivation itself,
 					not just the label.
-				</p>
+				</LqText>
 			</div>
 			<div class="lq-truth-card">
 				<h3 class="lq-truth-h">3. Named accountability vs. committee-anonymized</h3>
-				<p class="lq-text-body">
+				<LqText as="p" size="14" tone="primary" leading="relaxed">
 					Legal work product built into a proprietary tool does not disclose a named individual
 					accountable for it — responsibility diffuses across an anonymous process, as far as a user
 					can see. Every LQ.AI skill that touches legal substance carries a named
 					practicing-attorney attestation as a condition of merge — a real person's name is on the
 					work.
-				</p>
+				</LqText>
 			</div>
 		</div>
 	</section>
 
 	<section class="lq-compare-matrix" data-testid="lq-ai-learn-compare-matrix">
 		<h2 class="lq-section-h">Highlight matrix</h2>
-		<p class="lq-text-body">
+		<LqText as="p" size="14" tone="primary" leading="relaxed">
 			Eight of the fourteen rows in the full comparison — the ones most people ask about first. Each
 			links to its interactive playground and its ADR/source. Where LQ.AI's own capability is
 			partial or roadmapped, the caveat is stated inline, not buried.
-		</p>
+		</LqText>
 		<div class="lq-table-wrap">
 			<table class="lq-compare-table">
 				<thead>
@@ -342,7 +347,7 @@
 	</section>
 
 	<div class="lq-compare-callout" data-testid="lq-ai-learn-compare-callout">
-		<p class="lq-text-body">
+		<LqText as="p" size="14" tone="primary" leading="relaxed">
 			<strong>Full evidence-linked comparison + verification paths →</strong>
 			<a
 				href="https://github.com/LegalQuants/lq-ai/blob/main/docs/comparison.md"
@@ -351,15 +356,15 @@
 				rel="noopener noreferrer">docs/comparison.md</a
 			>
 			— all 14 rows, the honest-caveats section, and how to verify the comparison yourself.
-		</p>
+		</LqText>
 	</div>
 
 	<footer class="lq-how-footer">
-		<p class="lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed">
 			<a href="/lq-ai/learn/how" class="lq-link">See it work →</a>
 			— the How It Works page walks the interactive playgrounds linked above in narrative order.
-		</p>
-		<p class="lq-text-body">
+		</LqText>
+		<LqText as="p" size="14" tone="secondary" leading="relaxed">
 			Don't take this page's word for it either. Read
 			<a
 				href="https://github.com/LegalQuants/lq-ai/blob/main/docs/HONEST-STATE.md"
@@ -367,7 +372,7 @@
 				target="_blank"
 				rel="noopener noreferrer">HONEST-STATE.md</a
 			>, the canonical claims-vs-reality document this comparison is built from.
-		</p>
+		</LqText>
 	</footer>
 </main>
 
@@ -394,9 +399,7 @@
 		margin-bottom: var(--lq-space-6);
 	}
 
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
-		margin-top: var(--lq-space-2);
+	.lq-page-header :global(.lq-page-intro) {
 		max-width: 72ch;
 		line-height: 1.6;
 	}
@@ -406,13 +409,6 @@
 		font-weight: 600;
 		color: var(--lq-text);
 		margin: 0 0 var(--lq-space-3) 0;
-	}
-
-	.lq-text-body {
-		margin: 0;
-		font-size: 14px;
-		line-height: 1.6;
-		color: var(--lq-text);
 	}
 
 	.lq-link {
@@ -522,9 +518,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--lq-space-3);
-	}
-
-	.lq-how-footer .lq-text-body {
-		color: var(--lq-text-secondary);
 	}
 </style>
