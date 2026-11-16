@@ -86,7 +86,7 @@
 	}
 	button {
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		background: var(--lq-inset);
 		color: var(--lq-text);

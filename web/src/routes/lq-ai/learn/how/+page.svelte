@@ -61,7 +61,7 @@
 					title="System Architecture Map"
 					loading="lazy"
 					data-testid="learn-playground-system-architecture"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -104,7 +104,7 @@
 					title="Request Lifecycle — Lifecycle of a chat send"
 					loading="lazy"
 					data-testid="learn-playground-request-lifecycle"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -162,7 +162,7 @@
 					title="Tier System — Tier and refusal explorer"
 					loading="lazy"
 					data-testid="learn-playground-tier-system"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -211,7 +211,7 @@
 					title="Skill Composition — Assembled prompt explorer"
 					loading="lazy"
 					data-testid="learn-playground-skill-composition"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -257,7 +257,7 @@
 					title="Citation Engine — 4-stage cascade"
 					loading="lazy"
 					data-testid="learn-playground-citation-engine-cascade"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -325,7 +325,7 @@
 					title="Anonymization Layer — pre/post middleware"
 					loading="lazy"
 					data-testid="learn-playground-anonymization-layer"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -378,7 +378,7 @@
 					title="Data Residency — Where data lives"
 					loading="lazy"
 					data-testid="learn-playground-data-residency"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -429,7 +429,7 @@
 					title="Playbook executor — 4-node cascade"
 					loading="lazy"
 					data-testid="learn-playground-playbook-cascade"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -479,7 +479,7 @@
 					title="Tabular Review — grid + cell citation drawer"
 					loading="lazy"
 					data-testid="learn-playground-tabular-review"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -530,7 +530,7 @@
 					title="Word Add-In — install + auth flow"
 					loading="lazy"
 					data-testid="learn-playground-word-addin-flow"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -582,7 +582,7 @@
 					title="OTel trace — chat-send end to end"
 					loading="lazy"
 					data-testid="learn-playground-otel-eval"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -624,7 +624,7 @@
 					title="Autonomous flow — a single agent, fully audited"
 					loading="lazy"
 					data-testid="learn-playground-autonomous-flow"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -678,7 +678,7 @@
 					title="Autonomous primitives — watches, schedules, memory, precedent"
 					loading="lazy"
 					data-testid="learn-playground-autonomous-primitives"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -730,7 +730,7 @@
 					title="Knowledge-base hybrid retrieval — lexical + vector, fused"
 					loading="lazy"
 					data-testid="learn-playground-kb-hybrid-retrieval"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -781,7 +781,7 @@
 					title="Projects, org profile, and tier floors — shaping a request"
 					loading="lazy"
 					data-testid="learn-playground-projects-org-tiers"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -837,7 +837,7 @@
 					title="Slack/Teams intake bridges — OAuth install + admin lifecycle"
 					loading="lazy"
 					data-testid="learn-playground-intake-bridges"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -893,7 +893,7 @@
 					title="Governed Tool Boundary"
 					loading="lazy"
 					data-testid="learn-playground-governed-tool-flow"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -962,7 +962,7 @@
 					title="Authority Source Registry"
 					loading="lazy"
 					data-testid="learn-playground-authority-sources"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -1016,7 +1016,7 @@
 					title="Citation Ledger"
 					loading="lazy"
 					data-testid="learn-playground-citation-ledger"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -1071,7 +1071,7 @@
 					title="Fiduciary Gate"
 					loading="lazy"
 					data-testid="learn-playground-fiduciary-gate"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -1127,7 +1127,7 @@
 					title="Treatment Layer"
 					loading="lazy"
 					data-testid="learn-playground-treatment-layer"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">
@@ -1183,7 +1183,7 @@
 					title="Matter Session Flow"
 					loading="lazy"
 					data-testid="learn-playground-matter-session-flow"
-					style="width: 100%; height: 900px; border: 1px solid var(--lq-border, #e5e7eb); border-radius: 8px;"
+					style="width: 100%; height: 900px; border: 1px solid var(--lq-border); border-radius: 8px;"
 				></iframe>
 			</div>
 			<div class="lq-playground-foot">

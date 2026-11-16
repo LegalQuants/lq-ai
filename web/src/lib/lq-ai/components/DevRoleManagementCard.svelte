@@ -487,7 +487,7 @@
 		margin-top: var(--lq-space-2);
 	}
 	.password-display {
-		font-family: var(--lq-font-mono, monospace);
+		font-family: var(--lq-font-mono);
 	}
 	button:focus-visible,
 	input:focus-visible,
@@ -520,7 +520,7 @@
 	.filter-select,
 	.filter-input {
 		padding: var(--lq-space-2) var(--lq-space-3);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius-sm);
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -598,7 +598,7 @@
 
 	.role-select {
 		padding: 2px var(--lq-space-2);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius-sm);
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -638,7 +638,7 @@
 	.page-btn {
 		padding: var(--lq-space-1) var(--lq-space-3);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-surface);
 		color: var(--lq-text);
 		font-size: 13px;

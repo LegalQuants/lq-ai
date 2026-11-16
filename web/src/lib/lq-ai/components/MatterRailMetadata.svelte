@@ -174,7 +174,7 @@
     {#if matter.privileged || tierLabel}
       <div class="mrm-badges">
         {#if matter.privileged}
-          <TrustPill variant="secure" label="Privileged" />
+          <TrustPill variant="secure" tone="slate" label="Privileged" />
         {/if}
         {#if tierLabel}
           <TrustPill variant="tier" label={tierLabel} />
@@ -364,7 +364,7 @@
     color: var(--lq-accent);
     background: transparent;
     border: 1px solid var(--lq-accent-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: 2px 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -409,13 +409,13 @@
     background: var(--lq-error);
     color: white;
     border: 0;
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-3);
     cursor: pointer;
   }
 
   .mrm-btn-danger:hover:not(:disabled) {
-    filter: brightness(0.9);
+    opacity: 0.85;
   }
 
   .mrm-btn-danger:disabled {
@@ -429,7 +429,7 @@
     color: var(--lq-error);
     background: transparent;
     border: 1px solid var(--lq-error-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-3);
     cursor: pointer;
     margin-top: var(--lq-space-2);
@@ -489,7 +489,7 @@
   .mrm-textarea,
   .mrm-select {
     background: var(--lq-inset);
-    border: 1px solid var(--lq-border);
+    border: 1px solid var(--lq-border-strong);
     border-radius: var(--lq-radius);
     padding: var(--lq-space-2) var(--lq-space-3);
     font-size: 13px;
@@ -546,13 +546,13 @@
     background: var(--lq-accent);
     color: white;
     border: 0;
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-4);
     cursor: pointer;
   }
 
   .mrm-btn-save:hover:not(:disabled) {
-    filter: brightness(0.95);
+    opacity: 0.85;
   }
 
   .mrm-btn-save:disabled {
@@ -571,7 +571,7 @@
     color: var(--lq-text-secondary);
     background: transparent;
     border: 1px solid var(--lq-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-3);
     cursor: pointer;
   }

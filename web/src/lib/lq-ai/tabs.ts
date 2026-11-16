@@ -60,14 +60,38 @@ export interface TabVisibilityOpts {
   autonomousEnabled?: boolean;
 }
 
+/**
+ * Who may see a navigation entry. One rule set serves the top tabs today and
+ * the sidebar model in `nav.ts`, so the two can never disagree about a gate.
+ *
+ * - `all`: every signed-in user.
+ * - `admin`: users with the admin role (or the legacy `is_admin` flag).
+ * - `autonomous`: only when the Autonomous opt-in is on. Callers pass the
+ *   value from the preferences store; the store never trusts a cached value
+ *   for this flag, and neither does this rule, which treats "unknown" as off.
+ */
+export type VisibilityRule = 'all' | 'admin' | 'autonomous';
+
+export function isVisibleUnder(
+  rule: VisibilityRule,
+  user: User | null,
+  opts: TabVisibilityOpts = {}
+): boolean {
+  if (rule === 'autonomous') return opts.autonomousEnabled === true;
+  if (rule === 'admin') return user?.role === 'admin' || user?.is_admin === true;
+  return true;
+}
+
+function ruleFor(tab: TabDef): VisibilityRule {
+  if (tab.id === 'autonomous') return 'autonomous';
+  if (tab.adminOnly) return 'admin';
+  return 'all';
+}
+
 export function isTabVisible(id: TabId, user: User | null, opts: TabVisibilityOpts = {}): boolean {
   const tab = TABS.find((t) => t.id === id);
   if (!tab) return false;
-  if (id === 'autonomous') return opts.autonomousEnabled === true;
-  if (tab.adminOnly) {
-    return user?.role === 'admin' || user?.is_admin === true;
-  }
-  return true;
+  return isVisibleUnder(ruleFor(tab), user, opts);
 }
 
 export function isTabAvailable(id: TabId): boolean {

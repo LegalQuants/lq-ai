@@ -275,7 +275,6 @@ cd web && npm install    # regenerates package-lock.json
 
 ```bash
 grep -m1 '"version"'                 web/package.json   # upstream's new version
-grep -m1 '"@fontsource-variable/inter"' web/package.json   # our added dep survived
 grep -A1 '"node_modules/pyodide"'    web/package-lock.json  # upstream's bump resolved
 ```
 
