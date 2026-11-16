@@ -3,7 +3,8 @@
  *
  * Six scenarios, all intercept-based (deterministic; no real seed data):
  *
- *   1. Opt-in gating  — Autonomous tab absent when disabled; direct visit
+ *   1. Opt-in gating  — the sidebar's Labs row (Autonomous, until the Labs
+ *                       page exists) is absent when disabled; direct visit
  *                       to /lq-ai/autonomous redirects to settings.
  *   2. Receipt + Halt — Sessions list shows a running session with a Halt
  *                       button; receipt page renders a phase node, a tool
@@ -12,7 +13,7 @@
  *                       POST endpoint and surfaces a success banner.
  *   4. Precedent dismiss — Precedent entry renders; Dismiss fires the POST
  *                          endpoint and surfaces a success banner.
- *   5. Opt-out        — After disabling, the tab disappears and a direct
+ *   5. Opt-out        — After disabling, the Labs row disappears and a direct
  *                       visit to /lq-ai/autonomous redirects back to settings.
  *   6. Run now        — Select a skill, submit, then navigate to its receipt.
  *
@@ -250,17 +251,24 @@ function interceptBaseRequests(autonomousEnabled: boolean): void {
 // Scenario 1 + 5 — Opt-in gating + opt-out
 // ---------------------------------------------------------------------------
 
+// The left sidebar's primary navigation and its Labs row (ADR 0045 §6).
+const primaryNav = '[data-testid="lq-shell-sidebar"] nav[aria-label="Primary"]';
+const labsRow = 'a[data-nav-id="labs"]';
+
 describe('M4-C2 — Scenario 1 + 5: opt-in gating and opt-out', () => {
-	it('1a: Autonomous tab is NOT present when autonomous_enabled=false', () => {
+	it('1a: Labs row is NOT present when autonomous_enabled=false', () => {
 		interceptBaseRequests(false);
 
 		cy.visit('/lq-ai', {
 			onBeforeLoad: (win) => setAuthStorage(win, { autonomousEnabled: false })
 		});
 
-		// TopTabBar renders tabs; 'Autonomous' should not appear.
-		cy.get('.lq-tabbar', { timeout: 10000 }).should('exist');
-		cy.get('.lq-tabbar').contains('button', 'Autonomous').should('not.exist');
+		// The left sidebar renders its rows from nav.ts; the Labs row follows the
+		// Autonomous opt-in (the tab row's old Autonomous tab rule).
+		cy.get(primaryNav, { timeout: 10000 }).should('exist');
+		cy.get(primaryNav).find('[data-nav-id="home"]').should('exist');
+		cy.get(primaryNav).find(labsRow).should('not.exist');
+		cy.get(primaryNav).contains('Labs').should('not.exist');
 	});
 
 	it('1b: Direct visit to /lq-ai/autonomous redirects to /lq-ai/settings/autonomous when opt-in=false', () => {
@@ -274,7 +282,7 @@ describe('M4-C2 — Scenario 1 + 5: opt-in gating and opt-out', () => {
 		cy.url({ timeout: 10000 }).should('include', '/lq-ai/settings/autonomous');
 	});
 
-	it('1c: After opt-in toggle (PATCH returns enabled=true), Autonomous tab appears', () => {
+	it('1c: After opt-in toggle (PATCH returns enabled=true), Labs row appears', () => {
 		interceptBaseRequests(false);
 
 		// Start at settings/autonomous with opt-in disabled.
@@ -303,13 +311,16 @@ describe('M4-C2 — Scenario 1 + 5: opt-in gating and opt-out', () => {
 
 		cy.wait('@patchPreferences');
 
-		// After the PATCH the preferences store is updated. The TopTabBar is
-		// reactive to $preferences.autonomous_enabled. The Autonomous tab should
-		// now be present in the tab bar.
-		cy.get('.lq-tabbar', { timeout: 10000 }).contains('button', 'Autonomous').should('exist');
+		// After the PATCH the preferences store is updated. The sidebar is
+		// reactive to $preferences.autonomous_enabled. The Labs row should now be
+		// present, linking to the Autonomous pages.
+		cy.get(primaryNav, { timeout: 10000 })
+			.find(labsRow)
+			.should('have.attr', 'href', '/lq-ai/autonomous')
+			.and('contain.text', 'Labs');
 	});
 
-	it('5: After opt-out, Autonomous tab disappears and direct visit redirects', () => {
+	it('5: After opt-out, Labs row disappears and direct visit redirects', () => {
 		// Start with opt-in ENABLED.
 		interceptBaseRequests(true);
 
@@ -317,8 +328,8 @@ describe('M4-C2 — Scenario 1 + 5: opt-in gating and opt-out', () => {
 			onBeforeLoad: (win) => setAuthStorage(win, { autonomousEnabled: true })
 		});
 
-		// Autonomous tab should be visible right now.
-		cy.get('.lq-tabbar', { timeout: 10000 }).contains('button', 'Autonomous').should('exist');
+		// The Labs row should be visible right now.
+		cy.get(primaryNav, { timeout: 10000 }).find(labsRow).should('be.visible');
 
 		// Intercept PATCH to return disabled.
 		cy.intercept('PATCH', '**/api/v1/users/me/preferences', {
@@ -340,8 +351,8 @@ describe('M4-C2 — Scenario 1 + 5: opt-in gating and opt-out', () => {
 
 		cy.wait('@patchPreferencesOff');
 
-		// Tab should disappear.
-		cy.get('.lq-tabbar').contains('button', 'Autonomous').should('not.exist');
+		// The row should disappear.
+		cy.get(primaryNav).find(labsRow).should('not.exist');
 
 		// Intercept the preferences GET for the next page visit — now returns disabled.
 		cy.intercept('GET', '**/api/v1/users/me/preferences', {
@@ -622,8 +633,22 @@ describe('M4-C2 — Scenario 6: Run now', () => {
 
 // DE-324 regression checks share this existing deterministic spec track.
 describe('DE-324 — shell notification bell', () => {
-	const trigger = '[data-testid="lq-ai-notification-bell-trigger"]';
-	const dropdown = '[data-testid="lq-ai-notification-bell-dropdown"]';
+	// The bell lives in the left sidebar (ADR 0045 §6) in two places, both only
+	// when Automations is on: an icon beside the sidebar toggle (in the strip
+	// while the sidebar is collapsed, as on a phone) and a Notifications row.
+	// Both open the list in the right sidebar.
+	const bell = '[data-testid="lq-shell-bell"]';
+	const stripBell = '[data-testid="lq-shell-bell-strip"]';
+	const notificationsRow = '[data-testid="lq-shell-notifications-row"]';
+	const sidebar = '[data-testid="lq-shell-sidebar"]';
+	const list = '[data-testid="lq-shell-notifications-panel"]';
+	const item = '[data-testid="lq-shell-notifications-item"]';
+	const count = (selector: string) => `${selector} .lq-sidebar-count`;
+	function noBell() {
+		for (const placement of [bell, stripBell, notificationsRow])
+			cy.get(placement).should('not.exist');
+		cy.get(list).should('not.exist');
+	}
 	const prefs = (enabled: boolean) => ({
 		reasoning_visibility: 'disclosure',
 		featured_tools: 'prominent',
@@ -681,11 +706,11 @@ describe('DE-324 — shell notification bell', () => {
 			ready.then(() => req.reply(prefs(false)))
 		).as('freshPreferences');
 		visitShell();
-		cy.get('.lq-topbar', { timeout: 30000 }).should('be.visible');
-		cy.get(trigger).should('not.exist');
+		cy.get(sidebar, { timeout: 30000 }).should('be.visible');
+		noBell();
 		cy.then(() => release());
 		cy.wait('@freshPreferences');
-		cy.get(trigger).should('not.exist');
+		noBell();
 		cy.get('@bellListCalls').should('not.have.been.called');
 	});
 
@@ -696,8 +721,8 @@ describe('DE-324 — shell notification bell', () => {
 		}).as('failedPreferences');
 		visitShell();
 		cy.wait('@failedPreferences');
-		cy.get('.lq-topbar', { timeout: 30000 }).should('be.visible');
-		cy.get(trigger).should('not.exist');
+		cy.get(sidebar, { timeout: 30000 }).should('be.visible');
+		noBell();
 	});
 
 	it('retries a failed list, refills after an individual read, and restores focus on Escape', () => {
@@ -719,29 +744,35 @@ describe('DE-324 — shell notification bell', () => {
 			req.reply(notification(id));
 		}).as('markRead');
 		visitShell();
-		cy.get(trigger, { timeout: 30000 }).click();
-		cy.get(dropdown)
+		cy.get(bell, { timeout: 30000 }).click();
+		cy.get(bell).should('have.attr', 'aria-expanded', 'true');
+		cy.get(list)
 			.should('contain.text', 'Notifications unavailable.')
 			.and('not.contain.text', 'No unread notifications.');
 		cy.then(() => {
 			unavailable = false;
 		});
-		cy.get(dropdown).contains('button', 'Retry').click();
-		cy.get(dropdown).find('li.item').should('have.length', 10);
-		cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '11');
-		cy.get(dropdown).find('li.item').first().contains('button', 'Mark read').click();
+		cy.get(list).contains('button', 'Retry').click();
+		cy.get(list).find(item).should('have.length', 10);
+		cy.get(count(bell)).should('have.text', '11');
+		cy.get(count(notificationsRow)).should('have.text', '11');
+		cy.get(list).find(item).first().contains('button', 'Mark read').click();
 		cy.wait('@markRead');
-		cy.get(dropdown).find('li.item').should('have.length', 10);
-		cy.get(dropdown).should('contain.text', 'Notice n10').and('not.contain.text', 'Notice n0');
-		cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '10');
-		cy.get(trigger).should('be.focused').type('{esc}');
-		cy.get(dropdown).should('not.exist');
-		cy.get(trigger).should('have.attr', 'aria-expanded', 'false').and('be.focused');
+		cy.get(list).find(item).should('have.length', 10);
+		cy.get(list).should('contain.text', 'Notice n10').and('not.contain.text', 'Notice n0');
+		cy.get(count(bell)).should('have.text', '10');
+		// Escape from inside the list closes it and returns focus to the bell that opened it.
+		cy.focused().should('exist').type('{esc}');
+		cy.get(list).should('not.exist');
+		cy.get(bell).should('have.attr', 'aria-expanded', 'false').and('be.focused');
 	});
 
 	for (const width of [1440, 375]) {
-		it(`keeps shown-item scope, partial failures and dropdown bounds correct at ${width}px`, () => {
+		it(`keeps shown-item scope, partial failures and list bounds correct at ${width}px`, () => {
 			cy.viewport(width, 900);
+			// A wide screen shows the sidebar open with the bell beside its toggle;
+			// a narrow one starts collapsed to the strip, which carries the bell.
+			const trigger = width === 1440 ? bell : stripBell;
 			let ids = Array.from({ length: 102 }, (_, i) => `n${i}`);
 			cy.intercept('GET', '**/api/v1/autonomous/notifications**', (req) =>
 				req.reply({
@@ -760,26 +791,24 @@ describe('DE-324 — shell notification bell', () => {
 				}
 			});
 			visitShell();
-			cy.get('[data-testid="lq-ai-notification-bell-badge"]', { timeout: 30000 }).should(
-				'have.text',
-				'99+'
-			);
+			cy.get(count(trigger), { timeout: 30000 }).should('have.text', '99+');
+			cy.get(trigger).should('have.attr', 'aria-label', 'Notifications, 99+ (102 unread)');
 			cy.get(trigger).focus();
 			cy.get(trigger).type('{enter}');
-			cy.get(dropdown)
+			cy.get('[data-testid="lq-right-sidebar"]')
 				.should('be.visible')
-				.then(($menu) => {
-					const bounds = $menu[0].getBoundingClientRect();
+				.then(($panel) => {
+					const bounds = $panel[0].getBoundingClientRect();
 					expect(bounds.left).to.be.at.least(0);
 					expect(bounds.right).to.be.at.most(width);
 				});
-			cy.get(dropdown)
-				.contains('button', 'Mark shown read')
+			cy.get(list).find(item).should('have.length', 10);
+			cy.get('[data-testid="lq-shell-notifications-mark-all"]')
 				.should('have.text', 'Mark shown read')
 				.click();
-			cy.get('[data-testid="lq-ai-notification-bell-badge"]').should('have.text', '93');
-			cy.get(dropdown).find('[role="alert"]').should('contain.text', '1 notification');
-			cy.get(dropdown).should('contain.text', 'Notice n1');
+			cy.get(count(trigger)).should('have.text', '93');
+			cy.get(list).find('[role="alert"]').should('contain.text', '1 notification');
+			cy.get(list).should('contain.text', 'Notice n1');
 			cy.screenshot(`de324-bell-${width}`, { capture: 'viewport' });
 		});
 	}

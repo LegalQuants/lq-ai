@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconDots, IconNotes } from '@tabler/icons-svelte';
   /**
    * MessageOverflowMenu — generic ⋯ menu rendered on assistant message
    * footers (Wave D.2 Task 5.3). Composable by intent: callers pass in an
@@ -103,7 +104,7 @@
       data-testid="lq-ai-message-overflow-trigger"
       bind:this={triggerEl}
       on:click={toggle}
-    >⋯</button>
+    ><IconDots size={16} stroke={1.75} aria-hidden="true" /></button>
     {#if open}
       <ul class="menu">
         {#if captureInOverflow}
@@ -113,7 +114,7 @@
               disabled={captureDisabled}
               data-testid="lq-ai-message-overflow-capture"
               on:click={handleCapture}
-            >📝 Capture as skill</button>
+            ><IconNotes size={14} stroke={1.75} aria-hidden="true" /> Capture as skill</button>
           </li>
         {/if}
       </ul>
@@ -134,15 +135,15 @@
     border: 0;
     padding: 4px 8px;
     cursor: pointer;
-    color: var(--lq-text-tertiary, #9ca3af);
+    color: var(--lq-text-tertiary);
     font-size: 16px;
     line-height: 1;
-    border-radius: var(--lq-radius-sm, 4px);
+    border-radius: var(--lq-radius-pill);
   }
 
   .trigger:hover {
-    background: var(--lq-inset, #fafbfa);
-    color: var(--lq-text-secondary, #6b7280);
+    background: var(--lq-inset);
+    color: var(--lq-text-secondary);
   }
 
   .menu {
@@ -152,9 +153,9 @@
     position: absolute;
     right: 0;
     top: 100%;
-    background: var(--lq-canvas, #ffffff);
-    border: 1px solid var(--lq-border, #e5e7eb);
-    border-radius: var(--lq-radius, 6px);
+    background: var(--lq-canvas);
+    border: 1px solid var(--lq-border);
+    border-radius: var(--lq-radius);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     min-width: 180px;
     z-index: 10;
@@ -173,7 +174,7 @@
   }
 
   .menu button:hover:not(:disabled) {
-    background: var(--lq-inset, #fafbfa);
+    background: var(--lq-inset);
   }
 
   .menu button:disabled {

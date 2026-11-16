@@ -20,6 +20,7 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	let policy: SkillResourcePolicy | null = null;
 	let loading = true;
@@ -36,7 +37,14 @@
 </script>
 
 <section class="dev-card" aria-label="Skill reference policy">
-	<h2 class="lq-text-label">Skill reference policy</h2>
+	<LqTitle
+		order={2}
+		size="12"
+		weight="semibold"
+		tone="tertiary"
+		transform="uppercase"
+		tracking="wide">Skill reference policy</LqTitle
+	>
 	{#if loading}
 		<p role="status">Loading policy…</p>
 	{:else if error}
@@ -86,7 +94,7 @@
 	}
 	button {
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		background: var(--lq-inset);
 		color: var(--lq-text);

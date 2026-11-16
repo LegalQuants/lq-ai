@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconSparkles, IconX } from '@tabler/icons-svelte';
 	/**
 	 * EnhancedDiffModal — tap-to-diff popover for the ✨ enhanced pill.
 	 *
@@ -56,8 +57,12 @@
 >
 	<div class="diff-panel">
 		<header>
-			<h2 id="enhanced-diff-title">✨ Enhance Prompt — original vs. enhanced</h2>
-			<button class="close" on:click={close} aria-label="Close" data-testid="enhanced-diff-close">×</button>
+			<h2 id="enhanced-diff-title">
+				<IconSparkles size={16} stroke={1.75} aria-hidden="true" /> Enhance Prompt — original vs. enhanced
+			</h2>
+			<button class="close" on:click={close} aria-label="Close" data-testid="enhanced-diff-close"
+				><IconX size={16} stroke={1.75} aria-hidden="true" /></button
+			>
 		</header>
 
 		<div class="cols">
@@ -93,7 +98,7 @@
 		z-index: 60;
 	}
 	.diff-panel {
-		background: #fff;
+		background: var(--lq-canvas);
 		border-radius: 8px;
 		width: min(900px, 90vw);
 		max-height: 80vh;
@@ -106,19 +111,19 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 14px;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--lq-border);
 	}
 	header h2 {
 		font-size: 14px;
 		font-weight: 600;
 		margin: 0;
-		color: #111827;
+		color: var(--lq-text);
 	}
 	.close {
 		background: transparent;
 		border: 0;
 		font-size: 22px;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		cursor: pointer;
 		padding: 0 6px;
 	}
@@ -138,29 +143,29 @@
 		font-size: 11px;
 		font-weight: 600;
 		text-transform: uppercase;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		margin: 0 0 6px 0;
 		letter-spacing: 0.04em;
 	}
 	pre {
-		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-family: var(--lq-font-mono);
 		font-size: 12px;
 		line-height: 1.5;
 		white-space: pre-wrap;
 		word-break: break-word;
-		background: #f9fafb;
-		border: 1px solid #e5e7eb;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		padding: 10px;
-		color: #111827;
+		color: var(--lq-text);
 		margin: 0;
 	}
 	.empty {
 		font-size: 12px;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		font-style: italic;
-		background: #f9fafb;
-		border: 1px dashed #d1d5db;
+		background: var(--lq-inset);
+		border: 1px dashed var(--lq-border);
 		border-radius: 6px;
 		padding: 10px;
 		margin: 0;

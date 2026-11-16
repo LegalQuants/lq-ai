@@ -1,4 +1,12 @@
 <script context="module" lang="ts">
+	import {
+		IconUser,
+		IconBrain,
+		IconFileText,
+		IconTool,
+		IconPaperclip,
+		IconShield
+	} from '@tabler/icons-svelte';
 	import type { ReceiptEvent, ReceiptEventKind } from '../api/receipts';
 
 	export const ALL_KINDS: ReceiptEventKind[] = [
@@ -10,13 +18,14 @@
 		'error'
 	];
 
-	export const KIND_ICONS: Record<ReceiptEventKind, string> = {
-		message: '👤',
-		inference: '🧠',
-		audit: '📜',
-		skill: '🛠',
-		retrieval: '📎',
-		error: '🛡'
+	/** Tabler line icons (ADR 0045 §5). */
+	export const KIND_ICONS: Record<ReceiptEventKind, typeof IconUser> = {
+		message: IconUser,
+		inference: IconBrain,
+		audit: IconFileText,
+		skill: IconTool,
+		retrieval: IconPaperclip,
+		error: IconShield
 	};
 
 	export const KIND_LABELS: Record<ReceiptEventKind, string> = {
@@ -164,7 +173,14 @@
 				title={KIND_DESCRIPTION[event.kind]}
 			>
 				<span class="ts">{formatTimestamp(event.ts)}</span>
-				<span class="icon">{KIND_ICONS[event.kind]}</span>
+				<span class="icon"
+					><svelte:component
+						this={KIND_ICONS[event.kind]}
+						size={12}
+						stroke={1.75}
+						aria-hidden="true"
+					/></span
+				>
 				<span class="desc">{eventDescription(event)}</span>
 				{#if expanded.has(String(idx))}
 					<pre class="detail">{JSON.stringify(event.detail, null, 2)}</pre>
@@ -186,11 +202,11 @@
 		gap: 3px;
 		flex-wrap: wrap;
 		padding-bottom: 6px;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--lq-border);
 	}
 	.chips button {
-		background: #f3f4f6;
-		color: #374151;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 		padding: 2px 6px;
 		border-radius: 9999px;
 		font-size: 9px;
@@ -198,39 +214,40 @@
 		cursor: pointer;
 	}
 	.chips button.active {
-		background: #4338ca;
-		color: #fff;
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 	}
 	.row {
 		display: grid;
 		grid-template-columns: auto auto 1fr;
 		gap: 6px;
 		padding: 4px 0;
-		border-bottom: 1px solid #f3f4f6;
+		border-bottom: 1px solid var(--lq-border);
 		text-align: left;
 		background: transparent;
 		border: 0;
 		cursor: pointer;
 		font-size: 10px;
-		color: #374151;
+		color: var(--lq-text-secondary);
 	}
 	.ts {
-		color: #6b7280;
-		font-family: monospace;
+		color: var(--lq-text-tertiary);
+		font-family: var(--lq-font-mono);
 	}
 	.icon {
-		font-size: 12px;
+		display: inline-flex;
+		align-items: center;
 	}
 	.detail {
 		grid-column: 1 / -1;
-		background: #f9fafb;
+		background: var(--lq-inset);
 		padding: 6px;
 		border-radius: 4px;
 		font-size: 9px;
 		white-space: pre-wrap;
 	}
 	.empty {
-		color: #9ca3af;
+		color: var(--lq-text-tertiary);
 		padding: 20px;
 		text-align: center;
 		font-size: 11px;

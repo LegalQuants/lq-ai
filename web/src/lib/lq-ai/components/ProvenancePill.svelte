@@ -1,4 +1,5 @@
 <script context="module" lang="ts">
+	import { IconTool, IconLock, IconBrain, IconPaperclip, IconFileText, IconSparkles, IconScale } from '@tabler/icons-svelte';
 	/**
 	 * ProvenancePill — pill primitive attached to AI messages.
 	 * Wave A defines the contract; Wave D wires it into the message renderer.
@@ -6,14 +7,24 @@
 	 */
 	export type ProvenanceKind = 'skill' | 'tier' | 'provider' | 'kb' | 'audit' | 'enhanced' | 'caselaw';
 
-	const KIND_ICON: Record<ProvenanceKind, string> = {
-		skill: '🛠️',
-		tier: '🔒',
-		provider: '🧠',
-		kb: '📎',
-		audit: '📜',
-		enhanced: '✨',
-		caselaw: '⚖'
+	/** Tabler line icons (ADR 0045 §5); the names are what `iconFor` returns. */
+	const KIND_ICON: Record<ProvenanceKind, typeof IconTool> = {
+		skill: IconTool,
+		tier: IconLock,
+		provider: IconBrain,
+		kb: IconPaperclip,
+		audit: IconFileText,
+		enhanced: IconSparkles,
+		caselaw: IconScale
+	};
+	const KIND_ICON_NAME: Record<ProvenanceKind, string> = {
+		skill: 'tool',
+		tier: 'lock',
+		provider: 'brain',
+		kb: 'paperclip',
+		audit: 'file-text',
+		enhanced: 'sparkles',
+		caselaw: 'scale'
 	};
 
 	/**
@@ -36,7 +47,12 @@
 			'Case law — this answer drew on external legal sources (e.g. CourtListener). Click to view sources consulted.'
 	};
 
+	/** The Tabler icon name for a kind (`tabler-icon-<name>` in the markup). */
 	export function iconFor(kind: ProvenanceKind): string {
+		return KIND_ICON_NAME[kind];
+	}
+
+	export function iconComponentFor(kind: ProvenanceKind): typeof IconTool {
 		return KIND_ICON[kind];
 	}
 
@@ -44,11 +60,11 @@
 		return KIND_DESCRIPTION[kind];
 	}
 
-	export type ProvenanceTone = 'sage' | 'slate' | 'amber';
+	export type ProvenanceTone = 'sage' | 'slate' | 'governance';
 
+	/** A tier mismatch is a governance signal, drawn at least as loudly as a matching tier. */
 	export function toneFor(kind: ProvenanceKind, tierMismatch: boolean): ProvenanceTone {
-		if (kind === 'tier') return tierMismatch ? 'amber' : 'slate';
-		if (kind === 'caselaw') return 'slate';
+		if (kind === 'tier') return tierMismatch ? 'governance' : 'slate';
 		return 'sage';
 	}
 </script>
@@ -60,7 +76,7 @@
 	export let onTap: (() => void) | undefined = undefined;
 
 	$: tone = toneFor(kind, tierMismatch);
-	$: icon = iconFor(kind);
+	$: icon = iconComponentFor(kind);
 	$: description = descriptionFor(kind);
 </script>
 
@@ -71,7 +87,7 @@
 	title={description}
 	on:click={onTap}
 >
-	<span class="lq-prov-icon" aria-hidden="true">{icon}</span>
+	<svelte:component this={icon} size={12} stroke={1.75} class="lq-prov-icon" aria-hidden="true" />
 	<span class="lq-prov-summary">{summary}</span>
 </button>
 
@@ -88,29 +104,35 @@
 		background: transparent;
 		cursor: pointer;
 	}
-	.lq-prov-icon {
-		font-size: 11px;
+	.lq-prov-pill :global(.lq-prov-icon) {
+		flex: none;
 	}
 	.lq-prov-summary {
 		font-weight: 500;
 	}
-	.lq-prov-tone-sage {
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-		border-color: var(--lq-accent-border);
-	}
+	/* ADR 0045: sage is a neutral outline; slate (the tier) adds a governance dot. */
+	.lq-prov-tone-sage,
 	.lq-prov-tone-slate {
-		background: var(--lq-tier-soft);
-		color: var(--lq-tier);
-		border-color: var(--lq-tier-border);
+		background: var(--lq-canvas);
+		color: var(--lq-text);
+		border-color: var(--lq-border);
 	}
-	.lq-prov-tone-amber {
-		background: var(--lq-warn-soft);
-		color: var(--lq-warn);
-		border-color: var(--lq-warn-border);
+	.lq-prov-tone-slate::before {
+		content: '';
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--lq-governance);
+		flex: none;
+	}
+	/* A tier mismatch: governance text and edge on the governance tint. */
+	.lq-prov-tone-governance {
+		background: var(--lq-governance-soft);
+		color: var(--lq-governance);
+		border-color: var(--lq-governance-border);
 	}
 	.lq-prov-pill:hover {
-		filter: brightness(0.97);
+		opacity: 0.85;
 	}
 	.lq-prov-pill:focus-visible {
 		outline: 2px solid var(--lq-accent);

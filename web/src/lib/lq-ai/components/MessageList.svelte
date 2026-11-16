@@ -89,7 +89,7 @@
 	</LqStack>
 
 	{#if messages.length === 0}
-		<div class="flex-1 flex items-center justify-center text-gray-400 text-sm italic">
+		<div class="flex-1 flex items-center justify-center lq-t-text3 text-sm italic">
 			{#if newHarness}
 				No messages yet. Type a request and send it. New harness answers a request that needs
 				nothing read, and otherwise proposes a plan for you to approve.
@@ -99,3 +99,10 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-text3 {
+		color: var(--lq-text-tertiary);
+	}
+</style>

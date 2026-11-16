@@ -13,6 +13,7 @@
 	import { RUNS_START_FROM_A_CHAT_TEXT } from '$lib/lq-ai/run/composer';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import RunMessage from './run/RunMessage.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	let run: OrchestrationChatRun | null = null;
 
@@ -23,7 +24,9 @@
 	<header>
 		<a href="/lq-ai/autonomous">Autonomous sessions</a>
 		<div class="heading">
-			<h1 class="lq-text-page-h">{id ? 'Run receipt' : 'Governed runs'}</h1>
+			<LqTitle order={1} size="20" weight="bold" tone="primary"
+				>{id ? 'Run receipt' : 'Governed runs'}</LqTitle
+			>
 			<span class="tag">Experimental</span>
 		</div>
 		{#if id}
@@ -78,7 +81,7 @@
 		gap: 0.8rem;
 		flex-wrap: wrap;
 	}
-	h1 {
+	.heading :global(h1) {
 		margin: 0.6rem 0;
 	}
 	h2 {

@@ -242,8 +242,8 @@ Inference Gateway:  http://localhost:8001/docs
 
 After login you land on the LQ.AI home. Three good starting points:
 
-- Click **Learn** in the top bar to take the interactive tour — a set of playgrounds (the count grows with releases) walks through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
-- Click **Skills** to browse the 10 built-in skills. Each is inspectable: click any skill to read the `SKILL.md` driving it.
+- Click **Learn** at the foot of the left sidebar to take the interactive tour — a set of playgrounds (the count grows with releases) walks through the architecture, the request lifecycle, the tier system, what the model sees, where your data lives, and how to author a skill. This is the fastest orientation for both evaluators and new contributors. (`http://localhost:3000/lq-ai/learn`)
+- Open **Customise** in the left sidebar and click **Skills** to browse the 10 built-in skills. Each is inspectable: click any skill to read the `SKILL.md` driving it.
 - Click **+ New matter** to create your first project workspace and attach a document to try a skill against.
 
 ---
@@ -419,7 +419,7 @@ LQ.AI is built to be **usable by every attorney on a team — including those wh
 Concretely, this means:
 
 - **WCAG 2.1 AA as the design target** for every shipped surface — color contrast, focus indication, keyboard reachability, semantic structure.
-- **Semantic HTML + ARIA patterns by default** — every tab, dialog, button, and form control uses the correct role, label, and state attributes (the top-tab nav implements the WAI-ARIA tablist pattern with roving arrow-key focus; modals use `role="dialog"` + `aria-modal="true"` + escape-to-close).
+- **Semantic HTML + ARIA patterns by default** — every tab, dialog, button, and form control uses the correct role, label, and state attributes (the left sidebar is a labelled navigation landmark of links that mark the current page with `aria-current`, its Customise group is a button with `aria-expanded`, and on narrow screens it opens over the page and closes on Escape; the right sidebar closes on Escape and returns focus to the control that opened it; modals use `role="dialog"` + `aria-modal="true"` + escape-to-close).
 - **Keyboard parity with mouse** for every power feature — Enhance Prompt (`⌘E`), Skill Creator, knowledge-base attach, and the launcher all reachable without a pointing device.
 - **Tested both ways** — automated `axe-cli` scans across primary surfaces (target: 0 critical/serious findings), plus Cypress E2E coverage of the chrome's keyboard and screen-reader-relevant assertions, plus a manual keyboard pass before each release.
 - **Theming respects user-agent preferences** — the Practice palette ships with light-mode defaults; downstream forks and operator deployments can override the semantic CSS variables (see [§10 of the M1 frontend design](docs/superpowers/specs/2026-05-10-m1-frontend-design.md#10-theming-customization-and-developer-extensibility-open-source-posture)) to match their own contrast and color-blindness needs.

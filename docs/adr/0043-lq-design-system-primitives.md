@@ -1,6 +1,7 @@
 # ADR 0043 — `lq` design-system primitives for the LQ.AI shell
 
 **Status:** Accepted (2026-10-18)
+**Amended by:** [ADR 0045](0045-lq-ai-shell-redesign.md) (the LQ.AI shell redesign): its tone values, typography (the system typeface replaces Inter; `@fontsource-variable/inter` is removed; one type scale, carried by `LqText` and `LqTitle`, and the `.lq-text-*` classes described below migrated to them and removed) and radii. The primitives, the typed scales and the role names stay; ADR 0045 adds a `governance` role, makes `info` and `warning` neutral ink, and points `danger` at a new red. Where this record states a colour, a font or a radius below, ADR 0045 governs.
 **Decision-maker for the maintainer revision:** @houfu (2026-10-17)
 **Original proposal and reference implementation:** Simon Booth (@sgbooth), PR #282
 **Approval record:** The LQ.AI weekly committee call on 2026-10-18 approved adoption of ADR 0043 with an “adopt first, refine later” approach. No objection was recorded; this is not a claim of a counted formal vote or a completed code review. The October 17 maintainer revision defines the bounded scope below. [Joel's October 20 meeting follow-up](https://legalquants.slack.com/archives/C0BDS8RR7JM/p1792441109058609) records the adoption and action O18-04 to update the canonical decision records. The public minutes remain a draft under review until October 26; their publication is separate from this approval record.
@@ -83,6 +84,8 @@ Secondary reasons emoji specifically are a poor icon vocabulary, independent of 
 - **Not visually consistent.** The same emoji renders differently per OS/browser (Apple's colorful emoji set vs. Windows'/Linux's, or a missing glyph entirely on some platforms) — a security/legal product where "what does this icon mean" matters shouldn't depend on the reader's OS to render it recognizably.
 
 The emoji glyphs still in `ProvenancePill`/`TrustPill`/the capture button are pre-existing and out of scope for this ADR to migrate wholesale — flagged as a natural Tabler-icon migration candidate for later, not undone here.
+
+*Follow-up under [ADR 0045](0045-lq-ai-shell-redesign.md):* those glyphs are now Tabler icons. The emoji of the old tab row left the interface with it: the left sidebar replaced the tab row and draws its rows with Tabler icons. The unmounted tab definitions (`web/src/lib/lq-ai/tabs.ts`) still carry their emoji until that file is removed.
 
 ## Scope / boundary
 

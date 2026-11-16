@@ -254,7 +254,8 @@ describe('Item 1.6 — Matter intake: describe → session → receipt', () => {
 			statusCode: 200,
 			body: [{ id: PROJECT_ID, name: 'Acme NDA', slug: 'acme-nda' }]
 		}).as('projectsRetried');
-		cy.contains('button', 'Retry').click();
+		// The page's own Retry (the left sidebar has a Retry for its own lists).
+		cy.get('#lq-main').contains('button', 'Retry').click();
 		cy.wait('@projectsRetried');
 		cy.get('#matter-project').should('exist');
 		cy.contains('button', 'Run on this matter').should('not.be.disabled');
