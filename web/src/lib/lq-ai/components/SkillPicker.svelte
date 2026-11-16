@@ -70,12 +70,12 @@
 	</div>
 
 	{#if projectAttachedSkills.length > 0}
-		<div class="text-xs text-gray-500">
+		<div class="text-xs lq-t-text2">
 			From project (auto-attached):
 			<span class="space-x-1">
 				{#each projectAttachedSkills as name}
 					<span
-						class="inline-block px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs border border-gray-200"
+						class="inline-block px-2 py-0.5 rounded-full lq-t-inset lq-t-text2 text-xs border lq-t-border"
 						title="Inherited from this chat's Project"
 					>
 						{name}
@@ -95,7 +95,7 @@
 						</span>
 						<button
 							type="button"
-							class="text-xs text-rose-600 hover:underline"
+							class="text-xs lq-t-error hover:underline"
 							on:click={() => onDetach(name)}
 							data-testid={`lq-ai-skill-detach-${name}`}
 						>
@@ -119,7 +119,7 @@
 							<button type="button" class="underline" on:click={() => onRetry(name)}>Retry</button>
 						</p>
 					{:else}
-						<p class="text-xs text-gray-500 italic mt-1">Loading skill details…</p>
+						<p class="text-xs lq-t-text2 italic mt-1">Loading skill details…</p>
 					{/if}
 				</div>
 			{/each}
@@ -237,5 +237,19 @@
 	}
 	.lq-skill-option:hover {
 		background: var(--lq-accent-soft);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>

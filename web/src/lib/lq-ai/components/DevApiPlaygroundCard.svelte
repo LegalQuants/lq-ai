@@ -81,7 +81,7 @@
 
   .token-display {
     flex: 1;
-    font-family: var(--lq-font-mono, monospace);
+    font-family: var(--lq-font-mono);
     font-size: 13px;
     background: var(--lq-inset);
     border: 1px solid var(--lq-border);

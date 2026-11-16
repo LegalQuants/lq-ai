@@ -20,6 +20,10 @@
 	import AmbientTrustChrome from '$lib/lq-ai/components/AmbientTrustChrome.svelte';
 	import SessionTimeoutWarning from '$lib/lq-ai/components/SessionTimeoutWarning.svelte';
 	import NotificationBell from '$lib/lq-ai/components/NotificationBell.svelte';
+	import ShellSidebar from '$lib/lq-ai/components/ShellSidebar.svelte';
+	import PageHeader from '$lib/lq-ai/components/PageHeader.svelte';
+	import RightSidebar from '$lib/lq-ai/components/RightSidebar.svelte';
+	import { readShellSwitch, type ShellVariant } from '$lib/lq-ai/shell';
 	import { autonomousChromeEnabled, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
@@ -65,6 +69,14 @@
 
 	let activityHandler: (() => void) | null = null;
 
+	// Developer-only switch for the redesigned chrome (see $lib/lq-ai/shell).
+	// Off by default; sign-in and forced password change keep today's chrome.
+	let shell: ShellVariant = 'tabs';
+	onMount(() => {
+		shell = readShellSwitch();
+	});
+	$: sidebarChrome = shell === 'sidebar' && !isAuthExempt(pathname);
+
 	onMount(() => {
 		// Layouts survive client-side sign-in/navigation. Sync each new signed-in user,
 		// and let the store discard responses from an earlier session.
@@ -98,8 +110,11 @@
 </script>
 
 {#if booted}
-	<div class="lq-shell">
-		{#if !isAuthExempt(pathname)}
+	<div class="lq-shell" class:lq-shell-sidebar={sidebarChrome}>
+		{#if sidebarChrome}
+			<ShellSidebar user={$auth.user ?? null} {pathname} />
+			<PageHeader {pathname} />
+		{:else if !isAuthExempt(pathname)}
 			<header class="lq-topbar">
 				<a class="lq-brand" href="/lq-ai">
 					<span class="lq-brand-lq">LQ</span>.AI
@@ -117,7 +132,11 @@
 		<main id="lq-main">
 			<slot />
 		</main>
-		<DualBrandingFooter />
+		{#if sidebarChrome}
+			<RightSidebar {pathname} />
+		{:else}
+			<DualBrandingFooter />
+		{/if}
 		<SessionTimeoutWarning />
 	</div>
 {/if}
@@ -144,4 +163,30 @@
 	}
 	.lq-brand-lq { color: var(--lq-accent); }
 	main { flex: 1; min-height: 0; overflow-y: auto; }
+	/* Switch on: left sidebar | page header over main | right sidebar. The
+	   header and the right sidebar are absent when the page has nothing for
+	   them, and the middle column takes the space. Explicit placement keeps
+	   main in its row when the header is absent. */
+	.lq-shell-sidebar {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		grid-template-rows: auto minmax(0, 1fr);
+	}
+	.lq-shell-sidebar > :global(.lq-sidebar) {
+		grid-column: 1;
+		grid-row: 1 / -1;
+	}
+	.lq-shell-sidebar > :global(.lq-page-header) {
+		grid-column: 2;
+		grid-row: 1;
+	}
+	.lq-shell-sidebar main {
+		grid-column: 2;
+		grid-row: 2;
+		min-width: 0;
+	}
+	.lq-shell-sidebar > :global(.lq-right-sidebar) {
+		grid-column: 3;
+		grid-row: 1 / -1;
+	}
 </style>

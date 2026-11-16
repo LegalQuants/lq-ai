@@ -292,13 +292,13 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 2px 7px;
-		border-radius: var(--lq-radius-pill, 9999px);
+		border-radius: var(--lq-radius-pill);
 		font-size: 11px;
 		font-weight: 500;
 	}
 
 	.lq-pill-required {
-		background: var(--lq-accent-soft, rgba(79, 70, 229, 0.1));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent);
 	}

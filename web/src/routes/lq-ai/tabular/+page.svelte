@@ -175,8 +175,8 @@
 	}
 	.lq-tabular-page__cta {
 		padding: 0.5rem 0.875rem;
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: none;
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
@@ -201,8 +201,8 @@
 	}
 	.lq-tabular-page__error {
 		color: var(--lq-error);
-		background: var(--lq-error-soft, var(--lq-inset));
-		border: 1px solid var(--lq-error-border, var(--lq-border));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 	}
 	.lq-tabular-page__empty-title {
 		margin: 0 0 0.5rem;
@@ -252,12 +252,12 @@
 		background: var(--lq-inset);
 	}
 	.lq-tabular-table__status[data-status='completed'] {
-		background: var(--lq-success-soft, var(--lq-inset));
-		color: var(--lq-success, inherit);
+		background: var(--lq-success-soft);
+		color: var(--lq-success);
 	}
 	.lq-tabular-table__status[data-status='failed'] {
-		background: var(--lq-error-soft, var(--lq-inset));
-		color: var(--lq-error, inherit);
+		background: var(--lq-error-soft);
+		color: var(--lq-error);
 	}
 	.lq-tabular-table__status[data-status='cancelled'] {
 		background: var(--lq-inset);
@@ -265,7 +265,7 @@
 	}
 	.lq-tabular-table__status[data-status='running'],
 	.lq-tabular-table__status[data-status='pending'] {
-		background: var(--lq-warning-soft, var(--lq-inset));
-		color: var(--lq-warning, inherit);
+		background: var(--lq-warning-soft);
+		color: var(--lq-warning);
 	}
 </style>

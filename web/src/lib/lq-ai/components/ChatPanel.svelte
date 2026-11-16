@@ -218,6 +218,13 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
+	import ChatDetailsPanel from './ChatDetailsPanel.svelte';
+	import { readShellSwitch } from '$lib/lq-ai/shell';
+	import {
+		clearShellContext,
+		publishShellContext,
+		revealRightSidebar
+	} from '$lib/lq-ai/rightSidebar';
 	import LqButton from './shared/LqButton.svelte';
 	import LqSwitch from './shared/LqSwitch.svelte';
 	import LqGroup from './shared/LqGroup.svelte';
@@ -1501,6 +1508,42 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
+	// Interface-redesign P1.4, behind the developer switch ($lib/lq-ai/shell).
+	// With the switch on, the attached files and the receipts move into the
+	// shell's shared right sidebar (same components, same props) and the
+	// chat's title into its page header. With the switch off nothing here
+	// publishes and the panels render beside the chat as before.
+	let sidebarShell = false;
+	const shellOwner = Symbol('ChatPanel');
+	onMount(() => {
+		sidebarShell = readShellSwitch() === 'sidebar';
+	});
+	onDestroy(() => clearShellContext(shellOwner));
+	$: if (sidebarShell)
+		publishShellContext(
+			shellOwner,
+			activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
+			activeChat
+				? {
+						label: 'Chat details',
+						component: ChatDetailsPanel,
+						props: {
+							chatId: activeChat.id,
+							chatFiles,
+							newHarness: harnessChosen,
+							projectFiles,
+							uploading,
+							attachLimitReached,
+							onUpload: uploadAttached,
+							onDetach: detachFile,
+							compact: !!projectIdFilter,
+							receiptsOpen: receiptsDrawerOpen,
+							onCloseReceipts: () => (receiptsDrawerOpen = false)
+						}
+					}
+				: null
+		);
+
 	// ADR 0038 D1 — governed runs. Which profiles this chat can start is read when the
 	// active chat changes (and again after a run ends or a run is proposed). New
 	// harness is one of the chat's models: the choice is remembered per chat like any
@@ -1647,7 +1690,7 @@
 
 	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
-			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
+			class="px-4 py-2 border-b lq-t-border flex items-center justify-between"
 			data-testid="lq-ai-chat-header"
 		>
 			{#if activeChat}
@@ -1656,7 +1699,7 @@
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
-						<p class="text-xs text-gray-500">
+						<p class="text-xs lq-t-text2">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
 								activeChat.project_id}
 						</p>
@@ -1696,7 +1739,7 @@
 
 		{#if activeChat}
 			<div
-				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
+				class="border-t lq-t-border p-3 space-y-2"
 				class:lq-composer-fit={selectedRunProfile !== null}
 				data-testid="lq-ai-composer"
 			>
@@ -1889,7 +1932,10 @@
 							type="button"
 							aria-label="Toggle receipts drawer"
 							title="Toggle receipts"
-							on:click={() => (receiptsDrawerOpen = !receiptsDrawerOpen)}
+							on:click={() => {
+								receiptsDrawerOpen = !receiptsDrawerOpen;
+								if (sidebarShell && receiptsDrawerOpen) revealRightSidebar();
+							}}
 							data-testid="lq-ai-receipts-toggle"
 						>
 							<IconListDetails size={14} aria-hidden="true" />
@@ -1947,26 +1993,28 @@
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
 
-	{#if activeChat}
-		<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
-			<AttachedFilesPanel
-				{chatFiles}
-				newHarness={harnessChosen}
-				{projectFiles}
-				{uploading}
-				{attachLimitReached}
-				onUpload={uploadAttached}
-				onDetach={detachFile}
-			/>
-		</CompactPanel>
-	{/if}
+	{#if !sidebarShell}
+		{#if activeChat}
+			<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
+				<AttachedFilesPanel
+					{chatFiles}
+					newHarness={harnessChosen}
+					{projectFiles}
+					{uploading}
+					{attachLimitReached}
+					onUpload={uploadAttached}
+					onDetach={detachFile}
+				/>
+			</CompactPanel>
+		{/if}
 
-	{#if activeChat && receiptsDrawerOpen}
-		<ReceiptsDrawer
-			bind:open={receiptsDrawerOpen}
-			chatId={activeChat.id}
-			onClose={() => (receiptsDrawerOpen = false)}
-		/>
+		{#if activeChat && receiptsDrawerOpen}
+			<ReceiptsDrawer
+				bind:open={receiptsDrawerOpen}
+				chatId={activeChat.id}
+				onClose={() => (receiptsDrawerOpen = false)}
+			/>
+		{/if}
 	{/if}
 </div>
 
@@ -2082,5 +2130,13 @@
 	}
 	.lq-composer::placeholder {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>
