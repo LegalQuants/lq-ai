@@ -111,7 +111,7 @@
     background: var(--lq-accent);
     color: white;
     border: 0;
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-2) var(--lq-space-4);
     cursor: pointer;
     font-weight: 500;
@@ -120,7 +120,7 @@
   }
 
   .mtr-btn-primary:hover {
-    filter: brightness(0.95);
+    opacity: 0.85;
   }
 
   .mtr-btn-primary:focus-visible {

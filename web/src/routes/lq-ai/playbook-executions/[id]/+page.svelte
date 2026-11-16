@@ -282,8 +282,8 @@
 	}
 	.lq-pbx-page__error {
 		color: var(--lq-error);
-		background: var(--lq-error-soft, var(--lq-inset));
-		border: 1px solid var(--lq-error-border, var(--lq-border));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.lq-pbx-status {
@@ -297,15 +297,15 @@
 	}
 	.lq-pbx-status--pending,
 	.lq-pbx-status--running {
-		background: var(--lq-warn-soft, var(--lq-inset));
-		color: var(--lq-warn, var(--lq-text-secondary));
+		background: var(--lq-warn-soft);
+		color: var(--lq-warn);
 	}
 	.lq-pbx-status--completed {
-		background: var(--lq-accent-soft, var(--lq-inset));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 	}
 	.lq-pbx-status--error {
-		background: var(--lq-error-soft, var(--lq-inset));
+		background: var(--lq-error-soft);
 		color: var(--lq-error);
 	}
 
@@ -346,7 +346,7 @@
 	}
 	.lq-pbx-filters select {
 		padding: 0.25rem 0.5rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		font-size: 0.875rem;
@@ -449,14 +449,14 @@
 		letter-spacing: 0.04em;
 	}
 	.lq-severity--critical {
-		background: var(--lq-error-soft, var(--lq-inset));
+		background: var(--lq-error-soft);
 		color: var(--lq-error);
-		border: 1px solid var(--lq-error-border, transparent);
+		border: 1px solid var(--lq-error-border);
 	}
 	.lq-severity--high {
-		background: var(--lq-warn-soft, var(--lq-inset));
+		background: var(--lq-warn-soft);
 		color: var(--lq-warn);
-		border: 1px solid var(--lq-warn-border, transparent);
+		border: 1px solid var(--lq-warn-border);
 	}
 	.lq-severity--medium {
 		background: var(--lq-inset);
@@ -465,7 +465,7 @@
 	}
 	.lq-severity--low {
 		background: var(--lq-inset);
-		color: var(--lq-text-tertiary, var(--lq-text-secondary));
+		color: var(--lq-text-tertiary);
 		border: 1px solid var(--lq-border);
 	}
 
@@ -478,7 +478,7 @@
 		font-weight: 500;
 	}
 	.lq-outcome--matches-standard {
-		background: var(--lq-accent-soft, var(--lq-inset));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 	}
 	.lq-outcome--matches-fallback {
@@ -486,11 +486,11 @@
 		color: var(--lq-text-secondary);
 	}
 	.lq-outcome--deviates {
-		background: var(--lq-warn-soft, var(--lq-inset));
+		background: var(--lq-warn-soft);
 		color: var(--lq-warn);
 	}
 	.lq-outcome--missing {
-		background: var(--lq-error-soft, var(--lq-inset));
+		background: var(--lq-error-soft);
 		color: var(--lq-error);
 	}
 </style>

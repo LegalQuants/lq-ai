@@ -286,13 +286,13 @@
 		color: var(--lq-tier);
 		border: 1px solid var(--lq-tier-border);
 		padding: 4px 10px;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		font-size: 12px;
 		font-family: ui-monospace, monospace;
 		cursor: pointer;
 	}
 	.lq-model-pill:hover {
-		filter: brightness(0.97);
+		opacity: 0.85;
 	}
 	.lq-model-pill:focus-visible {
 		outline: 2px solid var(--lq-tier);
