@@ -1,24 +1,34 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { preferences, setPreference, initPreferences } from '$lib/lq-ai/stores/preferences';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	onMount(() => {
 		initPreferences();
 	});
 </script>
 
-<h2 class="lq-text-panel-h" style="margin-bottom: var(--lq-space-4);">Autonomous Layer</h2>
-<p class="lq-text-body" style="color: var(--lq-text-secondary); margin-bottom: var(--lq-space-6);">
+<LqTitle
+	order={2}
+	size="16"
+	weight="semibold"
+	tone="primary"
+	style="margin-bottom: var(--lq-space-4);">Autonomous Layer</LqTitle
+>
+<LqText as="p" size="14" tone="secondary" style="margin-bottom: var(--lq-space-6);">
 	When enabled, LQ.AI can run background agents that watch your knowledge bases, run scheduled
 	scans, propose memory about your preferences, and surface cross-matter precedents — always under
 	hard cost, halt, and per-phase tool limits, and always producing an inspectable receipt. Off by
 	default. Turning it off stops new runs; you keep access to past receipts and can still halt
 	anything running.
-</p>
+</LqText>
 
 <div class="lq-autonomous-toggle" style="margin-top: var(--lq-space-6);">
-	<label
-		class="lq-text-body"
+	<LqText
+		as="label"
+		size="14"
+		tone="primary"
 		style="display: flex; gap: var(--lq-space-2); align-items: flex-start;"
 	>
 		<input
@@ -34,5 +44,5 @@
 				and produce a full receipt you can inspect at any time.
 			</span>
 		</span>
-	</label>
+	</LqText>
 </div>

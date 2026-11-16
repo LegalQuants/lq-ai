@@ -2,6 +2,8 @@
   import { skillsApi, projectsApi } from '$lib/lq-ai/api';
   import type { Project, SkillSummary } from '$lib/lq-ai/types';
   import TrustPill from './TrustPill.svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
   export let onMatterUpdate: (next: Project) => void = () => {};
@@ -69,7 +71,7 @@
 
 <section class="mrs-section" data-testid="matter-rail-skills">
   <header class="mrs-header">
-    <h3 class="lq-text-panel-h mrs-title">Skills</h3>
+    <LqTitle order={3} size="16" weight="semibold" tone="primary" class="mrs-title">Skills</LqTitle>
     <button
       type="button"
       class="mrs-btn-attach"
@@ -86,7 +88,7 @@
   {/if}
 
   {#if attachedNames.length === 0 && !pickerOpen}
-    <p class="lq-text-caption mrs-empty">No skills attached.</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrs-empty">No skills attached.</LqText>
   {:else}
     <div class="mrs-chips">
       {#each attachedNames as name (name)}
@@ -109,9 +111,9 @@
   {#if pickerOpen}
     <div id="mrs-picker" class="mrs-picker" role="listbox" aria-label="Available skills to attach">
       {#if loadingAvailable}
-        <p class="lq-text-caption mrs-empty">Loading skills…</p>
+        <LqText as="p" size="12" tone="tertiary" class="mrs-empty">Loading skills…</LqText>
       {:else if availableSkills.length === 0}
-        <p class="lq-text-caption mrs-empty">No skills available to attach.</p>
+        <LqText as="p" size="12" tone="tertiary" class="mrs-empty">No skills available to attach.</LqText>
       {:else}
         <ul class="mrs-available-list">
           {#each availableSkills as skill (skill.name)}
@@ -122,12 +124,12 @@
                 on:click={() => attachSkill(skill)}
                 disabled={attachingName === skill.name}
               >
-                <span class="lq-text-body-sm mrs-skill-name">{skill.title || skill.name}</span>
+                <LqText as="span" size="13.5" weight="medium" tone="primary" class="mrs-skill-name">{skill.title || skill.name}</LqText>
                 {#if skill.description}
-                  <span class="lq-text-caption mrs-skill-desc">{skill.description}</span>
+                  <LqText as="span" size="12" tone="secondary" class="mrs-skill-desc">{skill.description}</LqText>
                 {/if}
                 {#if attachingName === skill.name}
-                  <span class="lq-text-caption mrs-attaching">Attaching…</span>
+                  <LqText as="span" size="12" tone="accent" class="mrs-attaching">Attaching…</LqText>
                 {/if}
               </button>
             </li>
@@ -154,12 +156,11 @@
     gap: var(--lq-space-2);
   }
 
-  .mrs-title {
+  .mrs-header :global(.mrs-title) {
     margin: 0;
   }
 
-  .mrs-empty {
-    color: var(--lq-text-tertiary);
+  .mrs-section :global(.mrs-empty) {
     padding: var(--lq-space-1) 0;
   }
 
@@ -180,7 +181,7 @@
     color: var(--lq-accent);
     background: transparent;
     border: 1px solid var(--lq-accent-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: 2px 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -285,20 +286,10 @@
     outline-offset: 2px;
   }
 
-  .mrs-skill-name {
-    color: var(--lq-text);
-    font-weight: 500;
-  }
-
-  .mrs-skill-desc {
-    color: var(--lq-text-secondary);
+  .mrs-available-item :global(.mrs-skill-desc) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 100%;
-  }
-
-  .mrs-attaching {
-    color: var(--lq-accent);
   }
 </style>

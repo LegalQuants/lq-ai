@@ -18,6 +18,8 @@
   import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
   import { onMount } from 'svelte';
   import AttachKBModal from './AttachKBModal.svelte';
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
 
   export let matter: Project;
   export let onMatterUpdate: (next: Project) => void = () => {};
@@ -103,7 +105,7 @@
 
 <section class="mrk-section" data-testid="matter-rail-knowledge">
   <header class="mrk-header">
-    <h3 class="lq-text-panel-h mrk-title">Knowledge</h3>
+    <LqTitle order={3} size="16" weight="semibold" tone="primary" class="mrk-title">Knowledge</LqTitle>
     <button
       type="button"
       class="mrk-btn-attach"
@@ -119,17 +121,17 @@
   {/if}
 
   {#if loadingAttached}
-    <p class="lq-text-caption mrk-empty">Loading knowledge bases…</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrk-empty">Loading knowledge bases…</LqText>
   {:else if attachedKBs.length === 0}
-    <p class="lq-text-caption mrk-empty">No knowledge bases attached.</p>
+    <LqText as="p" size="12" tone="tertiary" class="mrk-empty">No knowledge bases attached.</LqText>
   {:else}
     <ul class="mrk-kb-list">
       {#each attachedKBs as kb (kb.id)}
         <li class="mrk-kb-row">
-          <span class="mrk-kb-name lq-text-body-sm" title={kb.name}>{kb.name}</span>
-          <span class="mrk-kb-meta lq-text-caption">
+          <LqText as="span" size="13.5" tone="primary" class="mrk-kb-name" title={kb.name}>{kb.name}</LqText>
+          <LqText as="span" size="12" tone="tertiary" class="mrk-kb-meta">
             {kb.file_count ?? 0} {kb.file_count === 1 ? 'doc' : 'docs'}
-          </span>
+          </LqText>
           <button
             type="button"
             class="mrk-btn-detach"
@@ -172,20 +174,19 @@
     gap: var(--lq-space-2);
   }
 
-  .mrk-title {
+  .mrk-header :global(.mrk-title) {
     margin: 0;
   }
 
-  .mrk-empty {
-    color: var(--lq-text-tertiary);
+  .mrk-section :global(.mrk-empty) {
     padding: var(--lq-space-1) 0;
   }
 
   .mrk-error {
     font-size: 12px;
-    color: var(--lq-error, #b91c1c);
-    background: var(--lq-error-soft, #fef2f2);
-    border: 1px solid var(--lq-error-border, #fecaca);
+    color: var(--lq-error);
+    background: var(--lq-error-soft);
+    border: 1px solid var(--lq-error-border);
     border-radius: var(--lq-radius);
     padding: var(--lq-space-1) var(--lq-space-2);
     margin: 0;
@@ -197,7 +198,7 @@
     color: var(--lq-accent);
     background: transparent;
     border: 1px solid var(--lq-accent-border);
-    border-radius: var(--lq-radius);
+    border-radius: var(--lq-radius-pill);
     padding: 2px 10px;
     cursor: pointer;
     white-space: nowrap;
@@ -231,16 +232,14 @@
     border-radius: var(--lq-radius);
   }
 
-  .mrk-kb-name {
+  .mrk-kb-row :global(.mrk-kb-name) {
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--lq-text);
   }
 
-  .mrk-kb-meta {
-    color: var(--lq-text-tertiary);
+  .mrk-kb-row :global(.mrk-kb-meta) {
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -258,7 +257,7 @@
   }
 
   .mrk-btn-detach:hover:not(:disabled) {
-    color: var(--lq-error, #b91c1c);
+    color: var(--lq-error);
   }
 
   .mrk-btn-detach:disabled {

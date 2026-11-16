@@ -4,6 +4,8 @@
    *
    * variant determines a default tone (secure→sage, tier→slate,
    * provider→sage, audit→sage, warn→amber, error→red); `tone` prop overrides.
+   * Under ADR 0045 sage renders neutral, slate is governance (a neutral pill with
+   * an orange dot), amber is neutral ink and red is danger.
    * `display` chooses label vs dot-only rendering for the personalization toggle.
    *
    * The toneClassFor + labelFor helpers are exported for unit testing.
@@ -71,12 +73,17 @@
   .lq-pill-clickable { cursor: pointer; }
   .lq-pill-dot { padding: 4px 8px; font-size: 10px; }
 
-  .lq-pill-tone-sage    { background: var(--lq-accent-soft); color: var(--lq-accent); border-color: var(--lq-accent-border); }
-  .lq-pill-tone-slate   { background: var(--lq-tier-soft);   color: var(--lq-tier);   border-color: var(--lq-tier-border); }
+  /* ADR 0045: colour means governance or error. sage (secure, provider, audit) is a
+     neutral outline; slate (the tier, and privileged matters by explicit tone) is a
+     neutral outline with a governance mark. */
+  .lq-pill-tone-sage    { background: var(--lq-canvas); color: var(--lq-text); border-color: var(--lq-border); }
+  .lq-pill-tone-slate   { background: var(--lq-canvas); color: var(--lq-text); border-color: var(--lq-border); }
+  .lq-pill-tone-slate:not(.lq-pill-dot)::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lq-governance); flex: none; }
+  .lq-pill-tone-slate.lq-pill-dot { color: var(--lq-governance); }
   .lq-pill-tone-amber   { background: var(--lq-warn-soft);   color: var(--lq-warn);   border-color: var(--lq-warn-border); }
   .lq-pill-tone-red     { background: var(--lq-error-soft);  color: var(--lq-error);  border-color: var(--lq-error-border); }
   .lq-pill-tone-neutral { background: var(--lq-inset);       color: var(--lq-text-secondary); border-color: var(--lq-border); }
 
-  .lq-pill-clickable:hover { filter: brightness(0.97); }
+  .lq-pill-clickable:hover { opacity: 0.85; }
   .lq-pill-clickable:focus-visible { outline: 2px solid var(--lq-accent); outline-offset: 2px; }
 </style>
