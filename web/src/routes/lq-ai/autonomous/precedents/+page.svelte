@@ -379,18 +379,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.banner-link {
@@ -450,9 +450,9 @@
 		border-radius: 10px;
 		font-size: 12px;
 		font-weight: 500;
-		background: var(--lq-info-bg, #e8f4fd);
-		color: var(--lq-info-text, #0a5fa8);
-		border: 1px solid var(--lq-info-border, #9ed3f5);
+		background: var(--lq-info-bg);
+		color: var(--lq-info-text);
+		border: 1px solid var(--lq-info-border);
 		white-space: nowrap;
 	}
 
@@ -460,7 +460,7 @@
 		font-size: 12px;
 		font-weight: 600;
 		color: var(--lq-text-secondary);
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.05));
+		background: var(--lq-surface-hover);
 		padding: 2px 6px;
 		border-radius: 10px;
 		white-space: nowrap;
@@ -472,7 +472,7 @@
 		border-radius: 10px;
 		font-size: 12px;
 		font-weight: 500;
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.06));
+		background: var(--lq-surface-hover);
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
 		white-space: nowrap;
@@ -517,7 +517,7 @@
 		padding: var(--lq-space-1) var(--lq-space-2);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		color: var(--lq-text);
 		font-size: 13px;
 		min-width: 180px;
@@ -537,7 +537,7 @@
 	}
 
 	.picker-error {
-		color: var(--lq-error-text, #800);
+		color: var(--lq-error-text);
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -557,7 +557,7 @@
 	}
 
 	.action-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button.primary {
@@ -572,8 +572,8 @@
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {

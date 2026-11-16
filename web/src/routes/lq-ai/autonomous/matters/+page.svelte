@@ -477,8 +477,8 @@
 	.submit-error {
 		font-size: 13px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;

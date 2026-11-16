@@ -208,7 +208,7 @@
 		gap: 12px;
 	}
 	.column-row {
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		padding: 12px;
 		margin: 0;
@@ -222,7 +222,7 @@
 	.row-index {
 		font-size: 12px;
 		font-weight: 600;
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
@@ -241,7 +241,7 @@
 		margin-bottom: 4px;
 	}
 	.required {
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 		font-style: normal;
 	}
 	input,
@@ -249,7 +249,7 @@
 	select {
 		width: 100%;
 		padding: 8px;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		font-size: 14px;
 		font-family: inherit;
@@ -261,7 +261,7 @@
 		gap: 8px;
 	}
 	.error {
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 		font-size: 12px;
 	}
 	.inline-error {
@@ -273,7 +273,7 @@
 	}
 	.ghost {
 		background: transparent;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border);
 		padding: 4px 10px;
 		border-radius: 6px;
 		cursor: pointer;
@@ -284,8 +284,8 @@
 		cursor: not-allowed;
 	}
 	.ghost.danger {
-		color: var(--lq-error, #b54848);
-		border-color: var(--lq-error, #b54848);
+		color: var(--lq-error);
+		border-color: var(--lq-error);
 	}
 	.add-column {
 		align-self: flex-start;
