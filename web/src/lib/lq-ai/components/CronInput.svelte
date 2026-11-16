@@ -253,7 +253,7 @@
 
 	.cron-select {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -299,7 +299,7 @@
 
 	.cron-input-text {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -359,8 +359,8 @@
 	.cron-error {
 		font-size: 12px;
 		color: var(--lq-error);
-		background: var(--lq-error-soft, rgba(176, 0, 0, 0.06));
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -372,7 +372,7 @@
 		gap: var(--lq-space-2);
 		font-size: 13px;
 		padding: var(--lq-space-2) var(--lq-space-3);
-		background: var(--lq-surface, rgba(0, 0, 0, 0.02));
+		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
 		border-radius: var(--lq-radius);
 	}

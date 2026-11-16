@@ -72,7 +72,7 @@
 </script>
 
 <div
-	class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+	class="fixed inset-0 z-50 flex items-center justify-center lq-t-backdrop p-4"
 	on:click={handleBackdropClick}
 	on:keydown={handleKeydown}
 	role="dialog"
@@ -82,19 +82,16 @@
 	data-testid="lq-ai-tier-details-backdrop"
 >
 	<div
-		class="bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full p-4 space-y-3"
+		class="lq-t-canvas rounded-lg shadow-xl border lq-t-border max-w-md w-full p-4 space-y-3"
 		data-testid="lq-ai-tier-details-panel"
 	>
 		<div class="flex items-start justify-between gap-2">
-			<h3
-				id="lq-ai-tier-details-title"
-				class="text-sm font-semibold text-gray-900 dark:text-gray-100"
-			>
+			<h3 id="lq-ai-tier-details-title" class="text-sm font-semibold lq-t-text">
 				{tierInfo?.label ?? 'Inference details'}
 			</h3>
 			<button
 				type="button"
-				class="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-lg leading-none"
+				class="lq-t-text2 lq-t-hover-text text-lg leading-none"
 				on:click={() => dispatch('close')}
 				aria-label="Close"
 				data-testid="lq-ai-tier-details-close"
@@ -104,59 +101,51 @@
 		</div>
 
 		{#if tierInfo}
-			<p class="text-xs text-gray-600 dark:text-gray-300">{tierInfo.blurb}</p>
+			<p class="text-xs lq-t-text2">{tierInfo.blurb}</p>
 		{:else}
-			<p class="text-xs text-gray-600 dark:text-gray-300">
+			<p class="text-xs lq-t-text2">
 				This message did not record a routed inference tier. Older messages and messages from before
 				D1 / B5 do not carry this metadata.
 			</p>
 		{/if}
 
 		{#if showRequestedDelta}
-			<div class="border-t border-gray-200 dark:border-gray-800 pt-2">
-				<div class="text-[10px] uppercase tracking-wide text-gray-500">Requested</div>
-				<div
-					class="text-sm font-mono text-gray-800 dark:text-gray-100"
-					data-testid="lq-ai-tier-details-requested-model"
-				>
+			<div class="border-t lq-t-border pt-2">
+				<div class="text-[10px] uppercase tracking-wide lq-t-text2">Requested</div>
+				<div class="text-sm font-mono lq-t-text" data-testid="lq-ai-tier-details-requested-model">
 					{requestedModel}
 				</div>
-				<div class="text-[10px] text-gray-500 italic mt-0.5">
-					Resolved server-side per ADR 0011.
-				</div>
+				<div class="text-[10px] lq-t-text2 italic mt-0.5">Resolved server-side per ADR 0011.</div>
 			</div>
 		{/if}
 
-		<div class="border-t border-gray-200 dark:border-gray-800 pt-2">
-			<div class="text-[10px] uppercase tracking-wide text-gray-500">
+		<div class="border-t lq-t-border pt-2">
+			<div class="text-[10px] uppercase tracking-wide lq-t-text2">
 				{showRequestedDelta ? 'Routed to' : 'Provider / model'}
 			</div>
-			<div
-				class="text-sm font-mono text-gray-800 dark:text-gray-100"
-				data-testid="lq-ai-tier-details-provider-model"
-			>
+			<div class="text-sm font-mono lq-t-text" data-testid="lq-ai-tier-details-provider-model">
 				{providerModelLine}
 			</div>
 		</div>
 
 		{#if showTokens || showCost}
-			<div class="border-t border-gray-200 dark:border-gray-800 pt-2 grid grid-cols-2 gap-2">
+			<div class="border-t lq-t-border pt-2 grid grid-cols-2 gap-2">
 				{#if promptTokens != null}
 					<div>
-						<div class="text-[10px] uppercase tracking-wide text-gray-500">Prompt tokens</div>
-						<div class="text-sm font-mono text-gray-800 dark:text-gray-100">{promptTokens}</div>
+						<div class="text-[10px] uppercase tracking-wide lq-t-text2">Prompt tokens</div>
+						<div class="text-sm font-mono lq-t-text">{promptTokens}</div>
 					</div>
 				{/if}
 				{#if completionTokens != null}
 					<div>
-						<div class="text-[10px] uppercase tracking-wide text-gray-500">Completion tokens</div>
-						<div class="text-sm font-mono text-gray-800 dark:text-gray-100">{completionTokens}</div>
+						<div class="text-[10px] uppercase tracking-wide lq-t-text2">Completion tokens</div>
+						<div class="text-sm font-mono lq-t-text">{completionTokens}</div>
 					</div>
 				{/if}
 				{#if showCost}
 					<div class="col-span-2">
-						<div class="text-[10px] uppercase tracking-wide text-gray-500">Cost estimate</div>
-						<div class="text-sm font-mono text-gray-800 dark:text-gray-100">
+						<div class="text-[10px] uppercase tracking-wide lq-t-text2">Cost estimate</div>
+						<div class="text-sm font-mono lq-t-text">
 							${costEstimate?.toFixed(4)}
 						</div>
 					</div>
@@ -164,11 +153,33 @@
 			</div>
 		{/if}
 
-		<div class="border-t border-gray-200 dark:border-gray-800 pt-2">
-			<p class="text-[11px] text-gray-500 italic">
+		<div class="border-t lq-t-border pt-2">
+			<p class="text-[11px] lq-t-text2 italic">
 				Per the transparency principle (PRD §1.3): every artifact that shapes your output is
 				visible. The router decision behind this message is one of those artifacts.
 			</p>
 		</div>
 	</div>
 </div>
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-backdrop {
+		background-color: rgba(0, 0, 0, 0.4);
+	}
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
+	}
+	.lq-t-hover-text:hover {
+		color: var(--lq-text);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+</style>

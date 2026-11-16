@@ -81,7 +81,7 @@
 		font: inherit;
 		font-size: 12px;
 		font-weight: 500;
-		color: #4b5563; /* gray-600 */
+		color: var(--lq-text-secondary); /* gray-600 */
 		text-align: left;
 		transition: background-color 0.15s ease;
 	}
@@ -89,16 +89,8 @@
 		background: rgba(107, 114, 128, 0.12);
 	}
 	.lq-sources-header:focus-visible {
-		outline: 2px solid var(--lq-accent, #4338ca);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: -2px;
-	}
-
-	:global(.dark) .lq-sources-header {
-		color: #9ca3af; /* gray-400 */
-		background: rgba(107, 114, 128, 0.12);
-	}
-	:global(.dark) .lq-sources-header:hover {
-		background: rgba(107, 114, 128, 0.2);
 	}
 
 	.lq-sources-icon {
@@ -133,29 +125,20 @@
 
 	.lq-source-label {
 		font-weight: 600;
-		color: #374151; /* gray-700 */
-	}
-	:global(.dark) .lq-source-label {
-		color: #d1d5db; /* gray-300 */
+		color: var(--lq-text);
 	}
 
 	.lq-source-sub {
-		color: #6b7280; /* gray-500 */
+		color: var(--lq-text-tertiary);
 		font-size: 11px;
-	}
-	:global(.dark) .lq-source-sub {
-		color: #9ca3af; /* gray-400 */
 	}
 
 	.lq-source-link {
-		color: #4338ca; /* indigo-700 — consistent with caselaw pill tone */
+		color: var(--lq-accent);
+		text-decoration: underline;
 		font-size: 11px;
-		text-decoration: none;
 	}
 	.lq-source-link:hover {
 		text-decoration: underline;
-	}
-	:global(.dark) .lq-source-link {
-		color: #818cf8; /* indigo-400 */
 	}
 </style>

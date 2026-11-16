@@ -130,7 +130,7 @@
 
 	.inline-link {
 		color: var(--lq-accent);
-		text-decoration: none;
+		text-decoration: underline;
 	}
 
 	.inline-link:hover {

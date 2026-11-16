@@ -14,9 +14,9 @@
 	export let busy: boolean = false;
 </script>
 
-<div class="border border-gray-200 dark:border-gray-700 rounded-md overflow-hidden" data-testid="lq-ai-alias-table">
+<div class="border lq-t-border rounded-md overflow-hidden" data-testid="lq-ai-alias-table">
 	<table class="w-full text-sm">
-		<thead class="bg-gray-50 dark:bg-gray-800 text-xs uppercase tracking-wide text-gray-500">
+		<thead class="lq-t-inset text-xs uppercase tracking-wide lq-t-text2">
 			<tr>
 				<th class="text-left px-3 py-2">Alias</th>
 				<th class="text-left px-3 py-2">Provider</th>
@@ -28,23 +28,23 @@
 		<tbody>
 			{#if aliases.length === 0}
 				<tr>
-					<td colspan="5" class="px-3 py-6 text-center text-gray-500" data-testid="lq-ai-alias-table-empty">
+					<td colspan="5" class="px-3 py-6 text-center lq-t-text2" data-testid="lq-ai-alias-table-empty">
 						No aliases configured.
 					</td>
 				</tr>
 			{:else}
 				{#each aliases as alias (alias.name)}
 					<tr
-						class="border-t border-gray-200 dark:border-gray-700"
+						class="border-t lq-t-border"
 						data-testid="lq-ai-alias-row"
 						data-alias-name={alias.name}
 					>
 						<td class="px-3 py-2 font-medium">{alias.name}</td>
-						<td class="px-3 py-2 text-gray-700 dark:text-gray-300">{alias.provider}</td>
-						<td class="px-3 py-2 text-gray-700 dark:text-gray-300 font-mono text-xs">
+						<td class="px-3 py-2 lq-t-text2">{alias.provider}</td>
+						<td class="px-3 py-2 lq-t-text2 font-mono text-xs">
 							{alias.model}
 						</td>
-						<td class="px-3 py-2 text-gray-500 text-xs">
+						<td class="px-3 py-2 lq-t-text2 text-xs">
 							{alias.fallback.length > 0
 								? `${alias.fallback.length} fallback${alias.fallback.length === 1 ? '' : 's'}`
 								: '—'}
@@ -52,7 +52,7 @@
 						<td class="px-3 py-2 text-right space-x-2">
 							<button
 								type="button"
-								class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+								class="text-xs px-2 py-1 rounded border lq-t-border-strong lq-t-hover"
 								on:click={() => onEdit(alias)}
 								disabled={busy}
 								data-testid="lq-ai-alias-edit-btn"
@@ -61,7 +61,7 @@
 							</button>
 							<button
 								type="button"
-								class="text-xs px-2 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+								class="text-xs px-2 py-1 rounded border lq-t-error-border lq-t-error lq-t-error-hover"
 								on:click={() => onDelete(alias)}
 								disabled={busy}
 								data-testid="lq-ai-alias-delete-btn"
@@ -75,3 +75,31 @@
 		</tbody>
 	</table>
 </div>
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-hover:hover {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-hover:hover {
+		background-color: var(--lq-surface-hover);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+</style>
