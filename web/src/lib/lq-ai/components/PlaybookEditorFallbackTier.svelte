@@ -107,7 +107,7 @@
 		border: 1px solid var(--lq-border);
 		border-radius: 0.375rem;
 		padding: 0.75rem 0.875rem;
-		background: var(--lq-inset, transparent);
+		background: var(--lq-inset);
 	}
 	.lq-playbook-editor-tier__header {
 		display: flex;
@@ -138,7 +138,7 @@
 		cursor: not-allowed;
 	}
 	.lq-playbook-editor-tier__btn--danger {
-		color: var(--lq-error, #b91c1c);
+		color: var(--lq-error);
 	}
 	.lq-playbook-editor-tier__grid {
 		display: grid;

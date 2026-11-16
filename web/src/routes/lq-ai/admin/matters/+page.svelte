@@ -367,7 +367,7 @@
 		outline-offset: 2px;
 	}
 	.error {
-		color: var(--lq-danger, #b42318);
+		color: var(--lq-danger);
 	}
 	.notice {
 		color: var(--lq-text);

@@ -52,7 +52,7 @@
 
 {#if mcpReturn?.status === 'connected'}
 	<div
-		class="flex items-center gap-3 px-4 py-2 text-sm bg-emerald-50 border-b border-emerald-200 text-emerald-800"
+		class="flex items-center gap-3 px-4 py-2 text-sm lq-t-success-bg border-b lq-t-success-border lq-t-success"
 		data-testid="mcp-return-connected"
 	>
 		<span>Connected{mcpReturn.server ? ` to ${mcpReturn.server}` : ''}.</span>
@@ -70,7 +70,7 @@
 	</div>
 {:else if mcpReturn?.status === 'error'}
 	<div
-		class="flex items-center gap-3 px-4 py-2 text-sm bg-rose-50 border-b border-rose-200 text-rose-800"
+		class="flex items-center gap-3 px-4 py-2 text-sm lq-t-error-bg border-b lq-t-error-border lq-t-error-strong"
 		data-testid="mcp-return-error"
 	>
 		<span>Couldn't connect{mcpReturn.server ? ` ${mcpReturn.server}` : ''} — try again.</span>
@@ -85,7 +85,7 @@
 <style>
 	.lq-banner-primary {
 		background: #059669;
-		color: #fff;
+		color: var(--lq-canvas);
 		border: 0;
 		padding: 3px 10px;
 		border-radius: 4px;
@@ -103,5 +103,25 @@
 		cursor: pointer;
 		font-size: 12px;
 		text-decoration: underline;
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-strong {
+		color: var(--lq-error-text);
+	}
+	.lq-t-success {
+		color: var(--lq-success);
+	}
+	.lq-t-success-bg {
+		background-color: var(--lq-success-bg);
+	}
+	.lq-t-success-border {
+		border-color: var(--lq-success-border);
 	}
 </style>
