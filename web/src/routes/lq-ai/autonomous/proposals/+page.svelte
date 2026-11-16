@@ -425,10 +425,10 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
@@ -436,10 +436,10 @@
 		align-items: center;
 		gap: var(--lq-space-3);
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.banner-link {
@@ -520,19 +520,19 @@
 	}
 
 	.state-badge--pending {
-		background: var(--lq-warning-bg, #fef9e7);
-		color: var(--lq-warning-text, #8a5c00);
-		border-color: var(--lq-warning-border, #f5d77e);
+		background: var(--lq-warning-bg);
+		color: var(--lq-warning-text);
+		border-color: var(--lq-warning-border);
 	}
 
 	.state-badge--accepted {
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
-		border-color: var(--lq-success-border, #bfb);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
+		border-color: var(--lq-success-border);
 	}
 
 	.state-badge--rejected {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.05));
+		background: var(--lq-surface-hover);
 		color: var(--lq-text-secondary);
 		border-color: var(--lq-border);
 	}
@@ -550,7 +550,7 @@
 
 	.proposed-md {
 		padding: var(--lq-space-3);
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.03));
+		background: var(--lq-surface-hover);
 		border-radius: 6px;
 		border-left: 3px solid var(--lq-accent);
 	}
@@ -575,9 +575,9 @@
 	}
 
 	.proposal-id {
-		font-family: var(--lq-font-mono, monospace);
+		font-family: var(--lq-font-mono);
 		font-size: 11px;
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.05));
+		background: var(--lq-surface-hover);
 		padding: 1px 4px;
 		border-radius: 3px;
 	}
@@ -611,7 +611,7 @@
 	}
 
 	.action-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button.primary {
@@ -626,8 +626,8 @@
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {

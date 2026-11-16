@@ -81,7 +81,7 @@
 		font: inherit;
 		font-size: 12px;
 		font-weight: 500;
-		color: #4b5563; /* gray-600 */
+		color: var(--lq-text-secondary); /* gray-600 */
 		text-align: left;
 		transition: background-color 0.15s ease;
 	}
@@ -89,12 +89,12 @@
 		background: rgba(107, 114, 128, 0.12);
 	}
 	.lq-sources-header:focus-visible {
-		outline: 2px solid var(--lq-accent, #4338ca);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: -2px;
 	}
 
 	:global(.dark) .lq-sources-header {
-		color: #9ca3af; /* gray-400 */
+		color: var(--lq-text-tertiary); /* gray-400 */
 		background: rgba(107, 114, 128, 0.12);
 	}
 	:global(.dark) .lq-sources-header:hover {
@@ -144,7 +144,7 @@
 		font-size: 11px;
 	}
 	:global(.dark) .lq-source-sub {
-		color: #9ca3af; /* gray-400 */
+		color: var(--lq-text-tertiary); /* gray-400 */
 	}
 
 	.lq-source-link {

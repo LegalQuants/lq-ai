@@ -70,11 +70,11 @@
 	.lq-skill-pill {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--lq-space-1, 4px);
-		background: var(--lq-accent-soft, #e8f4ec);
-		color: var(--lq-accent, #1f7a6b);
-		border: 1px solid var(--lq-accent-border, #c5e6d1);
-		border-radius: var(--lq-radius-pill, 999px);
+		gap: var(--lq-space-1);
+		background: var(--lq-accent-soft);
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent-border);
+		border-radius: var(--lq-radius-pill);
 		padding: 2px 8px;
 		font-family: var(--lq-font-sans);
 		font-size: 12px;
@@ -108,7 +108,7 @@
 	}
 
 	.lq-skill-pill__remove:focus-visible {
-		outline: 2px solid var(--lq-accent, #1f7a6b);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
 		opacity: 1;
 	}

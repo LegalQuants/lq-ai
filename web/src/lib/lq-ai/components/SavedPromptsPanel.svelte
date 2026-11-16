@@ -284,7 +284,7 @@
 
 	{#if loadError}
 		<div
-			class="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+			class="text-xs lq-t-error lq-t-error-bg border lq-t-error-border rounded px-2 py-1"
 			data-testid="lq-ai-saved-prompts-error"
 		>
 			{loadError}
@@ -293,7 +293,7 @@
 
 	{#if promoteError}
 		<div
-			class="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+			class="text-xs lq-t-error lq-t-error-bg border lq-t-error-border rounded px-2 py-1"
 			data-testid="lq-ai-saved-prompt-promote-error"
 			role="alert"
 		>
@@ -308,14 +308,14 @@
 		>
 			<input
 				type="text"
-				class="w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+				class="w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 				placeholder="Name (e.g., Executive summary)"
 				bind:value={editing.name}
 				maxlength={200}
 				data-testid="lq-ai-saved-prompt-name"
 			/>
 			<textarea
-				class="w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800 resize-y"
+				class="w-full text-sm border lq-t-border-strong rounded px-2 py-1 resize-y"
 				rows="4"
 				placeholder="Prompt text…"
 				bind:value={editing.prompt_text}
@@ -323,18 +323,18 @@
 			></textarea>
 			<input
 				type="text"
-				class="w-full text-xs border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+				class="w-full text-xs border lq-t-border-strong rounded px-2 py-1"
 				placeholder="Tags, comma-separated (optional)"
 				bind:value={editing.tagsInput}
 				data-testid="lq-ai-saved-prompt-tags"
 			/>
 			{#if saveError}
-				<div class="text-xs text-rose-700">{saveError}</div>
+				<div class="text-xs lq-t-error">{saveError}</div>
 			{/if}
 			<div class="flex items-center justify-end gap-2">
 				<button
 					type="button"
-					class="text-xs px-2 py-1 rounded text-gray-600 hover:bg-gray-100"
+					class="text-xs px-2 py-1 rounded lq-t-text2 lq-t-hover"
 					on:click={cancelEdit}
 					disabled={saving}
 				>
@@ -366,15 +366,15 @@
 					<li class="py-2" data-testid={`lq-ai-saved-prompt-${prompt.id}`}>
 						<div class="flex items-start justify-between gap-2">
 							<div class="min-w-0 flex-1">
-								<div class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+								<div class="text-sm font-medium lq-t-text truncate">
 									{prompt.name}
 								</div>
-								<div class="text-xs text-gray-500 line-clamp-2">{prompt.prompt_text}</div>
+								<div class="text-xs lq-t-text2 line-clamp-2">{prompt.prompt_text}</div>
 								{#if prompt.tags.length > 0}
 									<div class="mt-1 flex flex-wrap gap-1">
 										{#each prompt.tags as tag}
 											<span
-												class="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200"
+												class="text-[10px] px-1.5 py-0.5 rounded-full lq-t-inset lq-t-text2 border lq-t-border"
 											>
 												{tag}
 											</span>
@@ -393,14 +393,14 @@
 								</button>
 								<button
 									type="button"
-									class="text-xs px-2 py-0.5 rounded text-gray-600 hover:bg-gray-100"
+									class="text-xs px-2 py-0.5 rounded lq-t-text2 lq-t-hover"
 									on:click={() => openEdit(prompt)}
 								>
 									Edit
 								</button>
 								<button
 									type="button"
-									class="text-xs px-2 py-0.5 rounded text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+									class="text-xs px-2 py-0.5 rounded lq-t-accent lq-t-accent-hover disabled:opacity-50"
 									on:click={() => promoteToSkill(prompt)}
 									disabled={promoting === prompt.id}
 									title="Promote to a user-scope skill (lands in /lq-ai/skills, edit before using)"
@@ -410,7 +410,7 @@
 								</button>
 								<button
 									type="button"
-									class="text-xs px-2 py-0.5 rounded text-gray-600 hover:bg-gray-100"
+									class="text-xs px-2 py-0.5 rounded lq-t-text2 lq-t-hover"
 									on:click={() => downloadAsSkillMd(prompt)}
 									title="Download as SKILL.md draft to PR into the canonical skills/ directory"
 									data-testid={`lq-ai-saved-prompt-export-${prompt.id}`}
@@ -419,7 +419,7 @@
 								</button>
 								<button
 									type="button"
-									class="text-xs px-2 py-0.5 rounded text-rose-600 hover:bg-rose-50"
+									class="text-xs px-2 py-0.5 rounded lq-t-error lq-t-error-hover"
 									on:click={() => remove(prompt)}
 								>
 									Delete
@@ -504,5 +504,43 @@
 
 	.lq-list-divider {
 		border-top: 1px solid var(--lq-border);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-accent {
+		color: var(--lq-accent);
+	}
+	.lq-t-accent-hover:hover {
+		background-color: var(--lq-accent-soft);
+	}
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-error-hover:hover {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-hover:hover {
+		background-color: var(--lq-surface-hover);
+	}
+	.lq-t-inset {
+		background-color: var(--lq-inset);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>
