@@ -7,12 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+	docStatusIcon,
 	docStatusLabel,
 	effectiveStatus,
 	effectiveFailureReason,
 	formatBytes,
 	sortFiles,
-	type DocStatus
+	type DocStatus,
+	type StatusIcon
 } from '../../../routes/lq-ai/knowledge/[id]/+page.svelte';
 import type { KnowledgeBaseFile, IngestionStatus } from '../types';
 
@@ -36,17 +38,29 @@ function makeFile(
 describe('docStatusLabel', () => {
 	it('renders the spec-mandated indicators', () => {
 		const cases: Array<[DocStatus, string]> = [
-			['ready', '✓ ready'],
-			['processing', '⏳ processing'],
-			['pending', '⏳ pending'],
-			['failed', '⚠ failed'],
+			['ready', 'ready'],
+			['processing', 'processing'],
+			['pending', 'pending'],
+			['failed', 'failed'],
 			// M3-0.3 / DE-276: post-parse embed states
-			['embed_failed', '⚠ embed failed'],
-			['partial', '⚠ partial embed']
+			['embed_failed', 'embed failed'],
+			['partial', 'partial embed']
 		];
 		for (const [s, expected] of cases) {
 			expect(docStatusLabel(s)).toBe(expected);
 		}
+	});
+
+	it('pairs each status with an icon instead of a glyph (ADR 0045 §5, WCAG 1.4.1)', () => {
+		const cases: Array<[DocStatus, StatusIcon]> = [
+			['ready', 'check'],
+			['processing', 'hourglass'],
+			['pending', 'hourglass'],
+			['failed', 'warning'],
+			['embed_failed', 'warning'],
+			['partial', 'warning']
+		];
+		for (const [s, icon] of cases) expect(docStatusIcon(s), s).toBe(icon);
 	});
 });
 

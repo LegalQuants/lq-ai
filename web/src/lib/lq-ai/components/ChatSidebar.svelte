@@ -10,6 +10,7 @@
 	 *   filters the sidebar to that project's chats.
 	 */
 	import type { Chat, Project } from '../types';
+	import { IconLock } from '@tabler/icons-svelte';
 
 	export let groups: Array<{ project: Project | null; chats: Chat[] }> = [];
 	export let activeChatId: string | null = null;
@@ -81,9 +82,10 @@
 						{group.project?.name ?? 'Without a project'}
 						{#if group.project?.privileged}
 							<span
-								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700 align-middle"
+								class="lq-chat-sidebar-privileged ml-1 px-1 py-0.5 rounded text-[10px] font-semibold align-middle"
 								title="Privileged matter — minimum_inference_tier enforced"
 							>
+								<IconLock size={11} stroke={2} aria-hidden="true" />
 								PRIVILEGED
 							</span>
 						{/if}
@@ -164,14 +166,14 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
 	}
 	.lq-btn-primary:hover {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 	.lq-btn-primary:focus-visible {
 		outline: 2px solid var(--lq-accent);
@@ -215,13 +217,22 @@
 		background: var(--lq-accent-soft);
 	}
 	.lq-chat-row--active {
-		background: var(--lq-accent-soft);
-		color: var(--lq-accent);
-		border-left: 2px solid var(--lq-accent);
-		padding-left: 18px;
+		background: var(--lq-selected);
+		color: var(--lq-text);
+		font-weight: 500;
 	}
 
 	.lq-empty-hint {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	/* ADR 0045 §1: privileged matters are governance, not error. */
+	.lq-chat-sidebar-privileged {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		color: var(--lq-governance);
+		background: var(--lq-governance-soft);
 	}
 </style>

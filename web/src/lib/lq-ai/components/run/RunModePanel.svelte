@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * The strip above the composer while New harness is the chat's model (ADR 0038
 	 * D1): one line, what a request may spend, shown before anything is sent. Send
@@ -64,7 +65,10 @@
 </script>
 
 <section class="strip" data-testid="lq-ai-run-mode-panel" aria-label="New harness">
-	{#if unavailable}<p class="unavailable" role="alert">{unavailable}</p>{/if}
+	{#if unavailable}<p class="unavailable" role="alert">
+			<LqToneIcon tone="warning" />
+			{unavailable}
+		</p>{/if}
 
 	<details class="limits" data-testid="lq-ai-run-mode-limits">
 		<summary>

@@ -10,7 +10,17 @@ import LqStack from '../components/shared/LqStack.svelte';
 import LqText from '../components/shared/LqText.svelte';
 import LqTitle from '../components/shared/LqTitle.svelte';
 import LqCard from '../components/shared/LqCard.svelte';
-import { LQ_TONES, LQ_GAP_VAR, LQ_TEXT_TONE_VAR, lqColorShade } from '../components/shared/types';
+import {
+	LQ_TONES,
+	LQ_GAP_VAR,
+	LQ_LEADING_VAR,
+	LQ_TEXT_ELEMENTS,
+	LQ_TEXT_SIZE_VAR,
+	LQ_TEXT_TONE_VAR,
+	LQ_TRACKING_VAR,
+	LQ_TYPE_SCALE,
+	lqColorShade
+} from '../components/shared/types';
 
 const attributes = {
 	class: 'caller-class',
@@ -98,15 +108,16 @@ describe('design primitive native attribute contract', () => {
 	});
 });
 
-describe('semantic roles preserve the existing palette and spacing', () => {
-	it('exports only the agreed roles and maps their base shades to existing CSS families', () => {
-		expect(LQ_TONES).toEqual(['accent', 'info', 'warning', 'danger', 'neutral']);
+describe('semantic roles follow the ADR 0045 palette and keep the spacing', () => {
+	it('exports only the agreed roles and maps their base shades to the ADR 0045 role tokens', () => {
+		expect(LQ_TONES).toEqual(['accent', 'governance', 'info', 'warning', 'danger', 'neutral']);
 		const values = [
-			'var(--lq-accent, #1f7a6b)',
-			'var(--lq-tier, #355a82)',
-			'var(--lq-warn, #a16e1f)',
-			'var(--lq-error, #b54848)',
-			'var(--lq-text-secondary, #4b5563)'
+			'var(--lq-accent, #111114)',
+			'var(--lq-governance, #a34a00)',
+			'var(--lq-info, #111114)',
+			'var(--lq-warning, #111114)',
+			'var(--lq-danger, #b42318)',
+			'var(--lq-text-secondary, #4f5158)'
 		];
 		LQ_TONES.forEach((tone, index) => {
 			expect(lqColorShade(tone, 5)).toBe(values[index]);
@@ -127,5 +138,115 @@ describe('semantic roles preserve the existing palette and spacing', () => {
 			'gap: var(--lq-space-4, 16px)'
 		);
 		expect(render(LqGroup, { props: { gap: 12 } }).body).toContain('gap: 12px');
+	});
+});
+
+// Server render wraps output in hydration comments; drop them to see the element.
+const markupOf = (html: string) => html.replace(/<!--[^>]*-->/g, '');
+
+describe('text and titles carry the ADR 0045 type scale', () => {
+	it('names every step of the scale and renders each one at its size', () => {
+		expect(LQ_TYPE_SCALE).toEqual([
+			'11',
+			'12',
+			'12.5',
+			'13',
+			'13.5',
+			'14',
+			'14.5',
+			'16',
+			'20',
+			'24',
+			'26',
+			'32'
+		]);
+		for (const step of LQ_TYPE_SCALE) {
+			expect(LQ_TEXT_SIZE_VAR[step]).toBe(`${step}px`);
+			expect(render(LqText, { props: { size: step } }).body).toContain(`font-size: ${step}px`);
+			expect(render(LqTitle, { props: { size: step } }).body).toContain(`font-size: ${step}px`);
+		}
+	});
+
+	it('keeps the older named text sizes their callers use, on the scale', () => {
+		expect(LQ_TEXT_SIZE_VAR).toMatchObject({
+			xs: '12px',
+			sm: '13px',
+			md: '14px',
+			lg: '16px',
+			xl: '20px'
+		});
+		for (const value of Object.values(LQ_TEXT_SIZE_VAR))
+			expect(LQ_TYPE_SCALE.map((step) => `${step}px`)).toContain(value);
+	});
+
+	it('draws the uppercase label style without a CSS class', () => {
+		const html = render(LqText, {
+			props: {
+				as: 'span',
+				size: '12',
+				weight: 'semibold',
+				tone: 'tertiary',
+				transform: 'uppercase',
+				tracking: 'wide'
+			}
+		}).body;
+		expect(markupOf(html)).toMatch(/^<span[\s>]/);
+		for (const declaration of [
+			'font-size: 12px',
+			'font-weight: 600',
+			'color: var(--lq-text-tertiary, #65676f)',
+			'letter-spacing: 0.06em',
+			'text-transform: uppercase'
+		])
+			expect(html).toContain(declaration);
+	});
+
+	it('leaves line height and letter spacing to the page unless asked', () => {
+		const plain = render(LqText, { props: {} }).body;
+		expect(plain).not.toContain('line-height');
+		expect(plain).not.toContain('letter-spacing');
+		expect(render(LqText, { props: { leading: 'relaxed' } }).body).toContain('line-height: 1.6');
+		expect(render(LqTitle, { props: { leading: 'tight' } }).body).toContain('line-height: 1.3');
+		expect(LQ_LEADING_VAR).toEqual({ tight: '1.3', snug: '1.4', relaxed: '1.6' });
+		expect(LQ_TRACKING_VAR).toEqual({ normal: 'normal', wide: '0.06em' });
+	});
+
+	it('renders as each text element the old classes were used on', () => {
+		expect(LQ_TEXT_ELEMENTS).toEqual([
+			'p',
+			'span',
+			'div',
+			'label',
+			'li',
+			'th',
+			'td',
+			'a',
+			'strong',
+			'code',
+			'legend',
+			'article',
+			'table'
+		]);
+		for (const element of LQ_TEXT_ELEMENTS)
+			expect(markupOf(render(LqText, { props: { as: element } }).body)).toMatch(
+				new RegExp(`^<${element}[\\s>]`)
+			);
+	});
+
+	it('takes its heading level from order and its size from the scale', () => {
+		const sizes = { 1: '32px', 2: '26px', 3: '20px', 4: '16px', 5: '14.5px', 6: '14px' };
+		for (const [order, size] of Object.entries(sizes)) {
+			const html = render(LqTitle, { props: { order: Number(order) as 1 } }).body;
+			expect(markupOf(html)).toMatch(new RegExp(`^<h${order}[\\s>]`));
+			expect(html).toContain(`font-size: ${size}`);
+			expect(html).toContain('font-weight: 700');
+		}
+		const page = render(LqTitle, {
+			props: { order: 1, size: '20', weight: 'semibold', tone: 'primary' }
+		}).body;
+		expect(markupOf(page)).toMatch(/^<h1[\s>]/);
+		expect(page).toContain('font-size: 20px');
+		expect(page).toContain('font-weight: 600');
+		expect(page).toContain('color: var(--lq-text, #111114)');
 	});
 });

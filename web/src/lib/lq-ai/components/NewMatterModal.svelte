@@ -44,6 +44,7 @@
 	import { projectsApi } from '$lib/lq-ai/api';
 	import type { Project } from '$lib/lq-ai/types';
 	import InfoTip from './InfoTip.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	export let onClose: () => void;
 	export let onCreated: (matter: Project) => void;
@@ -130,7 +131,9 @@
 >
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div class="nmm-panel" on:click|stopPropagation on:keydown|stopPropagation>
-		<h2 id="nmm-title" class="lq-text-page-h nmm-title">New matter</h2>
+		<LqTitle order={2} size="20" weight="bold" tone="primary" id="nmm-title" class="nmm-title"
+			>New matter</LqTitle
+		>
 
 		<form on:submit|preventDefault={handleSubmit} class="nmm-form" novalidate>
 			<!-- Name -->
@@ -253,7 +256,7 @@
 		overflow-y: auto;
 	}
 
-	.nmm-title {
+	.nmm-panel :global(.nmm-title) {
 		margin: 0 0 var(--lq-space-5);
 	}
 
@@ -300,7 +303,7 @@
 	.nmm-textarea,
 	.nmm-select {
 		background: var(--lq-inset);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -341,7 +344,7 @@
 		font-size: 13px;
 		color: var(--lq-error);
 		background: var(--lq-error-soft);
-		border: 1px solid var(--lq-error-border, var(--lq-error));
+		border: 1px solid var(--lq-error-border);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		margin: 0;
@@ -360,7 +363,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -368,7 +371,7 @@
 	}
 
 	.nmm-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.nmm-btn-primary:focus-visible {
@@ -385,7 +388,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;

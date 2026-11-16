@@ -28,9 +28,12 @@
 		return `Remove ${title}`;
 	}
 
-	/** Glyph to display when the skill omits a custom icon. */
-	export function displayIcon(icon: string | null | undefined): string {
-		return icon ? icon : '📜';
+	/**
+	 * The skill's own icon, exactly as the skill author wrote it (skill data), or null when
+	 * it has none; the pill then draws the Tabler fallback (ADR 0045 §5).
+	 */
+	export function displayIcon(icon: string | null | undefined): string | null {
+		return icon ? icon : null;
 	}
 
 	/**
@@ -48,6 +51,7 @@
 </script>
 
 <script lang="ts">
+	import { IconTool, IconX } from '@tabler/icons-svelte';
 	export let skill: AttachedSkill;
 	export let onRemove: ((slug: string) => void) | undefined = undefined;
 
@@ -56,25 +60,28 @@
 </script>
 
 <span class="lq-skill-pill" role="status">
-	<span class="lq-skill-pill__icon" aria-hidden="true">{icon}</span>
+	<span class="lq-skill-pill__icon" aria-hidden="true"
+		>{#if icon}{icon}{:else}<IconTool size={12} stroke={1.75} />{/if}</span
+	>
 	<span class="lq-skill-pill__title">{skill.title}</span>
 	<button
 		type="button"
 		class="lq-skill-pill__remove"
 		aria-label={ariaLabel}
 		on:click={() => handleRemove(skill, onRemove)}
-	>×</button>
+		><IconX size={12} stroke={1.75} aria-hidden="true" /></button
+	>
 </span>
 
 <style>
 	.lq-skill-pill {
 		display: inline-flex;
 		align-items: center;
-		gap: var(--lq-space-1, 4px);
-		background: var(--lq-accent-soft, #e8f4ec);
-		color: var(--lq-accent, #1f7a6b);
-		border: 1px solid var(--lq-accent-border, #c5e6d1);
-		border-radius: var(--lq-radius-pill, 999px);
+		gap: var(--lq-space-1);
+		background: var(--lq-accent-soft);
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent-border);
+		border-radius: var(--lq-radius-pill);
 		padding: 2px 8px;
 		font-family: var(--lq-font-sans);
 		font-size: 12px;
@@ -100,7 +107,7 @@
 		line-height: 1;
 		cursor: pointer;
 		opacity: 0.6;
-		border-radius: 2px;
+		border-radius: var(--lq-radius-pill);
 	}
 
 	.lq-skill-pill__remove:hover {
@@ -108,7 +115,7 @@
 	}
 
 	.lq-skill-pill__remove:focus-visible {
-		outline: 2px solid var(--lq-accent, #1f7a6b);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
 		opacity: 1;
 	}

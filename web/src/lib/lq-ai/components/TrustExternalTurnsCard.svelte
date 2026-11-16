@@ -6,6 +6,8 @@
 	import { getUsage } from '../api/admin';
 	import { LQAIApiError } from '../api/client';
 	import type { TrustVariant } from './TrustPill.svelte';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	// Providers whose turns count as self-hosted (not external).
 	const SELF_HOSTED_MARKERS = new Set(['ollama', 'localhost', 'ollama-localhost']);
@@ -74,34 +76,38 @@
 </script>
 
 <div class="lq-card">
-	<h3 class="lq-text-panel-h card-title">External-turn usage</h3>
+	<LqTitle order={3} size="16" weight="semibold" tone="primary" class="card-title"
+		>External-turn usage</LqTitle
+	>
 
 	{#if state.kind === 'not-admin'}
-		<p class="lq-text-body gated-msg">External-turn counts are visible to admins only.</p>
-		<p class="lq-text-caption gated-why">
+		<LqText as="p" size="14" tone="secondary" class="gated-msg"
+			>External-turn counts are visible to admins only.</LqText
+		>
+		<LqText as="p" size="12" tone="tertiary" class="gated-why">
 			These figures come from /admin/usage, which is admin-gated for cost-disclosure reasons.
-		</p>
+		</LqText>
 	{:else if state.kind === 'loading'}
-		<p class="lq-text-body loading-msg">Loading usage data…</p>
+		<LqText as="p" size="14" tone="secondary" class="loading-msg">Loading usage data…</LqText>
 	{:else if state.kind === 'error'}
-		<p class="lq-text-body error-msg">{state.message}</p>
+		<LqText as="p" size="14" tone="secondary" class="error-msg">{state.message}</LqText>
 	{:else if state.kind === 'ready'}
 		<div class="stats-row">
 			<div class="stat-block">
 				<span class="stat-count">{state.today}</span>
-				<span class="lq-text-caption stat-label">Today</span>
+				<LqText as="span" size="12" tone="secondary" class="stat-label">Today</LqText>
 				<TrustPill variant={pillVariant(state.today)} label="external turns" />
 			</div>
 			<div class="stat-divider" aria-hidden="true"></div>
 			<div class="stat-block">
 				<span class="stat-count">{state.sevenDay}</span>
-				<span class="lq-text-caption stat-label">Last 7 days</span>
+				<LqText as="span" size="12" tone="secondary" class="stat-label">Last 7 days</LqText>
 				<TrustPill variant={pillVariant(state.sevenDay)} label="external turns" />
 			</div>
 		</div>
-		<p class="lq-text-caption footer-note">
+		<LqText as="p" size="12" tone="tertiary" class="footer-note">
 			"External" = any turn routed to a non-self-hosted provider (excludes ollama / localhost).
-		</p>
+		</LqText>
 	{/if}
 </div>
 
@@ -116,21 +122,8 @@
 		gap: var(--lq-space-3);
 	}
 
-	.card-title {
+	.lq-card :global(.card-title) {
 		margin: 0;
-	}
-
-	.gated-msg {
-		color: var(--lq-text-secondary);
-	}
-
-	.gated-why {
-		color: var(--lq-text-tertiary);
-	}
-
-	.loading-msg,
-	.error-msg {
-		color: var(--lq-text-secondary);
 	}
 
 	.stats-row {
@@ -152,10 +145,6 @@
 		line-height: 1.1;
 	}
 
-	.stat-label {
-		color: var(--lq-text-secondary);
-	}
-
 	.stat-divider {
 		width: 1px;
 		background: var(--lq-border);
@@ -163,8 +152,7 @@
 		margin-top: 4px;
 	}
 
-	.footer-note {
-		color: var(--lq-text-tertiary);
+	.lq-card :global(.footer-note) {
 		margin: 0;
 	}
 </style>

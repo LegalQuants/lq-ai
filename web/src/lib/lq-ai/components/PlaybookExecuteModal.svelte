@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { createEventDispatcher } from 'svelte';
 	import { goto } from '$app/navigation';
 
@@ -130,7 +131,7 @@
 			disabled={executing}
 			aria-label="Close"
 		>
-			×
+			<IconX size={16} stroke={1.75} aria-hidden="true" />
 		</button>
 	</header>
 
@@ -240,20 +241,20 @@
 		width: min(90vw, 32rem);
 		max-height: 90vh;
 		overflow-y: auto;
-		background: var(--lq-surface, #ffffff);
-		border: 1px solid var(--lq-border, #e5e7eb);
+		background: var(--lq-surface);
+		border: 1px solid var(--lq-border);
 		border-radius: 0.5rem;
 		z-index: 1001;
 		display: flex;
 		flex-direction: column;
-		color: var(--lq-text-primary, #111827);
+		color: var(--lq-text-primary);
 	}
 	.lq-modal__header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 1rem 1.25rem;
-		border-bottom: 1px solid var(--lq-border, #e5e7eb);
+		border-bottom: 1px solid var(--lq-border);
 	}
 	.lq-modal__header h2 {
 		margin: 0;
@@ -265,7 +266,7 @@
 		font-size: 1.5rem;
 		line-height: 1;
 		cursor: pointer;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 		padding: 0 0.25rem;
 	}
 	.lq-modal__close:disabled {
@@ -287,10 +288,10 @@
 	.lq-modal__field select {
 		width: 100%;
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--lq-border, #e5e7eb);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
-		background: var(--lq-surface, #ffffff);
-		color: var(--lq-text-primary, #111827);
+		background: var(--lq-surface);
+		color: var(--lq-text-primary);
 		font-size: 0.9375rem;
 	}
 	.lq-modal__field select:disabled {
@@ -299,19 +300,19 @@
 	}
 	.lq-modal__placeholder {
 		padding: 0.5rem 0.625rem;
-		background: var(--lq-inset, #f3f4f6);
+		background: var(--lq-inset);
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 	}
 	.lq-modal__cost {
 		padding: 0.875rem 1rem;
-		background: var(--lq-inset, #f3f4f6);
+		background: var(--lq-inset);
 		border-radius: 0.5rem;
 	}
 	.lq-modal__cost-label {
 		font-size: 0.8125rem;
-		color: var(--lq-text-secondary, #6b7280);
+		color: var(--lq-text-secondary);
 	}
 	.lq-modal__cost-amount {
 		font-size: 1.5rem;
@@ -320,13 +321,13 @@
 	}
 	.lq-modal__cost-detail {
 		font-size: 0.8125rem;
-		color: var(--lq-text-tertiary, var(--lq-text-secondary, #6b7280));
+		color: var(--lq-text-tertiary);
 	}
 	.lq-modal__error {
 		padding: 0.625rem 0.875rem;
-		background: var(--lq-error-soft, var(--lq-inset, #fef2f2));
-		border: 1px solid var(--lq-error-border, var(--lq-border, #fecaca));
-		color: var(--lq-error, #b91c1c);
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
+		color: var(--lq-error);
 		border-radius: 0.375rem;
 		font-size: 0.875rem;
 	}
@@ -335,23 +336,23 @@
 		justify-content: flex-end;
 		gap: 0.5rem;
 		padding: 1rem 1.25rem;
-		border-top: 1px solid var(--lq-border, #e5e7eb);
+		border-top: 1px solid var(--lq-border);
 	}
 	.lq-modal__btn {
 		padding: 0.5rem 1rem;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		cursor: pointer;
 		border: 1px solid transparent;
 	}
 	.lq-modal__btn--secondary {
-		background: var(--lq-surface, #ffffff);
-		border-color: var(--lq-border, #e5e7eb);
-		color: var(--lq-text-primary, #111827);
+		background: var(--lq-surface);
+		border-color: var(--lq-border);
+		color: var(--lq-text-primary);
 	}
 	.lq-modal__btn--primary {
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 	}
 	.lq-modal__btn--primary:disabled,
 	.lq-modal__btn--secondary:disabled {

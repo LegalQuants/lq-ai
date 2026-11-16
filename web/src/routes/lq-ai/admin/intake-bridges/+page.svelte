@@ -29,6 +29,7 @@
 		slackDisplayName,
 		teamsDisplayName
 	} from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let list: IntakeBridgesList | null = null;
 	let loading = false;
@@ -130,7 +131,7 @@
 
 <div class="intake-bridges-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Intake bridges</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Intake bridges</LqTitle>
 		<p class="page-intro">
 			Connect Slack workspaces and Microsoft Teams tenants to this LQ.AI deployment. The slash
 			command surface (<code>/lq</code> and <code>/lq ask</code>) is descoped to M4 / community
@@ -358,18 +359,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -418,9 +419,9 @@
 
 	.install-input {
 		padding: var(--lq-space-2) var(--lq-space-3);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
-		background: var(--lq-bg, #fff);
+		background: var(--lq-bg);
 		font-size: 14px;
 	}
 
@@ -429,7 +430,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: none;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 14px;
 		font-weight: 500;
 		cursor: pointer;
@@ -475,7 +476,7 @@
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);
@@ -484,8 +485,8 @@
 	}
 
 	.action-button.danger {
-		color: var(--lq-error-text, #b00);
-		border-color: var(--lq-error-border, #fbb);
+		color: var(--lq-error-text);
+		border-color: var(--lq-error-border);
 	}
 
 	.action-button:disabled {

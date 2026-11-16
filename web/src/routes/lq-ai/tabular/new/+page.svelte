@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -471,7 +472,7 @@
 										type="button"
 										class="lq-tabwiz__adhoc-remove"
 										on:click={() => removeAdhocColumn(idx)}
-										aria-label="Remove column">×</button
+										aria-label="Remove column"><IconX size={14} stroke={1.75} aria-hidden="true" /></button
 									>
 								</td>
 							</tr>
@@ -623,10 +624,10 @@
 		color: var(--lq-text-secondary);
 	}
 	.lq-tabwiz__step[data-active='true'] {
-		background: var(--lq-accent-soft, var(--lq-inset));
+		background: var(--lq-accent-soft);
 		color: var(--lq-text);
 		font-weight: 500;
-		border: 1px solid var(--lq-accent, var(--lq-border));
+		border: 1px solid var(--lq-accent);
 	}
 	.lq-tabwiz__step[data-done='true'] {
 		opacity: 0.85;
@@ -667,7 +668,7 @@
 	}
 	.lq-tabwiz__field select {
 		padding: 0.5rem 0.625rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -700,7 +701,7 @@
 	}
 	.lq-tabwiz__file-warn {
 		font-size: 0.75rem;
-		color: var(--lq-warning, var(--lq-text-secondary));
+		color: var(--lq-warning);
 		margin-left: auto;
 	}
 	.lq-tabwiz__mode {
@@ -723,7 +724,7 @@
 	.lq-tabwiz__view-columns {
 		align-self: flex-start;
 		font-size: 0.875rem;
-		color: var(--lq-accent, #4f46e5);
+		color: var(--lq-accent);
 		text-decoration: underline;
 	}
 	.lq-tabwiz__adhoc {
@@ -740,7 +741,7 @@
 	.lq-tabwiz__adhoc input {
 		width: 100%;
 		padding: 0.375rem 0.5rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.25rem;
 		background: var(--lq-surface);
 		color: var(--lq-text);
@@ -761,7 +762,7 @@
 		padding: 0.375rem 0.625rem;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		cursor: pointer;
 	}
@@ -803,8 +804,8 @@
 		display: flex;
 		gap: 0.5rem;
 		padding: 0.875rem;
-		background: var(--lq-warning-soft, var(--lq-inset));
-		border: 1px solid var(--lq-warning-border, var(--lq-border));
+		background: var(--lq-warning-soft);
+		border: 1px solid var(--lq-warning-border);
 		border-radius: 0.375rem;
 		cursor: pointer;
 		font-size: 0.875rem;
@@ -818,10 +819,10 @@
 	}
 	.lq-tabwiz__error {
 		padding: 0.875rem;
-		background: var(--lq-error-soft, var(--lq-inset));
-		border: 1px solid var(--lq-error-border, var(--lq-border));
+		background: var(--lq-error-soft);
+		border: 1px solid var(--lq-error-border);
 		border-radius: 0.375rem;
-		color: var(--lq-error, inherit);
+		color: var(--lq-error);
 	}
 	.lq-tabwiz__nav {
 		display: flex;
@@ -832,15 +833,15 @@
 	.lq-tabwiz__next {
 		padding: 0.5rem 1rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		font-weight: 500;
 		cursor: pointer;
 		background: var(--lq-surface);
 	}
 	.lq-tabwiz__next {
-		background: var(--lq-accent, #4f46e5);
-		color: var(--lq-on-accent, #ffffff);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border-color: transparent;
 	}
 	.lq-tabwiz__next:disabled,

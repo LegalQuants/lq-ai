@@ -106,6 +106,7 @@
 </script>
 
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { onMount } from 'svelte';
 	import { listKnowledgeBases, createKnowledgeBase } from '$lib/lq-ai/api/knowledgeBases';
 	import { attachKnowledgeBase, detachKnowledgeBase } from '$lib/lq-ai/api/projectKnowledgeBases';
@@ -294,7 +295,9 @@
 						content="Knowledge bases are document collections you attach to a chat or matter. The AI can search and cite from them when answering. Documents are processed once at upload, then available across all your chats. You can attach multiple knowledge bases to a single matter."
 					/>
 				</h2>
-				<button type="button" class="akm-close" aria-label="Close" on:click={onClose}>×</button>
+				<button type="button" class="akm-close" aria-label="Close" on:click={onClose}
+					><IconX size={16} stroke={1.75} aria-hidden="true" /></button
+				>
 			</header>
 
 			<div class="akm-toolbar">
@@ -320,7 +323,7 @@
 						type="button"
 						class="akm-banner-dismiss"
 						on:click={dismissBanner}
-						aria-label="Dismiss tip">×</button
+						aria-label="Dismiss tip"><IconX size={14} stroke={1.75} aria-hidden="true" /></button
 					>
 				</div>
 			{/if}
@@ -552,14 +555,14 @@
 	}
 
 	.akm-error {
-		color: #b91c1c;
+		color: var(--lq-danger);
 		font-size: 13px;
 		margin: 0;
 	}
 
 	.akm-error--footer {
-		border: 1px solid #fecaca;
-		background: #fef2f2;
+		border: 1px solid var(--lq-danger-border);
+		background: var(--lq-danger-soft);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		border-radius: var(--lq-radius);
 	}
@@ -590,13 +593,13 @@
 	}
 
 	.akm-card--attached {
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 		cursor: default;
 	}
 
 	.akm-card--attached:hover {
 		border-color: var(--lq-border);
-		background: var(--lq-inset-secure, var(--lq-inset));
+		background: var(--lq-inset-secure);
 	}
 
 	.akm-card-name {
@@ -628,8 +631,8 @@
 	}
 
 	.akm-status--indexing {
-		background: #fef3c7;
-		color: #92400e;
+		background: var(--lq-warning-soft);
+		color: var(--lq-warning);
 	}
 
 	.akm-status--pending {
@@ -638,8 +641,8 @@
 	}
 
 	.akm-status--failed {
-		background: #fee2e2;
-		color: #b91c1c;
+		background: var(--lq-danger-soft);
+		color: var(--lq-danger);
 	}
 
 	.akm-card-foot {
@@ -689,7 +692,7 @@
 		align-self: flex-start;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-size: 14px;
 		color: var(--lq-text-primary);
@@ -722,7 +725,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;
@@ -730,7 +733,7 @@
 	}
 
 	.akm-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.akm-btn-primary:disabled {
@@ -742,7 +745,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;

@@ -142,14 +142,18 @@
 		return resp.results;
 	}
 
-	/** Glyph to display when a result omits a custom icon (matches AttachedSkillPill). */
-	export function displayIcon(icon: string | null | undefined): string {
-		return icon ? icon : '📜';
+	/**
+	 * The result's own icon as the skill author wrote it, or null when it has none; the row
+	 * then draws the Tabler fallback (matches AttachedSkillPill).
+	 */
+	export function displayIcon(icon: string | null | undefined): string | null {
+		return icon ? icon : null;
 	}
 </script>
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { IconTool } from '@tabler/icons-svelte';
 
 	export let query: string;
 	export let onSelect: (skill: SkillAutocompleteItem) => void;
@@ -289,7 +293,12 @@
 				on:mousedown={(e) => onRowMouseDown(e, r)}
 				on:mouseenter={() => (activeIndex = i)}
 			>
-				<span class="lq-slash-popover__icon" aria-hidden="true">{displayIcon(r.icon)}</span>
+				<span class="lq-slash-popover__icon" aria-hidden="true"
+					>{#if displayIcon(r.icon)}{displayIcon(r.icon)}{:else}<IconTool
+							size={14}
+							stroke={1.75}
+						/>{/if}</span
+				>
 				<span class="lq-slash-popover__body">
 					<span class="lq-slash-popover__title">{r.title}</span>
 					<span class="lq-slash-popover__desc">{r.description ?? ''}</span>
@@ -307,24 +316,24 @@
 		max-width: clamp(280px, 90vw, 420px);
 		max-height: 320px;
 		overflow-y: auto;
-		background: var(--lq-surface, var(--lq-canvas, #ffffff));
-		border: 1px solid var(--lq-border, #e5e7eb);
-		border-radius: var(--lq-radius, 6px);
+		background: var(--lq-surface);
+		border: 1px solid var(--lq-border);
+		border-radius: var(--lq-radius);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-		padding: var(--lq-space-1, 4px);
+		padding: var(--lq-space-1);
 		font-family: var(--lq-font-sans);
 		font-size: 13px;
-		color: var(--lq-text, #1a1a1a);
+		color: var(--lq-text);
 	}
 
 	.lq-slash-popover__status {
-		padding: var(--lq-space-2, 8px) var(--lq-space-3, 12px);
-		color: var(--lq-text-tertiary, #9ca3af);
+		padding: var(--lq-space-2) var(--lq-space-3);
+		color: var(--lq-text-tertiary);
 		font-size: 12px;
 	}
 
 	.lq-slash-popover__status--error {
-		color: var(--lq-error, #b54848);
+		color: var(--lq-error);
 	}
 
 	.lq-slash-popover__retry {
@@ -339,36 +348,36 @@
 	}
 
 	.lq-slash-popover__retry:focus-visible {
-		outline: 2px solid var(--lq-accent, #1f7a6b);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
 	}
 
 	.lq-slash-popover__link {
-		color: var(--lq-accent, #1f7a6b);
+		color: var(--lq-accent);
 		text-decoration: underline;
 	}
 
 	.lq-slash-popover__row {
 		display: flex;
 		align-items: flex-start;
-		gap: var(--lq-space-2, 8px);
+		gap: var(--lq-space-2);
 		width: 100%;
 		text-align: left;
 		background: none;
 		border: 0;
-		padding: var(--lq-space-2, 8px) var(--lq-space-3, 12px);
-		border-radius: var(--lq-radius-sm, 4px);
+		padding: var(--lq-space-2) var(--lq-space-3);
+		border-radius: var(--lq-radius-sm);
 		color: inherit;
 		font: inherit;
 		cursor: pointer;
 	}
 
 	.lq-slash-popover__row.active {
-		background: var(--lq-accent-soft, #e8f4ec);
+		background: var(--lq-accent-soft);
 	}
 
 	.lq-slash-popover__row:focus-visible {
-		outline: 2px solid var(--lq-accent, #1f7a6b);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: -2px;
 	}
 
@@ -387,14 +396,14 @@
 
 	.lq-slash-popover__title {
 		font-weight: 500;
-		color: var(--lq-text, #1a1a1a);
+		color: var(--lq-text);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
 	.lq-slash-popover__desc {
-		color: var(--lq-text-tertiary, #9ca3af);
+		color: var(--lq-text-tertiary);
 		font-size: 12px;
 		white-space: nowrap;
 		overflow: hidden;
