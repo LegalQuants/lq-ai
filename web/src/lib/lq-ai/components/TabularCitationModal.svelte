@@ -158,13 +158,13 @@
 		padding: 0;
 		overflow-y: auto;
 		overscroll-behavior: contain;
-		background: var(--lq-canvas, #fff);
-		color: var(--lq-text, #1a1a1a);
+		background: var(--lq-canvas);
+		color: var(--lq-text);
 		font-family: var(--lq-font-sans);
 		font-size: 0.875rem;
 		line-height: 1.5;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius-lg, 8px);
+		border-radius: var(--lq-radius-lg);
 		box-shadow: 0 24px 64px rgb(0 0 0 / 0.2);
 	}
 	.lq-tabcm::backdrop {
@@ -196,7 +196,7 @@
 		height: 2rem;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		font: inherit;
 		font-size: 1.5rem;
 		cursor: pointer;

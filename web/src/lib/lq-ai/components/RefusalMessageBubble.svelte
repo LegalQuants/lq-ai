@@ -119,8 +119,8 @@
 
 <style>
 	.refusal-bubble {
-		background: #fffbeb;
-		border: 1px solid #f59e0b;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-governance-border);
 		border-radius: 8px;
 		padding: 12px;
 		margin-bottom: 8px;
@@ -135,11 +135,11 @@
 		font-size: 16px;
 	}
 	strong {
-		color: #92400e;
+		color: var(--lq-governance);
 	}
 	.body {
 		font-size: 13px;
-		color: #78350f;
+		color: var(--lq-text);
 		line-height: 1.5;
 		margin: 0 0 10px 0;
 	}
@@ -150,26 +150,26 @@
 		margin-bottom: 8px;
 	}
 	.primary {
-		background: #4338ca;
-		color: #fff;
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.secondary {
-		background: #fff;
-		color: #4338ca;
-		border: 1px solid #4338ca;
+		background: var(--lq-canvas);
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent);
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.tertiary {
 		background: transparent;
-		color: #6b7280;
+		color: var(--lq-text-secondary);
 		border: 0;
 		padding: 4px 10px;
 		cursor: pointer;
@@ -186,11 +186,11 @@
 		font-size: 10px;
 	}
 	.pill-tier {
-		background: #fef3c7;
-		color: #92400e;
+		background: var(--lq-surface-muted);
+		color: var(--lq-governance);
 	}
 	.pill-audited {
-		background: #dbeafe;
-		color: #1e40af;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 	}
 </style>

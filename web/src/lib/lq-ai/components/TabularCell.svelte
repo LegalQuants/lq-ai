@@ -115,7 +115,7 @@
 		background: var(--lq-inset);
 	}
 	.lq-tabcell[role='button']:focus-visible {
-		outline: 2px solid var(--lq-accent, #4f46e5);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: -2px;
 	}
 	.lq-tabcell__placeholder {
@@ -143,22 +143,22 @@
 		text-transform: uppercase;
 	}
 	.lq-tabcell__chip[data-confidence='high'] {
-		background: var(--lq-success-soft, #dcfce7);
-		color: var(--lq-success, #166534);
+		background: var(--lq-success-soft);
+		color: var(--lq-success);
 	}
 	.lq-tabcell__chip[data-confidence='medium'] {
-		background: var(--lq-inset, #e5e7eb);
-		color: var(--lq-text, #1f2937);
+		background: var(--lq-inset);
+		color: var(--lq-text);
 	}
 	.lq-tabcell__chip[data-confidence='low'] {
-		background: var(--lq-warning-soft, #fef3c7);
-		color: var(--lq-warning, #92400e);
+		background: var(--lq-warning-soft);
+		color: var(--lq-warning);
 	}
 	.lq-tabcell__chip[data-confidence='failed'] {
 		/* Amber per Decision C-10 — distinct from Citation Engine's red
 		   unverified state. */
-		background: var(--lq-warning-soft, #fef3c7);
-		color: var(--lq-warning, #92400e);
-		border: 1px solid var(--lq-warning, #92400e);
+		background: var(--lq-warning-soft);
+		color: var(--lq-warning);
+		border: 1px solid var(--lq-warning);
 	}
 </style>

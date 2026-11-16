@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqText from './shared/LqText.svelte';
 	export let label: string;
 	export let description: string;
 	export let value: string;
@@ -9,9 +10,9 @@
 </script>
 
 <fieldset class="stg-fieldset">
-	<legend class="lq-text-panel-h stg-legend">{label}</legend>
+	<LqText as="legend" size="16" weight="semibold" tone="primary" class="stg-legend">{label}</LqText>
 	{#if description}
-		<p class="lq-text-caption stg-desc">{description}</p>
+		<LqText as="p" size="12" tone="secondary" class="stg-desc">{description}</LqText>
 	{/if}
 	<div class="stg-options">
 		{#each options as opt}
@@ -25,9 +26,9 @@
 					class="stg-radio"
 				/>
 				<span class="stg-option-body">
-					<span class="lq-text-label stg-option-label">{opt.label}</span>
+					<LqText as="span" size="12" weight="semibold" tone="primary" transform="uppercase" tracking="wide" class="stg-option-label">{opt.label}</LqText>
 					{#if opt.description}
-						<span class="lq-text-caption stg-option-desc">{opt.description}</span>
+						<LqText as="span" size="12" tone="secondary" class="stg-option-desc">{opt.description}</LqText>
 					{/if}
 				</span>
 			</label>
@@ -44,13 +45,11 @@
 		background: var(--lq-canvas);
 	}
 
-	.stg-legend {
+	.stg-fieldset :global(.stg-legend) {
 		padding: 0 var(--lq-space-2);
-		color: var(--lq-text);
 	}
 
-	.stg-desc {
-		color: var(--lq-text-secondary);
+	.stg-fieldset :global(.stg-desc) {
 		margin: 0 0 var(--lq-space-3) 0;
 	}
 
@@ -92,13 +91,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--lq-space-1);
-	}
-
-	.stg-option-label {
-		color: var(--lq-text);
-	}
-
-	.stg-option-desc {
-		color: var(--lq-text-secondary);
 	}
 </style>
