@@ -81,7 +81,7 @@
 						{group.project?.name ?? 'Without a project'}
 						{#if group.project?.privileged}
 							<span
-								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700 align-middle"
+								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold lq-t-error-soft lq-t-error align-middle"
 								title="Privileged matter — minimum_inference_tier enforced"
 							>
 								PRIVILEGED
@@ -223,5 +223,13 @@
 
 	.lq-empty-hint {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-soft {
+		background-color: var(--lq-error-soft);
 	}
 </style>

@@ -388,12 +388,12 @@
 	}
 
 	.filter-toggle:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 		color: var(--lq-text);
 	}
 
 	.filter-toggle--active {
-		background: var(--lq-accent-soft, rgba(var(--lq-accent-rgb, 59, 130, 246), 0.1));
+		background: var(--lq-accent-soft);
 		color: var(--lq-accent);
 		border-color: var(--lq-accent);
 	}
@@ -430,18 +430,18 @@
 
 	.error-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-error-bg, #fee);
-		color: var(--lq-error-text, #800);
+		background: var(--lq-error-bg);
+		color: var(--lq-error-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-error-border, #fbb);
+		border: 1px solid var(--lq-error-border);
 	}
 
 	.success-banner {
 		padding: var(--lq-space-3) var(--lq-space-4);
-		background: var(--lq-success-bg, #efe);
-		color: var(--lq-success-text, #060);
+		background: var(--lq-success-bg);
+		color: var(--lq-success-text);
 		border-radius: 6px;
-		border: 1px solid var(--lq-success-border, #bfb);
+		border: 1px solid var(--lq-success-border);
 	}
 
 	.loading {
@@ -485,11 +485,11 @@
 	}
 
 	.notification-row--unread {
-		background: var(--lq-accent-soft, rgba(59, 130, 246, 0.04));
+		background: var(--lq-accent-soft);
 	}
 
 	.notification-row--unread:has(.row-click-target:hover) {
-		background: var(--lq-accent-soft, rgba(59, 130, 246, 0.08));
+		background: var(--lq-accent-soft);
 	}
 
 	/* Full-row transparent button for unread click-to-read */
@@ -600,7 +600,7 @@
 		font-weight: 500;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		background: var(--lq-inset, rgba(0, 0, 0, 0.04));
+		background: var(--lq-inset);
 		color: var(--lq-text-tertiary);
 		border: 1px solid var(--lq-border);
 	}
@@ -653,7 +653,7 @@
 	}
 
 	.action-button:hover:not(:disabled) {
-		background: var(--lq-surface-hover, rgba(0, 0, 0, 0.04));
+		background: var(--lq-surface-hover);
 	}
 
 	.action-button:disabled {

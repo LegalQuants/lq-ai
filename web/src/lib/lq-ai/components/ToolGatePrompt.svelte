@@ -172,7 +172,7 @@
 	}
 	.primary {
 		background: #4338ca;
-		color: #fff;
+		color: var(--lq-canvas);
 		border: 0;
 		padding: 4px 10px;
 		border-radius: 4px;
@@ -180,7 +180,7 @@
 		font-size: 12px;
 	}
 	.secondary {
-		background: #fff;
+		background: var(--lq-canvas);
 		color: #4338ca;
 		border: 1px solid #4338ca;
 		padding: 4px 10px;

@@ -40,21 +40,21 @@
 </script>
 
 <form
-	class="max-w-md mx-auto mt-12 p-6 rounded-lg shadow border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 space-y-3"
+	class="max-w-md mx-auto mt-12 p-6 rounded-lg shadow border lq-t-border lq-t-canvas space-y-3"
 	on:submit|preventDefault={submit}
 	data-testid="lq-ai-change-password-form"
 >
-	<h1 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Change your password</h1>
-	<p class="text-sm text-gray-600 dark:text-gray-400">
+	<h1 class="text-lg font-semibold lq-t-text">Change your password</h1>
+	<p class="text-sm lq-t-text2">
 		The first-run admin account requires a password change before any other action. Your new
 		password must be at least 12 characters and differ from the current one.
 	</p>
 
 	<label class="block">
-		<span class="text-sm text-gray-700 dark:text-gray-200">Current password</span>
+		<span class="text-sm lq-t-text2">Current password</span>
 		<input
 			type="password"
-			class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+			class="mt-1 block w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 			bind:value={currentPassword}
 			required
 			data-testid="lq-ai-current-password"
@@ -62,10 +62,10 @@
 	</label>
 
 	<label class="block">
-		<span class="text-sm text-gray-700 dark:text-gray-200">New password</span>
+		<span class="text-sm lq-t-text2">New password</span>
 		<input
 			type="password"
-			class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+			class="mt-1 block w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 			bind:value={newPassword}
 			minlength="12"
 			required
@@ -74,10 +74,10 @@
 	</label>
 
 	<label class="block">
-		<span class="text-sm text-gray-700 dark:text-gray-200">Confirm new password</span>
+		<span class="text-sm lq-t-text2">Confirm new password</span>
 		<input
 			type="password"
-			class="mt-1 block w-full text-sm border border-gray-300 rounded px-2 py-1 dark:bg-gray-800"
+			class="mt-1 block w-full text-sm border lq-t-border-strong rounded px-2 py-1"
 			bind:value={confirmPassword}
 			minlength="12"
 			required
@@ -87,7 +87,7 @@
 
 	{#if error}
 		<div
-			class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1"
+			class="text-sm lq-t-error lq-t-error-bg border lq-t-error-border rounded px-2 py-1"
 			data-testid="lq-ai-change-password-error"
 		>
 			{error}
@@ -96,10 +96,47 @@
 
 	<button
 		type="submit"
-		class="w-full px-3 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium"
+		class="w-full px-3 py-2 rounded-md lq-t-primary-bg lq-t-on-accent lq-t-primary-hover disabled:opacity-50 text-sm font-medium"
 		disabled={busy}
 		data-testid="lq-ai-change-password-submit"
 	>
 		{busy ? 'Changing…' : 'Change password'}
 	</button>
 </form>
+
+<style>
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-border-strong {
+		border-color: var(--lq-border-strong);
+	}
+	.lq-t-canvas {
+		background-color: var(--lq-canvas);
+	}
+	.lq-t-error {
+		color: var(--lq-error);
+	}
+	.lq-t-error-bg {
+		background-color: var(--lq-error-bg);
+	}
+	.lq-t-error-border {
+		border-color: var(--lq-error-border);
+	}
+	.lq-t-on-accent {
+		color: var(--lq-on-accent);
+	}
+	.lq-t-primary-bg {
+		background-color: var(--lq-accent);
+	}
+	.lq-t-primary-hover:hover {
+		filter: brightness(0.95);
+	}
+	.lq-t-text {
+		color: var(--lq-text);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
+	}
+</style>
