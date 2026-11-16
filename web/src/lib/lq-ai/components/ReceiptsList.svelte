@@ -186,7 +186,7 @@
 		gap: 3px;
 		flex-wrap: wrap;
 		padding-bottom: 6px;
-		border-bottom: 1px solid #e5e7eb;
+		border-bottom: 1px solid var(--lq-border);
 	}
 	.chips button {
 		background: #f3f4f6;
@@ -199,7 +199,7 @@
 	}
 	.chips button.active {
 		background: #4338ca;
-		color: #fff;
+		color: var(--lq-canvas);
 	}
 	.row {
 		display: grid;
@@ -230,7 +230,7 @@
 		white-space: pre-wrap;
 	}
 	.empty {
-		color: #9ca3af;
+		color: var(--lq-text-tertiary);
 		padding: 20px;
 		text-align: center;
 		font-size: 11px;
