@@ -1,13 +1,38 @@
 # Word redline library: contract, document representation and limits
 
 > **Status:** Proposal. For discussion on [#697](https://github.com/LegalQuants/lq-ai/issues/697).
-> **Scope:** The reusable Word capability: reading the document, addressing paragraphs, proposing tracked-change edits and writing them back, and the endpoint that returns those edits. The note proposes #314 as the canonical lane for [ADR 0032](../adr/0032-word-add-in-1.0-slice.md) decision 2. Skill execution and the agent harness are outside this note.
+> **Scope:** The reusable Word capability: reading the document, addressing paragraphs, previewing tracked-change edits and writing them back. The shared API contract between the add-in and LQ.AI: the document snapshot the add-in sends and the typed edit proposal LQ.AI returns. The note proposes #314 as the canonical lane for [ADR 0032](../adr/0032-word-add-in-1.0-slice.md) decision 2. How LQ.AI produces the proposal (prompt assembly, skill execution, model routing, policy controls) belongs to LQ.AI's agents and adapters. This note states only what the result must satisfy.
 
 ## Summary
 
 The redline library is a set of pure TypeScript functions on WordprocessingML (OOXML). A caller supplies the document's XML, a list of operations, a revision author and date, and the paragraph texts the operations were written against. The library returns new XML with the edits as native tracked changes (`w:ins` and `w:del`). If the document no longer matches the supplied texts, the library throws and returns nothing.
 
 The library has no concept of chat, skills, tools or approval. Any caller that can produce a list of operations can use it: a chat panel, a skill-execute endpoint, an agent harness or a review screen. Office.js access sits in one separate adapter file that makes one read call and one write call to Word.
+
+## Ownership boundary
+
+The design has three parts. Each one has a single owner.
+
+| Part | Owner | Responsibilities |
+|---|---|---|
+| Local interaction | Word add-in | Reads the live document and the selection. Builds the snapshot. Previews the proposed edits. Lets the user approve or reject each edit. Checks for stale content. Applies the approved edits as tracked changes. |
+| Backend execution | LQ.AI, through its agents and adapters | Prompt assembly, skill execution, model routing and the applicable policy controls, including pseudonymization and its reversal. |
+| Shared API contract | Both, agreed in `docs/api/backend-openapi.yaml` | The add-in sends a document snapshot and a request. LQ.AI returns a typed edit proposal. |
+
+A proposal does not authorize anything. Returning a proposal does not apply it. Only the user, pressing Apply in Word, causes an edit to be written, and only the add-in writes it.
+
+### Data boundary
+
+These two statements are separate, and both hold:
+
+1. **The backend receives document content for inference.** The add-in sends the model document: a JSON projection of the text, list references, table-cell coordinates and comment threads, described under [Model document](#model-document-sent-to-the-model). The backend may pass this content to a model, subject to LQ.AI's policy controls.
+2. **The backend never reads or changes the live Word document.** The backend has no Office.js access, no handle on the open document and no copy of its XML. The backend returns a change object: a list of proposed operations that name paragraphs by id. The add-in alone resolves those operations against its snapshot, checks them, and writes them into Word.
+
+The backend sees only the snapshot the add-in chose to send. A user change after the snapshot never reaches the backend, and the add-in's staleness checks catch it before any write.
+
+### Independence from the editing engine
+
+The shared contract does not expose Jxml, run structure, XML positions or any tracked-changes library. The snapshot, the edit targets (paragraph ids and refs), the proposed operations and the apply outcome are plain JSON that a different engine could produce and consume. Replacing layer 1 or layer 2 later would not change the contract.
 
 ## Layers
 
@@ -29,7 +54,7 @@ The backend would define the model-facing schemas in Pydantic and in `docs/api/b
 The design uses two representations. The model never receives the first one.
 
 1. **The internal representation (Jxml)** comes from `DocxToJson.ts`. Jxml keeps everything an edit needs to map text back to XML: runs, offsets and source positions. Only the client uses it.
-2. **The model document** comes from layer 3. The model document is a small JSON projection of Jxml: paragraph ids, text and a few attributes, plus comment threads. The model sees only this representation, and the operation contract addresses paragraphs in its terms.
+2. **The model document** comes from layer 3. The model document is a small JSON projection of Jxml: paragraph ids, text and a few attributes, plus comment threads. The model sees only this representation, and the operation contract addresses paragraphs in its terms. The model document is the snapshot in the shared contract. Its shape does not depend on Jxml, so another engine could produce it.
 
 ### Paragraph order
 
@@ -71,7 +96,7 @@ Layer 3 projects Jxml into this shape:
 }
 ```
 
-- `id` names the paragraph for the model. `assignParagraphIds` keeps a paragraph's id while its text is unchanged, including after edits elsewhere and after the paragraph moves. A new paragraph gets an id built from a hash of its text, with a suffix when that id is taken. The library never gives a used id to different text.
+- `id` names the paragraph for the model. The add-in assigns ids, and the backend treats them as opaque strings. `assignParagraphIds` keeps a paragraph's id while its text is unchanged, including after edits elsewhere and after the paragraph moves. A new paragraph gets an id built from a hash of its text, with a suffix when that id is taken. The library never gives a used id to different text.
 - `text` is the Jxml `text`, placeholders included.
 - `ref` is the full list reference built by `paragraphReferences` from the labels of the parent levels, for example `§6.a.(i)`.
 - `revisions` marks a paragraph that already holds tracked changes.
@@ -98,7 +123,7 @@ The model names paragraphs by `id` or `ref`. Layer 3 resolves both to Jxml index
 
 ## The operation contract
 
-Layer 1 accepts four operations. Every index refers to the document as read, before any operation in the same call applies.
+Layer 1 accepts four operations. Every index refers to the document as read, before any operation in the same call applies. `DocumentOperation` is internal to the add-in and does not cross the API. The wire form is the id-addressed `DocumentOperationInput` below.
 
 ```ts
 type DocumentOperation =
@@ -113,7 +138,23 @@ type DocumentOperation =
 
 `replace` and `rewrite` both reduce to `{ start, end, insert }` edits on `paragraph.text`. `applyParagraphEdits` then rewrites only the runs those edits touch. The function leaves other runs, bookmarks, comment ranges, hyperlink wrappers and other authors' revisions unchanged byte for byte. New text takes the formatting of the run it joins. A new paragraph copies the paragraph properties and first-run formatting of the paragraph before it, without its section break.
 
-The model-facing form in layer 3 (`documentOperationInput`) is one flat object with optional fields, because some providers handle a union in a tool schema poorly. The flat form addresses paragraphs by id, by `ref`, or by the id of a selection the user attached. `toDocumentOperation` converts it into a `DocumentOperation` against a given snapshot, or throws a message the model can act on.
+The model-facing form in layer 3 (`DocumentOperationInput`) is one flat object with optional fields, because some providers handle a union in a tool schema poorly. The flat form addresses paragraphs by id, by `ref`, or by the id of a selection the user attached. `toDocumentOperation` converts it into a `DocumentOperation` against a given snapshot, or throws a message the model can act on.
+
+A sketch of the wire form. The field names follow this note. The type does not exist in code yet, and the OpenAPI schema will fix the final form.
+
+```ts
+type DocumentOperationInput = {
+  kind: "replace" | "rewrite" | "insertParagraph" | "deleteParagraph";
+  paragraph?: string;   // paragraph id from the model document
+  ref?: string;         // list reference, e.g. "§6.a", instead of an id
+  selection?: string;   // id of the selection the user attached
+  after?: string;       // insertParagraph: id to insert after; omitted inserts before the first
+  find?: string;        // replace
+  replace?: string;     // replace
+  occurrence?: number;  // replace, 1-based
+  text?: string;        // rewrite, insertParagraph
+};
+```
 
 The endpoint returns the id form. An id such as `9c2e` names a paragraph by its text, so the id stays valid when the user adds or removes paragraphs elsewhere. An index such as `12` names a position, and any paragraph added above it shifts every later index. The add-in converts ids to indexes against the snapshot it sent, just before it calls layer 1.
 
@@ -151,6 +192,8 @@ Node can run the full read, preview and apply cycle against XML fixtures, with n
 
 The library does not model approval. The caller passes only the operations the user approved, in one call. An operation the user rejected never reaches the library.
 
+Approval and write-back are local to the add-in and do not depend on the agent harness. Pressing Apply in Word does not need a paused server-side run, and it sends nothing to the backend.
+
 The chat integration in layer 4 works this way. The approval card keeps a set of operation positions the user unchecked. When the user presses Apply, the tool drops the unchecked operations and any operation that fails to resolve. The tool records a reason for each dropped operation. The tool then calls `editActiveWordDocument` once with the rest, plus the texts of the snapshot taken when the proposal arrived. A different approval mechanism (an agent-harness gate, a review screen, a skill-execute response) needs to produce the same two inputs: the approved `DocumentOperation[]` and the paragraph texts it showed the user.
 
 `previewDocumentOperation` uses the same code path as `editDocumentXml`. A preview that shows an error therefore corresponds to an operation that would fail on apply.
@@ -175,11 +218,13 @@ The check and the write run inside one `Word.run`. That run includes one `contex
 
 ## API contract
 
-The library applies edits in the add-in, so the server never reads or writes the document. The server's job is to give the model the document and the instruction, and to return the model's proposed operations.
+The add-in sends a snapshot and gets back a proposal. The backend receives document content for inference, but it never reads or changes the live document. See [Data boundary](#data-boundary).
 
 ### Proposed endpoint
 
 The proposal is a one-shot, stateless, non-streaming endpoint that replaces #314's `document-chat`. `document-chat` answers with citations that scroll to a paragraph. `document-edits` answers with edits, and approved edits appear in the document as tracked changes. The endpoint matches ADR 0032 decision 3: a skill-execute endpoint that returns structured redlines. The path is a placeholder.
+
+The endpoint is an adapter into LQ.AI's existing execution machinery. It does not add a separate backend execution path. It maps the Word request onto LQ.AI's prompt assembly, skill execution, model routing and policy controls. It then maps the result onto the response type below.
 
 `POST /api/v1/word-addin/document-edits`. The endpoint uses the same `authenticated_router` and `_active` auth that `document-chat` uses today.
 
@@ -210,16 +255,22 @@ The proposal is a one-shot, stateless, non-streaming endpoint that replaces #314
 }
 ```
 
-**Server behaviour:**
+**Contract requirements.** Whatever execution path LQ.AI uses, the response must meet these requirements:
 
-1. The server builds the prompt in this order: the document instructions, the `ModelDocument`, then the skills. The document comes before the skills so the provider can cache it across skills. The selection, when present, goes into the user message as a `<context kind="selection">` tag with its id.
-2. The server forces one tool call, `emit_document_edits`, whose arguments are `{ response, reason, operations }`. #314's `emit_answer` uses the same forced-tool pattern.
-3. The server sets `lq_ai_restore_tool_arguments: true` on the gateway request. Without the flag, the gateway rehydrates message content only. Pseudonyms would then stay in `find` and `text`, so a `replace` would fail to match and a `rewrite` would write pseudonyms into the document. The gateway does not restore arguments longer than 65,536 characters (`_MAX_RESTORED_ARGUMENT_CHARS`). The endpoint must refuse such a proposal instead of returning it unrestored.
-4. The server validates each operation with Pydantic. Each operation needs the fields its `kind` requires. Each `paragraph`, `after`, `ref` and `selection` must resolve in the request's `ModelDocument` or `selection`. An operation that fails validation goes into `errors` by position and stays out of `proposal.operations`.
-5. The server writes nothing to `chats` or `messages`. The gateway writes its usual `inference_routing_log` row.
-6. A request body above a size bound returns 422. #314 uses 300,000 characters for `document-chat`.
+1. **A typed response.** The model's output must be constrained to the `DocumentEditsResponse` schema and validated against it before it is returned. Free text that the add-in would have to parse is not acceptable. The add-in can apply only operations whose kind and fields are known, so this requirement is not optional.
+2. **Per-operation validation.** Each operation has the fields its `kind` requires. Each `paragraph`, `after`, `ref` and `selection` resolves in the request's `ModelDocument` or `selection`. An operation that fails goes into `errors` by position and stays out of `proposal.operations`.
+3. **Restored text in operations.** When policy pseudonymizes the document for inference, the text in `find`, `replace` and `text` must come back restored. Otherwise a `replace` would fail to match, and a `rewrite` would write pseudonyms into the document. If text cannot be restored, the endpoint refuses the proposal instead of returning it unrestored.
+4. **No server-side session state.** The add-in needs no second request to record an approval or resume a run. Whether the adapter records the run for audit or routing is LQ.AI's decision.
+5. **A size bound.** A request body above the bound returns 422. #314 uses 300,000 characters for `document-chat`.
 
-The server cannot run the full preview, because it has no Jxml. The add-in's `previewDocumentOperation` remains the authoritative check before approval.
+**Implementation options.** These are one way to meet the requirements with today's gateway. LQ.AI may choose others:
+
+- Build the prompt in this order: the document instructions, the `ModelDocument`, then the skills. The document comes before the skills so the provider can cache it across skills. The selection, when present, goes into the user message as a `<context kind="selection">` tag with its id.
+- Meet requirement 1 by forcing one tool call, `emit_document_edits`, whose arguments are `{ response, reason, operations }`, then validating with Pydantic. #314's `emit_answer` uses the same forced-tool pattern. Provider-native structured output would also meet it.
+- Meet requirement 3 by setting `lq_ai_restore_tool_arguments: true` on the gateway request. Without the flag, the gateway rehydrates message content only. The gateway does not restore arguments longer than 65,536 characters (`_MAX_RESTORED_ARGUMENT_CHARS`), so the adapter must refuse such a proposal.
+- Write nothing to `chats` or `messages`. The gateway writes its usual `inference_routing_log` row.
+
+The server cannot run the full preview, because it has no copy of the document's XML. The add-in's `previewDocumentOperation` remains the authoritative check before approval.
 
 **Add-in flow:**
 
@@ -230,9 +281,20 @@ The server cannot run the full preview, because it has no Jxml. The add-in's `pr
 5. Call `editActiveWordDocument(approved, author, snapshot.paragraphs.map(p => p.text))`.
 6. If the library refuses because the document changed, re-read the document and send a new request.
 
-The endpoint needs no second request to record an approval.
+Steps 3 to 6 run in the add-in and make no backend call.
 
-### Multi-turn alternative
+**Apply outcome.** The add-in records the result of each apply in an engine-neutral form:
+
+```ts
+{
+  applied: number[];                                  // positions in proposal.operations
+  skipped: { operation: number; reason: string }[];   // rejected by the user, unresolved, or refused
+}
+```
+
+For 1.0 the outcome stays in the add-in. Reporting it to LQ.AI, for audit or for a later turn, would be a separate integration decision.
+
+### Multi-turn alternative (not proposed)
 
 A multi-turn chat would use a streaming endpoint instead. The model would get three tools that run in the add-in: `read_document`, `read_selection` and `propose_document_edits`. The server would declare the tools but not implement them.
 
@@ -240,7 +302,7 @@ A multi-turn chat would use a streaming endpoint instead. The model would get th
 - The run pauses at `propose_document_edits`. The add-in shows the proposal, applies the approved operations, and sends a second request that resumes the run with the tool result.
 - Each request carries the full model document.
 
-The pause-and-resume approval is part of the agent harness, so this note does not propose it for 1.0.
+This note does not propose this flow. Local approval and write-back do not need it. A multi-turn flow that resumes after an apply would be a separate integration decision for LQ.AI's agents and adapters. It would reuse the same snapshot, operation and outcome types.
 
 When the endpoint is built, the PR will add it to `docs/api/backend-openapi.yaml`, `IMPLEMENTED_ROUTES` and `EXPECTED_PATHS`, and remove `document-chat` from all three.
 
@@ -290,16 +352,16 @@ Text boxes are a known mismatch rather than an open check. The library folds a t
 
 ## Dependencies
 
-The library adds one runtime dependency to `word-addin/`: `fast-xml-parser`. No tracked-changes library is involved, which bears on the SBOM review in ADR 0032 decision 3.
+The library adds one runtime dependency to `word-addin/`: `fast-xml-parser`. No tracked-changes library is involved, which bears on the SBOM review in ADR 0032 decision 3. The dependency stays in the add-in. The shared contract does not depend on it.
 
 ## Plan
 
-The work builds on #314, which this note proposes as the canonical lane. #314 already has the add-in shell, sign-in, the version handshake and a document-grounded endpoint. The steps below adapt #314 to the redline slice. Each step can follow the new endpoints or agent harness once the maintainers agree them.
+The work builds on #314, which this note proposes as the canonical lane. #314 already has the add-in shell, sign-in, the version handshake and a document-grounded endpoint. The steps below adapt #314 to the redline slice. No step depends on the agent harness.
 
 1. Add layers 1 and 2 to `word-addin/` with their tests, ahead of the lane decision and before any change to the chat UI. The step changes no user-facing behaviour.
-2. Add layer 3 and the `document-edits` endpoint, and remove `document-chat` and its citations.
+2. Add layer 3, and agree the `document-edits` contract in `docs/api/backend-openapi.yaml`. LQ.AI implements the endpoint as an adapter into its execution machinery. Remove `document-chat` and its citations.
 3. Change #314's Chat tab to show proposed edits and write the approved ones into the document as tracked changes.
 
 ## Open questions for the maintainers
 
-1. Why would the approval step sit in the proposed agent harness? This is a purely UI step: the add-in shows the edits, the user accepts or declines, and the library writes the accepted edit in one step.  
+1. Which LQ.AI execution entry point should the `document-edits` adapter wrap? ADR 0032 decision 3 names skill execution. Whichever entry point it wraps must meet the typed-response requirement.
