@@ -569,7 +569,7 @@ services:
   ollama:
     # Digest-pinned: `latest` alone is not reproducible. Bump the digest
     # deliberately (re-resolve `ollama/ollama:latest`) rather than drifting.
-    image: ollama/ollama:latest@sha256:f1a705f2bd113fb8d15f85f7c217f0dc5f6bebda6b0cc42b82c3ad165ffcb9dc
+    image: ollama/ollama:latest@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     profiles: ["local"]
     restart: unless-stopped
     volumes:
