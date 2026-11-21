@@ -1105,6 +1105,12 @@ pipeline writes chunks with `embedding=NULL` and C6 backfills via the
 gateway's `/v1/embeddings`. The pgvector extension is enabled by
 migration 0005. The dimension `vector(1536)` matches OpenAI's
 `text-embedding-3-small` per ADR 0008 (the embedding-model decision).
+Per [ADR 0045](adr/0045-short-embedding-storage-compatibility.md), shorter
+native embeddings are zero-padded at eager/lazy writes and vector-search
+queries. Provider results retain native dimensions. Changing the
+embedding model requires re-embedding stored documents; padding does not
+make different models comparable. Empty, non-finite, or oversized vectors
+are rejected before storage. No column or index migration is needed.
 
 C6 closes the embedding deferral via two backfill paths:
 

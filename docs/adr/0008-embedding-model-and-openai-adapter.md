@@ -10,6 +10,11 @@ decision 5 adds an opt-in local (Ollama) path to the `embedding` alias. This ADR
 1536-dimension constraint and its SBOM objection still hold and constrain that path;
 the assumption that an operator holds an OpenAI key is what changed.
 
+**Accepted revision (2026-11-21):** [ADR 0045](0045-short-embedding-storage-compatibility.md)
+adds zero-padding for shorter native vectors at document-storage and query
+boundaries. The column remains `vector(1536)`; native output need not be
+1,536-dimensional. Switching models still requires re-embedding documents.
+
 ---
 
 ## Context

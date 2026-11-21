@@ -699,6 +699,14 @@ The API endpoint `GET /api/v1/skills/{id}/inputs` returns the skill's input sche
 
 ### 3.5 Files / Knowledge Bases
 
+**Local embedding compatibility.** Native embedding vectors shorter than
+1,536 dimensions are zero-padded on document writes and search queries,
+preserving same-model cosine similarity in the existing database/index.
+Provider output and in-memory playbook clustering keep native dimensions.
+Empty, non-finite, or oversized vectors are rejected before storage.
+Switching embedding models requires re-embedding stored documents; see
+[ADR 0045](adr/0045-short-embedding-storage-compatibility.md).
+
 **M1 + M2 status:** Shipped. Knowledge base create, document attach, PDF upload, and ingest-to-`ready` (pgvector + FTS hybrid retrieval) wired end-to-end in M1; the Citation Engine's byte-level verification step landed in M2-A through M2-D and now runs against every model-emitted citation per [§3.3](#33-citation-engine-exact-quote). An operator can verify at `api/app/api/knowledge_bases.py`, `api/app/pipeline/ingest.py`, `api/app/workers/document_pipeline.py`, and `api/app/citation/verification.py`; Cypress E2E coverage in `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 2 (M1 retrieval) and `web/cypress/e2e/m2-c2-citation-states.cy.ts` (M2 citation-rendering states). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface) and [HONEST-STATE.md §3](HONEST-STATE.md#3-m2--citation-engine-and-anonymization-layer).
 
 **Description.** Persistent collections of documents accessible across chats. Files are uploaded once, ingested into the citation pipeline, and made available for retrieval. Knowledge Bases group files for shared access (e.g., "Privacy Compliance Library," "Standard Templates").
@@ -826,6 +834,14 @@ class Position(BaseModel):
 2. System extracts clauses, clusters by issue, identifies the user's most-common positions.
 3. System drafts a Playbook with suggested standard language and fallback tiers.
 4. User reviews, edits, approves.
+
+Generation must contain at least one position to complete. A missing or
+token-truncated extraction answer, an entirely empty clause corpus, or an
+empty assembled draft ends with `status='error'` and an actionable message.
+For local thinking models, operators can set
+`LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` for extraction and description
+calls; an empty value preserves provider defaults. Extraction allows up to
+8,192 output tokens for verbatim clauses and JSON metadata.
 
 *Playbook execution.* LangGraph workflow:
 1. Parse target contract via Document Pipeline.

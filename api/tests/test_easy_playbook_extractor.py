@@ -25,6 +25,7 @@ from app.playbooks.easy.extractor import (
     DEFAULT_CHARACTER_BUDGET,
     SPAN_OVERLAP_CHARACTERS,
     ExtractedClause,
+    ExtractionResponseError,
     _build_spans,
     extract_clauses_from_document,
 )
@@ -42,6 +43,7 @@ class _StubMessage:
 @dataclass
 class _StubChoice:
     message: _StubMessage
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -196,6 +198,43 @@ async def test_request_carries_lq_ai_purpose_for_audit_routing() -> None:
     # `temperature` is intentionally omitted — Opus 4.x reasoning models
     # rejected it as of 2026-05; the gateway only forwards non-None.
     assert request.temperature is None
+
+
+@pytest.mark.unit
+async def test_local_reasoning_setting_reserves_budget_for_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        "app.playbooks.easy.extractor.get_settings",
+        lambda: Settings(lq_ai_easy_playbook_reasoning_effort="none"),
+    )
+    gateway = _StubGateway(payloads=[{"extracted_clauses": []}])
+    await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
+    request = gateway.calls_received[0]
+    assert request.reasoning_effort == "none"
+    assert request.max_tokens == 8192
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("content", ["", '{"extracted_clauses": []}'])
+async def test_truncated_answer_is_rejected_even_if_valid_json(content: str) -> None:
+    from unittest.mock import AsyncMock
+
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = _StubResponse(
+        choices=[_StubChoice(message=_StubMessage(content=content), finish_reason="length")]
+    )
+    with pytest.raises(ExtractionResponseError, match="output limit"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)
+
+
+@pytest.mark.unit
+async def test_empty_model_answer_is_an_explicit_extraction_failure() -> None:
+    gateway = _StubGateway(payloads=[""])
+    with pytest.raises(ExtractionResponseError, match="no answer content"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------

@@ -23,14 +23,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.knowledge.embed import embed_chunks_for_file
+from app.knowledge.embed import embed_chunks_for_file, ensure_embeddings_for_chunk_ids
+from app.knowledge.retrieval import _vector_candidates
 from app.main import app
 from app.models.document import Document, DocumentChunk
 from app.models.file import File as FileModel
+from app.models.knowledge import KnowledgeBase, KnowledgeBaseFile
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -254,6 +256,64 @@ async def test_ingest_health_excludes_soft_deleted_files(
 def _vectors(n: int, dim: int = 1536) -> list[list[float]]:
     """Deterministic dummy embedding vectors for tests."""
     return [[0.01 * (i + 1)] * dim for i in range(n)]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("path", ["eager", "lazy"])
+async def test_local_embeddings_store_and_search_with_native_query(
+    db_session: AsyncSession, path: str
+) -> None:
+    admin = await _make_admin(db_session)
+    f, doc, chunks = await _make_file_doc_chunks(db_session, owner=admin, chunk_count=2)
+    kb = KnowledgeBase(owner_id=admin.id, name="Local vectors")
+    db_session.add(kb)
+    await db_session.flush()
+    db_session.add(KnowledgeBaseFile(kb_id=kb.id, file_id=f.id))
+    await db_session.flush()
+    vectors = [[1.0, 0.0] + [0.0] * 766, [0.8, 0.6] + [0.0] * 766]
+    with patch(
+        "app.knowledge.embed.request_embedding_vectors", new=AsyncMock(return_value=vectors)
+    ):
+        if path == "eager":
+            result = await embed_chunks_for_file(db_session, f.id)
+            assert result.chunks_embedded == 2
+            assert result.error is None
+        else:
+            assert await ensure_embeddings_for_chunk_ids(db_session, [c.id for c in chunks]) == 2
+    dimensions = await db_session.scalars(
+        text("SELECT vector_dims(embedding) FROM document_chunks WHERE document_id = :id"),
+        {"id": doc.id},
+    )
+    assert list(dimensions) == [1536, 1536]
+    matches = await _vector_candidates(db_session, kb_id=kb.id, query_embedding=vectors[0], limit=2)
+    assert [row[0] for row in matches] == [chunks[0].id, chunks[1].id]
+    assert [row[1] for row in matches] == pytest.approx([1.0, 0.8], abs=1e-6)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("vector", [[], [0.1] * 1537])
+async def test_incompatible_embedding_marks_document_failed_before_sql_write(
+    db_session: AsyncSession, vector: list[float]
+) -> None:
+    admin = await _make_admin(db_session)
+    f, doc, _ = await _make_file_doc_chunks(db_session, owner=admin, chunk_count=1)
+    with patch(
+        "app.knowledge.embed.request_embedding_vectors", new=AsyncMock(return_value=[vector])
+    ):
+        result = await embed_chunks_for_file(db_session, f.id)
+    assert result.chunks_embedded == 0
+    assert result.error and "dimension" in result.error
+    await db_session.refresh(doc)
+    assert doc.ingest_status == "embed_failed"
+    assert (
+        await db_session.scalar(
+            text(
+                "SELECT count(*) FROM document_chunks WHERE document_id = :id AND embedding IS NOT NULL"
+            ),
+            {"id": doc.id},
+        )
+        == 0
+    )
 
 
 @pytest.mark.integration
