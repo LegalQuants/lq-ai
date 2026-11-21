@@ -174,6 +174,10 @@ provider support for individual reasoning settings varies. Extraction has
 an 8,192-token answer budget. Hidden reasoning is never treated as clause
 JSON.
 
+Extraction and descriptions accept bare JSON or one complete JSON code
+block with surrounding model prose. Multiple blocks and malformed JSON
+are rejected; the answer is not repaired or inferred from prose.
+
 A missing or token-truncated extraction answer ends the generation with
 `status='error'`. A corpus with no usable clauses, or an assembled draft
 with zero positions, also fails. The wizard shows the generation's error

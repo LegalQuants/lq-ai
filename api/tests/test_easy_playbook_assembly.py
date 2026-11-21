@@ -21,10 +21,19 @@ from app.playbooks.easy.assembly import (
     _derive_examples,
     _derive_keywords,
     _dispatch_structured_call,
+    _parse_structured_json,
     assemble_playbook,
 )
 from app.playbooks.easy.clustering import ClauseInput, Cluster
 from app.schemas.playbooks import PlaybookCreate
+
+
+@pytest.mark.unit
+def test_prose_wrapped_description_requires_one_valid_json_answer() -> None:
+    assert _parse_structured_json(
+        'Here is the description.\n```json\n{"description": "A term."}\n```'
+    ) == {"description": "A term."}
+    assert _parse_structured_json("```json\n{}\n```\n```json\n{}\n```") == {}
 
 
 @pytest.mark.unit

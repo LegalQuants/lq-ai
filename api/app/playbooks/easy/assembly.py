@@ -40,6 +40,7 @@ from app.clients.gateway import GatewayClient
 from app.config import get_settings
 from app.playbooks.easy.clustering import Cluster
 from app.playbooks.easy.extractor import DEFAULT_JUDGE_MODEL
+from app.playbooks.easy.json_output import unwrap_json_answer
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.playbooks import (
     FallbackTier,
@@ -456,16 +457,9 @@ async def _dispatch_structured_call(
 
 
 def _parse_structured_json(content: str) -> dict[str, Any]:
-    """Lenient JSON parse — strip a leading ``json`` code fence if present."""
+    """Parse bare JSON or a single fenced answer, including a prose preamble."""
 
-    stripped = content.strip()
-    if stripped.startswith("```"):
-        parts = stripped.split("```", 2)
-        if len(parts) >= 2:
-            stripped = parts[1]
-        if stripped.startswith("json"):
-            stripped = stripped[4:]
-        stripped = stripped.rstrip("`").strip()
+    stripped = unwrap_json_answer(content)
     try:
         parsed = json.loads(stripped)
     except json.JSONDecodeError as exc:
