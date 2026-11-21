@@ -198,6 +198,45 @@ async def test_worker_rejects_unusable_generation(
 
 
 @pytest.mark.integration
+async def test_worker_clustering_receives_embeddings_through_document_guard(
+    db_session: AsyncSession, patch_session_factory: None
+) -> None:
+    from app.clients.gateway import GatewayClient
+
+    user = await _make_user(db_session)
+    doc = await _make_doc(db_session, owner=user)
+    generation = await _make_generation(db_session, owner=user, document_ids=[doc.id])
+    await db_session.commit()
+    gateway = AsyncMock(spec=GatewayClient)
+    gateway.embeddings.return_value = {
+        "data": [
+            {"index": 0, "embedding": [1.0, 0.0]},
+            {"index": 1, "embedding": [0.8, 0.6]},
+        ]
+    }
+    with (
+        patch(
+            "app.workers.easy_playbook_worker.extract_clauses_from_document",
+            new=AsyncMock(
+                return_value=[
+                    ExtractedClause(issue="Term", clause_text="Three years."),
+                    ExtractedClause(issue="Term", clause_text="Two years."),
+                ]
+            ),
+        ),
+        patch(
+            "app.workers.easy_playbook_worker.assemble_playbook",
+            new=AsyncMock(return_value=_stub_playbook()),
+        ),
+    ):
+        result = await easy_playbook_generation_job({"gateway": gateway}, str(generation.id))
+    assert result["status"] == "completed"
+    gateway.embeddings.assert_awaited_once_with(
+        model="embedding", input_=["Three years.", "Two years."]
+    )
+
+
+@pytest.mark.integration
 async def test_worker_happy_path_writes_draft_playbook_and_completes(
     db_session: AsyncSession,
     patch_session_factory: None,
