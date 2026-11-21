@@ -164,6 +164,33 @@ per-execution model selection today; the docstring flags inheriting it
 from `project.minimum_inference_tier` or playbook-level config as a
 future enhancement.
 
+## Easy Playbook model configuration and failed generations
+
+For local Qwen thinking models, set
+`LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` and recreate the API and
+ARQ worker. This uses the gateway's existing reasoning control for both
+extraction and description calls. Leave it empty for provider defaults;
+provider support for individual reasoning settings varies. Extraction has
+an 8,192-token answer budget. Hidden reasoning is never treated as clause
+JSON.
+
+Extraction and descriptions accept bare JSON or one complete JSON code
+block with surrounding model prose. Multiple blocks and malformed JSON
+are rejected; the answer is not repaired or inferred from prose.
+
+Corpus embedding calls pass through the document workflow's authorization
+wrapper, rechecking the actor and all source matters before delegating to
+the configured gateway client. The wrapper owns no HTTP transport. This
+keeps centroid merging and folding available without bypassing access
+checks; missing or revoked access prevents dispatch.
+
+A missing or token-truncated extraction answer ends the generation with
+`status='error'`. A corpus with no usable clauses, or an assembled draft
+with zero positions, also fails. The wizard shows the generation's error
+message and retry action. A successfully parsed response containing no
+clauses can still be appropriate for one non-contract document; a corpus
+containing only such documents cannot produce a successful playbook.
+
 ## Persisted row shape (executor)
 
 The executor writes to `playbook_executions.results` (JSONB). The
@@ -316,8 +343,10 @@ job `easy_playbook_generation_job` on queue `arq:m3a6`):
 
 The worker writes the assembled `PlaybookCreate.model_dump(mode="json")`
 into `easy_playbook_generations.draft_playbook` and flips the row to
-`completed`. Critically: **worker "success" means the pipeline produced
-a structurally valid draft — not that the playbook is correct,
+`completed` only when the draft contains positions. Missing/truncated
+extraction answers or an empty corpus/draft terminate with `error`.
+Critically: **worker "success" means the pipeline produced
+a non-empty, structurally valid draft — not that the playbook is correct,
 complete, or fit for use.** The wizard's Step 3 inline editor is where
 the user-attorney validates and edits before saving.
 
@@ -496,13 +525,41 @@ clustering quality fell short of the corpus README's target:
   document) with zero fallback tiers.
 
 The engine is **functional**; this is a tuning follow-on, not a
-correctness bug. DE-308 scopes the investigation (why near-synonym
-families aren't merged; why "Standard of Care" didn't cluster) and
-candidate fixes (a post-clustering merge/dedup pass; a
-minimum-document-support threshold for singleton positions). It is the
-exact kind of clustering-quality signal the corpus README flags as
-file-worthy — and the Step 3 inline editor is the safety net the
-quality bar relies on in the meantime.
+correctness bug. It is the exact kind of clustering-quality signal the
+corpus README flags as file-worthy — and the Step 3 inline editor is
+the safety net the quality bar relies on in the meantime.
+
+**DE-308 mitigations landed (2026-07-25); live re-verification
+pending.** Two fixes shipped:
+
+- A **minimum-document-support fold pass** in
+  `api/app/playbooks/easy/clustering.py`: after the centroid
+  label-merge, position groups backed by only one source document fold
+  into their nearest supported cluster when the clause-centroid cosine
+  similarity clears a floor (`0.80` default) — the folded clause
+  becomes a fallback-tier candidate instead of a standalone singleton
+  position. The supported group's label and modal standard are selected
+  from its members before folding. Setting `label_merge_threshold=None`
+  disables both merging and folding for exact-label grouping. Fold
+  diagnostics record aggregate counts. Below the floor the group stays
+  standalone (fail-closed:
+  a genuinely distinct outlier keeps its own visible position rather
+  than being buried inside another cluster).
+- The **missed "Standard of Care" axis** traced to the extractor
+  prompt: the sample NDAs embed the care standard inside the
+  "Obligations of Receiving Party" section with no dedicated heading,
+  and the prompt's issue vocabulary never named the axis. The prompt
+  (`extractor.py` and its mirror `skills/playbook-easy-extract/SKILL.md`,
+  v1.1.0) now names `"Standard of Care"` and instructs
+  one-entry-per-issue splitting for sections that bundle multiple
+  positions.
+
+These are validated by deterministic unit tests and a fixture-based
+corpus-replay test (`api/tests/test_easy_playbook_corpus_replay.py`)
+asserting 5–10 positions with all five designed axes — against
+synthetic embeddings and recorded-style extraction fixtures, **not** a
+live pipeline run. A live wizard re-run over the sample corpus and the
+reviewing-attorney walk-through remain the confirmation steps.
 
 ### Executor citations are not Citation-Engine-verified
 

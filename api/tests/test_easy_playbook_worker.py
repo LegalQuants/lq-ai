@@ -37,8 +37,8 @@ from app.models.document import Document
 from app.models.file import File as FileModel
 from app.models.playbook import EasyPlaybookGeneration
 from app.models.user import User
-from app.playbooks.easy.extractor import ExtractedClause
-from app.schemas.playbooks import PlaybookCreate
+from app.playbooks.easy.extractor import ExtractedClause, ExtractionResponseError
+from app.schemas.playbooks import PlaybookCreate, PositionCreate
 from app.security import hash_password
 from app.workers.easy_playbook_worker import easy_playbook_generation_job
 
@@ -144,13 +144,96 @@ def _stub_playbook() -> PlaybookCreate:
         contract_type="NDA",
         description="",
         version="1.0.0",
-        positions=[],
+        positions=[
+            PositionCreate(
+                issue="Term", standard_language="Three years.", severity_if_missing="medium"
+            )
+        ],
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("failure", ["empty_extraction", "truncated", "empty_draft"])
+async def test_worker_rejects_unusable_generation(
+    db_session: AsyncSession, patch_session_factory: None, failure: str
+) -> None:
+    user = await _make_user(db_session)
+    doc = await _make_doc(db_session, owner=user)
+    generation = await _make_generation(db_session, owner=user, document_ids=[doc.id])
+    # A re-enqueued row must not retain an old draft after this attempt fails.
+    generation.draft_playbook = _stub_playbook().model_dump(mode="json")
+    await db_session.commit()
+    extract = AsyncMock(
+        return_value=[]
+        if failure == "empty_extraction"
+        else [ExtractedClause(issue="Term", clause_text="Three years.")]
+    )
+    if failure == "truncated":
+        extract.side_effect = ExtractionResponseError(
+            "Clause extraction reached the model output limit."
+        )
+    cluster = AsyncMock(return_value=[])
+    draft = _stub_playbook().model_copy(update={"positions": []})
+    assemble = AsyncMock(return_value=draft)
+    with (
+        patch("app.workers.easy_playbook_worker.extract_clauses_from_document", new=extract),
+        patch("app.workers.easy_playbook_worker.cluster_clauses_by_issue", new=cluster),
+        patch("app.workers.easy_playbook_worker.assemble_playbook", new=assemble),
+    ):
+        result = await easy_playbook_generation_job({}, str(generation.id))
+    await db_session.refresh(generation)
+    assert result["status"] == "error"
+    assert generation.status == "error"
+    assert generation.completed_at is not None
+    assert generation.error_message
+    assert generation.draft_playbook is None
+    if failure != "empty_draft":
+        cluster.assert_not_awaited()
+        assemble.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_worker_clustering_receives_embeddings_through_document_guard(
+    db_session: AsyncSession, patch_session_factory: None
+) -> None:
+    from app.clients.gateway import GatewayClient
+
+    user = await _make_user(db_session)
+    doc = await _make_doc(db_session, owner=user)
+    generation = await _make_generation(db_session, owner=user, document_ids=[doc.id])
+    await db_session.commit()
+    gateway = AsyncMock(spec=GatewayClient)
+    gateway.embeddings.return_value = {
+        "data": [
+            {"index": 0, "embedding": [1.0, 0.0]},
+            {"index": 1, "embedding": [0.8, 0.6]},
+        ]
+    }
+    with (
+        patch(
+            "app.workers.easy_playbook_worker.extract_clauses_from_document",
+            new=AsyncMock(
+                return_value=[
+                    ExtractedClause(issue="Term", clause_text="Three years."),
+                    ExtractedClause(issue="Term", clause_text="Two years."),
+                ]
+            ),
+        ),
+        patch(
+            "app.workers.easy_playbook_worker.assemble_playbook",
+            new=AsyncMock(return_value=_stub_playbook()),
+        ),
+    ):
+        result = await easy_playbook_generation_job({"gateway": gateway}, str(generation.id))
+    assert result["status"] == "completed"
+    gateway.embeddings.assert_awaited_once_with(
+        model="embedding", input_=["Three years.", "Two years."]
+    )
 
 
 @pytest.mark.integration
@@ -307,7 +390,7 @@ async def test_worker_assembly_exception_lands_status_error(
     with (
         patch(
             "app.workers.easy_playbook_worker.extract_clauses_from_document",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=[ExtractedClause(issue="Term", clause_text="Three years.")]),
         ),
         patch(
             "app.workers.easy_playbook_worker.cluster_clauses_by_issue",
@@ -355,7 +438,9 @@ async def test_worker_silently_skips_documents_that_no_longer_exist(
     )
     await db_session.commit()
 
-    extract_mock = AsyncMock(return_value=[])
+    extract_mock = AsyncMock(
+        return_value=[ExtractedClause(issue="Term", clause_text="Three years.")]
+    )
     with (
         patch(
             "app.workers.easy_playbook_worker.extract_clauses_from_document",

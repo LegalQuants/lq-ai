@@ -2785,7 +2785,10 @@ paths:
 
         When ``status='completed'``, ``draft_playbook`` carries the
         assembled ``PlaybookCreate`` shape — the wizard's Step 3 inline
-        editor binds to this. When ``status='error'``, ``error_message``
+        editor binds to this, with at least one position. Missing or
+        truncated extraction answers and generations with no usable
+        clauses or no positions terminate with ``status='error'``.
+        When ``status='error'``, ``error_message``
         is populated. The wizard's Step 2 polls every few seconds until
         a terminal status arrives.
       responses:

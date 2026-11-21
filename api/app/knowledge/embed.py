@@ -27,6 +27,7 @@ hierarchy.
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -54,9 +55,27 @@ alias to a different provider/model don't need to change code on
 this side."""
 
 EMBEDDING_DIMENSION: Final[int] = 1536
-"""Native dim of ``text-embedding-3-small``. Matches C5's
-``vector(1536)`` column. If a future ADR repoints the alias to a
-different-dim model, a migration alters the column."""
+"""Storage/index dimension. Shorter native vectors are zero-padded at
+the database boundary; provider results retain their native dimensions.
+See ADR 0045 for compatibility and model-switching constraints."""
+
+
+def prepare_storage_embedding(vector: Sequence[float]) -> list[float]:
+    """Fit a native vector to storage without changing cosine similarity.
+
+    Used for eager/lazy writes and query vectors. Never truncate vectors
+    or mix embedding models; padding only aligns the storage shape.
+    """
+    if not 0 < len(vector) <= EMBEDDING_DIMENSION:
+        raise GatewayInvalidResponse(
+            "Embedding dimension is incompatible with document storage",
+            details={"received": len(vector), "maximum": EMBEDDING_DIMENSION},
+        )
+    values = [float(value) for value in vector]
+    if not all(math.isfinite(value) for value in values):
+        raise GatewayInvalidResponse("Embedding contains non-finite values")
+    return values + [0.0] * (EMBEDDING_DIMENSION - len(values))
+
 
 EMBED_BATCH_SIZE: Final[int] = 64
 """Number of chunks to submit per embeddings call.
@@ -321,6 +340,9 @@ async def embed_chunks_for_file(
                 model=model,
                 gateway=gateway,
             )
+            # Validate the whole batch before writing, so incompatible model
+            # output reaches the normal embed_failed/partial status path.
+            vectors = [prepare_storage_embedding(vector) for vector in vectors]
         except Exception as exc:
             log.warning(
                 "embed_chunks_for_file: batch failed",
@@ -475,6 +497,7 @@ async def ensure_embeddings_for_chunk_ids(
 
     texts = [chunk.content for chunk in chunks]
     vectors = await request_embedding_vectors(texts, model=model, gateway=gateway)
+    vectors = [prepare_storage_embedding(vector) for vector in vectors]
 
     embedded = 0
     for chunk, vector in zip(chunks, vectors, strict=True):

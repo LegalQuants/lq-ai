@@ -35,10 +35,17 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.clients.gateway import GatewayClient
+from app.config import get_settings
+from app.errors import GatewayInvalidResponse
 from app.models.document import Document
+from app.playbooks.easy.json_output import unwrap_json_answer
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
+
+
+class ExtractionResponseError(GatewayInvalidResponse):
+    """A missing or truncated answer cannot be accepted as corpus evidence."""
 
 
 # ---------------------------------------------------------------------------
@@ -95,20 +102,32 @@ emit a structured list of the negotiated positions it takes.
 Identify every clause that:
 
 1. Takes a substantive position on a recurring contract issue
-   (confidentiality definition, term, limitation of liability,
-   indemnification, payment terms, governing law, etc.).
+   (confidentiality definition, term, standard of care, limitation
+   of liability, indemnification, payment terms, governing law,
+   etc.).
 2. Is recognizable as a position, not pure boilerplate. Skip
    standard severability / notice / integration clauses UNLESS the
    contract takes an unusual position on them.
 3. Is contained in identifiable, contiguous text. Don't emit
    overlapping or fragmentary spans.
 
+A single section often bundles positions on MORE than one issue —
+e.g., an "Obligations of Receiving Party" section that both fixes
+the standard of care and restricts use and disclosure. Emit one
+entry per issue, each quoting only the sentence(s) or list item(s)
+that carry that position; do not collapse distinct positions into
+one section-sized entry, and do not let the emitted spans overlap.
+The standard of care is a recurring negotiated position in
+confidentiality agreements — extract it as its own "Standard of
+Care" entry even when it has no dedicated heading.
+
 For each identified clause, emit one entry with:
 
 * ``issue`` — short descriptive noun phrase from common contract
   vocabulary ("Limitation of Liability", "Permitted Disclosures",
-  "Term of Confidentiality Obligation"). Reuse common labels when
-  they fit — clustering downstream depends on label consistency.
+  "Standard of Care", "Term of Confidentiality Obligation"). Reuse
+  common labels when they fit — clustering downstream depends on
+  label consistency.
 * ``clause_text`` — verbatim quote from the contract. Preserve
   original wording, casing, and punctuation. Do not paraphrase.
 * ``source_offsets`` — half-open character interval
@@ -152,9 +171,9 @@ DEFAULT_CHARACTER_BUDGET = 50_000
 # Prevents clauses that straddle a span boundary from being missed.
 SPAN_OVERLAP_CHARACTERS = 1_500
 
-# Max output tokens. 20 clauses at ~120 tokens each = 2400; 3500 keeps
-# headroom for verbose clauses without letting the model meander.
-EASY_EXTRACT_MAX_TOKENS = 3500
+# Verbatim quotes from a short contract plus JSON labels/offsets can exceed
+# 3500 tokens. Reasoning is controlled separately, never parsed as the answer.
+EASY_EXTRACT_MAX_TOKENS = 8192
 
 # Default judge-model alias. Matches the M3-A2 executor's default;
 # the alias resolves to the deployment-configured "smart" model
@@ -187,7 +206,9 @@ async def extract_clauses_from_document(
     or if every LLM call returned malformed output. Failure-of-the-
     LLM is non-fatal for the corpus-level pipeline — one bad
     extraction reduces clustering signal but doesn't kill the
-    generation.
+    generation. Missing or token-truncated answers raise
+    ``ExtractionResponseError`` instead: these cannot be accepted as
+    evidence that a contract contains no negotiated positions.
 
     Args:
         document: the source document. ``normalized_content`` is
@@ -237,6 +258,8 @@ async def extract_clauses_from_document(
                 span_offset=offset,
                 contract_type=contract_type,
             )
+        except ExtractionResponseError:
+            raise
         except Exception as exc:
             logger.warning(
                 "easy_extract: span extraction failed",
@@ -334,6 +357,7 @@ async def _extract_one_span(
         model=model,
         messages=messages,
         max_tokens=EASY_EXTRACT_MAX_TOKENS,
+        reasoning_effort=get_settings().lq_ai_easy_playbook_reasoning_effort or None,
         # `temperature` is omitted: Anthropic Opus 4.x reasoning models
         # rejected the parameter as of 2026-05, and the gateway already
         # only forwards non-None values to providers. Determinism for
@@ -344,9 +368,16 @@ async def _extract_one_span(
     )
 
     response = await gateway.chat_completion(request)
+    if response.choices and getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ExtractionResponseError(
+            "Clause extraction reached the model output limit. "
+            "Configure the model's reasoning effort or use a model with sufficient output capacity."
+        )
     content = _extract_response_content(response)
     if not content:
-        return []
+        raise ExtractionResponseError(
+            "Clause extraction returned no answer content. Check the model's reasoning configuration."
+        )
 
     parsed = _parse_extracted_clauses(content)
     if span_offset > 0:
@@ -383,15 +414,7 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
     plus 1 malformed one is still useful.
     """
 
-    stripped = content.strip()
-    if stripped.startswith("```"):
-        # Drop a leading ``` or ```json fence and the trailing fence.
-        parts = stripped.split("```", 2)
-        if len(parts) >= 2:
-            stripped = parts[1]
-        if stripped.startswith("json"):
-            stripped = stripped[4:]
-        stripped = stripped.rstrip("`").strip()
+    stripped = unwrap_json_answer(content)
 
     try:
         parsed = json.loads(stripped)

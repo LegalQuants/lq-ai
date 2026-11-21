@@ -20,10 +20,44 @@ from app.playbooks.easy.assembly import (
     MAX_KEYWORD_COUNT,
     _derive_examples,
     _derive_keywords,
+    _dispatch_structured_call,
+    _parse_structured_json,
     assemble_playbook,
 )
 from app.playbooks.easy.clustering import ClauseInput, Cluster
 from app.schemas.playbooks import PlaybookCreate
+
+
+@pytest.mark.unit
+def test_prose_wrapped_description_requires_one_valid_json_answer() -> None:
+    assert _parse_structured_json(
+        'Here is the description.\n```json\n{"description": "A term."}\n```'
+    ) == {"description": "A term."}
+    assert _parse_structured_json("```json\n{}\n```\n```json\n{}\n```") == {}
+
+
+@pytest.mark.unit
+async def test_local_reasoning_setting_applies_to_descriptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        "app.playbooks.easy.assembly.get_settings",
+        lambda: Settings(lq_ai_easy_playbook_reasoning_effort="none"),
+    )
+    gateway = _StubChatGateway(payloads=[{"description": "A term."}])
+    result = await _dispatch_structured_call(
+        gateway=gateway,  # type: ignore[arg-type]
+        model="smart",
+        system_prompt="JSON",
+        user_content="Term",
+        max_tokens=600,
+        purpose="playbook_easy_describe_position",
+    )
+    assert result == {"description": "A term."}
+    assert gateway.calls_received[0].reasoning_effort == "none"
+
 
 # ---------------------------------------------------------------------------
 # Stub gateway — same shape as the extractor tests' stub

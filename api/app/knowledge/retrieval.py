@@ -26,6 +26,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.knowledge.embed import prepare_storage_embedding
+
 log = logging.getLogger(__name__)
 
 
@@ -86,7 +88,8 @@ async def hybrid_search(
         query: User's plain-text query — passed verbatim to FTS via
             :func:`plainto_tsquery`. The embedding for this same string
             is computed by the handler before calling here.
-        query_embedding: 1536-dim vector or ``None``. When ``None``,
+        query_embedding: Native vector of at most 1536 dimensions or ``None``.
+            Shorter vectors are zero-padded for database search. When ``None``,
             we skip the vector side entirely and run FTS-only — used
             when embed-on-read fails or ``alpha=1``.
         top_k: Final result count after combining.
@@ -237,7 +240,7 @@ async def _vector_candidates(
     [-1, 1]; we clamp at the normalize step).
     """
 
-    vector_text = _format_vector(query_embedding)
+    vector_text = _format_vector(prepare_storage_embedding(query_embedding))
     result = await db.execute(
         _VECTOR_SQL,
         {"kb_id": str(kb_id), "q_emb": vector_text, "limit": limit},

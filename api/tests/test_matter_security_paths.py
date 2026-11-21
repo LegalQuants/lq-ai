@@ -249,8 +249,14 @@ async def test_erasure_preserves_file_in_retained_kb(
 
 
 @pytest.mark.parametrize("role", ["blocked", "reader"])
+@pytest.mark.parametrize("operation", ["chat", "embeddings"])
 async def test_worker_rechecks_scope_before_each_dispatch(
-    db_session: AsyncSession, owner: User, colleague: User, matter: Project, role: str
+    db_session: AsyncSession,
+    owner: User,
+    colleague: User,
+    matter: Project,
+    role: str,
+    operation: str,
 ) -> None:
     from app.authz.documents import DocumentWorkflowGateway
     from app.clients.gateway import GatewayClient
@@ -274,13 +280,29 @@ async def test_worker_rechecks_scope_before_each_dispatch(
         model="smart",
         messages=[ChatCompletionMessage(role="user", content="Synthetic private excerpt")],
     )
-    await guarded.chat_completion(request)
-    gateway.chat_completion.assert_awaited_once()
+
+    async def dispatch() -> None:
+        if operation == "chat":
+            await guarded.chat_completion(request)
+        else:
+            await guarded.embeddings(
+                model="embedding",
+                input_=["Synthetic private excerpt"],
+                request_id="embedding-check",
+            )
+
+    dispatch_mock = gateway.chat_completion if operation == "chat" else gateway.embeddings
+    await dispatch()
+    dispatch_mock.assert_awaited_once()
+    if operation == "embeddings":
+        dispatch_mock.assert_awaited_once_with(
+            model="embedding", input_=["Synthetic private excerpt"], request_id="embedding-check"
+        )
     grant.role = role
     await db_session.flush()
     with pytest.raises(NotFound if role == "blocked" else Forbidden):
-        await guarded.chat_completion(request)
-    gateway.chat_completion.assert_awaited_once()
+        await dispatch()
+    dispatch_mock.assert_awaited_once()
 
 
 async def test_worker_admission_refuses_queued_screened_work(
@@ -482,7 +504,10 @@ async def test_autonomous_sources_require_direct_matter_grant(
     await _assert_kb_owned(db_session, kb.id, colleague.id)
 
 
-async def test_worker_refuses_missing_actor_before_dispatch(db_session: AsyncSession) -> None:
+@pytest.mark.parametrize("operation", ["chat", "embeddings"])
+async def test_worker_refuses_missing_actor_before_dispatch(
+    db_session: AsyncSession, operation: str
+) -> None:
     import uuid
 
     from app.authz.documents import DocumentWorkflowGateway
@@ -497,8 +522,12 @@ async def test_worker_refuses_missing_actor_before_dispatch(db_session: AsyncSes
         messages=[ChatCompletionMessage(role="user", content="Synthetic cached text")],
     )
     with pytest.raises(NotFound):
-        await guarded.chat_completion(request)
+        if operation == "chat":
+            await guarded.chat_completion(request)
+        else:
+            await guarded.embeddings(model="embedding", input_="Synthetic cached text")
     gateway.chat_completion.assert_not_called()
+    gateway.embeddings.assert_not_called()
 
 
 @pytest.mark.parametrize("direct", [False, True])

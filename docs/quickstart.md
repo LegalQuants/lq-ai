@@ -339,7 +339,7 @@ Open **Playbooks**. Five built-ins are seeded (NDA — Mutual, NDA — Unilatera
 
 ### Generate a Playbook from prior agreements
 
-Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA**, upload (or select) all five sample NDAs, and click **Generate playbook** — the wizard parses each file, then runs clustering on the `arq-worker` (typically 3–6 minutes for five documents). Edit / approve / save the resulting positions. See [docs/playbooks.md](playbooks.md). *(Clustering currently over-segments the corpus's five designed axes — [DE-308](PRD.md#9-deferred-enhancements-and-identified-future-work).)*
+Open **Playbooks → Generate from prior agreements**. Pick contract type **NDA**, upload (or select) all five sample NDAs, and click **Generate playbook** — the wizard parses each file, then runs clustering on the `arq-worker` (typically 3–6 minutes for five documents). Edit / approve / save the resulting positions. See [docs/playbooks.md](playbooks.md). *(Clustering over-segmentation mitigations landed under [DE-308](PRD.md#9-deferred-enhancements-and-identified-future-work) — target is 5–10 positions covering the corpus's five designed axes; a live re-run confirming the numbers is still pending, so some extra positions may appear.)*
 
 ### Run a Tabular Review across the five NDAs
 

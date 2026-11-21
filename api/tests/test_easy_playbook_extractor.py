@@ -25,9 +25,37 @@ from app.playbooks.easy.extractor import (
     DEFAULT_CHARACTER_BUDGET,
     SPAN_OVERLAP_CHARACTERS,
     ExtractedClause,
+    ExtractionResponseError,
     _build_spans,
+    _parse_extracted_clauses,
     extract_clauses_from_document,
 )
+
+
+@pytest.mark.unit
+def test_prose_wrapped_fenced_extraction_keeps_verbatim_clauses() -> None:
+    clause = {"issue": "Term", "clause_text": "Three (3) years.", "source_offsets": None}
+    answer = (
+        "I identified one position.\n\n```json\n"
+        + json.dumps({"extracted_clauses": [clause]})
+        + "\n```\nDone."
+    )
+    result = _parse_extracted_clauses(answer)
+    assert [item.model_dump() for item in result] == [clause]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "answer",
+    [
+        'Before ```json\n{"extracted_clauses": []}\n``` and ```json\n{"extracted_clauses": []}\n```',
+        'Before ```json\n{"extracted_clauses": [BROKEN]}\n```',
+        'Before {"extracted_clauses": []}',
+    ],
+)
+def test_ambiguous_or_malformed_wrapped_extraction_stays_invalid(answer: str) -> None:
+    assert _parse_extracted_clauses(answer) == []
+
 
 # ---------------------------------------------------------------------------
 # Stub gateway — mirrors tests/playbooks/test_executor.py::_StubGateway
@@ -42,6 +70,7 @@ class _StubMessage:
 @dataclass
 class _StubChoice:
     message: _StubMessage
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -196,6 +225,43 @@ async def test_request_carries_lq_ai_purpose_for_audit_routing() -> None:
     # `temperature` is intentionally omitted — Opus 4.x reasoning models
     # rejected it as of 2026-05; the gateway only forwards non-None.
     assert request.temperature is None
+
+
+@pytest.mark.unit
+async def test_local_reasoning_setting_reserves_budget_for_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        "app.playbooks.easy.extractor.get_settings",
+        lambda: Settings(lq_ai_easy_playbook_reasoning_effort="none"),
+    )
+    gateway = _StubGateway(payloads=[{"extracted_clauses": []}])
+    await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
+    request = gateway.calls_received[0]
+    assert request.reasoning_effort == "none"
+    assert request.max_tokens == 8192
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("content", ["", '{"extracted_clauses": []}'])
+async def test_truncated_answer_is_rejected_even_if_valid_json(content: str) -> None:
+    from unittest.mock import AsyncMock
+
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = _StubResponse(
+        choices=[_StubChoice(message=_StubMessage(content=content), finish_reason="length")]
+    )
+    with pytest.raises(ExtractionResponseError, match="output limit"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)
+
+
+@pytest.mark.unit
+async def test_empty_model_answer_is_an_explicit_extraction_failure() -> None:
+    gateway = _StubGateway(payloads=[""])
+    with pytest.raises(ExtractionResponseError, match="no answer content"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +490,52 @@ async def test_one_failed_span_does_not_kill_other_spans() -> None:
 def test_default_character_budget_leaves_room_for_overlap() -> None:
     """Overlap must be strictly less than budget — otherwise stride would be non-positive."""
     assert SPAN_OVERLAP_CHARACTERS < DEFAULT_CHARACTER_BUDGET
+
+
+# ---------------------------------------------------------------------------
+# Prompt taxonomy — DE-308 (missing "Standard of Care" axis)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_prompt_covers_standard_of_care_axis() -> None:
+    """The system prompt must cue the Standard of Care issue explicitly.
+
+    DE-308 diagnosis: the sample-NDA corpus embeds the standard of
+    care inside the "Obligations of Receiving Party" section (no
+    dedicated heading), and the prompt's issue-vocabulary examples
+    never mentioned it — so extractions collapsed the care standard
+    into one section-sized obligations entry and the axis never
+    surfaced as a position. The prompt must (a) name "Standard of
+    Care" in the label vocabulary and (b) instruct one-entry-per-issue
+    splitting for sections that bundle multiple positions.
+    """
+
+    from app.playbooks.easy.extractor import EASY_EXTRACT_SYSTEM_PROMPT
+
+    # (a) the label vocabulary names the axis (quoted example form).
+    assert '"Standard of Care"' in EASY_EXTRACT_SYSTEM_PROMPT
+    # (b) bundled sections must be split one-entry-per-issue.
+    normalized = " ".join(EASY_EXTRACT_SYSTEM_PROMPT.split())
+    assert "one entry per issue" in normalized
+
+
+@pytest.mark.unit
+def test_skill_md_mirror_carries_standard_of_care_taxonomy() -> None:
+    """The SKILL.md is the human-readable mirror of the embedded prompt.
+
+    Per the extractor module docstring, prompt changes must land in
+    both places. This pins the DE-308 taxonomy addition in the
+    SKILL.md so the pair can't silently drift on this axis.
+    """
+
+    from pathlib import Path
+
+    skill_md = (
+        Path(__file__).resolve().parents[2] / "skills" / "playbook-easy-extract" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert '"Standard of Care"' in skill_md
+    assert "one entry per issue" in skill_md
 
 
 @pytest.mark.unit
