@@ -7,6 +7,7 @@ name: CI
 #   - web/    : svelte-check + Vitest
 #   - api/    : ruff + mypy (standard mode) + pytest (with Postgres) + coverage gate
 #   - gateway/: ruff + mypy --strict + pytest + coverage gate
+#   - slack-bridge/: ruff + mypy --strict + pytest
 #   - tests/golden + tests/injection: keyless inventory and security regressions
 #   - api/Dockerfile.release: the skills-corpus guard (builds the `skills`
 #     stage only, so no dependency install; see scripts/release-image-check.sh)
@@ -244,6 +245,39 @@ jobs:
       - name: Real bundled helpers and application acceptance
         # Serial: each call proves cleanup of this isolated broker's jobs.
         run: pytest tests/skills tests/autonomous/orchestration/test_skill_capabilities.py -q
+
+  slack-bridge-checks:
+    name: Slack bridge (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: slack-bridge
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Slack bridge with dev extras
+        run: python -m pip install ".[dev]"
+
+      - name: ruff check
+        run: ruff check .
+
+      - name: ruff format --check
+        run: ruff format --check .
+
+      - name: mypy --strict (per bridge config)
+        run: mypy app
+
+      - name: pytest
+        run: python -m pytest tests -q
 
   gateway-checks:
     name: Gateway (ruff + mypy --strict + pytest)
