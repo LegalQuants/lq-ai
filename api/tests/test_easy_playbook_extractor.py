@@ -27,8 +27,35 @@ from app.playbooks.easy.extractor import (
     ExtractedClause,
     ExtractionResponseError,
     _build_spans,
+    _parse_extracted_clauses,
     extract_clauses_from_document,
 )
+
+
+@pytest.mark.unit
+def test_prose_wrapped_fenced_extraction_keeps_verbatim_clauses() -> None:
+    clause = {"issue": "Term", "clause_text": "Three (3) years.", "source_offsets": None}
+    answer = (
+        "I identified one position.\n\n```json\n"
+        + json.dumps({"extracted_clauses": [clause]})
+        + "\n```\nDone."
+    )
+    result = _parse_extracted_clauses(answer)
+    assert [item.model_dump() for item in result] == [clause]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "answer",
+    [
+        'Before ```json\n{"extracted_clauses": []}\n``` and ```json\n{"extracted_clauses": []}\n```',
+        'Before ```json\n{"extracted_clauses": [BROKEN]}\n```',
+        'Before {"extracted_clauses": []}',
+    ],
+)
+def test_ambiguous_or_malformed_wrapped_extraction_stays_invalid(answer: str) -> None:
+    assert _parse_extracted_clauses(answer) == []
+
 
 # ---------------------------------------------------------------------------
 # Stub gateway — mirrors tests/playbooks/test_executor.py::_StubGateway

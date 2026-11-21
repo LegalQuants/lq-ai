@@ -38,6 +38,7 @@ from app.clients.gateway import GatewayClient
 from app.config import get_settings
 from app.errors import GatewayInvalidResponse
 from app.models.document import Document
+from app.playbooks.easy.json_output import unwrap_json_answer
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -413,15 +414,7 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
     plus 1 malformed one is still useful.
     """
 
-    stripped = content.strip()
-    if stripped.startswith("```"):
-        # Drop a leading ``` or ```json fence and the trailing fence.
-        parts = stripped.split("```", 2)
-        if len(parts) >= 2:
-            stripped = parts[1]
-        if stripped.startswith("json"):
-            stripped = stripped[4:]
-        stripped = stripped.rstrip("`").strip()
+    stripped = unwrap_json_answer(content)
 
     try:
         parsed = json.loads(stripped)
