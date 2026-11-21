@@ -574,15 +574,18 @@ def _provider_key_error_code(exc: ProviderKeyMutationError) -> str:
     return "internal_error"
 
 
-def _resolved_master_key() -> str | None:
+def _resolved_master_key(request: Request | None = None) -> str | None:
     """Return the bound gateway master key, or ``None`` if unset.
 
-    Reads ``LQ_AI_GATEWAY_MASTER_KEY`` / ``LQ_AI_GATEWAY_MASTER_KEY_FILE``
-    via :func:`app.secrets.resolve_secret`. Runtime (encrypted-at-rest)
+    Uses the gateway's startup snapshot when lifespan has run. Runtime (encrypted-at-rest)
     key storage is impossible without it; the write endpoints fail fast
     with 400 when it's absent rather than writing an unencryptable key.
     """
 
+    if request is not None:
+        resolver: ProviderKeyResolver | None = getattr(request.app.state, "key_resolver", None)
+        if resolver is not None:
+            return resolver.master_key
     return resolve_secret(MASTER_KEY_ENV)
 
 
@@ -599,7 +602,7 @@ async def list_provider_keys_endpoint(request: Request) -> dict[str, Any]:
     rows = list_provider_keys(
         config,
         request.app.state.adapters,
-        ProviderKeyResolver.from_environ(),
+        getattr(request.app.state, "key_resolver", None) or ProviderKeyResolver.from_environ(),
     )
     return {"provider_keys": rows}
 
@@ -623,7 +626,7 @@ async def _apply_provider_key_request(
     reload failure paths.
     """
 
-    master_key = _resolved_master_key()
+    master_key = _resolved_master_key(request)
     if not master_key:
         return _gateway_error(
             code="failed_precondition",
@@ -785,7 +788,7 @@ async def _apply_tool_provider_request(
 
     encrypted_token: str | None = None
     if plaintext is not None:
-        master_key = _resolved_master_key()
+        master_key = _resolved_master_key(request)
         if not master_key:
             return _gateway_error(
                 code="failed_precondition",

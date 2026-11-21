@@ -32,23 +32,20 @@ configuration error — :class:`SecretSourceConflict` is raised rather
 than silently preferring one source. File values are stripped of
 surrounding whitespace (secret managers commonly append a trailing
 newline); an empty-after-strip file raises :class:`SecretFileError`.
-World/group-readable files log a warning (expected ``0400``/``0600``)
-but still load, so sloppy dev mounts do not hard-fail. Secret values
-never appear in log messages or exceptions — only the variable name
-and path.
+File targets must be regular files readable by the service with mode
+``0400`` or ``0600``. Other modes are rejected before reading. Secret
+values and paths never appear in log messages or exceptions.
 """
 
 from __future__ import annotations
 
-import logging
 import os
 import secrets
-from dataclasses import dataclass
-from pathlib import Path
+import stat
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 from cryptography.fernet import Fernet, InvalidToken
-
-logger = logging.getLogger(__name__)
 
 __all__ = [
     "MASTER_KEY_ENV",
@@ -60,6 +57,7 @@ __all__ = [
     "encrypt_value",
     "generate_master_key",
     "resolve_secret",
+    "snapshot_secret_sources",
 ]
 
 
@@ -90,51 +88,43 @@ class SecretSourceConflict(RuntimeError):
     """
 
 
-class SecretFileError(RuntimeError):
+class SecretFileError(ValueError):
     """Raised when a ``NAME_FILE`` path is missing, unreadable, or empty.
 
-    The message names the variable and path only — never the file
-    contents — so it is safe to surface in startup logs.
+    The message names the variable and failure class, never file contents
+    or a potentially sensitive path.
     """
 
 
 def _read_secret_file(*, var_name: str, path_str: str) -> str:
     """Read and strip a file-mounted secret.
 
-    Raises :class:`SecretFileError` for missing paths, directories,
-    read failures, and empty-after-strip contents. Logs a warning when
-    the file is group/world-readable (expected ``0400``/``0600``) but
-    still loads it.
+    Open once, then inspect the opened target before reading. This allows
+    projected-secret symlinks without checking a different inode from the
+    one read. ``O_NONBLOCK`` keeps a configured FIFO from hanging startup.
     """
 
-    path = Path(path_str)
-    if not path.exists() or not path.is_file():
-        raise SecretFileError(
-            f"{var_name}_FILE points at {path_str!r}, which is missing or not a regular file."
-        )
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
-        mode = path.stat().st_mode
-    except OSError as exc:
-        raise SecretFileError(
-            f"cannot stat secret file for {var_name}_FILE at {path_str!r}: {exc.strerror or exc}"
-        ) from exc
-    if mode & 0o077:
-        logger.warning(
-            "secret file for %s at %r is group/world-accessible (mode %o); "
-            "expected 0400 or 0600 owned by the service user",
-            var_name,
-            path_str,
-            mode & 0o777,
-        )
+        fd = os.open(path_str, flags)
+    except OSError:
+        raise SecretFileError(f"cannot open {var_name}_FILE") from None
     try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise SecretFileError(
-            f"cannot read secret file for {var_name}_FILE at {path_str!r}: {exc.strerror or exc}"
-        ) from exc
+        with os.fdopen(fd, "r", encoding="utf-8") as secret_file:
+            target = os.fstat(secret_file.fileno())
+            if not stat.S_ISREG(target.st_mode):
+                raise SecretFileError(f"{var_name}_FILE is not a regular file")
+            mode = stat.S_IMODE(target.st_mode)
+            if mode not in (0o400, 0o600):
+                raise SecretFileError(f"{var_name}_FILE has mode {mode:04o}; expected 0400 or 0600")
+            raw = secret_file.read(65_537)
+    except (OSError, UnicodeError):
+        raise SecretFileError(f"cannot read {var_name}_FILE") from None
+    if len(raw) > 65_536:
+        raise SecretFileError(f"{var_name}_FILE is too large")
     value = raw.strip()
     if not value:
-        raise SecretFileError(f"secret file for {var_name}_FILE at {path_str!r} is empty.")
+        raise SecretFileError(f"{var_name}_FILE is empty")
     return value
 
 
@@ -150,15 +140,17 @@ def resolve_secret(var_name: str, env: dict[str, str] | None = None) -> str | No
 
     source = env if env is not None else dict(os.environ)
     direct = source.get(var_name)
-    file_path = source.get(f"{var_name}_FILE")
+    file_name = f"{var_name}_FILE"
+    file_path = source.get(file_name)
     direct_set = bool(direct)
-    file_set = bool(file_path and file_path.strip())
-    if direct_set and file_set:
+    file_present = file_name in source
+    if direct_set and file_present:
         raise SecretSourceConflict(
             f"{var_name} and {var_name}_FILE are both set; choose one delivery path."
         )
-    if file_set:
-        assert file_path is not None
+    if file_present:
+        if not file_path or not file_path.strip():
+            raise SecretFileError(f"{file_name} is blank")
         return _read_secret_file(var_name=var_name, path_str=file_path.strip())
     return direct or None
 
@@ -238,6 +230,12 @@ class ProviderKeyResolver:
     """Snapshot of the environment used for ``api_key_env`` lookups.
     Defaults to :data:`os.environ` via :meth:`from_environ`."""
 
+    file_errors: dict[str, str] = field(default_factory=dict)
+    """Startup-validated file-source errors, isolated by variable name."""
+
+    unbound_files: set[str] = field(default_factory=set)
+    """File sources added after startup; these require a process restart."""
+
     @classmethod
     def from_environ(cls) -> ProviderKeyResolver:
         """Build a resolver from process environment.
@@ -285,9 +283,10 @@ class ProviderKeyResolver:
            doesn't decrypt under the configured master key.
         2. ``api_key_env`` set → look up that env var or its ``_FILE``
            sibling (``ANTHROPIC_API_KEY`` / ``ANTHROPIC_API_KEY_FILE``);
-           ``""`` if unset. A missing/unreadable/empty file degrades to
-           ``""`` with a warning so the provider is skipped like any
-           other missing key; setting both ``NAME`` and ``NAME_FILE``
+           ``""`` if unset. An invalid configured file raises
+           :class:`SecretFileError` so the affected provider is unavailable,
+           even when the adapter otherwise permits anonymous operation.
+           Setting both ``NAME`` and ``NAME_FILE``
            raises :class:`SecretSourceConflict` (ambiguous — fail, never
            guess). The env-only form is preserved for backward
            compatibility per ADR 0011.
@@ -310,16 +309,63 @@ class ProviderKeyResolver:
                     f"token was generated with a different one."
                 ) from exc
         if api_key_env:
-            try:
-                return resolve_secret(api_key_env, self.env) or ""
-            except SecretFileError as exc:
-                logger.warning(
-                    "skipping provider %r: %s",
-                    provider_name,
-                    exc,
-                )
-                return ""
+            if api_key_env in self.file_errors:
+                raise SecretFileError(self.file_errors[api_key_env])
+            if api_key_env in self.unbound_files:
+                raise SecretFileError(f"{api_key_env}_FILE requires a service restart")
+            return resolve_secret(api_key_env, self.env) or ""
         return ""
+
+
+def snapshot_secret_sources(
+    env: dict[str, str],
+    *,
+    global_names: Iterable[str],
+    provider_names: Iterable[str],
+) -> tuple[ProviderKeyResolver, dict[str, str | None]]:
+    """Bind mounted credentials once for a gateway process.
+
+    Global failures (master and service authentication) abort startup.
+    Invalid provider files are retained as errors so only those adapters
+    fail. Unknown file sources cannot become active through a YAML hot
+    reload: they require a restart to enter the snapshot.
+    """
+
+    globals_set = set(global_names) | {MASTER_KEY_ENV}
+    provider_set = set(provider_names) - globals_set
+    snapshot = dict(env)
+    global_values: dict[str, str | None] = {}
+    file_errors: dict[str, str] = {}
+    unbound_files = {name[:-5] for name in env if name.endswith("_FILE")}
+
+    for name in sorted(globals_set | provider_set):
+        try:
+            value = resolve_secret(name, env)
+        except SecretFileError as exc:
+            if name in globals_set:
+                raise
+            file_errors[name] = str(exc)
+            value = None
+        snapshot.pop(f"{name}_FILE", None)
+        unbound_files.discard(name)
+        if name in globals_set:
+            global_values[name] = value
+        if value is not None:
+            snapshot[name] = value
+        elif name in file_errors:
+            snapshot.pop(name, None)
+
+    for name in unbound_files:
+        snapshot.pop(f"{name}_FILE", None)
+    return (
+        ProviderKeyResolver(
+            master_key=global_values[MASTER_KEY_ENV],
+            env=snapshot,
+            file_errors=file_errors,
+            unbound_files=unbound_files,
+        ),
+        global_values,
+    )
 
 
 def _is_constant_time_equal(a: str, b: str) -> bool:

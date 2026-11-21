@@ -165,7 +165,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       # Enables the runtime BYOK provider-key store (encrypts keys at rest, ADR 0011).
       # Optional for boot, but the launcher always mints it so the in-app "Provider keys"
       # admin page works; without it that API returns 400 failed_precondition.
@@ -232,7 +232,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-lq-ai-files}
       S3_REGION: ${S3_REGION:-us-east-1}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
       JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-604800}
@@ -295,7 +295,7 @@ services:
       LQ_AI_CHUNK_TARGET_CHARS: ${LQ_AI_CHUNK_TARGET_CHARS:-2000}
       LQ_AI_CHUNK_OVERLAP_CHARS: ${LQ_AI_CHUNK_OVERLAP_CHARS:-200}
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - ingest-hf-cache:/root/.cache/huggingface
@@ -327,7 +327,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       LQ_AI_SKIP_MIGRATIONS: "1"
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills corpus is baked at /skills (image ENV); set explicitly for clarity.
       LQ_AI_SKILLS_DIR: ${LQ_AI_SKILLS_DIR:-/skills}

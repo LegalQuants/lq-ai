@@ -112,7 +112,9 @@ async def apply_tool_provider(
     new_adapter = None
     if entry is not None:
         try:
-            new_adapter = build_tool_adapter(entry)
+            new_adapter = build_tool_adapter(
+                entry, key_resolver=getattr(app_state, "key_resolver", None)
+            )
         except Exception:  # never leak key material into the log
             logger.warning(
                 "tool provider %r (%s) key applied but adapter build failed; "

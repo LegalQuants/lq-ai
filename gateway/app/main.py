@@ -83,6 +83,7 @@ from app.providers.tool.eurlex import EurLexToolAdapter
 from app.providers.tool.govinfo import GovInfoToolAdapter
 from app.router import Router
 from app.routing_log import NullRoutingLogWriter, RoutingLogWriter, SQLRoutingLogWriter
+from app.secrets import ProviderKeyResolver, snapshot_secret_sources
 from app.tool_egress_log import NullToolEgressLogWriter, SQLToolEgressLogWriter
 
 logger = logging.getLogger(__name__)
@@ -132,16 +133,20 @@ def _resolve_mcp_config_path() -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+def build_adapter(
+    provider: ProviderConfig, *, key_resolver: ProviderKeyResolver | None = None
+) -> ProviderAdapter | None:
     from app.config_revision import configuration_revision
 
-    adapter = _build_adapter(provider)
+    adapter = _build_adapter(provider, key_resolver=key_resolver)
     if adapter is not None:
         adapter.configuration_revision = configuration_revision(provider)
     return adapter
 
 
-def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
+def _build_adapter(
+    provider: ProviderConfig, *, key_resolver: ProviderKeyResolver | None = None
+) -> ProviderAdapter | None:
     """Construct the adapter for one provider, or ``None`` if no live
     adapter can be built.
 
@@ -177,34 +182,38 @@ def _build_adapter(provider: ProviderConfig) -> ProviderAdapter | None:
     # build-time validation the tool path already does.
     validate_llm_base_url(provider.base_url)
     if provider.type == "anthropic":
-        return AnthropicAdapter.from_config(provider)
+        return AnthropicAdapter.from_config(provider, key_resolver=key_resolver)
     if provider.type in ("openai", "openai_compatible"):
         # C6 + B6: OpenAI adapter services both embeddings and chat
         # completions and handles both ``openai`` and ``openai_compatible``.
-        return OpenAIAdapter.from_config(provider)
+        return OpenAIAdapter.from_config(provider, key_resolver=key_resolver)
     if provider.type == "azure_openai":
         # M2-E1 (DE-267): Azure OpenAI mirrors the OpenAI wire shape with
         # a deployment-scoped URL (+ api-version) and ``api-key`` auth.
-        return AzureOpenAIAdapter.from_config(provider)
+        return AzureOpenAIAdapter.from_config(provider, key_resolver=key_resolver)
     if provider.type == "ollama":
         # B6 partial: Ollama is the Mode-2 (air-gapped local inference)
         # backbone per PRD §1.5.1 / §6.1.
-        return OllamaAdapter.from_config(provider)
+        return OllamaAdapter.from_config(provider, key_resolver=key_resolver)
     # B6 lands the remaining adapters (Vertex, Bedrock); until then there
     # is no adapter for those types (or any unknown type).
     return None
 
 
-def build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+def build_tool_adapter(
+    provider: ToolProviderConfig, *, key_resolver: ProviderKeyResolver | None = None
+) -> ToolProviderAdapter | None:
     from app.config_revision import configuration_revision
 
-    adapter = _build_tool_adapter(provider)
+    adapter = _build_tool_adapter(provider, key_resolver=key_resolver)
     if adapter is not None:
         adapter.configuration_revision = configuration_revision(provider)
     return adapter
 
 
-def _build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | None:
+def _build_tool_adapter(
+    provider: ToolProviderConfig, *, key_resolver: ProviderKeyResolver | None = None
+) -> ToolProviderAdapter | None:
     """Construct the tool adapter for one provider, or ``None`` if disabled
     or no adapter exists for the type. Validates the base_url against the
     provider's egress policy at build time so a misconfig fails at startup."""
@@ -215,17 +224,17 @@ def _build_tool_adapter(provider: ToolProviderConfig) -> ToolProviderAdapter | N
         adapter.validate_base_url()
         return adapter
     if provider.type == "courtlistener":
-        cl_adapter = CourtListenerToolAdapter.from_config(provider)
+        cl_adapter = CourtListenerToolAdapter.from_config(provider, key_resolver=key_resolver)
         cl_adapter.validate_base_url()
         return cl_adapter
     if provider.type == "mcp":
         from app.providers.tool.mcp import MCPToolProviderAdapter
 
-        mcp_adapter = MCPToolProviderAdapter.from_config(provider)
+        mcp_adapter = MCPToolProviderAdapter.from_config(provider, key_resolver=key_resolver)
         mcp_adapter.validate_base_url()
         return mcp_adapter
     if provider.type == "govinfo":
-        govinfo_adapter = GovInfoToolAdapter.from_config(provider)
+        govinfo_adapter = GovInfoToolAdapter.from_config(provider, key_resolver=key_resolver)
         govinfo_adapter.validate_base_url()
         return govinfo_adapter
     if provider.type == "edgar":
@@ -258,6 +267,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.exception("gateway config load failed; refusing to start")
         raise
 
+    # Bind every configured mounted credential before constructing clients or
+    # adapters. A replaced mount takes effect only after restart; runtime
+    # YAML reloads can still change routing and encrypted provider keys.
+    auth_name = config.gateway_auth.api_key_env or "LQ_AI_GATEWAY_KEY"
+    provider_names: set[str] = set()
+    default_key_names = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "azure_openai": "AZURE_OPENAI_API_KEY",
+    }
+    for provider in config.providers:
+        if provider.api_key_env:
+            provider_names.add(provider.api_key_env)
+        elif not provider.api_key_encrypted and provider.type in default_key_names:
+            provider_names.add(default_key_names[provider.type])
+    provider_names.update(tp.api_key_env for tp in config.tool_providers if tp.api_key_env)
+    key_resolver, global_keys = snapshot_secret_sources(
+        dict(os.environ),
+        global_names={auth_name, "LQ_AI_GATEWAY_KEY"},
+        provider_names=provider_names,
+    )
+    app.state.key_resolver = key_resolver
+    app.state.gateway_auth_name = auth_name
+    app.state.gateway_auth_key = global_keys[auth_name]
+    if config.gateway_auth.enabled and not global_keys[auth_name] and not config.dev_mode.enabled:
+        raise RuntimeError(f"Refusing to start: {auth_name} or {auth_name}_FILE is required")
+
     # D0.5: wrap the loaded config in a mutable holder so admin endpoints
     # can hot-reload after writing the YAML file. The router and admin
     # handlers read through the holder; in-flight requests hold their
@@ -284,7 +320,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     adapters: dict[str, ProviderAdapter] = {}
     for provider in config.providers:
         try:
-            adapter = build_adapter(provider)
+            adapter = build_adapter(provider, key_resolver=key_resolver)
         except ProviderEgressRefused as exc:
             # Deliberate: an egress-policy violation is fatal at startup.
             # Skipping the provider would let the router fall through to the
@@ -380,7 +416,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     tool_adapters: dict[str, ToolProviderAdapter] = {}
     for tp in config.tool_providers:
         try:
-            tool_adapter = build_tool_adapter(tp)
+            tool_adapter = build_tool_adapter(tp, key_resolver=key_resolver)
         except Exception:
             logger.exception(
                 "skipping tool provider %r (type=%s): egress validation failed",
@@ -431,14 +467,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ``app.api.inference`` uses ``app.state.backend_client`` if set,
     # otherwise falls back to the process-global handle. We stash both
     # so tests bypassing lifespan still get a usable handle.
-    backend_client: BackendClient = configure_backend_client()
+    backend_client: BackendClient = configure_backend_client(
+        gateway_key=global_keys["LQ_AI_GATEWAY_KEY"] or ""
+    )
     app.state.backend_client = backend_client
     logger.info("backend client wired against %s", backend_client.base_url)
 
     # D0: live model discovery for ``GET /v1/models``. The discoverer
     # owns its own httpx client and a TTL cache. Per-source failures
     # never raise — see app.model_discovery.
-    model_discoverer = ModelDiscoverer()
+    model_discoverer = ModelDiscoverer(key_resolver=key_resolver)
     app.state.model_discoverer = model_discoverer
     logger.info("model discoverer wired (Ollama 60s TTL, Anthropic 300s TTL)")
 

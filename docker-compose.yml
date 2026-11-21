@@ -153,7 +153,7 @@ services:
     environment:
       # Auth — backend → gateway (and gateway → backend for C2 skill fetches).
       # The gateway uses the SAME shared secret in BOTH directions.
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       # Enables the runtime encrypted-at-rest key store (ADR 0011). Optional for
       # boot, but forwarded so `docker compose up` supports the in-app admin key
       # setters — Configure → Provider keys AND Admin → Research sources (enable
@@ -257,7 +257,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       # Inference Gateway
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       # JWT (auth — per ADR 0002 the backend owns auth)
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
@@ -349,7 +349,7 @@ services:
       # work with even on KBs configured for hybrid retrieval
       # (`hybrid_alpha < 1.0`).
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Persist Docling's Hugging Face model cache and EasyOCR's detection
     # model cache across container restarts so the operator only pays
@@ -415,7 +415,7 @@ services:
       # extractor which calls the inference gateway. Pre-wired now so
       # Phase 5 doesn't need a second docker-compose edit.
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
-      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
+      LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Skills loader — the worker's on_startup installs the skill
       # registry via the shared bootstrap (app/skills/bootstrap.py) so

@@ -12,17 +12,14 @@ clear the cache via `get_settings.cache_clear()` after monkeypatching env.
 
 from __future__ import annotations
 
-import logging
+import os
+import stat
 from decimal import Decimal
 from functools import lru_cache
-from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import AliasChoices, Field, model_validator
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-log = logging.getLogger(__name__)
 
 LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 
@@ -30,6 +27,39 @@ LogLevel = Literal["debug", "info", "warning", "warn", "error", "critical"]
 # outside dev mode (see ``assert_production_secrets``) so a deployment can never
 # silently ship with a public signing key.
 DEV_JWT_SECRET = "dev-jwt-secret-change-me"
+
+
+class GatewayKeyFileError(RuntimeError):
+    """Secret-free startup error for an invalid API shared-key file."""
+
+
+def _read_gateway_key_file(path: str) -> str:
+    """Read one restrictive regular file, inspecting the opened target."""
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        raise GatewayKeyFileError("cannot open LQ_AI_GATEWAY_KEY_FILE") from None
+    try:
+        with os.fdopen(fd, "r", encoding="utf-8") as secret_file:
+            target = os.fstat(secret_file.fileno())
+            if not stat.S_ISREG(target.st_mode):
+                raise GatewayKeyFileError("LQ_AI_GATEWAY_KEY_FILE is not a regular file")
+            mode = stat.S_IMODE(target.st_mode)
+            if mode not in (0o400, 0o600):
+                raise GatewayKeyFileError(
+                    f"LQ_AI_GATEWAY_KEY_FILE has mode {mode:04o}; expected 0400 or 0600"
+                )
+            value = secret_file.read(65_537)
+    except (OSError, UnicodeError):
+        raise GatewayKeyFileError("cannot read LQ_AI_GATEWAY_KEY_FILE") from None
+    if len(value) > 65_536:
+        raise GatewayKeyFileError("LQ_AI_GATEWAY_KEY_FILE is too large")
+    value = value.strip()
+    if not value:
+        raise GatewayKeyFileError("LQ_AI_GATEWAY_KEY_FILE is empty")
+    return value
 
 
 class Settings(BaseSettings):
@@ -154,8 +184,8 @@ class Settings(BaseSettings):
         default="",
         description="Shared secret for backend ↔ gateway. Required in prod.",
     )
-    lq_ai_gateway_key_file: str = Field(
-        default="",
+    lq_ai_gateway_key_file: str | None = Field(
+        default=None,
         description=(
             "Path to a file containing the backend ↔ gateway shared secret "
             "(Docker/K8s secret-mount delivery for LQ_AI_GATEWAY_KEY). "
@@ -164,58 +194,23 @@ class Settings(BaseSettings):
         ),
     )
 
-    @model_validator(mode="after")
-    def _resolve_gateway_key_file(self) -> Settings:
-        """Resolve ``LQ_AI_GATEWAY_KEY_FILE`` into ``lq_ai_gateway_key``.
+    def __init__(self, **values: Any) -> None:
+        """Bind a file key after Pydantic validates fields.
 
-        Gateway-only file delivery (#590): the api needs the same shared
-        secret the gateway checks, so mixed env/file deployments keep
-        working. Both set → fail closed; file missing/unreadable/empty →
-        fail closed (silently disabling service-to-service auth would be
-        worse). File values are stripped; group/world-readable files log
-        a warning but still load.
+        A model-level validator would place the plaintext direct key in
+        ``ValidationError.input`` when it raises. A dedicated exception
+        keeps both rendered and structured errors free of that value.
         """
 
-        if self.lq_ai_gateway_key and self.lq_ai_gateway_key_file:
-            raise ValueError(
-                "LQ_AI_GATEWAY_KEY and LQ_AI_GATEWAY_KEY_FILE are both set; "
-                "choose one delivery path."
-            )
-        if self.lq_ai_gateway_key_file:
-            path = Path(self.lq_ai_gateway_key_file.strip())
-            if not path.is_file():
-                raise ValueError(
-                    "LQ_AI_GATEWAY_KEY_FILE points at "
-                    f"{self.lq_ai_gateway_key_file!r}, which is missing or not a regular file."
-                )
-            try:
-                mode = path.stat().st_mode
-            except OSError as exc:
-                raise ValueError(
-                    "cannot stat LQ_AI_GATEWAY_KEY_FILE "
-                    f"at {self.lq_ai_gateway_key_file!r}: {exc.strerror or exc}"
-                ) from exc
-            if mode & 0o077:
-                log.warning(
-                    "secret file for LQ_AI_GATEWAY_KEY at %r is group/world-accessible "
-                    "(mode %o); expected 0400 or 0600",
-                    self.lq_ai_gateway_key_file,
-                    mode & 0o777,
-                )
-            try:
-                value = path.read_text(encoding="utf-8").strip()
-            except OSError as exc:
-                raise ValueError(
-                    "cannot read LQ_AI_GATEWAY_KEY_FILE "
-                    f"at {self.lq_ai_gateway_key_file!r}: {exc.strerror or exc}"
-                ) from exc
-            if not value:
-                raise ValueError(
-                    "secret file for LQ_AI_GATEWAY_KEY_FILE "
-                    f"at {self.lq_ai_gateway_key_file!r} is empty."
-                )
-            self.lq_ai_gateway_key = value
-        return self
+        super().__init__(**values)
+        file_path = self.lq_ai_gateway_key_file
+        if file_path is None:
+            return
+        if self.lq_ai_gateway_key:
+            raise GatewayKeyFileError("LQ_AI_GATEWAY_KEY and LQ_AI_GATEWAY_KEY_FILE are both set")
+        if not file_path.strip():
+            raise GatewayKeyFileError("LQ_AI_GATEWAY_KEY_FILE is blank")
+        self.lq_ai_gateway_key = _read_gateway_key_file(file_path.strip())
 
     # ----- Chat history (multi-turn memory) -----
     # The chat send path (api/app/api/chats.py) replays prior turns of the
@@ -600,6 +595,10 @@ def assert_production_secrets(settings: Settings) -> None:
             "Refusing to start: JWT_SECRET is the published development default "
             f"({DEV_JWT_SECRET!r}). Set JWT_SECRET to a strong random secret, or "
             "set LQ_AI_DEV_MODE=true for local development."
+        )
+    if not settings.lq_ai_gateway_key and not settings.lq_ai_dev_mode:
+        raise RuntimeError(
+            "Refusing to start: LQ_AI_GATEWAY_KEY or LQ_AI_GATEWAY_KEY_FILE is required"
         )
 
 

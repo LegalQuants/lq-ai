@@ -28,6 +28,7 @@ def test_defaults_apply_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
         "S3_REGION",
         "LQ_AI_GATEWAY_URL",
         "LQ_AI_GATEWAY_KEY",
+        "LQ_AI_GATEWAY_KEY_FILE",
         "JWT_SECRET",
         "JWT_ACCESS_TOKEN_TTL_SECONDS",
         "JWT_REFRESH_TOKEN_TTL_SECONDS",
@@ -147,18 +148,33 @@ def test_assert_production_secrets_allows_real_secret(
 ) -> None:
     """A non-default secret is accepted even outside dev mode."""
     monkeypatch.setenv("JWT_SECRET", "a-strong-random-production-secret")
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", "gateway-shared-key")
     monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
     s = Settings(_env_file=None)  # type: ignore[call-arg]
     assert_production_secrets(s)  # does not raise
 
 
 @pytest.mark.unit
-def test_gateway_key_file_resolves(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_assert_production_secrets_requires_gateway_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("JWT_SECRET", "a-strong-random-production-secret")
+    monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
+    monkeypatch.delenv("LQ_AI_GATEWAY_KEY_FILE", raising=False)
+    monkeypatch.delenv("LQ_AI_DEV_MODE", raising=False)
+    with pytest.raises(RuntimeError, match="LQ_AI_GATEWAY_KEY or LQ_AI_GATEWAY_KEY_FILE"):
+        assert_production_secrets(Settings(_env_file=None))  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("mode", [0o400, 0o600])
+def test_gateway_key_file_resolves(monkeypatch: pytest.MonkeyPatch, tmp_path, mode: int) -> None:
     """LQ_AI_GATEWAY_KEY_FILE delivers the shared secret (#590)."""
     from pathlib import Path
 
     secret_file = tmp_path / "gateway-key.txt"
     secret_file.write_text("file-gateway-key\n", encoding="utf-8")
+    secret_file.chmod(mode)
     monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
     monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(secret_file))
     s = Settings(_env_file=None)  # type: ignore[call-arg]
@@ -169,22 +185,52 @@ def test_gateway_key_file_resolves(monkeypatch: pytest.MonkeyPatch, tmp_path) ->
 @pytest.mark.unit
 def test_gateway_key_file_conflict_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Both KEY and KEY_FILE set → fail closed, never silently prefer one."""
-    from pydantic import ValidationError
+    from app.config import GatewayKeyFileError
 
     secret_file = tmp_path / "gateway-key.txt"
     secret_file.write_text("file-value", encoding="utf-8")
     monkeypatch.setenv("LQ_AI_GATEWAY_KEY", "env-value")
     monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(secret_file))
-    with pytest.raises(ValidationError, match="both set"):
+    with pytest.raises(GatewayKeyFileError, match="both set"):
         Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 @pytest.mark.unit
 def test_gateway_key_file_missing_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Missing file → fail closed (silently disabling auth would be worse)."""
-    from pydantic import ValidationError
+    from app.config import GatewayKeyFileError
 
     monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
     monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(tmp_path / "missing.txt"))
-    with pytest.raises(ValidationError, match="missing or not a regular file"):
+    with pytest.raises(GatewayKeyFileError, match="cannot open"):
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("mode", [0o440, 0o644])
+def test_gateway_key_file_wide_mode_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path, mode: int
+) -> None:
+    from app.config import GatewayKeyFileError
+
+    secret_file = tmp_path / "gateway-key.txt"
+    secret_file.write_text("private-key-value", encoding="utf-8")
+    secret_file.chmod(mode)
+    monkeypatch.delenv("LQ_AI_GATEWAY_KEY", raising=False)
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", str(secret_file))
+    with pytest.raises(GatewayKeyFileError, match=f"{mode:04o}") as excinfo:
+        Settings(_env_file=None)  # type: ignore[call-arg]
+    assert "private-key-value" not in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_gateway_key_conflict_does_not_expose_direct_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import GatewayKeyFileError
+
+    sentinel = "plaintext-should-not-appear"
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY", sentinel)
+    monkeypatch.setenv("LQ_AI_GATEWAY_KEY_FILE", "/not/read")
+    with pytest.raises(GatewayKeyFileError) as excinfo:
+        Settings(_env_file=None)  # type: ignore[call-arg]
+    assert sentinel not in str(excinfo.value)
+    assert sentinel not in vars(excinfo.value).values()

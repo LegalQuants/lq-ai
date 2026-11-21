@@ -69,27 +69,54 @@ Every gateway secret `NAME` may instead be delivered as `NAME_FILE=<path>`
 The `api/` service honors `LQ_AI_GATEWAY_KEY_FILE` for the same shared secret
 so mixed env/file deployments keep authenticating.
 
+For Docker Compose, create a private file and save this override as
+`gateway-key-files.yml` beside the base Compose file. The four services share
+one mounted key. The base Compose files permit an empty `LQ_AI_GATEWAY_KEY` so
+the override can supply the file path; production startup rejects both sources
+being absent. Use the same override with `docker-compose.release.yml`.
+
 ```bash
-# Docker Compose (Swarm-style secrets block — values are paths, not secrets)
-# compose file excerpt (illustrative; replace CHANGEME paths with yours):
-# secrets:
-#   gateway_master_key:
-#     file: ./secrets/gateway_master_key.txt
-# services:
-#   gateway:
-#     secrets:
-#       - source: gateway_master_key
-#         target: /run/secrets/gateway_master_key
-#         mode: 0400
-#     environment:
-#       LQ_AI_GATEWAY_MASTER_KEY_FILE: /run/secrets/gateway_master_key
+umask 077
+mkdir -p secrets
+openssl rand -hex 32 > secrets/lq-ai-gateway-key
+chmod 0400 secrets/lq-ai-gateway-key
+docker compose -f docker-compose.yml -f gateway-key-files.yml up -d
+```
+
+```yaml
+# gateway-key-files.yml (keep this file free of secret values)
+services:
+  gateway:
+    environment:
+      LQ_AI_GATEWAY_KEY: ""
+      LQ_AI_GATEWAY_KEY_FILE: /run/secrets/lq-ai-gateway-key
+    volumes:
+      - ./secrets/lq-ai-gateway-key:/run/secrets/lq-ai-gateway-key:ro
+  api:
+    environment:
+      LQ_AI_GATEWAY_KEY: ""
+      LQ_AI_GATEWAY_KEY_FILE: /run/secrets/lq-ai-gateway-key
+    volumes:
+      - ./secrets/lq-ai-gateway-key:/run/secrets/lq-ai-gateway-key:ro
+  ingest-worker:
+    environment:
+      LQ_AI_GATEWAY_KEY: ""
+      LQ_AI_GATEWAY_KEY_FILE: /run/secrets/lq-ai-gateway-key
+    volumes:
+      - ./secrets/lq-ai-gateway-key:/run/secrets/lq-ai-gateway-key:ro
+  arq-worker:
+    environment:
+      LQ_AI_GATEWAY_KEY: ""
+      LQ_AI_GATEWAY_KEY_FILE: /run/secrets/lq-ai-gateway-key
+    volumes:
+      - ./secrets/lq-ai-gateway-key:/run/secrets/lq-ai-gateway-key:ro
 ```
 
 ```yaml
 # Kubernetes (external-secrets-operator or sealed-secret mounted as a file)
-# env:
-#   - name: LQ_AI_GATEWAY_MASTER_KEY_FILE
-#     value: /var/run/secrets/lq-ai/gateway_master_key
+# Set projected Secret volume defaultMode: 0400, mount it in the gateway,
+# and set LQ_AI_GATEWAY_MASTER_KEY_FILE to the mounted path. The API and
+# workers need the shared gateway key mounted the same way.
 ```
 
 ```ini
@@ -105,13 +132,17 @@ Rules:
   `SecretSourceConflict` naming the variable (never the value).
 * Files are UTF-8 text, stripped of surrounding whitespace (a trailing newline
   from Vault/agent templates is fine). Missing, unreadable, directory, or
-  empty-after-strip files fail clearly (`SecretFileError` naming var + path).
-  Master/gateway-key failures are fatal; a bad provider-key file skips that
-  provider with a warning (same as a missing env key) so unrelated providers
-  keep serving.
-* Permissions: store files `0400`/`0600` owned by the service user. A
-  group/world-readable file logs a warning but still loads (warn-only by design
-  so sloppy dev mounts do not hard-fail production boot).
+  empty-after-strip files fail clearly (`SecretFileError` naming the variable,
+  never the path or value). Master/gateway-key failures are fatal; a bad
+  provider-key file makes only that provider unavailable, without silently
+  treating it as keyless.
+* Files must be readable by the service identity and have mode `0400` or
+  `0600`. Group/world-readable and writable modes are rejected. Symlinks to
+  regular files are accepted; the opened target's mode is checked. Compose
+  secret `mode:` is not consistently enforced for file-backed secrets, so set
+  the source file mode explicitly and verify it inside the container.
+* The gateway binds file secrets at startup. After rotation, restart the
+  gateway, API, and workers together so they use the same shared key.
 * Env-only deployments keep working unchanged — to migrate, mount the file,
   set `*_FILE`, unset the plaintext var, restart.
 
@@ -213,9 +244,16 @@ The procedure is the same in all cases:
 
 3. **Update `gateway.yaml`** so each `api_key_encrypted:` carries the new token. The yaml diff is large (every encrypted token changes), but the wire-format key has not changed.
 
-4. **Swap `LQ_AI_GATEWAY_MASTER_KEY`** in the gateway's deployment environment to the new value.
+4. **Swap the gateway's master-key source** to the new value, whether it is
+   `LQ_AI_GATEWAY_MASTER_KEY` or the file named by
+   `LQ_AI_GATEWAY_MASTER_KEY_FILE`. Keep the new ciphertexts and new key
+   together as one deployment change.
 
-5. **Restart the gateway** (or trigger config reload). Verify with `curl http://gateway/admin/v1/providers/health` that each provider's adapter built successfully — a stale master key would surface as `DecryptError` at adapter-build time and the provider would not register.
+5. **Restart the gateway.** A config reload or replacement of the mounted file
+   does not change the process-bound master key. Verify with
+   `curl http://gateway/admin/v1/providers/health` that each provider's adapter
+   built successfully — a stale master key would surface as `DecryptError` at
+   adapter-build time and the provider would not register.
 
 6. **Revoke the old master key** in your secrets vault (or mark superseded with an audit-log entry — your vault's convention). The gateway never reads it again; nothing in the deployment will accept it.
 

@@ -215,12 +215,12 @@ def _status_for_provider(
 ) -> dict[str, object]:
     """Recompute the single-provider status dict from the live config.
 
-    Built with a fresh ``ProviderKeyResolver.from_environ()`` so the
-    master key currently bound to the process is used to derive ``last4``.
+    Uses the process startup snapshot to derive ``last4``. Tests that
+    bypass lifespan construct a resolver from the environment.
     """
 
     config = holder.current()
-    resolver = ProviderKeyResolver.from_environ()
+    resolver = getattr(app_state, "key_resolver", None) or ProviderKeyResolver.from_environ()
     provider = config.provider_by_name(provider_name)
     if provider is None:
         # The provider vanished between the write and this read — should not
@@ -328,7 +328,9 @@ async def apply_provider_key(
         new_adapter = None
     else:
         try:
-            new_adapter = build_adapter(provider)
+            new_adapter = build_adapter(
+                provider, key_resolver=getattr(app_state, "key_resolver", None)
+            )
         except ProviderEgressRefused as exc:
             # The key was written, but this provider's base_url is refused by
             # egress policy; report it rather than 500 after a successful

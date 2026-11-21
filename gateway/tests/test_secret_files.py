@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 
 import pytest
@@ -13,7 +12,17 @@ from app.secrets import (
     SecretSourceConflict,
     generate_master_key,
     resolve_secret,
+    snapshot_secret_sources,
 )
+
+
+@pytest.fixture(autouse=True)
+def private_secret_file_umask():
+    previous = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(previous)
 
 
 @pytest.mark.unit
@@ -27,9 +36,11 @@ def test_resolve_secret_unset_returns_none() -> None:
 
 
 @pytest.mark.unit
-def test_resolve_secret_file_only_strips_newline(tmp_path) -> None:
+@pytest.mark.parametrize("mode", [0o400, 0o600])
+def test_resolve_secret_file_only_strips_newline(tmp_path, mode: int) -> None:
     secret_file = tmp_path / "key.txt"
     secret_file.write_text("dummy-secret-value\n", encoding="utf-8")
+    secret_file.chmod(mode)
     out = resolve_secret("MY_KEY", {"MY_KEY_FILE": str(secret_file)})
     assert out == "dummy-secret-value"
 
@@ -72,15 +83,26 @@ def test_resolve_secret_empty_file_raises(tmp_path) -> None:
 
 
 @pytest.mark.unit
-def test_resolve_secret_world_readable_warns_but_loads(tmp_path, caplog) -> None:
+@pytest.mark.parametrize("mode", [0o440, 0o644])
+def test_resolve_secret_wide_permissions_rejected(tmp_path, mode: int) -> None:
     secret_file = tmp_path / "key.txt"
     secret_file.write_text("dummy-warn-value", encoding="utf-8")
-    os.chmod(secret_file, 0o644)
-    with caplog.at_level(logging.WARNING, logger="app.secrets"):
-        out = resolve_secret("MY_KEY", {"MY_KEY_FILE": str(secret_file)})
-    assert out == "dummy-warn-value"
-    assert any("group/world-accessible" in r.message for r in caplog.records)
-    assert not any("dummy-warn-value" in r.message for r in caplog.records)
+    os.chmod(secret_file, mode)
+    with pytest.raises(SecretFileError, match=f"{mode:04o}") as excinfo:
+        resolve_secret("MY_KEY", {"MY_KEY_FILE": str(secret_file)})
+    assert "dummy-warn-value" not in str(excinfo.value)
+
+
+@pytest.mark.unit
+def test_resolve_secret_symlink_checks_opened_target(tmp_path) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("private-value", encoding="utf-8")
+    link = tmp_path / "current.txt"
+    link.symlink_to(target)
+    assert resolve_secret("MY_KEY", {"MY_KEY_FILE": str(link)}) == "private-value"
+    target.chmod(0o644)
+    with pytest.raises(SecretFileError, match="0644"):
+        resolve_secret("MY_KEY", {"MY_KEY_FILE": str(link)})
 
 
 @pytest.mark.unit
@@ -110,15 +132,70 @@ def test_provider_resolver_reads_file_key(tmp_path) -> None:
 
 
 @pytest.mark.unit
-def test_provider_resolver_file_error_degrades_to_empty(tmp_path) -> None:
+def test_provider_resolver_file_error_rejects_provider(tmp_path) -> None:
     missing = tmp_path / "missing.txt"
     resolver = ProviderKeyResolver(master_key=None, env={"OPENAI_API_KEY_FILE": str(missing)})
-    out = resolver.resolve(
-        provider_name="openai-prod",
-        api_key_env="OPENAI_API_KEY",
-        api_key_encrypted=None,
+    with pytest.raises(SecretFileError):
+        resolver.resolve(
+            provider_name="openai-prod",
+            api_key_env="OPENAI_API_KEY",
+            api_key_encrypted=None,
+        )
+
+
+@pytest.mark.unit
+def test_blank_file_source_is_not_treated_as_unset() -> None:
+    with pytest.raises(SecretFileError, match="blank"):
+        resolve_secret("MY_KEY", {"MY_KEY_FILE": " "})
+
+
+@pytest.mark.unit
+def test_snapshot_keeps_file_value_after_rotation(tmp_path) -> None:
+    secret_file = tmp_path / "provider.txt"
+    secret_file.write_text("original", encoding="utf-8")
+    resolver, _ = snapshot_secret_sources(
+        {"OPENAI_API_KEY_FILE": str(secret_file)},
+        global_names={"LQ_AI_GATEWAY_KEY"},
+        provider_names={"OPENAI_API_KEY"},
     )
-    assert out == ""
+    secret_file.write_text("rotated", encoding="utf-8")
+    assert (
+        resolver.resolve(
+            provider_name="openai-prod", api_key_env="OPENAI_API_KEY", api_key_encrypted=None
+        )
+        == "original"
+    )
+
+
+@pytest.mark.unit
+def test_snapshot_invalid_provider_file_remains_unavailable(tmp_path) -> None:
+    missing = tmp_path / "missing.txt"
+    resolver, _ = snapshot_secret_sources(
+        {"OPENAI_API_KEY_FILE": str(missing)},
+        global_names={"LQ_AI_GATEWAY_KEY"},
+        provider_names={"OPENAI_API_KEY"},
+    )
+    with pytest.raises(SecretFileError):
+        resolver.resolve(
+            provider_name="openai-prod", api_key_env="OPENAI_API_KEY", api_key_encrypted=None
+        )
+    assert (
+        resolver.resolve(provider_name="local-keyless", api_key_env=None, api_key_encrypted=None)
+        == ""
+    )
+
+
+@pytest.mark.unit
+def test_snapshot_global_key_is_bound_once(tmp_path) -> None:
+    secret_file = tmp_path / "gateway-key.txt"
+    secret_file.write_text("first", encoding="utf-8")
+    _, global_keys = snapshot_secret_sources(
+        {"LQ_AI_GATEWAY_KEY_FILE": str(secret_file)},
+        global_names={"LQ_AI_GATEWAY_KEY"},
+        provider_names=set(),
+    )
+    secret_file.unlink()
+    assert global_keys["LQ_AI_GATEWAY_KEY"] == "first"
 
 
 @pytest.mark.unit
@@ -172,6 +249,30 @@ def test_gateway_key_file_resolves_for_dependencies(tmp_path, monkeypatch) -> No
         {"gateway_auth": {"enabled": True, "api_key_env": "LQ_AI_GATEWAY_KEY"}}
     )
     assert _resolve_required_key(config) == "dep-file-key"
+
+
+@pytest.mark.unit
+def test_gateway_key_dependency_uses_startup_value_after_file_change(tmp_path) -> None:
+    from app.api.dependencies import _resolve_required_key
+    from app.config import GatewayConfig
+
+    secret_file = tmp_path / "gateway-key.txt"
+    secret_file.write_text("initial-key", encoding="utf-8")
+    _, global_keys = snapshot_secret_sources(
+        {"LQ_AI_GATEWAY_KEY_FILE": str(secret_file)},
+        global_names={"LQ_AI_GATEWAY_KEY"},
+        provider_names=set(),
+    )
+    secret_file.write_text("rotated-key", encoding="utf-8")
+    config = GatewayConfig.model_validate({"gateway_auth": {"enabled": True}})
+    assert (
+        _resolve_required_key(
+            config,
+            bound_name="LQ_AI_GATEWAY_KEY",
+            bound_key=global_keys["LQ_AI_GATEWAY_KEY"],
+        )
+        == "initial-key"
+    )
 
 
 @pytest.mark.unit

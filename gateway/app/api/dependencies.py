@@ -33,14 +33,18 @@ GATEWAY_KEY_HEADER = "X-LQ-AI-Gateway-Key"
 """Shared-secret header that the backend sends on every gateway call."""
 
 
-def _resolve_required_key(config: GatewayConfig) -> str | None:
+def _resolve_required_key(
+    config: GatewayConfig,
+    *,
+    bound_name: str | None = None,
+    bound_key: str | None = None,
+) -> str | None:
     """Return the expected shared-secret value, or None if disabled.
 
-    Pulls the env-var name from ``gateway_auth.api_key_env`` (default
-    ``LQ_AI_GATEWAY_KEY``) and reads the value via
-    :func:`app.secrets.resolve_secret`, so ``NAME_FILE`` delivery works.
-    A conflicting or unreadable file source raises (fail closed) rather
-    than silently disabling auth. Returns None when
+    Uses the startup-bound value for ``gateway_auth.api_key_env`` (default
+    ``LQ_AI_GATEWAY_KEY``). Direct helper calls outside lifespan resolve
+    from the environment. A conflicting or unreadable file source raises.
+    Returns None when
     ``gateway_auth.enabled`` is False (auth disabled — typical only for
     local dev with the env var unset) or when the secret resolves empty.
 
@@ -52,7 +56,13 @@ def _resolve_required_key(config: GatewayConfig) -> str | None:
     if not config.gateway_auth.enabled:
         return None
     env_name = config.gateway_auth.api_key_env or "LQ_AI_GATEWAY_KEY"
-    expected = resolve_secret(env_name)
+    if bound_name is not None:
+        if env_name != bound_name:
+            raise RuntimeError("gateway authentication source changed; restart required")
+        expected = bound_key
+    else:
+        # Tests that bypass lifespan retain the direct helper's old shape.
+        expected = resolve_secret(env_name)
     if not expected:
         return None
     return expected
@@ -63,8 +73,9 @@ def make_require_gateway_key() -> Callable[..., Awaitable[None]]:
 
     Returns a callable suitable for ``Depends(...)``. Reads the live
     config snapshot off the request's app state on every call so that
-    if an operator changes the gateway-auth settings via the admin
-    surface, future calls immediately pick up the new policy.
+    if an operator changes the gateway-auth enabled setting, future calls
+    immediately pick up the new policy. Changing the source name requires
+    a restart.
 
     Behavior:
 
@@ -83,7 +94,11 @@ def make_require_gateway_key() -> Callable[..., Awaitable[None]]:
             config: GatewayConfig = holder.current()
         else:
             config = request.app.state.config
-        expected = _resolve_required_key(config)
+        expected = _resolve_required_key(
+            config,
+            bound_name=getattr(request.app.state, "gateway_auth_name", None),
+            bound_key=getattr(request.app.state, "gateway_auth_key", None),
+        )
         if expected is None:
             return
         if x_lq_ai_gateway_key is None or not hmac.compare_digest(x_lq_ai_gateway_key, expected):
