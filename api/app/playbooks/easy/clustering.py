@@ -229,16 +229,18 @@ async def cluster_clauses_by_issue(
        of Confidentiality Obligation"; "Governing Law" / "Forum and
        Jurisdiction") that the exact-match step misses. The label
        string itself is NOT the signal — clause-text centroids are.
-    4. **Low-support fold pass (DE-308)**: if ``min_document_support``
-       is > 1 and embeddings are available, groups supported by fewer
-       than ``min_document_support`` distinct documents are folded
-       into the nearest supported cluster (by clause-centroid cosine)
+    4. **Low-support fold pass (DE-308)**: if label merging is enabled,
+       ``min_document_support`` is > 1 and embeddings are available,
+       groups supported by fewer than ``min_document_support`` distinct
+       documents are folded into the nearest supported cluster (by clause-centroid cosine)
        when the similarity is at or above ``singleton_fold_floor``.
        Below the floor the group stays a standalone position
        (fail-closed — an outlier must not pollute a cluster).
-    5. Within each (possibly merged) group, compute the medoid
+    5. Within each group before folding, compute the medoid
        (clause whose embedding minimizes total cosine distance to the
-       others) — that's the modal_clause.
+       others) — that's the modal_clause. Folded clauses participate
+       in fallback ranking while the group's standard and label are
+       preserved.
     6. Rank the non-modal members by cosine distance from the modal
        (largest first) and take the top ``max_fallback_neighbors``
        distinct-text clauses as neighbor_clauses.
@@ -264,7 +266,7 @@ async def cluster_clauses_by_issue(
         max_fallback_neighbors: how many neighbor clauses per
             cluster. Two matches the M3-A6 design.
         label_merge_threshold: cosine-similarity threshold for the
-            label-merge pass. ``None`` disables the pass entirely
+            label-merge pass. ``None`` disables merging and folding
             (exact-match grouping only — the original M3-A6 behavior).
             Default ``0.85`` was tuned against the synthetic NDA corpus.
         min_document_support: minimum distinct-document support a
@@ -325,7 +327,13 @@ async def cluster_clauses_by_issue(
     # typically single-document orphans whose unaveraged centroid
     # narrowly missed the merge bar. Skipped when embeddings failed
     # (no centroid signal → fail-closed, groups stand as-is).
-    if min_document_support > 1 and len(groups) >= 2 and embeddings is not None:
+    standard_groups = groups
+    if (
+        label_merge_threshold is not None
+        and min_document_support > 1
+        and len(groups) >= 2
+        and embeddings is not None
+    ):
         groups = _fold_low_support_groups(
             groups=groups,
             embeddings=embeddings,
@@ -337,7 +345,8 @@ async def cluster_clauses_by_issue(
     clusters: list[Cluster] = []
 
     for canonical_label, group_clauses in groups.items():
-        display_label = _pick_display_label(group_clauses, canonical=canonical_label)
+        standard_clauses = standard_groups[canonical_label]
+        display_label = _pick_display_label(standard_clauses, canonical=canonical_label)
 
         # Single-member cluster: nothing to compute.
         if len(group_clauses) == 1:
@@ -355,7 +364,9 @@ async def cluster_clauses_by_issue(
 
         if embeddings is not None:
             group_vectors = [embeddings[i] for i in group_indices]
-            modal_pos = _medoid_index(group_vectors)
+            # Folded members are appended after the original group. They can
+            # supply fallbacks without influencing selection of its standard.
+            modal_pos = _medoid_index(group_vectors[: len(standard_clauses)])
             distances_from_modal = [
                 _cosine_distance(group_vectors[modal_pos], v) if i != modal_pos else float("-inf")
                 for i, v in enumerate(group_vectors)
@@ -594,18 +605,6 @@ def _fold_low_support_groups(
         if best_label is not None and best_similarity >= similarity_floor:
             out[best_label].extend(candidate_clauses)
             folded_count += 1
-            logger.info(
-                "easy_cluster: folded low-support group %r into %r (similarity %.3f)",
-                label,
-                best_label,
-                best_similarity,
-                extra={
-                    "event": "easy_cluster_singleton_folded",
-                    "folded_label": label,
-                    "target_label": best_label,
-                    "similarity": best_similarity,
-                },
-            )
         else:
             kept[label] = candidate_clauses
 

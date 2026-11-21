@@ -10,6 +10,7 @@ quality bar.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -426,6 +427,86 @@ async def test_merged_cluster_canonical_label_is_most_populated() -> None:
 # ---------------------------------------------------------------------------
 # Low-support fold pass (DE-308)
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_fold_logs_counts_without_contract_content(caplog: pytest.LogCaptureFixture) -> None:
+    gateway = _StubEmbeddingGateway(
+        vectors=[[1.0, 0.0], [1.0, 0.0], [0.82, 0.5724]],
+    )
+    clauses = [
+        _mk("Private client remedies", "Private standard clause."),
+        _mk("Private client remedies", "Private alternative clause."),
+        _mk("Private client injunction", "Private one-document clause."),
+    ]
+    with caplog.at_level(logging.INFO, logger="app.playbooks.easy.clustering"):
+        clusters = await cluster_clauses_by_issue(
+            clauses=clauses,
+            gateway=gateway,  # type: ignore[arg-type]
+        )
+
+    assert len(clusters) == 1
+    summary = [
+        record
+        for record in caplog.records
+        if getattr(record, "event", None) == "easy_cluster_fold_summary"
+    ]
+    assert len(summary) == 1
+    assert summary[0].folded_count == 1
+    assert summary[0].group_count == 1
+    for clause in clauses:
+        assert clause.issue.lower() not in str(caplog.record_tuples).lower()
+        assert clause.clause_text not in caplog.text
+        assert all(
+            clause.issue.lower() not in str(record.__dict__).lower() for record in caplog.records
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("orphan_count", [1, 3])
+async def test_fold_preserves_supported_standard_and_label(orphan_count: int) -> None:
+    # The incoming vector is between the supported variants and would become
+    # the medoid if it could vote. Repeated spans must also leave the label intact.
+    supported = [
+        _mk("Remedies", "Supported standard clause."),
+        _mk("Remedies", "Supported alternative clause."),
+    ]
+    orphan_doc = uuid.uuid4()
+    orphans = [
+        _mk_doc(orphan_doc, "Injunctive Relief", "Single-document alternative.")
+        for _ in range(orphan_count)
+    ]
+    gateway = _StubEmbeddingGateway(
+        vectors=[[0.36, -0.93], [0.36, 0.93]] + [[0.82, 0.5724]] * orphan_count,
+    )
+    clusters = await cluster_clauses_by_issue(
+        clauses=supported + orphans,
+        gateway=gateway,  # type: ignore[arg-type]
+    )
+
+    assert len(clusters) == 1
+    assert clusters[0].issue_label == "Remedies"
+    assert clusters[0].modal_clause is supported[0]
+    assert clusters[0].member_clauses == supported + orphans
+    assert orphans[0] in clusters[0].neighbor_clauses
+
+
+@pytest.mark.unit
+async def test_exact_match_mode_disables_low_support_fold() -> None:
+    gateway = _StubEmbeddingGateway(
+        vectors=[[1.0, 0.0], [1.0, 0.0], [0.82, 0.5724]],
+    )
+    supported = [_mk("Remedies", "Supported standard."), _mk("Remedies", "Supported variant.")]
+    orphan = _mk("Injunctive Relief", "Single-document alternative.")
+    clusters = await cluster_clauses_by_issue(
+        clauses=[*supported, orphan],
+        gateway=gateway,  # type: ignore[arg-type]
+        label_merge_threshold=None,
+    )
+
+    assert len(clusters) == 2
+    assert clusters[0].member_clauses == supported
+    assert clusters[1].member_clauses == [orphan]
 
 
 @pytest.mark.unit

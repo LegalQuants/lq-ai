@@ -509,7 +509,11 @@ pending.** Two fixes shipped:
   into their nearest supported cluster when the clause-centroid cosine
   similarity clears a floor (`0.80` default) — the folded clause
   becomes a fallback-tier candidate instead of a standalone singleton
-  position. Below the floor the group stays standalone (fail-closed:
+  position. The supported group's label and modal standard are selected
+  from its members before folding. Setting `label_merge_threshold=None`
+  disables both merging and folding for exact-label grouping. Fold
+  diagnostics record aggregate counts. Below the floor the group stays
+  standalone (fail-closed:
   a genuinely distinct outlier keeps its own visible position rather
   than being buried inside another cluster).
 - The **missed "Standard of Care" axis** traced to the extractor
