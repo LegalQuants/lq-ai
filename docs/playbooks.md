@@ -164,6 +164,23 @@ per-execution model selection today; the docstring flags inheriting it
 from `project.minimum_inference_tier` or playbook-level config as a
 future enhancement.
 
+## Easy Playbook model configuration and failed generations
+
+For local Qwen thinking models, set
+`LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` and recreate the API and
+ARQ worker. This uses the gateway's existing reasoning control for both
+extraction and description calls. Leave it empty for provider defaults;
+provider support for individual reasoning settings varies. Extraction has
+an 8,192-token answer budget. Hidden reasoning is never treated as clause
+JSON.
+
+A missing or token-truncated extraction answer ends the generation with
+`status='error'`. A corpus with no usable clauses, or an assembled draft
+with zero positions, also fails. The wizard shows the generation's error
+message and retry action. A successfully parsed response containing no
+clauses can still be appropriate for one non-contract document; a corpus
+containing only such documents cannot produce a successful playbook.
+
 ## Persisted row shape (executor)
 
 The executor writes to `playbook_executions.results` (JSONB). The
@@ -316,8 +333,10 @@ job `easy_playbook_generation_job` on queue `arq:m3a6`):
 
 The worker writes the assembled `PlaybookCreate.model_dump(mode="json")`
 into `easy_playbook_generations.draft_playbook` and flips the row to
-`completed`. Critically: **worker "success" means the pipeline produced
-a structurally valid draft — not that the playbook is correct,
+`completed` only when the draft contains positions. Missing/truncated
+extraction answers or an empty corpus/draft terminate with `error`.
+Critically: **worker "success" means the pipeline produced
+a non-empty, structurally valid draft — not that the playbook is correct,
 complete, or fit for use.** The wizard's Step 3 inline editor is where
 the user-attorney validates and edits before saving.
 

@@ -37,6 +37,7 @@ from collections import Counter
 from typing import Any, Final
 
 from app.clients.gateway import GatewayClient
+from app.config import get_settings
 from app.playbooks.easy.clustering import Cluster
 from app.playbooks.easy.extractor import DEFAULT_JUDGE_MODEL
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
@@ -426,6 +427,7 @@ async def _dispatch_structured_call(
             ChatCompletionMessage(role="user", content=user_content),
         ],
         max_tokens=max_tokens,
+        reasoning_effort=get_settings().lq_ai_easy_playbook_reasoning_effort or None,
         anonymize=False,
         lq_ai_purpose=purpose,
     )

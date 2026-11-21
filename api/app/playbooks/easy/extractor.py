@@ -35,10 +35,16 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.clients.gateway import GatewayClient
+from app.config import get_settings
+from app.errors import GatewayInvalidResponse
 from app.models.document import Document
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
+
+
+class ExtractionResponseError(GatewayInvalidResponse):
+    """A missing or truncated answer cannot be accepted as corpus evidence."""
 
 
 # ---------------------------------------------------------------------------
@@ -164,9 +170,9 @@ DEFAULT_CHARACTER_BUDGET = 50_000
 # Prevents clauses that straddle a span boundary from being missed.
 SPAN_OVERLAP_CHARACTERS = 1_500
 
-# Max output tokens. 20 clauses at ~120 tokens each = 2400; 3500 keeps
-# headroom for verbose clauses without letting the model meander.
-EASY_EXTRACT_MAX_TOKENS = 3500
+# Verbatim quotes from a short contract plus JSON labels/offsets can exceed
+# 3500 tokens. Reasoning is controlled separately, never parsed as the answer.
+EASY_EXTRACT_MAX_TOKENS = 8192
 
 # Default judge-model alias. Matches the M3-A2 executor's default;
 # the alias resolves to the deployment-configured "smart" model
@@ -199,7 +205,9 @@ async def extract_clauses_from_document(
     or if every LLM call returned malformed output. Failure-of-the-
     LLM is non-fatal for the corpus-level pipeline — one bad
     extraction reduces clustering signal but doesn't kill the
-    generation.
+    generation. Missing or token-truncated answers raise
+    ``ExtractionResponseError`` instead: these cannot be accepted as
+    evidence that a contract contains no negotiated positions.
 
     Args:
         document: the source document. ``normalized_content`` is
@@ -249,6 +257,8 @@ async def extract_clauses_from_document(
                 span_offset=offset,
                 contract_type=contract_type,
             )
+        except ExtractionResponseError:
+            raise
         except Exception as exc:
             logger.warning(
                 "easy_extract: span extraction failed",
@@ -346,6 +356,7 @@ async def _extract_one_span(
         model=model,
         messages=messages,
         max_tokens=EASY_EXTRACT_MAX_TOKENS,
+        reasoning_effort=get_settings().lq_ai_easy_playbook_reasoning_effort or None,
         # `temperature` is omitted: Anthropic Opus 4.x reasoning models
         # rejected the parameter as of 2026-05, and the gateway already
         # only forwards non-None values to providers. Determinism for
@@ -356,9 +367,16 @@ async def _extract_one_span(
     )
 
     response = await gateway.chat_completion(request)
+    if response.choices and getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ExtractionResponseError(
+            "Clause extraction reached the model output limit. "
+            "Configure the model's reasoning effort or use a model with sufficient output capacity."
+        )
     content = _extract_response_content(response)
     if not content:
-        return []
+        raise ExtractionResponseError(
+            "Clause extraction returned no answer content. Check the model's reasoning configuration."
+        )
 
     parsed = _parse_extracted_clauses(content)
     if span_offset > 0:
