@@ -452,8 +452,8 @@ async def test_fold_logs_counts_without_contract_content(caplog: pytest.LogCaptu
         if getattr(record, "event", None) == "easy_cluster_fold_summary"
     ]
     assert len(summary) == 1
-    assert summary[0].folded_count == 1
-    assert summary[0].group_count == 1
+    assert summary[0].__dict__["folded_count"] == 1
+    assert summary[0].__dict__["group_count"] == 1
     for clause in clauses:
         assert clause.issue.lower() not in str(caplog.record_tuples).lower()
         assert clause.clause_text not in caplog.text
