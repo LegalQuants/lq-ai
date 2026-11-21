@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,6 +71,21 @@ class DocumentWorkflowGateway(GatewayClient):
 
     async def get_citation_engine_ensemble_config(self) -> EnsembleConfig | None:
         return await self._gateway.get_citation_engine_ensemble_config()
+
+    async def embeddings(
+        self,
+        *,
+        model: str,
+        input_: str | list[str],
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        # Own no HTTP client: inherited dispatch uses uninitialized transport
+        # state. Embeddings carry source content and require the same checks.
+        await self.authorize()
+        kwargs: dict[str, Any] = {"model": model, "input_": input_}
+        if request_id is not None:
+            kwargs["request_id"] = request_id
+        return await self._gateway.embeddings(**kwargs)
 
     async def get_citation_engine_judge_model(self, *, fallback: str = "fast") -> str:
         return await self._gateway.get_citation_engine_judge_model(fallback=fallback)

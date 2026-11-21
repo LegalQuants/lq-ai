@@ -178,6 +178,12 @@ Extraction and descriptions accept bare JSON or one complete JSON code
 block with surrounding model prose. Multiple blocks and malformed JSON
 are rejected; the answer is not repaired or inferred from prose.
 
+Corpus embedding calls pass through the document workflow's authorization
+wrapper, rechecking the actor and all source matters before delegating to
+the configured gateway client. The wrapper owns no HTTP transport. This
+keeps centroid merging and folding available without bypassing access
+checks; missing or revoked access prevents dispatch.
+
 A missing or token-truncated extraction answer ends the generation with
 `status='error'`. A corpus with no usable clauses, or an assembled draft
 with zero positions, also fails. The wizard shows the generation's error
