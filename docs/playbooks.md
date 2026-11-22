@@ -166,6 +166,30 @@ future enhancement.
 
 ## Easy Playbook model configuration and failed generations
 
+Per [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md), position count
+is diagnostic: preserve coherent issues and outliers instead of forcing a
+5–10 ceiling. Both centroid merging and singleton folding require a compatible
+issue identity from a bounded synonym registry; unknown labels stay separate.
+Definitions/exclusions, permitted/compelled disclosures, recipient liability/
+remedies, agreement duration/survival, and governing law/forum remain distinct.
+
+Quotes must match contiguous source text at clause boundaries. The application
+publishes the original slice with derived offsets, deduplicates chunk overlap,
+and makes one source-based repair attempt for invalid quotes. Failed repair
+fails generation. Model guesses never become source anchors. Overlapping
+citations are allowed when a complete sentence genuinely governs two issues.
+
+Descriptions use the selected standard rather than the other corpus variants.
+A batched source-consistency check requires strict verdicts and matched evidence;
+unsupported prose becomes literal source text and neutral review instructions.
+This does not certify legal correctness. Fallback descriptions compare wording
+without claiming that the alternative is legally acceptable.
+
+`LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS` controls this task only (default
+900, range 60–7200). Record any longer local-model timeout with the walkthrough;
+it does not satisfy the default-model performance target automatically.
+
+
 For local Qwen thinking models, set
 `LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` and recreate the API and
 ARQ worker. This uses the gateway's existing reasoning control for both
@@ -297,7 +321,7 @@ job `easy_playbook_generation_job` on queue `arq:m3a6`):
    1,500-char overlap between spans for long documents) over the
    document's `normalized_content`. Emits a list of
    `{issue, clause_text, source_offsets}` entries — verbatim clause
-   text plus best-effort `[start, end)` offsets (the same half-open
+   text plus source-derived `[start, end)` offsets (the same half-open
    offset semantics as the M2 Citation Engine). The prompt is a Python
    mirror of `skills/playbook-easy-extract/SKILL.md` — the SKILL.md is
    the human-readable, forkable source of truth; the constant in the

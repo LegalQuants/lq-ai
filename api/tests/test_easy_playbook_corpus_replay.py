@@ -3,9 +3,10 @@
 Replays the five-document sample NDA corpus
 (``docs/quickstart/sample-ndas/``) through
 :func:`cluster_clauses_by_issue` and scores the result against the
-corpus README's target: **5-10 positions covering all five variant
-axes** (Term, Definition of Confidential Information, Standard of
-Care, Survival of Trade Secrets, Permitted Disclosures).
+corpus README's coverage requirement: all five variant axes (Term,
+Definition of Confidential Information, Standard of Care, Survival of
+Trade Secrets, Permitted Disclosures), preserving coherent outliers.
+The historical 5-10 count is a diagnostic, not a cap (maintainer decision).
 
 Honesty note on fixtures
 ------------------------
@@ -420,8 +421,8 @@ def _cluster_containing(clusters: list[Cluster], clause_text: str) -> Cluster:
 
 
 @pytest.mark.unit
-async def test_corpus_replay_hits_position_target_and_covers_all_five_axes() -> None:
-    """Default pipeline settings → 5-10 positions, all five README axes present."""
+async def test_corpus_replay_preserves_issues_and_covers_all_five_axes() -> None:
+    """Compatible aliases merge; all axes and ambiguous outliers remain."""
 
     gateway = _StubEmbeddingGateway(vectors=_corpus_vectors())
     clusters = await cluster_clauses_by_issue(
@@ -430,12 +431,10 @@ async def test_corpus_replay_hits_position_target_and_covers_all_five_axes() -> 
     )
 
     labels = [c.issue_label for c in clusters]
-    assert 5 <= len(clusters) <= 10, f"position count {len(clusters)} outside 5-10: {labels}"
-    # Pin the exact deterministic outcome so tuning regressions surface loudly:
-    # Term, Definition, Standard of Care, Survival, Permitted Disclosures,
-    # Governing Law, Return/Destruction, Remedies (incl. folded Injunctive
-    # Relief), and the standalone Reverse Engineering outlier.
-    assert len(clusters) == 9, f"expected 9 deterministic clusters, got {labels}"
+    # Counts are diagnostic: preserve ambiguous labels and true outliers.
+    assert sum(len(c.member_clauses) for c in clusters) == len(_CORPUS)
+    ambiguous = next(c for c in clusters if c.issue_label == "Term and Termination")
+    assert len(ambiguous.member_clauses) == 1
 
     lowered = [label.lower() for label in labels]
     for axis_name, predicate in _AXIS_LABEL_PREDICATES.items():
@@ -484,11 +483,10 @@ async def test_corpus_replay_regression_without_de308_passes_oversegments() -> N
     """Documents the pre-fix failure mode the DE-308 passes eliminate.
 
     * Exact-label grouping alone (no centroid merge, no fold): every
-      drift label becomes its own position — 15 clusters, blowing the
-      10-position ceiling.
+      drift label becomes its own position — 15 clusters, retaining every exact label.
     * Centroid merge without the fold pass: drift labels collapse but
       the near-miss "Injunctive Relief" singleton (0.80-0.85 gap)
-      still stands — 10 clusters, at the very edge of the target.
+      still stands — 11 clusters; count is a diagnostic, not a coverage cap.
     """
 
     gateway = _StubEmbeddingGateway(vectors=_corpus_vectors())
@@ -505,5 +503,5 @@ async def test_corpus_replay_regression_without_de308_passes_oversegments() -> N
         gateway=gateway,  # type: ignore[arg-type]
         min_document_support=1,
     )
-    assert len(merge_without_fold) == 10
+    assert len(merge_without_fold) == 11
     assert any(c.issue_label == "Injunctive Relief" for c in merge_without_fold)

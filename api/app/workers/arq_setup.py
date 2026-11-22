@@ -293,6 +293,13 @@ def _populate_class_attrs() -> None:
     with contextlib.suppress(ImportError):  # pragma: no cover - arq missing in some envs
         from arq import func
 
+        WorkerSettings.functions = [
+            func(handler, timeout=get_settings().lq_ai_easy_playbook_job_timeout_seconds)
+            if handler is easy_playbook_generation_job
+            else handler
+            for handler in WorkerSettings.functions
+        ]
+
         # Keep the handler registered to reject stale queued jobs safely when
         # disabled; only an enabled deployment schedules new jobs or sweeps.
         # No retained result may suppress a later wakeup of the same session.

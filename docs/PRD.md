@@ -830,6 +830,15 @@ class Position(BaseModel):
 - Commercial MSA Playbook (purchase-side)
 
 *Easy Playbook (auto-generation).* Wizard:
+
+The maintainer's 2026-11-22 coverage decision preserves coherent issues and
+outliers; the sample corpus's 5–10 count is diagnostic rather than a hard cap.
+Issue identities constrain similarity merges/folds. Source quotations and
+offsets must be anchored to actual contiguous text; failed one-shot quotation
+repair ends generation. Descriptions are grounded in the selected standard,
+with a separate consistency check and extractive fallback. These checks do
+not replace attorney review. See [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md).
+
 1. Upload 5–20 prior agreements of the same contract type.
 2. System extracts clauses, clusters by issue, identifies the user's most-common positions.
 3. System drafts a Playbook with suggested standard language and fallback tiers.
@@ -4719,13 +4728,21 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **Specific scope:**
 - Investigate `api/app/playbooks/easy/clustering.py`: why near-synonym positions aren't merged (license family, jurisdiction family, CI-definition family), and why "Standard of Care" didn't cluster into its own position despite varying across all five documents.
-- Tune toward the README's "~5–10 positions, each of the 5 designed axes present" target.
+- Preserve coherent issues and all five axes. The historical ~5–10 count is diagnostic, not a cap (maintainer decision, 2026-11-22).
 - Consider a post-clustering merge/dedup pass and a minimum-document-support threshold for singleton positions.
 - The reviewing-attorney walk-through should weigh whether the over-segmentation or the missed axis affects the legal usefulness of generated playbooks.
 
 **When to ship:** Post-M3; clustering quality is iterative and benefits from real-corpus signal, but the missed-axis behavior is worth an early look.
 
 **Status (2026-07-25): mitigations landed; live-corpus re-verification pending.** Two code-level fixes shipped: (a) a minimum-document-support fold pass in `clustering.py` (`DEFAULT_MIN_DOCUMENT_SUPPORT = 2`, `DEFAULT_SINGLETON_FOLD_FLOOR = 0.80`) — after the centroid label-merge, groups backed by a single document fold into their nearest supported cluster when the clause-centroid cosine clears the floor, and stay standalone below it (fail-closed, so genuinely distinct outliers keep their own position); (b) the missed-axis diagnosis traced to the extractor prompt — the sample NDAs embed the standard of care inside the "Obligations of Receiving Party" section with no dedicated heading, and the prompt's issue vocabulary never named the axis, so it was collapsed into a section-sized obligations entry. The prompt (`extractor.py` + `skills/playbook-easy-extract/SKILL.md`, v1.1.0) now names `"Standard of Care"` and instructs one-entry-per-issue splitting for bundled sections. Validated by deterministic unit tests plus a fixture-based corpus-replay test (`api/tests/test_easy_playbook_corpus_replay.py`) asserting 5–10 positions with all five axes — against synthetic embeddings, not a live run. Remaining: a live wizard re-run over the sample corpus and the reviewing-attorney walk-through.
+
+**2026-11-22 implementation update (attestation pending).** The live local-model
+run exposed cross-concept merging/folding and unsupported excerpts/descriptions.
+ADR 0046 records bounded issue-identity guards, source-derived quotations and
+offsets with one repair attempt, selected-standard descriptions, and a source
+consistency check with extractive fallback. Coverage preserves genuine issues
+and outliers rather than enforcing the former count ceiling. A new full live
+walkthrough is required; fixture results are not live acceptance evidence.
 
 #### DE-309 — Tabular cells: real Citation-Engine-backed provenance (M3-E1 finding F6 follow-on)
 

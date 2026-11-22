@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     lq_ai_easy_playbook_reasoning_effort: Literal[
         "", "none", "minimal", "low", "medium", "high"
     ] = ""
+    lq_ai_easy_playbook_job_timeout_seconds: int = Field(default=900, ge=60, le=7200)
 
     # ----- Postgres -----
     # SQLAlchemy async URL form, e.g. postgresql+asyncpg://user:pass@host:5432/db.

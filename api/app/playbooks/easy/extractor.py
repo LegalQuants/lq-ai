@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,7 +39,9 @@ from app.clients.gateway import GatewayClient
 from app.config import get_settings
 from app.errors import GatewayInvalidResponse
 from app.models.document import Document
+from app.playbooks.easy.issue_identity import issue_identity
 from app.playbooks.easy.json_output import unwrap_json_answer
+from app.playbooks.easy.source_anchor import anchor_quote, repair_context
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -77,9 +80,8 @@ class ExtractedClause(BaseModel):
     Clause text is verbatim — the clustering step embeds these
     strings for variant detection.
 
-    Source offsets are best-effort. If the model could not identify
-    exact offsets, the field is ``None`` and the UI's "open in
-    document" affordance is omitted for that clause.
+    Extraction derives exact offsets from a verified source slice. The
+    field stays nullable for callers constructing intermediate candidates.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -109,17 +111,31 @@ Identify every clause that:
    standard severability / notice / integration clauses UNLESS the
    contract takes an unusual position on them.
 3. Is contained in identifiable, contiguous text. Don't emit
-   overlapping or fragmentary spans.
+   fragmentary spans.
 
 A single section often bundles positions on MORE than one issue —
 e.g., an "Obligations of Receiving Party" section that both fixes
 the standard of care and restricts use and disclosure. Emit one
 entry per issue, each quoting only the sentence(s) or list item(s)
 that carry that position; do not collapse distinct positions into
-one section-sized entry, and do not let the emitted spans overlap.
+one section-sized entry. Prefer disjoint sentences or list items. If one
+complete sentence genuinely governs multiple issues, it may be quoted for
+each issue to preserve context; do not reconstruct fragments.
 The standard of care is a recurring negotiated position in
 confidentiality agreements — extract it as its own "Standard of
 Care" entry even when it has no dedicated heading.
+
+Keep definitions separate from exclusions; permitted disclosures separate from
+compelled disclosures; recipient liability separate from remedies; agreement
+duration separate from confidentiality survival; and governing law separate
+from forum/venue. Use specific survival labels for trade secrets and general
+confidential information when the source supports separate entries. Preserve
+other genuine issues; do not target a fixed number of entries.
+
+Quote contiguous source text only. Never join a list header to a non-adjacent
+item, stitch items (a) and (c), or insert connecting words. Include enough
+adjacent context to preserve the actor, conditions, and negation. If offsets
+are uncertain, use null; the application validates quotes and derives offsets.
 
 For each identified clause, emit one entry with:
 
@@ -274,6 +290,15 @@ async def extract_clauses_from_document(
             continue
         merged.extend(clauses)
 
+    # Overlapping input spans must not give the same source clause extra votes.
+    merged = list(
+        {
+            (issue_identity(c.issue), c.source_offsets.start, c.source_offsets.end): c
+            for c in merged
+            if c.source_offsets is not None
+        }.values()
+    )
+
     logger.info(
         "easy_extract: extraction complete",
         extra={
@@ -367,6 +392,90 @@ async def _extract_one_span(
         lq_ai_purpose="playbook_easy_extract",
     )
 
+    parsed = await _dispatch_extraction(gateway, request)
+    anchored, rejected = _anchor_extracted_clauses(parsed, span_text)
+    if rejected:
+        logger.warning(
+            "easy_extract: repairing unmatched source quotations",
+            extra={"event": "easy_extract_source_repair", "unanchored_count": len(rejected)},
+        )
+        repair_request = request.model_copy(
+            update={
+                "lq_ai_purpose": "playbook_easy_extract_repair",
+                "messages": [
+                    *messages,
+                    ChatCompletionMessage(
+                        role="user",
+                        content=(
+                            "Re-extract ONLY the issues listed below from DOCUMENT TEXT. The previous "
+                            "quotes did not match a contiguous source slice. Copy one contiguous sentence "
+                            "or list item for each issue. Do not join a header to a non-adjacent item or "
+                            "stitch items (a) and (c). Do not add connecting words. Set source_offsets to null; "
+                            "the application locates the quote. Return the same extracted_clauses JSON shape.\n"
+                            "When a source_context is supplied, copy its COMPLETE sentence, including "
+                            "all conditions and both survival alternatives. Do not split at a comma. "
+                            "The same full sentence may be quoted for two distinct issues.\n"
+                            + json.dumps(
+                                [
+                                    {
+                                        "issue": c.issue,
+                                        "rejected_quote": c.clause_text,
+                                        "source_context": repair_context(span_text, c.clause_text),
+                                    }
+                                    for c in rejected
+                                ]
+                            )
+                        ),
+                    ),
+                ],
+            }
+        )
+        try:
+            repaired = await _dispatch_extraction(gateway, repair_request)
+        except ExtractionResponseError:
+            raise
+        except Exception as exc:
+            raise ExtractionResponseError(
+                "Source quotation repair failed; retry generation."
+            ) from exc
+        repaired, still_rejected = _anchor_extracted_clauses(repaired, span_text)
+        if still_rejected or Counter(issue_identity(c.issue) for c in repaired) != Counter(
+            issue_identity(c.issue) for c in rejected
+        ):
+            raise ExtractionResponseError(
+                "Clause extraction could not produce contiguous source quotations after repair. "
+                "Review the source documents or retry with a different model."
+            )
+        anchored.extend(repaired)
+    return [_rebase_offsets(c, delta=span_offset) for c in anchored]
+
+
+def _anchor_extracted_clauses(
+    clauses: list[ExtractedClause], source: str
+) -> tuple[list[ExtractedClause], list[ExtractedClause]]:
+    anchored: list[ExtractedClause] = []
+    rejected: list[ExtractedClause] = []
+    for clause in clauses:
+        match = anchor_quote(source, clause.clause_text)
+        if match is None:
+            rejected.append(clause)
+        else:
+            anchored.append(
+                clause.model_copy(
+                    update={
+                        "clause_text": match.text,
+                        "source_offsets": ExtractedClauseSourceOffsets(
+                            start=match.start, end=match.end
+                        ),
+                    }
+                )
+            )
+    return anchored, rejected
+
+
+async def _dispatch_extraction(
+    gateway: GatewayClient, request: ChatCompletionRequest
+) -> list[ExtractedClause]:
     response = await gateway.chat_completion(request)
     if response.choices and getattr(response.choices[0], "finish_reason", None) == "length":
         raise ExtractionResponseError(
@@ -379,10 +488,7 @@ async def _extract_one_span(
             "Clause extraction returned no answer content. Check the model's reasoning configuration."
         )
 
-    parsed = _parse_extracted_clauses(content)
-    if span_offset > 0:
-        parsed = [_rebase_offsets(clause, delta=span_offset) for clause in parsed]
-    return parsed
+    return _parse_extracted_clauses(content)
 
 
 def _extract_response_content(response: Any) -> str | None:

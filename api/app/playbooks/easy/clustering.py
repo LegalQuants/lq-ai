@@ -62,6 +62,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.clients.gateway import GatewayClient
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vectors
 from app.playbooks.easy.extractor import ExtractedClauseSourceOffsets
+from app.playbooks.easy.issue_identity import compatible_issues
 
 logger = logging.getLogger(__name__)
 
@@ -76,43 +77,13 @@ some legitimately-variant positions without a fallback tier."""
 
 
 DEFAULT_LABEL_MERGE_THRESHOLD: Final[float] = 0.85
-"""Default cosine-similarity threshold for merging semantically-similar
-issue label groups into a single cluster (post-smoke iteration,
-2026-05-21).
+"""Centroid merge threshold WITHIN a compatible issue identity.
 
-The original M3-A6 design grouped by normalized-label exact match
-(whitespace + case insensitive), which left semantically-identical
-positions split across multiple clusters when the extractor produced
-label drift — e.g., "Term" vs "Term of Agreement" vs "Term of
-Confidentiality Obligation" on the synthetic NDA corpus produced
-three orphan clusters instead of one merged cluster with three
-fallback variants. The first fix attempt embedded the labels and
-unioned label-embedding pairs above threshold — but the synthetic-
-NDA smoke showed that **label-only similarity is the wrong signal**:
-
-* "term of agreement" / "term of confidentiality obligation" → 0.584
-* "governing law" / "forum and jurisdiction" → 0.492 (same concept!)
-* "definition of confidential info" / "exclusions from confidential info" → 0.731 (distinct concepts, shared words)
-
-No single label-similarity threshold separates "want merge" from
-"want keep". The signal that actually works is **the centroid of
-each group's clause-text embeddings**: groups whose member clauses
-talk about the same legal concept have centroid pairs in the
-0.85-0.95 range, while distinct concepts sit in 0.65-0.78. The
-clause text is already being embedded for medoid selection so this
-piggybacks on the existing batched call with no extra round-trip.
-
-0.85 was selected against the synthetic NDA corpus as the threshold
-that merges "Term"-variant groups and "Governing Law"/"Forum and
-Jurisdiction" while keeping "Definition" vs "Exclusions"-from-
-Confidential-Information separate. Operators can override per-call
-by passing a different ``label_merge_threshold`` (stricter = fewer
-merges).
-
-Pass ``label_merge_threshold=None`` to disable label-merging entirely
-(reverts to exact-match grouping). Useful when the wizard caller
-already knows the labels are clean or for unit tests that pin only
-the exact-match path."""
+The live nomic run placed definitions/exclusions at 0.855 and permitted/
+compelled disclosures at 0.881. Similarity therefore cannot establish issue
+identity. Bounded synonyms in issue_identity.py constrain both merge and
+fold passes; unknown issues stay separate. None disables both passes.
+"""
 
 
 DEFAULT_MIN_DOCUMENT_SUPPORT: Final[int] = 2
@@ -137,23 +108,11 @@ chunking in the extractor) are corpus support of 1, not 2.
 
 
 DEFAULT_SINGLETON_FOLD_FLOOR: Final[float] = 0.80
-"""Minimum clause-centroid cosine similarity for folding a
-low-support group into its nearest supported cluster (DE-308).
+"""Minimum centroid similarity for a low-support, same-identity fold.
 
-Deliberately laxer than :data:`DEFAULT_LABEL_MERGE_THRESHOLD` (0.85)
-but above the distinct-concept band the merge-threshold probe
-observed (0.65-0.78 on the synthetic NDA corpus): a single-document
-group's centroid is a single unaveraged vector, so a same-concept
-orphan can land just under the 0.85 merge bar; the 0.80 floor
-captures that 0.80-0.85 gap while staying above the observed
-distinct-concept range.
-
-Fail-closed below the floor: a low-support group whose nearest
-supported cluster is not similar enough stays a standalone position
-rather than polluting a cluster. The asymmetry is intentional — a
-wrongly-standalone position is visible and deletable in the Step 3
-inline editor, while a wrongly-folded distinct position is buried
-inside another position's member list."""
+Different or unknown issue identities cannot fold merely because vectors
+are close. Remaining outliers stay visible; position count is diagnostic.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -225,10 +184,10 @@ async def cluster_clauses_by_issue(
        and union-find merge groups whose centroid pairs exceed the
        cosine-similarity threshold. The canonical label for a merged
        group is the source label whose group had the most clauses.
-       Catches semantic drift ("Term" / "Term of Agreement" / "Term
-       of Confidentiality Obligation"; "Governing Law" / "Forum and
-       Jurisdiction") that the exact-match step misses. The label
-       string itself is NOT the signal — clause-text centroids are.
+       Only compatible issue identities may merge: "Term" / "Term of
+       Agreement" may match, but agreement duration and confidentiality
+       survival remain distinct, as do governing law and forum. Unknown
+       labels are kept separate unless their normalized identity matches.
     4. **Low-support fold pass (DE-308)**: if label merging is enabled,
        ``min_document_support`` is > 1 and embeddings are available,
        groups supported by fewer than ``min_document_support`` distinct
@@ -447,23 +406,11 @@ def _merge_groups_by_clause_centroid(
     clause_index_by_id: dict[int, int],
     similarity_threshold: float,
 ) -> dict[str, list[ClauseInput]]:
-    """Union-find merge of label groups whose clause-text centroids exceed the threshold.
+    """Merge only compatible issue identities with sufficiently close centroids.
 
-    For each label group, the centroid is the element-wise mean of its
-    member-clause embeddings. Two groups merge when the cosine similarity
-    of their centroids exceeds the threshold. The clause-text signal is
-    much stronger than the label-string signal for this task: e.g.,
-    "Governing Law" and "Forum and Jurisdiction" share no surface tokens
-    (label cosine ~0.49) but their member clauses describe the same
-    legal concept (centroid cosine in the 0.85+ range against the
-    synthetic NDA corpus).
-
-    Each connected component becomes one merged group; the canonical
-    label for a merged group is the source group's label with the most
-    clauses (ties → the lexicographically-first label, for stability).
-
-    Returns a new ``groups`` dict. Singleton components pass through
-    unchanged.
+    The bounded identity relation prevents cross-concept and transitive
+    bridges even when different concepts have identical vectors. Canonical
+    label = largest source group (lexicographically last on ties).
     """
 
     label_list = list(groups.keys())
@@ -492,6 +439,8 @@ def _merge_groups_by_clause_centroid(
 
     for i in range(n):
         for j in range(i + 1, n):
+            if not compatible_issues(label_list[i], label_list[j]):
+                continue
             similarity = 1.0 - _cosine_distance(centroids[i], centroids[j])
             if similarity > similarity_threshold:
                 union(i, j)
@@ -542,7 +491,7 @@ def _fold_low_support_groups(
 
     "Supported" = backed by at least ``min_document_support`` distinct
     documents. Each low-support candidate is compared (clause-centroid
-    cosine) against every supported group's centroid; if the best
+    cosine) against compatible supported groups' centroids; if the best
     similarity is at or above ``similarity_floor`` the candidate's
     clauses join that group (they become fallback-tier candidates via
     the normal neighbor ranking downstream). Otherwise the candidate
@@ -598,6 +547,8 @@ def _fold_low_support_groups(
         best_label: str | None = None
         best_similarity = -math.inf
         for target_label in target_labels:
+            if not compatible_issues(label, target_label):
+                continue
             similarity = 1.0 - _cosine_distance(candidate_centroid, target_centroids[target_label])
             if similarity > best_similarity:
                 best_similarity = similarity

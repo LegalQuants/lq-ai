@@ -309,7 +309,7 @@ async def test_similar_clause_centroids_merge_into_one_cluster() -> None:
     clauses = [
         _mk("Term", "Three years."),
         _mk("Term of Agreement", "Five years."),
-        _mk("Term of Confidentiality Obligation", "Two years."),
+        _mk("Agreement Duration", "Two years."),
     ]
     clusters = await cluster_clauses_by_issue(
         clauses=clauses,
@@ -413,7 +413,7 @@ async def test_merged_cluster_canonical_label_is_most_populated() -> None:
         _mk("Term", "Three years."),
         _mk("Term", "Five years."),
         _mk("Term of Agreement", "Two years."),
-        _mk("Term of Confidentiality", "One year."),
+        _mk("Agreement Duration", "One year."),
     ]
     clusters = await cluster_clauses_by_issue(
         clauses=clauses,
@@ -435,9 +435,9 @@ async def test_fold_logs_counts_without_contract_content(caplog: pytest.LogCaptu
         vectors=[[1.0, 0.0], [1.0, 0.0], [0.82, 0.5724]],
     )
     clauses = [
-        _mk("Private client remedies", "Private standard clause."),
-        _mk("Private client remedies", "Private alternative clause."),
-        _mk("Private client injunction", "Private one-document clause."),
+        _mk("Remedies", "Private standard clause."),
+        _mk("Remedies", "Private alternative clause."),
+        _mk("Injunctive Relief", "Private one-document clause."),
     ]
     with caplog.at_level(logging.INFO, logger="app.playbooks.easy.clustering"):
         clusters = await cluster_clauses_by_issue(

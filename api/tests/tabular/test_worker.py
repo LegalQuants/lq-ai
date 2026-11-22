@@ -72,4 +72,12 @@ def test_worker_still_registers_easy_playbook_job() -> None:
 
     from app.workers.easy_playbook_worker import easy_playbook_generation_job
 
-    assert easy_playbook_generation_job in arq_setup.WorkerSettings.functions
+    registered = [
+        f
+        for f in arq_setup.WorkerSettings.functions
+        if getattr(f, "coroutine", f) is easy_playbook_generation_job
+    ]
+    assert len(registered) == 1
+    assert (
+        registered[0].timeout_s == arq_setup.get_settings().lq_ai_easy_playbook_job_timeout_seconds
+    )

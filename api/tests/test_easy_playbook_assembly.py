@@ -91,9 +91,28 @@ class _StubChatGateway:
 
     payloads: list[Any] = field(default_factory=list)
     calls_received: list[Any] = field(default_factory=list)
+    verification_payload: Any = None
 
     async def chat_completion(self, request: Any) -> _StubResponse:
         self.calls_received.append(request)
+        if request.lq_ai_purpose == "playbook_easy_assemble_verify":
+            payload = self.verification_payload
+            if payload is None:
+                items = json.loads(request.messages[1].content)["items"]
+                payload = {
+                    "checks": [
+                        {
+                            "id": item["id"],
+                            "description_supported": True,
+                            "redline_supported": True,
+                            "source_quotes": item["sources"],
+                        }
+                        for item in items
+                    ]
+                }
+            return _StubResponse(
+                choices=[_StubChoice(message=_StubMessage(content=json.dumps(payload)))]
+            )
         if not self.payloads:
             return _StubResponse(choices=[_StubChoice(message=_StubMessage(content=""))])
         payload = self.payloads.pop(0)
@@ -285,7 +304,7 @@ async def test_one_cluster_with_two_neighbors_produces_one_position_with_two_tie
     assert position.detection_keywords[1] == "liability"
 
     # LLM was called 3 times (1 describe + 2 tier).
-    assert len(gateway.calls_received) == 3
+    assert len(gateway.calls_received) == 4
 
 
 # ---------------------------------------------------------------------------
@@ -346,8 +365,8 @@ async def test_describe_position_llm_failure_uses_defensive_defaults() -> None:
         gateway=gateway,  # type: ignore[arg-type]
     )
     position = playbook.positions[0]
-    assert position.description == ""
-    assert position.redline_strategy == ""
+    assert position.description == "Selected standard: " + position.standard_language
+    assert position.redline_strategy == "Review deviations against the selected standard language."
     # Severity defaults to "medium" per the prompt's "bias toward medium" guidance.
     assert position.severity_if_missing == "medium"
 
@@ -384,7 +403,7 @@ async def test_describe_position_malformed_json_uses_defaults() -> None:
         gateway=gateway,  # type: ignore[arg-type]
     )
     position = playbook.positions[0]
-    assert position.description == ""
+    assert position.description == "Selected standard: " + position.standard_language
     assert position.severity_if_missing == "medium"
 
 

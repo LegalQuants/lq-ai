@@ -181,7 +181,7 @@ async def test_short_document_single_call_returns_parsed_clauses() -> None:
     assert clauses[0].clause_text == "Confidentiality term is three (3) years."
     assert clauses[0].source_offsets is not None
     assert clauses[0].source_offsets.start == 3
-    assert clauses[0].source_offsets.end == 44
+    assert clauses[0].source_offsets.end == text.index("\n")
     assert clauses[1].issue == "Governing Law"
     # One LLM call.
     assert len(gateway.calls_received) == 1
@@ -342,7 +342,9 @@ async def test_clause_without_source_offsets_is_accepted() -> None:
         gateway=gateway,  # type: ignore[arg-type]
     )
     assert len(clauses) == 1
-    assert clauses[0].source_offsets is None
+    assert clauses[0].source_offsets is not None
+    assert clauses[0].source_offsets.start == 0
+    assert clauses[0].source_offsets.end == len("Delaware law applies.")
 
 
 @pytest.mark.unit
@@ -405,7 +407,7 @@ async def test_long_document_multiple_calls_offsets_rebased() -> None:
     # our 100-char test budget.
     budget = 100
     overlap = 20
-    text = "x" * 150  # spans: (0, "x"*100) and (80, "x"*70)
+    text = "Clause A" + "." * 82 + "Clause B" + "." * 52
 
     gateway = _StubGateway(
         payloads=[
@@ -445,19 +447,19 @@ async def test_long_document_multiple_calls_offsets_rebased() -> None:
     assert clauses[0].issue == "Issue A"
     assert clauses[0].source_offsets is not None
     assert clauses[0].source_offsets.start == 0
-    assert clauses[0].source_offsets.end == 50
+    assert clauses[0].source_offsets.end == 8
     # Second clause: span 1 (offset 80), per-span (10, 40) → (90, 120).
     assert clauses[1].issue == "Issue B"
     assert clauses[1].source_offsets is not None
     assert clauses[1].source_offsets.start == 90
-    assert clauses[1].source_offsets.end == 120
+    assert clauses[1].source_offsets.end == 98
 
 
 @pytest.mark.unit
 async def test_one_failed_span_does_not_kill_other_spans() -> None:
     """A transport failure on span 0 doesn't block span 1 from contributing."""
 
-    text = "x" * 150
+    text = "." * 90 + "still got this one" + "." * 42
     gateway = _StubGateway(
         payloads=[
             ConnectionError("transient gateway timeout"),

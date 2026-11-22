@@ -3,7 +3,7 @@ name: playbook-easy-extract
 description: Use when extracting the negotiated positions from a single prior contract as input to the Easy Playbook auto-generation pipeline. Reads a contract's text, identifies the clauses that take a substantive position on a contract issue (definition of confidential information, limitation of liability, indemnification, payment terms, etc.), and emits a structured list of {issue, clause_text, source_offsets} for downstream clustering. Output is intermediate; the in-house attorney evaluates the final assembled playbook, not this stage.
 lq_ai:
   title: Playbook Easy Extract
-  version: 1.1.0
+  version: 1.2.0
   author: LegalQuants
   tags: [contracts, playbooks, extraction, internal]
   jurisdiction: regime-aware
@@ -39,9 +39,21 @@ Read the contract end-to-end before emitting any output. Identify every clause t
 
 1. **Takes a substantive position on a recurring contract issue.** Recurring issues are those that appear across most contracts of the same family: confidentiality definition, term, standard of care, limitation of liability, indemnification, payment terms, governing law, etc. A clause that imposes an obligation, defines a key term, allocates risk, or sets a threshold is "substantive."
 2. **Is recognizable as a position (not boilerplate).** Skip pure mechanical clauses (notices, severability, integration) — they don't represent a negotiated stance worth clustering. Include them only when the contract takes an unusual position on them.
-3. **Is contained in identifiable, contiguous text.** Don't emit overlapping or fragmentary spans — pick the section/sentence that captures the position.
+3. **Is contained in identifiable, contiguous text.** Don't emit fragmentary spans — pick the section/sentence that captures the position.
 
-A single section often bundles positions on **more than one issue** — e.g., an "Obligations of Receiving Party" section that both fixes the standard of care and restricts use and disclosure. Emit one entry per issue, each quoting only the sentence(s) or list item(s) that carry that position; do not collapse distinct positions into one section-sized entry, and do not let the emitted spans overlap. The standard of care is a recurring negotiated position in confidentiality agreements — extract it as its own `"Standard of Care"` entry even when it has no dedicated heading.
+A single section often bundles positions on **more than one issue** — e.g., an "Obligations of Receiving Party" section that both fixes the standard of care and restricts use and disclosure. Emit one entry per issue, each quoting only the sentence(s) or list item(s) that carry that position; do not collapse distinct positions into one section-sized entry. Prefer disjoint sentences or list items. If one complete sentence genuinely governs multiple issues, it may be quoted for each issue to preserve context; do not reconstruct fragments. The standard of care is a recurring negotiated position in confidentiality agreements — extract it as its own `"Standard of Care"` entry even when it has no dedicated heading.
+
+Keep definitions separate from exclusions; permitted disclosures separate from
+compelled disclosures; recipient liability separate from remedies; agreement
+duration separate from confidentiality survival; and governing law separate
+from forum/venue. Use specific survival labels for trade secrets and general
+confidential information when the source supports separate entries. Preserve
+other genuine issues; do not target a fixed number of entries.
+
+Quote contiguous source text only. Never join a list header to a non-adjacent
+item, stitch items (a) and (c), or insert connecting words. Include enough
+adjacent context to preserve the actor, conditions, and negation. If offsets
+are uncertain, use null; the application validates quotes and derives offsets.
 
 For each identified clause, emit one entry. The same contract typically yields 5–20 entries depending on length and complexity.
 
@@ -65,13 +77,13 @@ Do NOT invent novel labels when a common one fits — clustering depends on labe
 
 The `clause_text` field is a **verbatim quote** of the clause from the source document. Preserve the original wording, casing, and punctuation. Do not paraphrase or summarize — the clustering step embeds and compares these strings literally.
 
-If the position spans multiple sentences, include all of them. If the position appears in a numbered list, include the list header and the relevant items. Don't include unrelated surrounding text.
+If the position spans multiple adjacent sentences, include them. For a numbered list, quote a complete contiguous list item; include its header only when no unrelated item intervenes. Never reconstruct an actor or join non-adjacent text. Do not include unrelated surrounding text.
 
 ### Source offsets
 
 The `source_offsets` field is a pair `{start, end}` of 0-based character offsets into the normalized document text. The pipeline uses these to render highlights in the UI and to support the future "open in document" drilldown (Citation Engine integration).
 
-If you cannot identify exact offsets, omit the field (`null`); the downstream pipeline tolerates missing offsets but will not show the in-document highlight.
+If you cannot identify exact offsets, use `null`. The application matches the quotation against the source and derives verified offsets. An unmatched or incomplete quotation is re-extracted once; unsuccessful repair fails generation rather than publishing an unsupported excerpt.
 
 ## Output
 
