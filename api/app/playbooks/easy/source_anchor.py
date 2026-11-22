@@ -49,7 +49,8 @@ def anchor_quote(
         before = source[:source_start]
         after = source[source_end:].lstrip()
         begins_clause = not before.strip() or re.search(
-            r"""(?:[.;:]["\u201d\u2019']*|\n|\([a-zA-Z0-9]+\))\s*$""", before
+            r"""(?:[.;:]["\u201d\u2019']*\s*(?:(?:and|or)\s+)?|\n\s*|\([a-zA-Z0-9]+\)\s*)$""",
+            before,
         )
         ends_clause = (
             not after

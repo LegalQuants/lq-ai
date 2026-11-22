@@ -156,6 +156,12 @@ def test_source_anchor_uses_exact_slice_and_rejects_stitching_and_lost_negation(
     assert source[match.start : match.end] == match.text
     assert anchor_quote(source, "disclose the information.") is None
     assert anchor_quote(source, "(a) Use reasonable care; and (c) encrypt data.") is None
+    assert (
+        anchor_quote(
+            "Use only for the Purpose; and (d) not disclose data.", "(d) not disclose data."
+        )
+        is not None
+    )
     clause = ExtractedClause(
         issue="Standard of Care",
         clause_text="Use reasonable care",
