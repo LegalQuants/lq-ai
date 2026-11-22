@@ -27,6 +27,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install locked test dependencies
+        env:
+          # Match web/Dockerfile: the browser frontend does not use Node's CUDA provider.
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci
       - name: Typecheck the standalone scanner
         run: npx tsc --project tsconfig.a11y.json
