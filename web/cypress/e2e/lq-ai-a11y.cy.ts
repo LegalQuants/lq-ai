@@ -45,6 +45,7 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 		'/api/v1/auths': user,
 		'/api/v1/users/me': user,
 		'/api/v1/users/me/preferences': preferences,
+		'/api/v1/integrations/slack/account-links': [],
 		'/api/v1/admin/bootstrap-status': { default_password_active: false, logs_hint: '' },
 		'/api/v1/projects': [],
 		'/api/v1/chats': { items: [], next_cursor: null },
