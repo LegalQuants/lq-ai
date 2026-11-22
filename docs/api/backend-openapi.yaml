@@ -4242,6 +4242,138 @@ paths:
         '500':
           description: Operator has not configured `LQ_AI_BRIDGE_TOKEN` on the api
 
+  /api/v1/integrations/slack/link-requests:
+    post:
+      tags:
+      - slack-accounts
+      summary: Start Link
+      operationId: start_link_api_v1_integrations_slack_link_requests_post
+      parameters:
+      - name: authorization
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkStart'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackLinkStarted'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/integrations/slack/link-requests/preview:
+    post:
+      tags:
+      - slack-accounts
+      summary: Preview Link
+      operationId: preview_link_api_v1_integrations_slack_link_requests_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkToken'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackLinkPreview'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - OAuth2PasswordBearer: []
+  /api/v1/integrations/slack/link-requests/confirm:
+    post:
+      tags:
+      - slack-accounts
+      summary: Confirm Link
+      operationId: confirm_link_api_v1_integrations_slack_link_requests_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkToken'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackAccountResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - OAuth2PasswordBearer: []
+  /api/v1/integrations/slack/account-links:
+    get:
+      tags:
+      - slack-accounts
+      summary: List Links
+      operationId: list_links_api_v1_integrations_slack_account_links_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SlackAccountResponse'
+                type: array
+                title: Response List Links Api V1 Integrations Slack Account Links Get
+      security:
+      - OAuth2PasswordBearer: []
+  /api/v1/integrations/slack/account-links/{link_id}:
+    delete:
+      tags:
+      - slack-accounts
+      summary: Unlink
+      operationId: unlink_api_v1_integrations_slack_account_links__link_id__delete
+      security:
+      - OAuth2PasswordBearer: []
+      parameters:
+      - name: link_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Link Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
   /api/v1/integrations/teams/tenants:
     post:
       tags: [integrations-teams]
@@ -10837,6 +10969,99 @@ components:
           items: {type: string}
         enabled: {type: boolean}
         egress_tier: {type: integer, nullable: true}
+
+    SlackAccountResponse:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        team_id:
+          type: string
+          title: Team Id
+        team_name:
+          type: string
+          title: Team Name
+        slack_user_id:
+          type: string
+          title: Slack User Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - team_id
+      - team_name
+      - slack_user_id
+      - created_at
+      title: SlackAccountResponse
+    SlackLinkPreview:
+      properties:
+        team_id:
+          type: string
+          title: Team Id
+        team_name:
+          type: string
+          title: Team Name
+        slack_user_id:
+          type: string
+          title: Slack User Id
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - team_id
+      - team_name
+      - slack_user_id
+      - expires_at
+      title: SlackLinkPreview
+    SlackLinkStart:
+      properties:
+        team_id:
+          type: string
+          pattern: ^T[A-Z0-9]{1,63}$
+          title: Team Id
+        slack_user_id:
+          type: string
+          pattern: ^[UW][A-Z0-9]{1,63}$
+          title: Slack User Id
+      additionalProperties: false
+      type: object
+      required:
+      - team_id
+      - slack_user_id
+      title: SlackLinkStart
+    SlackLinkStarted:
+      properties:
+        url:
+          type: string
+          title: Url
+        expires_at:
+          type: string
+          format: date-time
+          title: Expires At
+      type: object
+      required:
+      - url
+      - expires_at
+      title: SlackLinkStarted
+    SlackLinkToken:
+      properties:
+        token:
+          type: string
+          maxLength: 43
+          minLength: 43
+          pattern: ^[A-Za-z0-9_-]+$
+          title: Token
+      additionalProperties: false
+      type: object
+      required:
+      - token
+      title: SlackLinkToken
 
 security:
   - bearerAuth: []

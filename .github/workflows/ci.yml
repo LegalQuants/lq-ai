@@ -108,6 +108,8 @@ jobs:
         # this step so a future Cypress job installs the binary normally.
         env:
           CYPRESS_INSTALL_BINARY: "0"
+          # Match web/Dockerfile for this CPU-only test job.
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci
 
       - name: svelte-check (typecheck — LQ.AI-owned code)

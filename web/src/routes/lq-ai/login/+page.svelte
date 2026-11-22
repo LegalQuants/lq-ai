@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { slackLinkDestination } from '$lib/lq-ai/auth/slack-link';
 
 	import { authApi, bootstrapApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
@@ -23,7 +24,7 @@
 			if (res.user.must_change_password) {
 				goto('/lq-ai/change-password');
 			} else {
-				goto('/lq-ai');
+				goto(slackLinkDestination());
 			}
 		} catch (e: unknown) {
 			if (e instanceof LQAIApiError) {

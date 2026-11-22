@@ -269,6 +269,11 @@ IMPLEMENTED_ROUTES: set[tuple[str, str]] = {
     ("GET", "/api/v1/word-addin/version"),
     # M3-D1 — slack-bridge persistence surface (bridge-token bearer auth)
     ("POST", "/api/v1/integrations/slack/workspaces"),
+    ("POST", "/api/v1/integrations/slack/link-requests"),
+    ("POST", "/api/v1/integrations/slack/link-requests/preview"),
+    ("POST", "/api/v1/integrations/slack/link-requests/confirm"),
+    ("GET", "/api/v1/integrations/slack/account-links"),
+    ("DELETE", "/api/v1/integrations/slack/account-links/{link_id}"),
     # M3-D3 — teams-bridge persistence surface (bridge-token bearer auth)
     ("POST", "/api/v1/integrations/teams/tenants"),
     # M3-D4 — admin intake-bridges surface

@@ -1,28 +1,25 @@
 # LQ.AI Slack Bridge (M3-D1)
 
-The Slack bridge is a small standalone service that mediates between Slack's
-OAuth / Events APIs and the LQ.AI backend. It ships with the M3 release as
-**plumbing-only**: the `/lq` slash command surface (M3-D2) is descoped to M4 /
-community contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq-slash-command--quick-skill-flow--deferred-to-m4--community-contribution).
+Account linking is documented in [the linking guide](../docs/slack-account-linking.md).
+`/lq help` now returns a private association link. `/lq ask` remains unavailable.
 
-## What it does today (v0.3.0)
+The Slack bridge mediates OAuth installation and signed commands between Slack
+and the LQ.AI backend. The current command surface is `/lq help`, which returns
+a private account-link URL. The API owns the identity mapping and auditing.
 
-- Hosts the OAuth install flow at `/slack/oauth/install` → Slack consent →
-  `/slack/oauth/callback` → workspace persistence in the LQ.AI api.
-- Verifies inbound Slack request signatures (`X-Slack-Signature` /
-  `X-Slack-Request-Timestamp`) on every webhook so M3-D2's slash-command
-  handler lands on a verified substrate.
-- Health surface: `/healthz` (liveness) + `/readyz` (readiness — checks the
-  LQ.AI api is reachable on the configured `LQ_AI_BACKEND_URL`).
+## What it does today
 
-## What it does NOT do today
+- Hosts `/slack/oauth/install` and `/slack/oauth/callback` and persists the
+  encrypted workspace installation in the API.
+- Verifies Slack signatures and timestamp freshness over raw request bodies.
+- Handles `/slack/commands` for `/lq help`, forwarding only the verified
+  workspace and user IDs through a scoped backend credential.
+- Supports explicit signed-in confirmation and unlinking in the web app.
+- Provides `/healthz` and `/readyz`.
 
-- **Slash commands** — `/lq` and `/lq ask`, per DE-288, are deferred.
-- **Inbound message handling** — the bot does not read silent channels; it
-  only acts on user-invoked commands (when those land in M3-D2 / community).
-- **Per-user identity binding** — Slack user ↔ LQ.AI user mapping is in
-  M3-D4's admin UI scope. The bridge persists the workspace record; the
-  admin UI binds Slack identities to LQ.AI accounts.
+Quick-ask inference, thread forwarding, profile lookup and Teams account-linking
+parity remain separate work. The bridge does not read silent channels. Real
+OAuth and signed HTTP linking against a live Slack workspace remain unverified.
 
 ## Configuration
 
@@ -33,6 +30,8 @@ community contribution per [PRD §9 DE-288](../docs/PRD.md#de-288--slackteams-lq
 | `SLACK_SIGNING_SECRET` | yes | Inbound webhook signature verification |
 | `LQ_AI_BACKEND_URL` | yes | Base URL of the lq-ai api (e.g. `http://api:8000`) |
 | `LQ_AI_BRIDGE_TOKEN` | yes | Shared secret the bridge sends on internal calls to the api |
+| `LQ_AI_SLACK_COMMAND_TOKEN` | for linking | Scoped API account-link issuance credential, separate from the installation token |
+| `LQ_AI_WEB_PUBLIC_URL` | API only | Public HTTPS web origin used to generate confirmation URLs |
 | `LQ_AI_BRIDGE_PUBLIC_URL` | yes | Public base URL at which the bridge's routes are reachable, **without** the `/slack` router prefix — the bridge appends `/slack/oauth/callback` itself (e.g. `https://slack-bridge.example.com`; give the bridge its own origin). `https://lqai.example.com/slack` would yield `…/slack/slack/oauth/callback`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OpenTelemetry exporter — opt-in per PRD §5.7 |
 | `OTEL_SERVICE_NAME` | no | Defaults to `lq-ai-slack-bridge` |
@@ -55,7 +54,7 @@ their own Slack App (via the [Slack App Manifest UI](https://api.slack.com/refer
 and supply the resulting OAuth credentials via the env vars above.
 
 The manifest declares only the scopes the bridge needs today:
-- `commands` — for the future M3-D2 slash-command surface.
+- `commands` — for `/lq help` account linking.
 - `chat:write` — so the bot can post replies in channels it is invited to.
 
 No `channels:read`, no `groups:read`, no `im:read` — the bot does **not** read

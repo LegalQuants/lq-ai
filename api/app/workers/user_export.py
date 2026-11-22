@@ -62,6 +62,8 @@ from app.models import (
     User,
     UserExportJob,
 )
+from app.models.slack_account import SlackAccountLink
+from app.models.slack_workspace import SlackWorkspace
 from app.storage import delete_object, stream_download, upload_bytes
 
 log = logging.getLogger(__name__)
@@ -405,6 +407,29 @@ async def _build_zip(session: AsyncSession, user: User) -> bytes:
             ),
         )
         zf.writestr("user.json", json.dumps(_serialize_user(user), indent=2))
+
+        slack_links = await session.execute(
+            select(SlackAccountLink, SlackWorkspace)
+            .join(SlackWorkspace, SlackWorkspace.id == SlackAccountLink.workspace_id)
+            .where(SlackAccountLink.user_id == user.id)
+            .order_by(SlackAccountLink.id)
+        )
+        zf.writestr(
+            "slack_accounts.json",
+            json.dumps(
+                [
+                    {
+                        "id": str(link.id),
+                        "team_id": workspace.team_id,
+                        "team_name": workspace.team_name,
+                        "slack_user_id": link.slack_user_id,
+                        "created_at": link.created_at.isoformat(),
+                    }
+                    for link, workspace in slack_links
+                ],
+                indent=2,
+            ),
+        )
 
         # Chats + messages (messages indirected via chat_id).
         chats = (

@@ -58,6 +58,10 @@ class Settings(BaseSettings):
             "LQ_AI_BRIDGE_TOKEN env var at every bridge-facing endpoint."
         ),
     )
+    lq_ai_slack_command_token: str = Field(
+        default="",
+        description="Scoped backend account-link credential. Empty disables linking commands.",
+    )
     lq_ai_bridge_public_url: str = Field(
         ...,
         description=(

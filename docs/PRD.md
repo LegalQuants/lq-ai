@@ -1180,6 +1180,19 @@ Persistent matter memory is the single most-cited capability across in-house use
 
 ### 3.15 Slack / Teams Light Intake Bridge (M3)
 
+**Slack-first linking increment (2026-11-22).** `/lq help` returns a private,
+ten-minute account association link. The signed-in user previews the Slack
+workspace and user IDs and explicitly confirms before the backend creates the
+unique mapping. Tokens are single-use and stored hashed. Account settings support
+unlinking. Unlinking and workspace disconnection revoke pending links, and a
+workspace reinstall after disconnection requires fresh account linking. Link,
+unlink and disconnect mutations commit with their audit records. No email
+matching or Slack profile lookup is permitted. The first answering release will
+support `/lq help` and `/lq ask` with private answers, Slack first. This increment
+does not enable inference. Thread forwarding and the admin skill picker remain
+under #342. Teams SDK evaluation remains separate, with explicit `tid` + `oid`
+linking required. PR #415 stays parked.
+
 **M3 status: PLUMBING SHIPPED (v0.3.0) — slash-command surface still deferred (M4 closed without it; DE-288); OAuth E2E unverified.** The `slack-bridge` (M3-D1) and `teams-bridge` (M3-D3) standalone services, their OAuth handlers, the api-side persistence endpoints (bridge-bearer-authed, bot-token encrypted at rest), and the admin management surface (M3-D4) all shipped under the `slack`/`teams` Compose profiles. Implementation companion: [docs/intake-bridges.md](intake-bridges.md). **Honesty caveats:** the `/lq` slash-command quick-skill surface remains deferred — M4 closed without it ([§9 DE-288](#9-deferred-enhancements-and-identified-future-work)) — only install + OAuth + identity-binding plumbing is in M3 scope; and that plumbing was verified **in isolation only** — a real OAuth round-trip against a public-URL tunnel has never been exercised ([§9 DE-312](#9-deferred-enhancements-and-identified-future-work), P1). Do not read this as a claim that the bridges work end-to-end.
 
 **Description.** A Slack and Teams bot that supports two flows: (1) **forward as a chat** — a user `/lq` slash-command on a message thread creates an LQ.AI chat with the thread's content as initial context; (2) **quick ask** — `/lq ask "is this an MSA or an order form?"` runs a short skill (configurable via Org Profile) and replies in-thread. Replies render in the Slack/Teams thread; deeper engagement opens the web app. No matter management, no triage, no SLA tracking — that is the boundary with Streamline AI's category, which is explicitly out of scope per §1.6.
@@ -4040,7 +4053,7 @@ The Slack/Teams plumbing is enough for an operator to install the bot, complete 
 
 **Specific scope:**
 
-- **M3-D2 — Slack `/lq` slash command + `/lq ask` quick-skill flow.** Two slash command flows in the `slack-bridge` service: `/lq` (no arg) on a thread forwards thread content as the seed of a new LQ.AI chat, bot replies in-thread with a link to the chat in the web app; `/lq ask "<question>"` runs a configured Org-Profile quick-ask skill (admin-configurable; default `quick-legal-question` skill) against the question and replies in-thread with the answer + a link to open the chat in the web app. Slack user → LQ.AI user identity mapping via email match (unmatched users see a "your Slack account isn't linked" message). Thread contents stored under the linked user's chat history with normal RBAC. Cost-accounting integration tags Slack-sourced inference with `source: slack`. Effort: 8–10 hours.
+- **M3-D2 — Slack `/lq` slash command + `/lq ask` quick-skill flow.** Two slash command flows in the `slack-bridge` service: `/lq` (no arg) on a thread forwards thread content as the seed of a new LQ.AI chat, bot replies in-thread with a link to the chat in the web app; `/lq ask "<question>"` runs a configured Org-Profile quick-ask skill (admin-configurable; default `quick-legal-question` skill) against the question and replies in-thread with the answer + a link to open the chat in the web app. Slack user → LQ.AI user identity mapping requires explicit account linking by workspace ID and Slack user ID, with signed-in confirmation and unlinking. Email matching and profile lookup are excluded. Thread contents stored under the linked user's chat history with normal RBAC. Cost-accounting integration tags Slack-sourced inference with `source: slack`. Effort: 8–10 hours.
 
 - **M3-D3 Teams parity for the slash command surface.** The `teams-bridge` service in scope under M3-D3 retains its OAuth install + identity binding surface (the plumbing). The slash-command parity for Teams (the equivalent of M3-D2 in the Microsoft Teams runtime) is deferred to this DE alongside the Slack flow. Effort: ~8 hours assuming the Slack flow is implemented first and the Teams runtime adapter reuses most of the orchestration logic.
 

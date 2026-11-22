@@ -111,6 +111,8 @@ __all__ = [
     "SavedPrompt",
     "SkillWorkspace",
     "SkillWorkspaceFile",
+    "SlackAccountLink",
+    "SlackLinkRequest",
     "SlackWorkspace",
     "TabularCellCitation",
     "TabularExecution",
@@ -127,4 +129,8 @@ __all__ = [
     "WorkProductFiduciaryGate",
 ]
 
+from .slack_account import (
+    SlackAccountLink as SlackAccountLink,
+    SlackLinkRequest as SlackLinkRequest,
+)
 from .storage_deletion import StorageDeletion as StorageDeletion

@@ -175,6 +175,11 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/tabular/bulk-ops/{bulk_op_id}",
         # M3-D1 — slack-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/slack/workspaces",
+        "/api/v1/integrations/slack/link-requests",
+        "/api/v1/integrations/slack/link-requests/preview",
+        "/api/v1/integrations/slack/link-requests/confirm",
+        "/api/v1/integrations/slack/account-links",
+        "/api/v1/integrations/slack/account-links/{link_id}",
         # M3-D3 — teams-bridge persistence surface (bearer-token, no user)
         "/api/v1/integrations/teams/tenants",
         # M3-D4 — admin intake-bridges surface (admin-only)
@@ -399,7 +404,7 @@ async def test_openapi_paths_match_sketch() -> None:
     # ADR 0038 adds two more (163 -> 165): the owner's read of how one session
     # of a run was set up, and the text of an engine prompt file.
     # Matter access adds eight administration and sharing paths (165 -> 173).
-    assert len(actual) == 173
+    assert len(actual) == 178
 
 
 @pytest.mark.unit

@@ -13,6 +13,7 @@
 	import { page } from '$app/stores';
 
 	import { auth } from '$lib/lq-ai/auth/store';
+	import { captureSlackLink } from '$lib/lq-ai/auth/slack-link';
 	import { authApi } from '$lib/lq-ai/api';
 	import { LQAIApiError, PasswordChangeRequiredError } from '$lib/lq-ai/api/client';
 	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
@@ -34,6 +35,7 @@
 	$: pathname = $page.url.pathname;
 
 	async function gate() {
+		captureSlackLink();
 		if (!$auth.access_token) {
 			if (!isAuthExempt(pathname)) {
 				goto('/lq-ai/login');

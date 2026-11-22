@@ -207,7 +207,8 @@ Run a skill (or ad-hoc column spec) across a document corpus into a document × 
 | Slack bridge service + OAuth install + encrypted persistence | partial (M3) | `slack-bridge/` (compose `--profile slack`, port 8002); table `slack_workspaces` (migration `0037`, Fernet-encrypted bot token under a distinct master key); `api/app/api/integrations_slack.py` |
 | Teams bridge service + multi-tenant admin-consent OAuth | partial (M3) | `teams-bridge/` (compose `--profile teams`, port 8003); table `teams_tenants` (migration `0038`); `api/app/api/integrations_teams.py` |
 | Admin intake-bridges management (list + soft-delete) | M3 | `api/app/api/admin_intake_bridges.py`; `web/src/routes/lq-ai/admin/intake-bridges/+page.svelte` |
-| `/lq` slash-command intake surface | **deferred** | Webhook handler is signature-verified but inert — [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work) |
+| Slack `/lq help` + explicit account linking | implemented, live HTTP flow unverified | Signed private link, confirmation, unlink and disconnect revocation. Migration `0080`; `api/tests/test_slack_account_linking.py`; browser acceptance `lq-ai-slack-account-linking.cy.ts` |
+| `/lq ask` inference and Teams command parity | **deferred** | [DE-288](PRD.md#9-deferred-enhancements-and-identified-future-work); #415 stays parked |
 | End-to-end OAuth against live Slack/Microsoft | **unverified** | Never exercised against a live tunnel — [DE-312](PRD.md#9-deferred-enhancements-and-identified-future-work); see [`docs/intake-bridges.md`](intake-bridges.md) "Honest state up front" |
 
 ---

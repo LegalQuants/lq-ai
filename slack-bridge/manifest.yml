@@ -8,16 +8,14 @@
 #
 # Scopes are kept narrow on purpose — the bridge only needs to:
 #
-#   - present a future slash command (`commands`)
+#   - handle the /lq help slash command (`commands`)
 #   - reply to invocations and post in invited channels (`chat:write`)
 #
 # It does NOT need `channels:read` / `groups:read` / `im:read` because
 # the bot does not read silent channels (PRD §3.15 — only acts on
 # explicit user invocations).
 #
-# The slash-command surface (M3-D2) is descoped to M4 / community per
-# DE-288, so this manifest declares no `slash_commands` block today.
-# Community contributors adding `/lq` extend this file via PR.
+# /lq help provides explicit account linking. Inference remains deferred.
 #
 # `${LQ_AI_BRIDGE_PUBLIC_URL}` is a placeholder the operator replaces
 # manually before pasting into Slack — Slack's manifest UI does not
@@ -35,13 +33,18 @@ display_information:
   long_description: >-
     LQ.AI is a self-hosted, transparency-first AI platform for in-house
     legal teams. This Slack bridge connects a Slack workspace to one
-    LQ.AI deployment so that future slash-command and bot surfaces can
-    be wired up by operator and community contributors. The bot does
+    LQ.AI deployment for private /lq help account linking. Quick-ask inference is not yet available. The bot does
     not read silent channels — it only responds to explicit user
     invocations.
   background_color: "#0b3a53"
 
 features:
+  slash_commands:
+    - command: /lq
+      url: ${LQ_AI_BRIDGE_PUBLIC_URL}/slack/commands
+      description: Link your Slack account to LQ.AI
+      usage_hint: help
+      should_escape: true
   bot_user:
     display_name: LQ.AI
     always_online: false
@@ -60,9 +63,7 @@ oauth_config:
       - chat:write
 
 settings:
-  # Slash commands + interactive components land in M3-D2 / community
-  # per DE-288. When they do, populate interactivity.request_url and
-  # add the slash_commands block above.
+  # Commands use signed HTTP delivery. Interactivity remains unconfigured.
   org_deploy_enabled: false
   socket_mode_enabled: false
   token_rotation_enabled: false
