@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -33,12 +33,13 @@ from app.workers.user_export import build_export_zip_for_test
 pytestmark = pytest.mark.integration
 BASE = "/api/v1/integrations/slack"
 SERVICE = {"Authorization": "Bearer command-fixture"}
+Linking = tuple[AsyncClient, dict[str, str], dict[str, str], SlackWorkspace]
 
 
 @pytest_asyncio.fixture
 async def linking(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> AsyncIterator[tuple[AsyncClient, dict[str, str], dict[str, str], SlackWorkspace]]:
+) -> AsyncIterator[Linking]:
     monkeypatch.setenv("LQ_AI_SLACK_COMMAND_TOKEN", "command-fixture")
     monkeypatch.setenv("LQ_AI_BRIDGE_TOKEN", "installation-fixture")
     monkeypatch.setenv("LQ_AI_WEB_PUBLIC_URL", "https://lq.test")
@@ -101,11 +102,12 @@ async def issue(client: AsyncClient, user: str = "U111", team: str = "T0123") ->
 
 
 async def test_link_preview_confirm_list_unlink_acceptance(
-    linking, db_session: AsyncSession
+    linking: Linking, db_session: AsyncSession
 ) -> None:
     client, alice, bob, _ = linking
     token = await issue(client)
     stored = await db_session.scalar(select(SlackLinkRequest))
+    assert stored is not None
     assert stored.token_hash == hashlib.sha256(token.encode()).hexdigest()
     for _ in range(2):
         result = await client.post(
@@ -150,7 +152,7 @@ async def test_link_preview_confirm_list_unlink_acceptance(
 
 
 async def test_expiry_replacement_conflict_and_workspace_isolation(
-    linking, db_session: AsyncSession
+    linking: Linking, db_session: AsyncSession
 ) -> None:
     client, alice, bob, _ = linking
     old = await issue(client)
@@ -159,6 +161,7 @@ async def test_expiry_replacement_conflict_and_workspace_isolation(
         await client.post(f"{BASE}/link-requests/preview", headers=alice, json={"token": old})
     ).status_code == 404
     row = await db_session.scalar(select(SlackLinkRequest))
+    assert row is not None
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     await db_session.commit()
     assert (
@@ -189,7 +192,7 @@ async def test_expiry_replacement_conflict_and_workspace_isolation(
 
 
 async def test_authority_is_scoped_and_extra_identity_is_rejected(
-    linking, monkeypatch: pytest.MonkeyPatch
+    linking: Linking, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, alice, _, _ = linking
     body = {"team_id": "T0123", "slack_user_id": "U111"}
@@ -221,11 +224,12 @@ async def test_authority_is_scoped_and_extra_identity_is_rejected(
 
 
 async def test_active_user_gate_and_unsafe_web_origin(
-    linking, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    linking: Linking, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, alice, _, _ = linking
     token = await issue(client)
     user = await db_session.scalar(select(User).where(User.email == "alice@example.com"))
+    assert user is not None
     user.must_change_password = True
     await db_session.commit()
     for endpoint in ("preview", "confirm"):
@@ -247,7 +251,7 @@ async def test_active_user_gate_and_unsafe_web_origin(
         ).status_code == 500
 
 
-async def test_invalid_inputs_do_not_echo_capabilities(linking) -> None:
+async def test_invalid_inputs_do_not_echo_capabilities(linking: Linking) -> None:
     client, alice, _, _ = linking
     for token in ("sensitive-invalid-token", "a" * 10000, {"token": "sensitive-nested-token"}):
         result = await client.post(
@@ -258,7 +262,7 @@ async def test_invalid_inputs_do_not_echo_capabilities(linking) -> None:
         assert "a" * 100 not in result.text
 
 
-async def test_mandatory_mfa_is_required(linking, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_mandatory_mfa_is_required(linking: Linking, monkeypatch: pytest.MonkeyPatch) -> None:
     client, alice, _, _ = linking
     token = await issue(client)
     monkeypatch.setenv("MFA_MANDATORY", "true")
@@ -272,7 +276,7 @@ async def test_mandatory_mfa_is_required(linking, monkeypatch: pytest.MonkeyPatc
 
 
 async def test_user_export_and_delete_cover_linked_accounts(
-    linking, db_session: AsyncSession
+    linking: Linking, db_session: AsyncSession
 ) -> None:
     client, alice, bob, _ = linking
     for headers, slack_user in ((alice, "U111"), (bob, "U222")):
@@ -283,6 +287,7 @@ async def test_user_export_and_delete_cover_linked_accounts(
             )
         ).status_code == 200
     user = await db_session.scalar(select(User).where(User.email == "alice@example.com"))
+    assert user is not None
     archive = zipfile.ZipFile(io.BytesIO(await build_export_zip_for_test(db_session, user)))
     exported = json.loads(archive.read("slack_accounts.json"))
     assert len(exported) == 1
@@ -295,7 +300,7 @@ async def test_user_export_and_delete_cover_linked_accounts(
 
 
 async def test_disconnect_revokes_links_and_challenges_after_reinstall(
-    linking, db_session: AsyncSession
+    linking: Linking, db_session: AsyncSession
 ) -> None:
     client, alice, _, workspace = linking
     token = await issue(client)
@@ -324,7 +329,7 @@ async def test_disconnect_revokes_links_and_challenges_after_reinstall(
 
 
 async def test_audit_failure_rolls_back_binding_and_consumption(
-    linking, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    linking: Linking, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, alice, _, _ = linking
     token = await issue(client)
@@ -378,7 +383,7 @@ async def test_concurrent_redemptions_one_winner(
         ) as client:
             token = await issue(client)
 
-            async def redeem():
+            async def redeem() -> Response:
                 return await client.post(
                     f"{BASE}/link-requests/confirm", headers=headers, json={"token": token}
                 )

@@ -27,6 +27,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install locked test dependencies
+        env:
+          # Match web/Dockerfile for this CPU-only build and browser scan.
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci
       - name: Typecheck the standalone scanner
         run: npx tsc --project tsconfig.a11y.json
