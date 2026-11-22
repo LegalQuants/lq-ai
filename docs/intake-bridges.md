@@ -14,24 +14,24 @@ identity-binding plumbing for both bridges, the api-side persistence and
 encryption surfaces, and the admin management page. It is the
 implementation companion to PRD §3.15.
 
-**Honest state up front.** What M3 shipped is **plumbing only**. The
-service scaffolds, the OAuth handlers, the bridge→api persistence path,
-at-rest token encryption, and the admin surface all exist and were
-verified *in isolation* during M3-E1. The end-to-end install flow — a
-real OAuth round-trip against a public-URL tunnel back into a live Slack
-workspace / M365 tenant — has **never** been exercised. The bridges'
-status is "plumbing shipped, real-OAuth integration **unverified**,"
-tracked as [DE-312](#references) (P1). The `/lq` slash-command surface
-(the user-facing reason to install a bridge) is descoped to M4 /
-community contribution, tracked as [DE-288](#references). Do not read
-this document as a claim that the bridges work end-to-end.
+**Current increment (2026-11-22).** Slack now has a signed HTTP `/lq help`
+handler and explicit per-user account linking with a confirmation page and
+unlinking. `/lq ask` inference and Teams user linking remain unimplemented.
+The earlier Socket Mode smoke test demonstrated only a fixed private reply.
+Real OAuth installation and this HTTP linking flow against a live Slack workspace
+remain unverified. Automated acceptance covers signed bridge requests, real
+PostgreSQL transactions, and the browser confirmation contract.
+
+See [Slack account linking](slack-account-linking.md) for configuration, the
+security contract and acceptance checks. The historical M3 sections below describe
+the original install substrate. They do not expand the current answering scope.
 
 ---
 
 ## Scope
 
 "Connect Slack / Teams to LQ.AI" can mean three things. M3 ships the
-first as plumbing; the second is descoped to M4; the third is out of
+first as plumbing and adds Slack account linking; answering remains deferred; the third is out of
 scope entirely.
 
 1. **Install + OAuth + identity binding** *(this plumbing, shipped in M3
@@ -45,8 +45,9 @@ scope entirely.
    thread as the seed of an LQ.AI chat; `/lq ask "<question>"` runs a
    configured quick-ask skill and replies in-thread. This is the reason
    an operator would install a bridge. It does **not** exist at v0.3.0:
-   no slash-command handler, no per-user identity mapping, no
-   in-thread reply. The admin UI carries visible-but-disabled
+   the original M3 release had no slash-command handler or per-user mapping.
+   The current increment adds `/lq help` and explicit Slack account linking.
+   Quick-ask inference and in-thread replies remain deferred. The admin UI carries visible-but-disabled
    quick-ask-skill pickers and an empty `/lq` audit-log shell as
    forward hooks for this work.
 
@@ -189,15 +190,14 @@ The bridge requests exactly two bot scopes:
 matching the `oauth_config.scopes.bot` block in
 [`slack-bridge/manifest.yml`](../slack-bridge/manifest.yml):
 
-- `commands` — for the future `/lq` slash-command surface (DE-288).
+- `commands` — for `/lq help` account linking.
 - `chat:write` — so the bot can post replies in channels it is invited
   to.
 
 There is no `channels:read` / `groups:read` / `im:read`. **The bot does
 not read silent channels** — it only acts on explicit user invocations
-(PRD §3.15 permission model). The manifest declares no `slash_commands`
-block at v0.3.0 because the slash-command surface is deferred; a
-community contributor adding `/lq` extends the manifest via PR.
+(PRD §3.15 permission model). The manifest now declares `/lq` at `/slack/commands` for private account linking.
+The original v0.3.0 manifest did not declare a command.
 
 ### Inbound webhook + signature verification
 
@@ -591,16 +591,13 @@ Graph display-name lookup resolves (or falls back). This must close
 before any milestone delivering the slash-command surface (DE-288) and
 before any claim that the bridges are end-to-end functional.
 
-### No `/lq` slash-command surface (DE-288)
+### Quick-ask and Teams command parity remain deferred (DE-288)
 
-The bridges are installable and OAuth-bound but otherwise **inert**.
-There is no `/lq` slash command, no `/lq ask` quick-skill flow, no
-per-user Slack/Teams ↔ LQ.AI identity mapping, no in-thread reply, and
-no thread-forwarding into chat history. The admin UI carries
-visible-but-disabled hooks (quick-ask skill picker, linked-users column,
-`/lq` audit-log shell). [DE-288](#references) (P2) tracks the
-slash-command surface for M4 / community contribution — the Slack flow
-can ship as a standalone PR with Teams parity as a follow-up.
+Slack `/lq help` now supports explicit account linking. `/lq ask` inference,
+Teams per-user linking, thread replies and thread forwarding remain separate
+work. The admin quick-ask skill picker and command audit-log shell remain
+unimplemented. The current first answering release is Slack-first and private.
+
 
 ### Compose env interpolation breaks all Compose commands when unset (DE-305)
 

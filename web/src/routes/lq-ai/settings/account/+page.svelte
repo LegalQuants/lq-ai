@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SlackAccountsPanel from '$lib/lq-ai/components/SlackAccountsPanel.svelte';
 	import MfaEnrollmentPanel from '$lib/lq-ai/components/MfaEnrollmentPanel.svelte';
 	import AccountExportDeletePanel from '$lib/lq-ai/components/AccountExportDeletePanel.svelte';
 </script>
@@ -25,6 +26,12 @@
 	<a href="/lq-ai/change-password" class="lq-btn-secondary">Change password</a>
 </section>
 
+<div class="section-divider" role="separator"></div>
+
+<section class="account-section">
+	<h3 class="section-heading">Linked Slack accounts</h3>
+	<SlackAccountsPanel />
+</section>
 <div class="section-divider" role="separator"></div>
 
 <!-- ── Your data ─────────────────────────────────────── -->

@@ -487,6 +487,14 @@ class Settings(BaseSettings):
             "/api/v1/integrations/slack/workspaces. Constant-time matched."
         ),
     )
+    lq_ai_slack_command_token: str = Field(
+        default="",
+        description="Scoped Slack linking credential, separate from the installation bearer.",
+    )
+    lq_ai_web_public_url: str = Field(
+        default="",
+        description="Public HTTPS web origin used for account linking. HTTP is allowed only on localhost.",
+    )
     lq_ai_bridge_master_key: str = Field(
         default="",
         description=(

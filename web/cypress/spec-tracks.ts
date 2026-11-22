@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 // Every checked-in spec belongs to exactly one track, or has an explicit
 // exclusion. Validate these exact paths before Cypress can silently ignore one.
 export const DETERMINISTIC_SPECS = [
+	'cypress/e2e/lq-ai-slack-account-linking.cy.ts',
 	'cypress/e2e/m3-0-fresh-install-login.cy.ts',
 	'cypress/e2e/m3-a4-playbook-execution.cy.ts',
 	'cypress/e2e/m3-a6-easy-playbook-wizard.cy.ts',

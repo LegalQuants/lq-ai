@@ -34,12 +34,14 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import AdminUser
+from app.audit import audit_action
 from app.db.session import get_db
 from app.errors import NotFound
+from app.models.slack_account import SlackAccountLink, SlackLinkRequest
 from app.models.slack_workspace import SlackWorkspace
 from app.models.teams_tenant import TeamsTenant
 from app.schemas.intake_bridges import (
@@ -116,7 +118,9 @@ async def soft_delete_slack_workspace(
     """
 
     row = (
-        await db.execute(select(SlackWorkspace).where(SlackWorkspace.id == workspace_id))
+        await db.execute(
+            select(SlackWorkspace).where(SlackWorkspace.id == workspace_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if row is None or row.deleted_at is not None:
         raise NotFound(
@@ -124,6 +128,15 @@ async def soft_delete_slack_workspace(
             details={"workspace_id": str(workspace_id)},
         )
     row.deleted_at = datetime.now(tz=UTC)
+    await db.execute(delete(SlackLinkRequest).where(SlackLinkRequest.workspace_id == row.id))
+    await db.execute(delete(SlackAccountLink).where(SlackAccountLink.workspace_id == row.id))
+    await audit_action(
+        db,
+        user_id=_admin.id,
+        action="slack.workspace.disconnect",
+        resource_type="slack_workspace",
+        resource_id=str(row.id),
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

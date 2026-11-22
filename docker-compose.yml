@@ -318,6 +318,8 @@ services:
       # operators who enable the `slack` compose profile. The api refuses
       # bridge traffic with 500 when either is unset.
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_SLACK_COMMAND_TOKEN: ${LQ_AI_SLACK_COMMAND_TOKEN:-}
+      LQ_AI_WEB_PUBLIC_URL: ${LQ_AI_WEB_PUBLIC_URL:-}
       LQ_AI_BRIDGE_MASTER_KEY: ${LQ_AI_BRIDGE_MASTER_KEY:-}
       # Fernet master key for per-user MCP OAuth tokens AND the
       # chat pending-tool-call resume payload (DE-358 item 5). Required
@@ -642,6 +644,7 @@ services:
       # LQ.AI-side coordinates
       LQ_AI_BACKEND_URL: ${LQ_AI_BACKEND_URL:-http://api:8000}
       LQ_AI_BRIDGE_TOKEN: ${LQ_AI_BRIDGE_TOKEN:-}
+      LQ_AI_SLACK_COMMAND_TOKEN: ${LQ_AI_SLACK_COMMAND_TOKEN:-}
       LQ_AI_BRIDGE_PUBLIC_URL: ${LQ_AI_BRIDGE_PUBLIC_URL:-}
       # Observability (opt-in)
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}

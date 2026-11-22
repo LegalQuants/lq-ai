@@ -1923,6 +1923,22 @@ constraint's backing index covers it.
 permissions; `scope` is stored verbatim so an operator can audit what
 the workspace consented to.
 
+### `slack_account_links` and `slack_link_requests` (0080)
+
+`slack_account_links` has a UUID `id`, `workspace_id` (cascade FK to
+`slack_workspaces`), `slack_user_id` (varchar 64), `user_id` (cascade FK to
+`users`, indexed), and `created_at` (timestamptz, default now()). A unique
+constraint on `(workspace_id, slack_user_id)` prevents cross-account rebinding.
+
+`slack_link_requests` has `token_hash` (SHA-256 hex, varchar 64 primary key),
+`workspace_id` (cascade FK), `slack_user_id` (varchar 64), and `expires_at`
+(timestamptz). Only one pending challenge per `(workspace_id, slack_user_id)`
+is retained. Issuance replaces its predecessor. Confirmation deletes the request
+and inserts the link with an audit row in one transaction. Unlink deletes pending
+requests for that identity. Disconnect deletes both tables' rows for the install.
+All these mutations lock the workspace row first, so an old request cannot survive
+a disconnect/reinstall race. No plaintext challenge, Slack profile or email is stored.
+
 ### `teams_tenants` (M3-D3)
 
 ```sql

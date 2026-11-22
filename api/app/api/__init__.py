@@ -53,6 +53,7 @@ from app.api import (
     saved_prompts,
     skill_workspaces,
     skills,
+    slack_accounts,
     tabular,
     teams,
     user_skills,
@@ -82,6 +83,7 @@ api_router.include_router(internal.router)
 # the user-token gate. Mounted without `_active` deliberately: the
 # bridge is a service-to-service caller with no user context.
 api_router.include_router(integrations_slack.router)
+api_router.include_router(slack_accounts.router)
 
 # M3-D3: teams-bridge → api persistence surface. Same auth posture as
 # the slack-bridge endpoint (shared LQ_AI_BRIDGE_TOKEN bearer); no

@@ -7277,6 +7277,98 @@ components:
       - scope
       title: SkillResourcePolicy
       type: object
+    SlackAccountResponse:
+      properties:
+        created_at:
+          format: date-time
+          title: Created At
+          type: string
+        id:
+          format: uuid
+          title: Id
+          type: string
+        slack_user_id:
+          title: Slack User Id
+          type: string
+        team_id:
+          title: Team Id
+          type: string
+        team_name:
+          title: Team Name
+          type: string
+      required:
+      - id
+      - team_id
+      - team_name
+      - slack_user_id
+      - created_at
+      title: SlackAccountResponse
+      type: object
+    SlackLinkPreview:
+      properties:
+        expires_at:
+          format: date-time
+          title: Expires At
+          type: string
+        slack_user_id:
+          title: Slack User Id
+          type: string
+        team_id:
+          title: Team Id
+          type: string
+        team_name:
+          title: Team Name
+          type: string
+      required:
+      - team_id
+      - team_name
+      - slack_user_id
+      - expires_at
+      title: SlackLinkPreview
+      type: object
+    SlackLinkStart:
+      additionalProperties: false
+      properties:
+        slack_user_id:
+          pattern: ^[UW][A-Z0-9]{1,63}$
+          title: Slack User Id
+          type: string
+        team_id:
+          pattern: ^T[A-Z0-9]{1,63}$
+          title: Team Id
+          type: string
+      required:
+      - team_id
+      - slack_user_id
+      title: SlackLinkStart
+      type: object
+    SlackLinkStarted:
+      properties:
+        expires_at:
+          format: date-time
+          title: Expires At
+          type: string
+        url:
+          title: Url
+          type: string
+      required:
+      - url
+      - expires_at
+      title: SlackLinkStarted
+      type: object
+    SlackLinkToken:
+      additionalProperties: false
+      properties:
+        token:
+          maxLength: 43
+          minLength: 43
+          pattern: ^[A-Za-z0-9_-]+$
+          title: Token
+          type: string
+      required:
+      - token
+      title: SlackLinkToken
+      type: object
     SlackWorkspaceCreate:
       additionalProperties: false
       description: 'Workspace record the slack-bridge POSTs after OAuth completes.
@@ -14935,6 +15027,138 @@ paths:
       summary: Read the deployment's tier policy (allowed tiers + minima)
       tags:
       - inference
+  /api/v1/integrations/slack/account-links:
+    get:
+      operationId: list_links_api_v1_integrations_slack_account_links_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SlackAccountResponse'
+                title: Response List Links Api V1 Integrations Slack Account Links
+                  Get
+                type: array
+          description: Successful Response
+      security:
+      - OAuth2PasswordBearer: []
+      summary: List Links
+      tags:
+      - slack-accounts
+  /api/v1/integrations/slack/account-links/{link_id}:
+    delete:
+      operationId: unlink_api_v1_integrations_slack_account_links__link_id__delete
+      parameters:
+      - in: path
+        name: link_id
+        required: true
+        schema:
+          format: uuid
+          title: Link Id
+          type: string
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Unlink
+      tags:
+      - slack-accounts
+  /api/v1/integrations/slack/link-requests:
+    post:
+      operationId: start_link_api_v1_integrations_slack_link_requests_post
+      parameters:
+      - in: header
+        name: authorization
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkStart'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackLinkStarted'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Start Link
+      tags:
+      - slack-accounts
+  /api/v1/integrations/slack/link-requests/confirm:
+    post:
+      operationId: confirm_link_api_v1_integrations_slack_link_requests_confirm_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkToken'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackAccountResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Confirm Link
+      tags:
+      - slack-accounts
+  /api/v1/integrations/slack/link-requests/preview:
+    post:
+      operationId: preview_link_api_v1_integrations_slack_link_requests_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlackLinkToken'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackLinkPreview'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      security:
+      - OAuth2PasswordBearer: []
+      summary: Preview Link
+      tags:
+      - slack-accounts
   /api/v1/integrations/slack/workspaces:
     post:
       description: "Persist (or upsert) the workspace record from the bridge.\n\n\

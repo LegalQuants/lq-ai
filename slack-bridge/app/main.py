@@ -15,8 +15,9 @@ The bridge surface is intentionally tiny at v0.3.0:
   the foundation M3-D2 (slash commands, descoped to M4 per DE-288)
   will fill in.
 
-Everything else — slash commands, message handlers, per-user identity
-binding — is M3-D2 / M3-D4 / community contribution scope.
+* ``POST /slack/commands`` — signed /lq help with a private account-link URL.
+
+The API owns user confirmation, linking and unlinking. Inference remains deferred.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+from .commands import router as commands_router
 from .config import Settings, get_settings
 from .oauth import router as oauth_router
 from .observability import init_otel
@@ -54,15 +56,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         description=(
             "OAuth install + workspace persistence for the LQ.AI Slack "
-            "integration. M3-D1 plumbing. Slash-command surface deferred "
-            "to M4 / community per DE-288."
+            "integration, with signed /lq help and explicit account linking. "
+            "Quick-ask inference remains deferred."
         ),
     )
 
     init_otel(cfg)
     FastAPIInstrumentor.instrument_app(app)
 
+    app.dependency_overrides[get_settings] = lambda: cfg
     app.include_router(oauth_router)
+    app.include_router(commands_router)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
