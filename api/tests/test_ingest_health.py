@@ -294,6 +294,9 @@ async def test_local_embeddings_store_and_search_with_native_query(
         {"id": doc.id},
     )
     assert list(dimensions) == [1536, 1536]
+    # This checks exact storage/query arithmetic, not approximate-index
+    # recall after the rest of the suite has populated the shared HNSW index.
+    await db_session.execute(text("SET LOCAL enable_indexscan = off"))
     matches = await _vector_candidates(db_session, kb_id=kb.id, query_embedding=vectors[0], limit=2)
     assert [row[0] for row in matches] == [chunks[0].id, chunks[1].id]
     assert [row[1] for row in matches] == pytest.approx([1.0, 0.8], abs=1e-6)

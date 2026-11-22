@@ -26,6 +26,8 @@ Normalize only PDF whitespace/hyphen wrapping for matching; publish the exact
 original slice. Require complete sentence/list-item boundaries rather than
 fragments that omit conditions or negation. Ignore model offsets, rebase
 verified offsets across chunks, and deduplicate overlapping-span repeats.
+An ordinary PDF line wrap is not a new clause boundary; numbered section
+headings and sentence/list-item boundaries provide the structural signal.
 Re-extract unsupported quotes once using the original source, supplying
 complete surrounding source context when the rejected fragment is locatable. If repair
 fails or loses the requested issues, fail generation; do not stitch or invent

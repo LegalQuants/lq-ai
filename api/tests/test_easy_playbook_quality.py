@@ -239,6 +239,17 @@ def test_source_anchor_uses_exact_slice_and_rejects_stitching_and_lost_negation(
     assert match.text == "Use reasonable\ncare"
     assert source[match.start : match.end] == match.text
     assert anchor_quote(source, "disclose the information.") is None
+    assert (
+        anchor_quote("The Party shall not\ndisclose the information.", "disclose the information.")
+        is None
+    )
+    assert (
+        anchor_quote(
+            "2. Definition\nInformation means non-public data.",
+            "Information means non-public data.",
+        )
+        is not None
+    )
     assert anchor_quote(source, "(a) Use reasonable care; and (c) encrypt data.") is None
     assert (
         anchor_quote(

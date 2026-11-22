@@ -49,8 +49,13 @@ def anchor_quote(
         before = source[:source_start]
         after = source[source_end:].lstrip()
         begins_clause = not before.strip() or re.search(
-            r"""(?:[.;:]["\u201d\u2019']*\s*(?:(?:and|or)\s+)?|\n\s*|\([a-zA-Z0-9]+\)\s*)$""",
+            r"""(?:[.;:]["\u201d\u2019']*\s*(?:(?:and|or)\s+)?|\([a-zA-Z0-9]+\)\s*)$""",
             before,
+        )
+        # A PDF layout wrap is not a sentence boundary: treating every
+        # newline as one can drop a negation from the preceding line.
+        begins_clause = begins_clause or re.search(
+            r"(?:^|\n)\s*\d+(?:\.\d+)*[.)]\s+[^\n]+\n\s*$", before
         )
         ends_clause = (
             not after
