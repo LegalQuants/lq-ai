@@ -30,7 +30,9 @@ function browser(url: string, disabled = false) {
 	});
 	return { values, location };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.unstubAllGlobals();
+});
 describe('Slack association capability navigation', () => {
 	it('removes the fragment and resumes only the fixed confirmation route', () => {
 		const { location } = browser(
