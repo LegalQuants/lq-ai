@@ -102,15 +102,11 @@ jobs:
 
       - name: Install dependencies
         # Cypress ships a large binary fetched from download.cypress.io on
-        # postinstall. This job runs svelte-check and Vitest only, and no
-        # workflow in the repo invokes Cypress, so the download is pure
-        # risk: a CDN blip reds a PR that never touched web/. Scoped to
-        # this step so a future Cypress job installs the binary normally.
+        # postinstall. This job runs svelte-check and Vitest only. Keep
+        # the download disabled here; browser jobs install Cypress normally.
         env:
           CYPRESS_INSTALL_BINARY: "0"
-          # Match web/Dockerfile: browser tests do not use Node's CUDA provider.
-          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-        run: npm ci
+        run: sh scripts/install-dependencies.sh
 
       - name: svelte-check (typecheck — LQ.AI-owned code)
         run: npm run check:lq-ai

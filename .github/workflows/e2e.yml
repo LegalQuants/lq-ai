@@ -90,10 +90,7 @@ jobs:
 
       - name: Install web dependencies
         working-directory: web
-        env:
-          # Match web/Dockerfile: Cypress exercises the browser frontend, not Node CUDA.
-          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
-        run: npm ci
+        run: sh scripts/install-dependencies.sh
 
       - name: Run Cypress (deterministic track)
         working-directory: web
