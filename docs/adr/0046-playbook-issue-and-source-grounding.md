@@ -34,12 +34,17 @@ spans when that is necessary to retain its conditions and context.
 
 Generate descriptions/redline strategies from the selected standard alone.
 Describe fallback differences without asserting legal acceptability. Batch a
-separate consistency check against the selected source(s), with strict boolean
+separate consistency check in bounded six-item batches against the selected source(s), with strict boolean
 verdicts and source-matched evidence. Missing, duplicate, malformed, unanchored,
 or unsupported verdicts fall back to literal source text and neutral review
 instructions. A deterministic expiry/survival inversion guard applies even
 when the model approves a description. This is a consistency check, not a
 legal verification guarantee; the attorney still reviews the output.
+
+The first full-corpus consistency request exhausted its 8,192-token response
+budget and conservatively replaced all prose with source text. Bound each
+check to six items and 4,096 response tokens; an invalid or truncated batch
+falls back only for its own items. Returned IDs from another batch are ignored.
 
 The per-Easy-Playbook worker timeout is configurable (60–7200 seconds,
 default 900). Other task timeouts are unchanged. A slower local-model

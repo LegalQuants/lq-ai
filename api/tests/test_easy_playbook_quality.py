@@ -24,6 +24,54 @@ from app.schemas.playbooks import FallbackTier, PositionCreate
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("failure", ["length", "wrong-id"])
+async def test_source_checks_are_bounded_and_failed_batches_are_isolated(failure: str) -> None:
+    import json
+
+    from app.playbooks.easy.assembly import VERIFY_BATCH_SIZE, VERIFY_MAX_TOKENS
+
+    positions = [
+        PositionCreate(
+            issue=f"Term {i}",
+            standard_language=f"The term is one year for position {i}.",
+            description="The term is one year.",
+            redline_strategy="Match this period.",
+            severity_if_missing="medium",
+        )
+        for i in range(VERIFY_BATCH_SIZE + 1)
+    ]
+    batches: list[list[dict[str, Any]]] = []
+
+    async def answer(request: Any) -> ChatCompletionResponse:
+        items = json.loads(request.messages[1].content)["items"]
+        batches.append(items)
+        assert len(items) <= VERIFY_BATCH_SIZE
+        assert request.max_tokens == VERIFY_MAX_TOKENS
+        checks = [
+            {
+                "id": item["id"],
+                "description_supported": True,
+                "redline_supported": True,
+                "source_quotes": item["sources"],
+            }
+            for item in items
+        ]
+        if len(batches) == 2 and failure == "wrong-id":
+            checks = [{"id": "position/0", "description_supported": False}]
+        result = response({"checks": checks})
+        if len(batches) == 2 and failure == "length":
+            result.choices[0].finish_reason = "length"
+        return result
+
+    gateway = AsyncMock()
+    gateway.chat_completion.side_effect = answer
+    await _ground_metadata(positions, gateway=gateway, judge_model="smart")
+    assert [len(batch) for batch in batches] == [VERIFY_BATCH_SIZE, 1]
+    assert all(p.description == "The term is one year." for p in positions[:-1])
+    assert positions[-1].description == "Selected standard: " + positions[-1].standard_language
+
+
+@pytest.mark.unit
 async def test_descriptions_are_prompted_from_the_selected_standard_only() -> None:
     from app.playbooks.easy.assembly import _describe_position
     from app.playbooks.easy.clustering import Cluster
