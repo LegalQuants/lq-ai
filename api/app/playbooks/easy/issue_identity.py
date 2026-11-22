@@ -33,6 +33,9 @@ _FAMILIES = (
         "Liability for Disclosees",
         "Responsibility for Permitted Disclosures",
         "Liability for Recipients",
+        "Liability for Permitted Disclosures",
+        "Liability for Employees",
+        "Liability for Disclosures to Third Parties",
     ),
     ("Standard of Care", "Duty of Care", "Confidentiality Standard of Care", "Degree of Care"),
     (
@@ -61,6 +64,7 @@ _FAMILIES = (
         "Survival of General Information",
         "Survival for Non-Trade Secret Information",
         "Survival of General Confidential Information",
+        "Survival for General Confidential Information",
         "Confidentiality Survival (General)",
     ),
     (
@@ -79,6 +83,9 @@ _FAMILIES = (
         "Forum and Jurisdiction",
         "Venue",
         "Forum or Venue",
+        "Forum",
+        "Forum/Venue",
+        "Forum and Venue",
     ),
     ("Permitted Use", "Use Limitation", "Restriction on Use", "Use Restriction"),
     ("Non-Disclosure Obligation", "Restriction on Disclosure", "Prohibition on Disclosure"),
@@ -86,6 +93,7 @@ _FAMILIES = (
         "Return or Destruction",
         "Return or Destruction of Materials",
         "Return or Destruction of Information",
+        "Return or Destruction of Confidential Information",
     ),
     (
         "Archival Copy Exception",
@@ -93,6 +101,7 @@ _FAMILIES = (
         "Retention of Backup Information",
         "Retention of Confidential Information",
         "Retained Copy",
+        "Retention of Archival Copy",
     ),
     (
         "No License",
@@ -101,6 +110,7 @@ _FAMILIES = (
         "No License or Other Rights",
         "No License Granted",
         "No License / No Rights Granted",
+        "No Transfer of Rights / No License",
     ),
 )
 

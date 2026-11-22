@@ -50,6 +50,15 @@ from forum/venue. Use specific survival labels for trade secrets and general
 confidential information when the source supports separate entries. Preserve
 other genuine issues; do not target a fixed number of entries.
 
+For an NDA, reuse these labels when they fit: "Definition of Confidential
+Information", "Exclusions from Confidential Information", "Standard of Care",
+"Permitted Use", "Restriction on Disclosure", "Permitted Disclosures",
+"Compelled Disclosure", "Recipient Liability", "Term of Agreement",
+"Survival of Trade Secrets", "Survival of General Information", "Return or
+Destruction", "Archival Copy Exception", "Remedies", "Governing Law",
+"Jurisdiction", and "No License". These are label conventions, not a required
+set or a limit. Keep a genuinely different or combined issue under its own label.
+
 Quote contiguous source text only. Never join a list header to a non-adjacent
 item, stitch items (a) and (c), or insert connecting words. Include enough
 adjacent context to preserve the actor, conditions, and negation. If offsets

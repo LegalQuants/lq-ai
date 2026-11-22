@@ -101,6 +101,42 @@ async def test_source_repair_transport_failure_is_not_silently_omitted() -> None
 @pytest.mark.parametrize(
     "labels",
     [
+        ("Jurisdiction", "Forum/Venue"),
+        ("Jurisdiction", "Forum and Venue"),
+        ("Jurisdiction", "Forum"),
+        ("Return or Destruction", "Return or Destruction of Confidential Information"),
+        ("Archival Copy Exception", "Retention of Archival Copy"),
+        ("No License", "No Transfer of Rights / No License"),
+        ("Recipient Liability", "Liability for Permitted Disclosures"),
+        ("Recipient Liability", "Liability for Disclosures to Third Parties"),
+        ("Survival of General Information", "Survival for General Confidential Information"),
+    ],
+)
+async def test_live_label_aliases_merge_or_fold_within_their_issue(
+    labels: tuple[str, str], cosine: float
+) -> None:
+    clauses = [
+        ClauseInput(document_id=uuid.uuid4(), issue=label, clause_text=f"Source {i}.")
+        for i, label in enumerate([labels[0], labels[0], labels[1]])
+    ]
+    gateway = AsyncMock()
+    gateway.embeddings.return_value = {
+        "data": [
+            {"index": i, "embedding": v}
+            for i, v in enumerate([[1.0, 0.0], [1.0, 0.0], [cosine, math.sqrt(1 - cosine**2)]])
+        ]
+    }
+    clusters = await cluster_clauses_by_issue(clauses=clauses, gateway=gateway)
+    assert len(clusters) == 1
+    assert len(clusters[0].member_clauses) == 3
+    assert clusters[0].modal_clause in clauses[:2]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cosine", [1.0, 0.82])
+@pytest.mark.parametrize(
+    "labels",
+    [
         ("Definition of Confidential Information", "Exclusions from Confidential Information"),
         ("Permitted Disclosures", "Compelled Disclosure"),
         ("Remedies", "Liability for Disclosees"),
