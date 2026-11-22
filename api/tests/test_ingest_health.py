@@ -271,8 +271,17 @@ async def test_local_embeddings_store_and_search_with_native_query(
     db_session.add(KnowledgeBaseFile(kb_id=kb.id, file_id=f.id))
     await db_session.flush()
     vectors = [[1.0, 0.0] + [0.0] * 766, [0.8, 0.6] + [0.0] * 766]
+    # Lazy retrieval has no row-order contract. Model responses correspond
+    # to request texts, so the fixture must do the same (not assign vectors
+    # by insertion order to randomly ordered database rows).
+    by_text = {chunk.content: vector for chunk, vector in zip(chunks, vectors, strict=True)}
+
+    async def vectors_for_texts(texts: list[str], **_kwargs: Any) -> list[list[float]]:
+        return [by_text[value] for value in texts]
+
     with patch(
-        "app.knowledge.embed.request_embedding_vectors", new=AsyncMock(return_value=vectors)
+        "app.knowledge.embed.request_embedding_vectors",
+        new=AsyncMock(side_effect=vectors_for_texts),
     ):
         if path == "eager":
             result = await embed_chunks_for_file(db_session, f.id)
