@@ -834,8 +834,11 @@ class Position(BaseModel):
 The maintainer's 2026-11-22 coverage decision preserves coherent issues and
 outliers; the sample corpus's 5–10 count is diagnostic rather than a hard cap.
 Issue identities constrain similarity merges/folds. Source quotations and
-offsets must be anchored to actual contiguous text; failed one-shot quotation
-repair ends generation. Descriptions are grounded in the selected standard,
+offsets must be anchored to actual contiguous text; one-shot quotation repair
+may complete a dangling connected list item from verified source context.
+Other failed repair ends generation. Invalid extraction responses and transport
+failures also fail explicitly rather than silently omitting a document.
+Descriptions are grounded in the selected standard,
 with a separate consistency check and extractive fallback. These checks do
 not replace attorney review. See [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md).
 

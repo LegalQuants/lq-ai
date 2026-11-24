@@ -39,10 +39,19 @@ verified offsets across chunks, and deduplicate overlapping-span repeats.
 An ordinary PDF line wrap is not a new clause boundary; numbered section
 headings and sentence/list-item boundaries provide the structural signal.
 Re-extract unsupported quotes once using the original source, supplying
-complete surrounding source context when the rejected fragment is locatable. If repair
-fails or loses the requested issues, fail generation; do not stitch or invent
-text. A complete sentence may support multiple issues with overlapping source
+complete surrounding source context when the rejected fragment is locatable.
+If repair repeats a dangling list item ending `; and` or `; or`, complete it
+only from the verified surrounding source slice. That slice must include the
+fragment, extend through the connected item, and pass the normal boundary
+checks. Other failed repairs or lost issues fail generation; do not stitch or
+invent text. A complete sentence may support multiple issues with overlapping source
 spans when that is necessary to retain its conditions and context.
+
+Accept one JSON answer after a prose preamble, or exact duplicate fenced
+copies of the same answer. Conflicting answers and malformed JSON remain
+invalid. Production dispatch reports invalid/missing/truncated responses and
+transport failures as extraction errors, rather than silently omitting a
+document. A valid empty extraction remains distinct from a failed response.
 
 Generate descriptions/redline strategies from the selected standard alone.
 Describe fallback differences without asserting legal acceptability. Batch a

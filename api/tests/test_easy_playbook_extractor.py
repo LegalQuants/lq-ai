@@ -48,7 +48,7 @@ def test_prose_wrapped_fenced_extraction_keeps_verbatim_clauses() -> None:
 @pytest.mark.parametrize(
     "answer",
     [
-        'Before ```json\n{"extracted_clauses": []}\n``` and ```json\n{"extracted_clauses": []}\n```',
+        'Before ```json\n{"extracted_clauses": []}\n``` and ```json\n{"extracted_clauses": [{"issue": "Term", "clause_text": "Two years."}]}\n```',
         'Before ```json\n{"extracted_clauses": [BROKEN]}\n```',
         'Before {"extracted_clauses": []}',
     ],
@@ -265,39 +265,30 @@ async def test_empty_model_answer_is_an_explicit_extraction_failure() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Malformed responses (non-fatal)
+# Malformed responses fail instead of silently omitting a document
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-async def test_malformed_json_response_returns_empty_list() -> None:
+async def test_malformed_json_response_is_an_explicit_failure() -> None:
     gateway = _StubGateway(payloads=["not valid json {[}"])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="invalid JSON"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
-async def test_top_level_array_response_returns_empty_list() -> None:
+async def test_top_level_array_response_is_an_explicit_failure() -> None:
     """A response that's a JSON array (not an object) is treated as malformed."""
     gateway = _StubGateway(payloads=['[{"issue": "x", "clause_text": "y"}]'])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="invalid response shape"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
-async def test_missing_extracted_clauses_key_returns_empty_list() -> None:
+async def test_missing_extracted_clauses_key_is_an_explicit_failure() -> None:
     gateway = _StubGateway(payloads=[{"clauses": [{"issue": "x"}]}])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="invalid response shape"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -348,15 +339,15 @@ async def test_clause_without_source_offsets_is_accepted() -> None:
 
 
 @pytest.mark.unit
-async def test_gateway_exception_is_swallowed_returns_empty_list() -> None:
-    """A transport failure on the only span returns ``[]``; doesn't crash the corpus run."""
+async def test_gateway_exception_is_an_explicit_failure() -> None:
+    """A transport failure cannot silently omit a document from the corpus."""
 
     gateway = _StubGateway(payloads=[ConnectionError("gateway down")])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some contract text."),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="request failed"):
+        await extract_clauses_from_document(
+            document=_make_doc("Some contract text."),
+            gateway=gateway,  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.unit
@@ -456,8 +447,8 @@ async def test_long_document_multiple_calls_offsets_rebased() -> None:
 
 
 @pytest.mark.unit
-async def test_one_failed_span_does_not_kill_other_spans() -> None:
-    """A transport failure on span 0 doesn't block span 1 from contributing."""
+async def test_one_failed_span_cannot_publish_a_partial_document() -> None:
+    """A failed span must not silently remove its positions from the corpus."""
 
     text = "." * 90 + "still got this one" + "." * 42
     gateway = _StubGateway(
@@ -473,14 +464,14 @@ async def test_one_failed_span_does_not_kill_other_spans() -> None:
             },
         ]
     )
-    clauses = await extract_clauses_from_document(
-        document=_make_doc(text),
-        gateway=gateway,  # type: ignore[arg-type]
-        character_budget=100,
-        span_overlap_characters=20,
-    )
-    assert len(clauses) == 1
-    assert clauses[0].issue == "Recovered"
+    with pytest.raises(ExtractionResponseError, match="request failed"):
+        await extract_clauses_from_document(
+            document=_make_doc(text),
+            gateway=gateway,  # type: ignore[arg-type]
+            character_budget=100,
+            span_overlap_characters=20,
+        )
+    assert len(gateway.calls_received) == 1
 
 
 # ---------------------------------------------------------------------------

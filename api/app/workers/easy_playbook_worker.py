@@ -168,7 +168,8 @@ async def _run_pipeline(
 
     Document-level extraction failures are tolerated — a single bad
     document degrades clustering signal but does not kill the whole
-    run. Missing/truncated model answers fail the generation explicitly.
+    run. Transport failures and invalid/missing/truncated model responses
+    are typed extraction failures and fail the generation explicitly.
     A corpus with no usable clauses or a draft with no positions also
     fails instead of presenting an empty draft as a successful result.
     """

@@ -41,7 +41,7 @@ from app.errors import GatewayInvalidResponse
 from app.models.document import Document
 from app.playbooks.easy.issue_identity import issue_identity
 from app.playbooks.easy.json_output import unwrap_json_answer
-from app.playbooks.easy.source_anchor import anchor_quote, repair_context
+from app.playbooks.easy.source_anchor import anchor_quote, complete_connected_item, repair_context
 from app.playbooks.easy.source_facts import source_issue
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
@@ -235,13 +235,10 @@ async def extract_clauses_from_document(
     parses the structured-JSON response, and returns the merged list
     of :class:`ExtractedClause` instances.
 
-    Returns an empty list if the document has no normalized content
-    or if every LLM call returned malformed output. Failure-of-the-
-    LLM is non-fatal for the corpus-level pipeline — one bad
-    extraction reduces clustering signal but doesn't kill the
-    generation. Missing or token-truncated answers raise
-    ``ExtractionResponseError`` instead: these cannot be accepted as
-    evidence that a contract contains no negotiated positions.
+    Returns an empty list for a document without normalized content or a valid
+    empty extraction. Transport failures, malformed response shapes, missing
+    content and token-truncated answers raise ``ExtractionResponseError``:
+    these cannot be accepted as evidence that a document has no positions.
 
     Args:
         document: the source document. ``normalized_content`` is
@@ -304,7 +301,9 @@ async def extract_clauses_from_document(
                     "error": str(exc),
                 },
             )
-            continue
+            raise ExtractionResponseError(
+                "Clause extraction request failed; retry generation."
+            ) from exc
         merged.extend(clauses)
 
     # Correct the narrow source/label mismatch observed in the walkthrough.
@@ -463,6 +462,23 @@ async def _extract_one_span(
                 "Source quotation repair failed; retry generation."
             ) from exc
         repaired, still_rejected = _anchor_extracted_clauses(repaired, span_text)
+        unresolved: list[ExtractedClause] = []
+        for clause in still_rejected:
+            complete = complete_connected_item(span_text, clause.clause_text)
+            if complete is None:
+                unresolved.append(clause)
+            else:
+                repaired.append(
+                    clause.model_copy(
+                        update={
+                            "clause_text": complete.text,
+                            "source_offsets": ExtractedClauseSourceOffsets(
+                                start=complete.start, end=complete.end
+                            ),
+                        }
+                    )
+                )
+        still_rejected = unresolved
         if still_rejected or Counter(issue_identity(c.issue) for c in repaired) != Counter(
             issue_identity(c.issue) for c in rejected
         ):
@@ -512,7 +528,7 @@ async def _dispatch_extraction(
             "Clause extraction returned no answer content. Check the model's reasoning configuration."
         )
 
-    return _parse_extracted_clauses(content)
+    return _parse_extracted_clauses(content, strict=True)
 
 
 def _extract_response_content(response: Any) -> str | None:
@@ -533,15 +549,17 @@ def _extract_response_content(response: Any) -> str | None:
     return content
 
 
-def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
-    """Lenient JSON parse + Pydantic validation; drop malformed entries.
+def _parse_extracted_clauses(content: str, *, strict: bool = False) -> list[ExtractedClause]:
+    """Parse JSON and validate entries, with explicit failures in production.
 
     Tolerates a leading ``` ```json ``` fence (some models wrap output).
     A top-level non-object response returns an empty list; a top-level
     object missing ``extracted_clauses`` returns an empty list. Per-entry
     validation failures log a WARNING and skip the entry rather than
     rejecting the whole response — a model that produces 19 valid entries
-    plus 1 malformed one is still useful.
+    plus 1 malformed one is still useful. With ``strict=True`` (the dispatch
+    path), invalid JSON, invalid shape or all-invalid entries raise instead of
+    silently treating a failed response as a valid empty extraction.
     """
 
     stripped = unwrap_json_answer(content)
@@ -556,12 +574,20 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
                 "error": str(exc),
             },
         )
+        if strict:
+            raise ExtractionResponseError(
+                "Clause extraction returned invalid JSON; retry generation."
+            ) from exc
         return []
 
     if not isinstance(parsed, dict):
+        if strict:
+            raise ExtractionResponseError("Clause extraction returned an invalid response shape.")
         return []
     raw_clauses = parsed.get("extracted_clauses")
     if not isinstance(raw_clauses, list):
+        if strict:
+            raise ExtractionResponseError("Clause extraction returned an invalid response shape.")
         return []
 
     out: list[ExtractedClause] = []
@@ -581,6 +607,8 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
                 },
             )
             continue
+    if strict and raw_clauses and not out:
+        raise ExtractionResponseError("Clause extraction returned no valid clause entries.")
     return out
 
 

@@ -86,3 +86,28 @@ def repair_context(source: str, quote: str) -> str | None:
     if source[match.end - 1 : match.end] in (".", ";"):
         end = match.end
     return source[start:end].strip()
+
+
+def complete_connected_item(source: str, quote: str) -> SourceMatch | None:
+    """Complete a repeated dangling list item using only verified source text.
+
+    This is a bounded fallback after model repair: a quote ending `; and` or
+    `; or` needs the connected item. No stitched or invented words qualify.
+    The surrounding context must itself pass the normal clause-boundary check.
+    """
+    if not re.search(r";\s*(?:and|or)\s*$", quote):
+        return None
+    fragment = anchor_quote(source, quote, require_clause_boundaries=False)
+    if fragment is None:
+        return None
+    context = repair_context(source, quote)
+    if context is None or anchor_quote(context, quote, require_clause_boundaries=False) is None:
+        return None
+    complete = anchor_quote(source, context)
+    if (
+        complete is None
+        or complete.end <= fragment.end
+        or re.search(r";\s*(?:and|or)\s*$", complete.text)
+    ):
+        return None
+    return complete

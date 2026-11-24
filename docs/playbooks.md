@@ -175,8 +175,9 @@ remedies, agreement duration/survival, and governing law/forum remain distinct.
 
 Quotes must match contiguous source text at clause boundaries. The application
 publishes the original slice with derived offsets, deduplicates chunk overlap,
-and makes one source-based repair attempt for invalid quotes. Failed repair
-fails generation. Model guesses never become source anchors. Overlapping
+and makes one source-based repair attempt for invalid quotes. A repeated
+dangling `; and` or `; or` item may use its complete, verified source context;
+other failed repair fails generation. Model guesses never become source anchors. Overlapping
 citations are allowed when a complete sentence genuinely governs two issues.
 
 Descriptions use the selected standard rather than the other corpus variants.
@@ -193,6 +194,12 @@ the existing attorney edit step remain the normal workflow.
 Checks also reject a no-license prohibition described as a license grant,
 unsupported care benchmarks or legal rationales, and omitted conditional court
 priority through the same existing fallbacks.
+
+Local-model responses may include a prose preamble before one JSON answer or
+exact duplicate fenced copies of that answer. The reader accepts those wrappers
+without changing the answer. Invalid JSON, conflicting answers, malformed
+response shapes, and extraction transport failures produce an explicit error;
+they cannot silently drop a document and publish a partial-corpus draft.
 
 `LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS` controls this task only (default
 900, range 60–7200). Record any longer local-model timeout with the walkthrough;

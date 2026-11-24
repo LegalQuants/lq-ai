@@ -153,13 +153,18 @@ def _stub_playbook() -> PlaybookCreate:
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("failure", ["empty_extraction", "truncated", "empty_draft"])
+@pytest.mark.parametrize(
+    "failure", ["empty_extraction", "truncated", "empty_draft", "partial_invalid_json"]
+)
 async def test_worker_rejects_unusable_generation(
     db_session: AsyncSession, patch_session_factory: None, failure: str
 ) -> None:
     user = await _make_user(db_session)
     doc = await _make_doc(db_session, owner=user)
     generation = await _make_generation(db_session, owner=user, document_ids=[doc.id])
+    if failure == "partial_invalid_json":
+        second = await _make_doc(db_session, owner=user)
+        generation.document_ids = [doc.id, second.id]
     # A re-enqueued row must not retain an old draft after this attempt fails.
     generation.draft_playbook = _stub_playbook().model_dump(mode="json")
     await db_session.commit()
@@ -172,6 +177,11 @@ async def test_worker_rejects_unusable_generation(
         extract.side_effect = ExtractionResponseError(
             "Clause extraction reached the model output limit."
         )
+    elif failure == "partial_invalid_json":
+        extract.side_effect = [
+            [ExtractedClause(issue="Term", clause_text="Three years.")],
+            ExtractionResponseError("Clause extraction returned invalid JSON; retry generation."),
+        ]
     cluster = AsyncMock(return_value=[])
     draft = _stub_playbook().model_copy(update={"positions": []})
     assemble = AsyncMock(return_value=draft)
@@ -187,6 +197,8 @@ async def test_worker_rejects_unusable_generation(
     assert generation.completed_at is not None
     assert generation.error_message
     assert generation.draft_playbook is None
+    if failure == "partial_invalid_json":
+        assert extract.await_count == 2
     if failure != "empty_draft":
         cluster.assert_not_awaited()
         assemble.assert_not_awaited()
