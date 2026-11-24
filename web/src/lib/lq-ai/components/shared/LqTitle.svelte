@@ -28,11 +28,10 @@
 	export let leading: LqLeading | undefined = undefined;
 	export let transform: LqTextTransform = 'none';
 
-	// Default sizes per order, on the scale: 32 px, the Home greeting (26),
-	// page titles (20), then 16, 14.5 (header titles) and body size.
+	// The two largest defaults use the Home greeting and large-heading steps.
 	const ORDER_SIZE: Record<1 | 2 | 3 | 4 | 5 | 6, LqTextSize> = {
-		1: '32',
-		2: '26',
+		1: '26',
+		2: '24',
 		3: '20',
 		4: '16',
 		5: '14.5',
