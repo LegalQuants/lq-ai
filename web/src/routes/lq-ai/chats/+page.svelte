@@ -85,7 +85,7 @@
 <style>
 	.lq-banner-primary {
 		background: #059669;
-		color: #fff;
+		color: var(--lq-canvas);
 		border: 0;
 		padding: 3px 10px;
 		border-radius: 4px;

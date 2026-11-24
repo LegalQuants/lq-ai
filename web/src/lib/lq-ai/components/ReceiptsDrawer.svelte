@@ -125,8 +125,8 @@
 <style>
   .receipts-drawer {
     width: 240px;
-    background: #fff;
-    border-left: 1px solid #e5e7eb;
+    background: var(--lq-canvas);
+    border-left: 1px solid var(--lq-border);
     padding: 10px 8px;
     display: flex;
     flex-direction: column;
@@ -136,7 +136,7 @@
   .title { font-weight: 600; font-size: 11px; color: #374151; }
   .close { background: transparent; border: 0; color: #6b7280; cursor: pointer; font-size: 16px; padding: 0 4px; }
   .error { background: #fef2f2; color: #991b1b; padding: 4px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 4px; }
-  footer { padding-top: 6px; border-top: 1px solid #e5e7eb; margin-top: 6px; }
+  footer { padding-top: 6px; border-top: 1px solid var(--lq-border); margin-top: 6px; }
   .export {
     background: transparent; border: 1px solid #d1d5db;
     padding: 3px 6px; border-radius: 3px; color: #374151;

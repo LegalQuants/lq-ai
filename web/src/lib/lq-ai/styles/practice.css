@@ -54,4 +54,31 @@
   --lq-space-5: 20px;
   --lq-space-6: 24px;
   --lq-space-8: 32px;
+
+  /* Compatibility values for tokens components already used but this file never
+     defined (interface-redesign work plan, Annex B P1.1, hygiene step). Each is the
+     value the majority of call sites carried as a fallback, or an alias of an
+     existing token. The palette flip replaces them with the shell ADR values. */
+  --lq-surface: var(--lq-canvas);
+  --lq-surface-hover: rgba(0, 0, 0, 0.04);
+  --lq-bg: var(--lq-canvas);
+  --lq-text-primary: var(--lq-text);
+  --lq-on-accent: #ffffff;
+  --lq-accent-rgb: 31, 122, 107;
+  --lq-danger: var(--lq-error);
+  --lq-error-bg: #fee;
+  --lq-error-text: #800;
+  --lq-success: #166534;
+  --lq-success-bg: #efe;
+  --lq-success-border: #bfb;
+  --lq-success-soft: var(--lq-inset);
+  --lq-success-text: #060;
+  --lq-warning: #92400e;
+  --lq-warning-bg: #fff8e1;
+  --lq-warning-border: #ffe08a;
+  --lq-warning-soft: #fef3c7;
+  --lq-warning-text: #92400e;
+  --lq-info-bg: #e8f4fd;
+  --lq-info-border: #9ed3f5;
+  --lq-info-text: #0a5fa8;
 }

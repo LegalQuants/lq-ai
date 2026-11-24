@@ -182,7 +182,7 @@
 		cursor: default;
 	}
 	.lq-m2-cite-chip:focus-visible {
-		outline: 2px solid var(--lq-accent, #4338ca);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 1px;
 	}
 
@@ -248,7 +248,7 @@
 		border-color: rgba(107, 114, 128, 0.32);
 	}
 	:global(.dark) .state-unverified {
-		color: #9ca3af; /* gray-400 */
+		color: var(--lq-text-tertiary); /* gray-400 */
 		background-color: rgba(107, 114, 128, 0.16);
 		border-color: rgba(107, 114, 128, 0.36);
 	}
@@ -271,10 +271,10 @@
 	}
 	:global(.lq-cite-inline-unverified) {
 		color: #6b7280; /* gray-500 */
-		text-decoration-color: #9ca3af; /* gray-400 */
+		text-decoration-color: var(--lq-text-tertiary); /* gray-400 */
 		text-decoration-style: dotted;
 	}
 	:global(.dark .lq-cite-inline-unverified) {
-		color: #9ca3af; /* gray-400 */
+		color: var(--lq-text-tertiary); /* gray-400 */
 	}
 </style>

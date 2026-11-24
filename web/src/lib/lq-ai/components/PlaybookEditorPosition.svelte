@@ -353,7 +353,7 @@
 		cursor: not-allowed;
 	}
 	.lq-playbook-editor-position__btn--danger {
-		color: var(--lq-error, #b91c1c);
+		color: var(--lq-error);
 	}
 	.lq-playbook-editor-position__field {
 		display: flex;
@@ -381,11 +381,11 @@
 		resize: vertical;
 	}
 	.lq-playbook-editor-position__input--invalid {
-		border-color: var(--lq-error, #b91c1c);
+		border-color: var(--lq-error);
 	}
 	.lq-playbook-editor-position__hint--error {
 		font-size: 0.75rem;
-		color: var(--lq-error, #b91c1c);
+		color: var(--lq-error);
 	}
 	.lq-playbook-editor-position__grid {
 		display: grid;
