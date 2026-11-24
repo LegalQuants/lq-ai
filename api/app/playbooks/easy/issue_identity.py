@@ -90,6 +90,12 @@ _FAMILIES = (
     ("Permitted Use", "Use Limitation", "Restriction on Use", "Use Restriction"),
     ("Non-Disclosure Obligation", "Restriction on Disclosure", "Prohibition on Disclosure"),
     (
+        "Security Safeguards",
+        "Information Security Safeguards",
+        "Technical Security Measures",
+        "Security Controls",
+    ),
+    (
         "Return or Destruction",
         "Return or Destruction of Materials",
         "Return or Destruction of Information",

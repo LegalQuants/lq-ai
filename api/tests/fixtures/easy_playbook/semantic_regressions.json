@@ -1,0 +1,41 @@
+{
+  "captured_head": "13c44e73a25c7cf45c47612adb4c9cccb565c94f",
+  "source": "Five sample NDAs, live Qwen/nomic walkthrough on 2026-11-22",
+  "cases": [
+    {
+      "kind": "issue_mismatch",
+      "issue": "Restriction on Disclosure",
+      "standard": "(c) not disclose,\ncopy, distribute, or otherwise make available the Confidential Information to any person\nother than as permitted herein.",
+      "alternative": "(c) take all reasonable steps to safeguard\nthe Confidential Information from theft, loss, or unauthorized access, including the use of\nencryption and access controls consistent with the Receiving Party's information-security\npolicies.",
+      "generated_description": "Alternative source language: (c) take all reasonable steps to safeguard\nthe Confidential Information from theft, loss, or unauthorized access, including the use of\nencryption and access controls consistent with the Receiving Party's information-security\npolicies."
+    },
+    {
+      "kind": "reversed_comparison",
+      "issue": "Remedies",
+      "standard": "The Parties acknowledge that any breach of this Agreement may cause irreparable harm for\nwhich monetary damages may be inadequate, and that the Disclosing Party shall be entitled\nto seek injunctive and other equitable relief, in addition to any other remedies available at law\nor in equity, without the necessity of posting a bond.",
+      "alternative": "The Receiving Party acknowledges that the disclosure or unauthorized use of Confidential\nInformation would cause irreparable harm and that monetary damages alone would be\ninsufficient. The Disclosing Party shall be entitled to seek injunctive relief in addition to all\nother remedies available at law or in equity.",
+      "generated_description": "Mutual acknowledgment of irreparable harm instead of a Receiving Party-specific acknowledgment, and omission of the explicit waiver of bond requirements."
+    },
+    {
+      "kind": "reversed_survival_direction",
+      "issue": "Survival of General Information",
+      "standard": "Notwithstanding such expiration, the Receiving Party's obligations with respect to\nConfidential Information shall continue (a) for a period of three (3) years following\nexpiration or termination with respect to information that constitutes trade secrets under\napplicable law, and (b) for the duration of the term with respect to all other Confidential\nInformation.",
+      "alternative": "(b) the Receiving Party's obligations with respect to all other Confidential Information\nshall continue for a period of two (2) years following expiration or termination of the\nTerm.",
+      "generated_description": "Post-termination confidentiality duration for non-trade secret information reduced from the contract term to two years."
+    },
+    {
+      "kind": "duration_conflation",
+      "issue": "Term of Agreement",
+      "standard": "This Agreement shall remain in effect for a period of four (4) years from the Effective Date\n(the \"Term\").",
+      "alternative": "This Agreement shall be effective for a period of one (1) year from the Effective Date.",
+      "generated_description": "Confidentiality term reduced from four years to one year."
+    },
+    {
+      "kind": "duration_conflation",
+      "issue": "Term of Agreement",
+      "standard": "This Agreement shall remain in effect for a period of four (4) years from the Effective Date\n(the \"Term\").",
+      "alternative": "This Agreement shall continue in effect for a period of two (2) years from the Effective Date.",
+      "generated_description": "Confidentiality term reduced from four years to two years."
+    }
+  ]
+}

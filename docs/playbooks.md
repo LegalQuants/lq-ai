@@ -185,6 +185,12 @@ unsupported prose becomes literal source text and neutral review instructions.
 This does not certify legal correctness. Fallback descriptions compare wording
 without claiming that the alternative is legally acceptable.
 
+The targeted source checks also keep explicit technical safeguards out of
+disclosure-prohibition groups and correct comparisons of simple agreement
+durations, general-information survival timing, and acknowledgement actors.
+They do not infer conditional or ambiguous terms. Generated descriptions and
+the existing attorney edit step remain the normal workflow.
+
 `LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS` controls this task only (default
 900, range 60–7200). Record any longer local-model timeout with the walkthrough;
 it does not satisfy the default-model performance target automatically.

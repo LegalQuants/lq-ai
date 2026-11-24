@@ -42,6 +42,7 @@ from app.models.document import Document
 from app.playbooks.easy.issue_identity import issue_identity
 from app.playbooks.easy.json_output import unwrap_json_answer
 from app.playbooks.easy.source_anchor import anchor_quote, repair_context
+from app.playbooks.easy.source_facts import source_issue
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,13 @@ duration separate from confidentiality survival; and governing law separate
 from forum/venue. Use specific survival labels for trade secrets and general
 confidential information when the source supports separate entries. Preserve
 other genuine issues; do not target a fixed number of entries.
+
+Keep technical security safeguards (such as encryption and access controls)
+separate from a prohibition on disclosure and from the benchmark for the
+standard of care. Use "Security Safeguards" for those measures. When a uniform
+survival rule expressly covers trade secrets and other confidential information,
+identify both issues using the complete shared sentence(s), without inventing
+a separate survival period.
 
 For an NDA, reuse these labels when they fit: "Definition of Confidential
 Information", "Exclusions from Confidential Information", "Standard of Care",
@@ -298,6 +306,13 @@ async def extract_clauses_from_document(
             )
             continue
         merged.extend(clauses)
+
+    # Correct the narrow source/label mismatch observed in the walkthrough.
+    # Keep the complete source quotation and coordinates unchanged.
+    merged = [
+        clause.model_copy(update={"issue": source_issue(clause.issue, clause.clause_text)})
+        for clause in merged
+    ]
 
     # Overlapping input spans must not give the same source clause extra votes.
     merged = list(

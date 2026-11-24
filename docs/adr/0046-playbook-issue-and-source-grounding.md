@@ -3,6 +3,10 @@
 Status: Coverage decision accepted by the maintainer on 2026-11-22;
 implementation and legal taxonomy await review/attestation.
 
+On 2026-11-25 the maintainer confirmed retaining the existing drafting
+behavior and fixing the specific observed defects. There is no source-only
+default, new manual workflow, or independently configured judge in this change.
+
 ## Context
 
 The live Qwen/nomic walkthrough on PR #419 produced 17 positions. It merged
@@ -20,6 +24,12 @@ Different identities cannot merge/fold, even with identical embeddings.
 Unknown labels remain independent. Keep the original pre-fold standard and
 label selection. This registry is conservative and visible work product;
 expanding it needs examples showing equivalent issues and separate controls.
+
+The next walkthrough exposed an incorrect initial label: a technical-security
+clause was called a disclosure prohibition. For those known labels, explicit
+encryption/access-control wording without a direct disclosure restriction or
+care benchmark becomes Security Safeguards. A combined restriction-and-security
+clause remains a separate combined issue; source text and offsets are unchanged.
 
 Derive quotations and offsets from actual contiguous document slices.
 Normalize only PDF whitespace/hyphen wrapping for matching; publish the exact
@@ -42,6 +52,15 @@ or unsupported verdicts fall back to literal source text and neutral review
 instructions. A deterministic expiry/survival inversion guard applies even
 when the model approves a description. This is a consistency check, not a
 legal verification guarantee; the attorney still reviews the output.
+
+Use bounded explicit source facts to correct the observed reversed comparisons:
+simple agreement durations, during-term versus post-expiry general-information
+protection, and the actor acknowledging irreparable harm. These comparisons
+remain readable descriptions of the alternative versus the standard, and
+outrank a mistaken model verdict. Conditional or ambiguous facts are not guessed;
+other descriptions keep the normal drafting/check/fallback path. Tier writers
+and checkers receive the issue and explicit source roles. Introduced court-type
+qualifiers absent from both sources are rejected.
 
 The first full-corpus consistency request exhausted its 8,192-token response
 budget and conservatively replaced all prose with source text. Bound each

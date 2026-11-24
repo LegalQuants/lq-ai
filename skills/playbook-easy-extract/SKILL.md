@@ -3,7 +3,7 @@ name: playbook-easy-extract
 description: Use when extracting the negotiated positions from a single prior contract as input to the Easy Playbook auto-generation pipeline. Reads a contract's text, identifies the clauses that take a substantive position on a contract issue (definition of confidential information, limitation of liability, indemnification, payment terms, etc.), and emits a structured list of {issue, clause_text, source_offsets} for downstream clustering. Output is intermediate; the in-house attorney evaluates the final assembled playbook, not this stage.
 lq_ai:
   title: Playbook Easy Extract
-  version: 1.2.0
+  version: 1.3.0
   author: LegalQuants
   tags: [contracts, playbooks, extraction, internal]
   jurisdiction: regime-aware
@@ -49,6 +49,13 @@ duration separate from confidentiality survival; and governing law separate
 from forum/venue. Use specific survival labels for trade secrets and general
 confidential information when the source supports separate entries. Preserve
 other genuine issues; do not target a fixed number of entries.
+
+Keep technical security safeguards (such as encryption and access controls)
+separate from a prohibition on disclosure and from the benchmark for the
+standard of care. Use "Security Safeguards" for those measures. When a uniform
+survival rule expressly covers trade secrets and other confidential information,
+identify both issues using the complete shared sentence(s), without inventing
+a separate survival period.
 
 For an NDA, reuse these labels when they fit: "Definition of Confidential
 Information", "Exclusions from Confidential Information", "Standard of Care",

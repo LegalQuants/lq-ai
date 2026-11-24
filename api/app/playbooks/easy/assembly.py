@@ -42,6 +42,7 @@ from app.playbooks.easy.clustering import Cluster
 from app.playbooks.easy.extractor import DEFAULT_JUDGE_MODEL
 from app.playbooks.easy.json_output import unwrap_json_answer
 from app.playbooks.easy.source_anchor import anchor_quote
+from app.playbooks.easy.source_facts import tier_comparison, unsupported_court_type
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.playbooks import (
     FallbackTier,
@@ -195,6 +196,13 @@ or market-standard. Preserve negation and do not invent legal effects. Examples:
   third-party claims."
 * "Confidentiality term reduced from five years to three years."
 
+The direction is always ALTERNATIVE compared with STANDARD. Identify who
+does what in each source before comparing them. Agreement duration is not
+confidentiality survival. Protection only during the agreement term has no
+post-expiry tail: adding two years after expiry extends it, not reduces it.
+Do not reverse the acknowledgement actors (both parties versus one party),
+and do not invent court types absent from the supplied clauses.
+
 Output STRICTLY VALID JSON:
 
   {"description": "<one short sentence>"}
@@ -303,6 +311,7 @@ async def _build_position(
             gateway=gateway,
             judge_model=judge_model,
             contract_type=contract_type,
+            issue_label=cluster.issue_label,
         )
         fallback_tiers.append(
             FallbackTier(
@@ -385,6 +394,7 @@ async def _describe_tier(
     gateway: GatewayClient,
     judge_model: str,
     contract_type: str,
+    issue_label: str = "",
 ) -> str:
     """Run the describe-tier LLM call; return one-sentence description.
 
@@ -394,10 +404,13 @@ async def _describe_tier(
     """
 
     user_content = (
-        f"CONTRACT TYPE: {contract_type}\n\n"
+        f"CONTRACT TYPE: {contract_type}\nISSUE: {issue_label}\n\n"
         f"STANDARD LANGUAGE:\n{modal_text}\n\n"
         f"ALTERNATIVE CLAUSE:\n{tier_text}"
     )
+    comparison = tier_comparison(issue_label, modal_text, tier_text)
+    if comparison:
+        user_content += f"\n\nEXPLICIT SOURCE FACTS (preserve their direction):\n{comparison}"
 
     payload = await _dispatch_structured_call(
         gateway=gateway,
@@ -512,6 +525,8 @@ async def _ground_metadata(
             {
                 "id": f"position/{index}",
                 "sources": [position.standard_language],
+                "issue": position.issue,
+                "source_roles": ["selected_standard"],
                 "description": position.description,
                 "redline_strategy": position.redline_strategy,
             }
@@ -521,7 +536,12 @@ async def _ground_metadata(
                 {
                     "id": f"tier/{index}/{tier.rank}",
                     "sources": [position.standard_language, tier.language],
+                    "issue": position.issue,
+                    "source_roles": ["selected_standard", "alternative"],
                     "description": tier.description,
+                    "explicit_source_comparison": tier_comparison(
+                        position.issue, position.standard_language, tier.language
+                    ),
                 }
             )
     checks: dict[str, dict[str, Any]] = {}
@@ -542,6 +562,9 @@ async def _ground_metadata(
                 '"description_supported": true or false, "redline_supported": true or false, '
                 '"source_quotes": ["short verbatim evidence from each source, in order"]}]}. '
                 "Return exactly one check per item. Each evidence quote must be at most 20 words. "
+                "Keep source_quotes in source_roles order: selected standard first, alternative second. "
+                "Compare the alternative against the standard, never the reverse. Distinguish agreement "
+                "duration from confidentiality survival, and during-term protection from a post-expiry tail. "
                 "Do not fill omissions using the issue name or assumptions. Emit ONLY the JSON object; "
                 "do not include analysis, commentary, reasoning, or Markdown."
             ),
@@ -597,7 +620,13 @@ async def _ground_metadata(
         ):
             position.redline_strategy = "Review deviations against the selected standard language."
         for tier in position.fallback_tiers:
-            if not supported(
+            comparison = tier_comparison(position.issue, position.standard_language, tier.language)
+            if comparison:
+                # Explicit source facts outrank even an affirmative model verdict.
+                tier.description = comparison
+            elif unsupported_court_type(
+                [position.standard_language, tier.language], tier.description
+            ) or not supported(
                 f"tier/{index}/{tier.rank}",
                 [position.standard_language, tier.language],
                 "description_supported",

@@ -839,6 +839,10 @@ repair ends generation. Descriptions are grounded in the selected standard,
 with a separate consistency check and extractive fallback. These checks do
 not replace attorney review. See [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md).
 
+The 2026-11-25 defect fixes retain this drafting behavior: bounded source-fact
+checks separate technical safeguards from disclosure prohibitions and preserve
+the direction of explicit duration, survival, and acknowledgement comparisons.
+
 1. Upload 5–20 prior agreements of the same contract type.
 2. System extracts clauses, clusters by issue, identifies the user's most-common positions.
 3. System drafts a Playbook with suggested standard language and fallback tiers.

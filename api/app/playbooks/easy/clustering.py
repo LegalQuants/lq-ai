@@ -63,6 +63,7 @@ from app.clients.gateway import GatewayClient
 from app.knowledge.embed import DEFAULT_EMBEDDING_MODEL, request_embedding_vectors
 from app.playbooks.easy.extractor import ExtractedClauseSourceOffsets
 from app.playbooks.easy.issue_identity import compatible_issues
+from app.playbooks.easy.source_facts import source_issue
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,13 @@ async def cluster_clauses_by_issue(
     if not clauses:
         return []
 
+    # Also protect direct callers that did not pass through the extractor.
+    clauses = [
+        clause.model_copy(update={"issue": label})
+        if (label := source_issue(clause.issue, clause.clause_text)) != clause.issue
+        else clause
+        for clause in clauses
+    ]
     groups = _group_by_normalized_label(clauses)
     logger.info(
         "easy_cluster: %d label groups across %d clauses",
