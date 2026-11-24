@@ -228,7 +228,7 @@
 
 	.form-row input {
 		padding: 8px 10px;
-		border: 1px solid var(--lq-border, #e4e4e7);
+		border: 1px solid var(--lq-border-strong, #80828a);
 		border-radius: 12px;
 		background: var(--lq-bg, #ffffff);
 		color: var(--lq-text, #111114);
@@ -238,7 +238,7 @@
 
 	.form-row input:focus {
 		outline: 2px solid var(--lq-accent, #111114);
-		outline-offset: -1px;
+		outline-offset: 2px;
 		border-color: var(--lq-accent, #111114);
 	}
 
