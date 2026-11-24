@@ -14,7 +14,12 @@ from app.models.document import Document
 from app.playbooks.easy.assembly import _describe_tier, _ground_metadata
 from app.playbooks.easy.clustering import ClauseInput, cluster_clauses_by_issue
 from app.playbooks.easy.extractor import extract_clauses_from_document
-from app.playbooks.easy.source_facts import source_issue, tier_comparison, unsupported_court_type
+from app.playbooks.easy.source_facts import (
+    source_issue,
+    tier_comparison,
+    unsupported_court_type,
+    unsupported_metadata,
+)
 from app.schemas.gateway import ChatCompletionChoice, ChatCompletionMessage, ChatCompletionResponse
 from app.schemas.playbooks import FallbackTier, PositionCreate
 
@@ -202,7 +207,10 @@ def test_period_comparisons_handle_reverse_and_conditional_cases() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("period", ["1.5", "1/2", "twenty-one", "0", "two (3)"])
+@pytest.mark.parametrize(
+    "period",
+    ["1.5", "1/2", "twenty-one", "twenty one", "at least two", "up to two", "0", "two (3)"],
+)
 def test_ambiguous_or_unsupported_duration_uses_normal_drafting(period: str) -> None:
     assert (
         tier_comparison(
@@ -315,3 +323,99 @@ async def test_invented_court_type_is_rejected_even_when_model_approves() -> Non
     await _ground_metadata([position], gateway=gateway, judge_model="smart")
     assert "district" not in position.fallback_tiers[0].description
     assert alternative in position.fallback_tiers[0].description
+
+
+METADATA_CASES = json.loads(
+    (Path(__file__).parent / "fixtures/easy_playbook/metadata_regressions.json").read_text()
+)["cases"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("case", METADATA_CASES, ids=[c["issue"] for c in METADATA_CASES])
+async def test_new_captured_wording_defects_cannot_survive_positive_verdict(
+    case: dict[str, Any],
+) -> None:
+    is_tier = case["field"] == "tier_description"
+    position = PositionCreate(
+        issue=case["issue"],
+        standard_language=case["standard"],
+        description="Review the selected standard.",
+        severity_if_missing="medium",
+        redline_strategy=case["generated_prose"] if not is_tier else "Review deviations.",
+        fallback_tiers=[
+            FallbackTier(rank=1, language=case["alternative"], description=case["generated_prose"])
+        ]
+        if is_tier
+        else [],
+    )
+    sources = [case["standard"], case["alternative"]] if is_tier else [case["standard"]]
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = response(
+        {
+            "checks": [
+                {
+                    "id": "tier/0/1" if is_tier else "position/0",
+                    "description_supported": True,
+                    "redline_supported": True,
+                    "source_quotes": sources,
+                }
+            ]
+        }
+    )
+    await _ground_metadata([position], gateway=gateway, judge_model="smart")
+    if is_tier:
+        assert (
+            position.fallback_tiers[0].description
+            == "Alternative source language: " + case["alternative"]
+        )
+    else:
+        assert (
+            position.redline_strategy == "Review deviations against the selected standard language."
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "issue,sources,prose",
+    [
+        (
+            "No License",
+            ["No license is granted.", "Nothing grants the Receiving Party rights."],
+            "Both sources grant no license; the alternative expressly names the Receiving Party.",
+        ),
+        (
+            "No License",
+            [
+                "The license grant is limited to internal use.",
+                "The license grant permits internal use only.",
+            ],
+            "The alternative limits the license grant to internal use.",
+        ),
+        (
+            "Standard of Care",
+            ["Use reasonable care consistent with industry practice."],
+            "Use an industry standard of care.",
+        ),
+        (
+            "Standard of Care",
+            [
+                "Use at least the care used for its own information and no less than reasonable care."
+            ],
+            "The alternative omits the own-information care benchmark.",
+        ),
+        (
+            "Jurisdiction",
+            [
+                "The Parties consent to Chancery (or, if such court lacks subject-matter jurisdiction, the federal courts located in Delaware)."
+            ],
+            "Chancery has priority; federal courts apply only if it lacks subject-matter jurisdiction.",
+        ),
+        (
+            "Exclusions from Confidential Information",
+            ["Exclude information that is independently developed."],
+            "Preserve the independent-development exclusion.",
+        ),
+    ],
+)
+def test_new_guards_keep_supported_wording(issue: str, sources: list[str], prose: str) -> None:
+    assert not unsupported_metadata(issue, sources, prose)

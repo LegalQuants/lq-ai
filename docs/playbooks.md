@@ -190,6 +190,9 @@ disclosure-prohibition groups and correct comparisons of simple agreement
 durations, general-information survival timing, and acknowledgement actors.
 They do not infer conditional or ambiguous terms. Generated descriptions and
 the existing attorney edit step remain the normal workflow.
+Checks also reject a no-license prohibition described as a license grant,
+unsupported care benchmarks or legal rationales, and omitted conditional court
+priority through the same existing fallbacks.
 
 `LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS` controls this task only (default
 900, range 60–7200). Record any longer local-model timeout with the walkthrough;

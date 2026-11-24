@@ -84,6 +84,14 @@ def _duration(language: str) -> str | None:
     if len(matches) != 1:
         return None
     match = matches[0]
+    if re.search(
+        r"\b(?:at least|at most|up to|no less than|no more than|approximately|about|between|"
+        + "|".join(_NUMBERS)
+        + r")\s*$",
+        language[: match.start()],
+        re.I,
+    ):
+        return None
     number = match["number"].casefold()
     value = int(number) if number.isdigit() else _NUMBERS[number]
     if value < 1:
@@ -216,3 +224,49 @@ def unsupported_court_type(sources: list[str], prose: str) -> bool:
     source_words = set(re.findall(r"[a-z]+", " ".join(sources).casefold()))
     prose_words = set(re.findall(r"[a-z]+", prose.casefold()))
     return bool((prose_words & terms) - source_words)
+
+
+def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
+    """Catch the remaining explicit wording mismatches from the live draft.
+
+    These checks reject prose through the existing source fallback; they do not
+    infer alternative obligations or replace drafting for unrelated issues.
+    """
+    if unsupported_court_type(sources, prose):
+        return True
+    identity = issue_identity(issue)
+    source = _text(" ".join(sources)).casefold()
+    text = _text(prose).casefold()
+    if identity == "Standard of Care":
+        return any(word in text and word not in source for word in ("customary", "industry"))
+    if identity == "No License":
+        negative = (
+            r"\bno licen[cs]e\b.{0,180}\bgrant|\bnothing\b.{0,80}\bgrants?\b|\bdoes not grant\b"
+        )
+        if all(re.search(negative, _text(s), re.I) for s in sources):
+            return bool(
+                re.search(
+                    r"\b(?:limits?|narrows?|restricts?|extends?|expands?|permits?|allows?)\b"
+                    r".{0,30}\blicen[cs]e grant\b",
+                    text,
+                )
+            )
+    if identity == "Jurisdiction":
+        conditional_federal = any(
+            re.search(
+                r"\bif\b.{0,70}\blacks\b.{0,40}\bjurisdiction\b.{0,30}\bfederal courts\b",
+                _text(s),
+                re.I,
+            )
+            for s in sources
+        )
+        return bool(
+            conditional_federal
+            and "chancery" in text
+            and "federal" in text
+            and not re.search(r"\b(?:if|when|conditional\w*|fallback)\b", text)
+        )
+    if identity == "Exclusions from Confidential Information":
+        claim = r"\blegally\b|\bstatutor(?:y|ily)\b|\b(?:law|legislation) (?:requires?|exempts?)\b"
+        return bool(re.search(claim, text) and not re.search(claim, source))
+    return False

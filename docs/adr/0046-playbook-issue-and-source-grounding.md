@@ -62,6 +62,15 @@ other descriptions keep the normal drafting/check/fallback path. Tier writers
 and checkers receive the issue and explicit source roles. Introduced court-type
 qualifiers absent from both sources are rejected.
 
+The 2026-11-25 rerun corrected those failures but exposed four further metadata
+mismatches: a no-license clause described as a license grant, own-information
+care described as customary care, a conditional federal-court fallback described
+as an unrestricted alternative, and contractual exclusions given an unsupported
+legal rationale. Targeted checks reject those phrases through the existing
+source-text/neutral-strategy fallback, even after an affirmative model verdict.
+Supported generated prose remains unchanged. Both completed attempts and their
+exact failed comparisons are retained as evidence and regression fixtures.
+
 The first full-corpus consistency request exhausted its 8,192-token response
 budget and conservatively replaced all prose with source text. Bound each
 check to six items and 4,096 response tokens; an invalid or truncated batch
