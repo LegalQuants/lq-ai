@@ -1647,7 +1647,7 @@
 
 	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
-			class="px-4 py-2 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between"
+			class="px-4 py-2 border-b lq-t-border flex items-center justify-between"
 			data-testid="lq-ai-chat-header"
 		>
 			{#if activeChat}
@@ -1656,7 +1656,7 @@
 						{activeChat.title || 'Untitled chat'}
 					</LqTitle>
 					{#if activeChat.project_id}
-						<p class="text-xs text-gray-500">
+						<p class="text-xs lq-t-text2">
 							In project: {$projectsStore.find((p) => p.id === activeChat.project_id)?.name ??
 								activeChat.project_id}
 						</p>
@@ -1696,7 +1696,7 @@
 
 		{#if activeChat}
 			<div
-				class="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2"
+				class="border-t lq-t-border p-3 space-y-2"
 				class:lq-composer-fit={selectedRunProfile !== null}
 				data-testid="lq-ai-composer"
 			>
@@ -2082,5 +2082,13 @@
 	}
 	.lq-composer::placeholder {
 		color: var(--lq-text-tertiary);
+	}
+
+	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
+	.lq-t-border {
+		border-color: var(--lq-border);
+	}
+	.lq-t-text2 {
+		color: var(--lq-text-secondary);
 	}
 </style>
