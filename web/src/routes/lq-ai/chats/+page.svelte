@@ -17,7 +17,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
-	import { page } from '$app/stores';
+	import { navigating, page } from '$app/stores';
 	import { afterNavigate, goto, replaceState } from '$app/navigation';
 	import ChatPanel from '$lib/lq-ai/components/ChatPanel.svelte';
 	import { parseOAuthReturn } from '$lib/lq-ai/chat/toolGate';
@@ -30,15 +30,19 @@
 
 	// Consume the All chats link after navigation so focus moves into the list
 	// after the router has finished restoring focus. Normal chat entry stays collapsed.
-	afterNavigate(({ to }) => {
-		if (to?.url.searchParams.get('view') !== 'all') return;
-		const url = new URL(to.url);
+	function revealRequestedChatList() {
+		const current = get(page);
+		if (!chatPanel || current.url.searchParams.get('view') !== 'all') return;
+		const url = new URL(current.url);
 		url.searchParams.delete('view');
-		replaceState(url, get(page).state);
-		void chatPanel?.showChatList();
-	});
+		replaceState(url, current.state);
+		void chatPanel.showChatList();
+	}
+	afterNavigate(revealRequestedChatList);
 
 	onMount(() => {
+		// On a direct visit, the auth gate can mount this page after navigation finishes.
+		if (!get(navigating)) revealRequestedChatList();
 		const r = parseOAuthReturn(get(page).url.searchParams);
 		if (r.status === 'none') return;
 		mcpReturn = { status: r.status, server: r.server };

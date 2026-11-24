@@ -117,6 +117,16 @@ for (const width of [390, 1440]) {
 			cy.get('[data-testid="lq-chat-list-sheet"]').should('not.be.visible');
 			cy.focused().should('have.attr', 'data-testid', 'lq-chat-list-toggle');
 			openAllChats(); // From the same bare route after dismissing the drawer.
+
+			// A new tab follows the native link without an in-page click.
+			cy.visit('/lq-ai/chats?view=all');
+			cy.get('[data-testid="lq-chat-list-sheet"]')
+				.contains('Older conversation')
+				.should('be.visible');
+			cy.focused().should('have.attr', 'data-testid', 'lq-ai-new-chat-btn');
+			cy.location('search').should('eq', '');
+			cy.visit('/lq-ai/chats');
+			cy.get('[data-testid="lq-chat-list-toggle"]').should('have.attr', 'aria-expanded', 'false');
 		}
 	});
 }
