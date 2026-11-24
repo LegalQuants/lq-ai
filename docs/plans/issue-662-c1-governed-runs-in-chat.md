@@ -1,10 +1,10 @@
 # Governed runs in chat: build plan for #662 C1
 
-**Status:** Proposed. [ADR 0038](../adr/0038-governed-runs-in-chat.md)
-is not ratified. This plan was superseded in part on 2026-10-07 and 2026-10-08 (see the
-note below). An implementation of the revised design exists and is
-described under [Implementation status](#implementation-status). It has had no
-maintainer or security review.
+**Status:** Historical build plan, superseded in part on 2026-10-07 and 2026-10-08.
+The revised design shipped as experimental in v0.9.1. See [ADR 0038's decision
+and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
+for the open ratification question and [Implementation status](#implementation-status) for the
+build evidence.
 **Date:** 2026-10-06. **Baseline inspected:** `5e128d5ba`. The plan was written
 from a read of the code. The implementation status was rewritten on 2026-10-09 and
 extended on 2026-10-10.
@@ -251,7 +251,7 @@ Numbered on 2026-10-13 at the maintainer's request, as DE-410 to DE-420 in PRD Â
 ## Implementation status
 
 Recorded 2026-10-09 on an implementation branch built on `91973fd80` (the v0.9.0 release
-commit). Unreviewed, and ahead of ratification. Both profile switches default
+commit). This snapshot predates the merge review. Both profile switches default
 to off. The branch follows the revised design in
 [ADR 0038](../adr/0038-governed-runs-in-chat.md), not the ten slices above as
 they are written. The slice table below says what became of each slice, and three
@@ -699,18 +699,10 @@ which this branch makes.
   scripts and the browser scripts are kept with the maintainer.
 - **Long sessions.** A run that outlasts the access token, and the idle
   sign-out, were not exercised.
-- **No security review.** The changes touch authorization, audit and
-  `gateway/**`. Five are on a security path: the gateway changes (a reasoning-effort
-  field, two Ollama tool-call fixes, and an opt-in that restores placeholders in the arguments of the calls a reply makes and puts a run's tool text under the request pseudonymization); the rule for a run outside a matter, including a matter's file read on
-  that matter's terms; the roles on runs and the cross-owner read with its audit row;
-  pseudonymization following the operator's setting; and the knowledge-base search.
-  Under ADR 0034, accepted on 2026-10-04, security review means maintainer review
-  with the security-path checklist applied; the project has no separate security team.
-  The DE-294 handoff rules are implemented as tests, not reviewed.
-- **No ratification.** ADR 0038 is Proposed. The direct answer, a run in a chat that
-  is in no matter, and the selection of a file a knowledge-base search finds amend ADR 0035
-  D1, D2 and D3, which are Accepted. ADR 0038 D1 gives the words, and they are ratified
-  with it.
+- **Merge review.** The [#599 merge receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3)
+  records the security-path review at `ca96056` and 10 of 10 CI checks passing.
+  It also records committee ratification. See the [ADR decision and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
+  for the open question about the scope of committee ratification.
 - **Choices inside the rulings.** The maintainer ruled on all eleven of the ADR's open
   questions. Rulings 4, 6 and 10 were built on choices he has not ruled on, which the
   ADR lists under each. D8, the access module, is proposed and not built.
