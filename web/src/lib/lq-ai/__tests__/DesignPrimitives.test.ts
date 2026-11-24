@@ -157,8 +157,7 @@ describe('text and titles carry the ADR 0045 type scale', () => {
 			'16',
 			'20',
 			'24',
-			'26',
-			'32'
+			'26'
 		]);
 		for (const step of LQ_TYPE_SCALE) {
 			expect(LQ_TEXT_SIZE_VAR[step]).toBe(`${step}px`);
@@ -234,7 +233,7 @@ describe('text and titles carry the ADR 0045 type scale', () => {
 	});
 
 	it('takes its heading level from order and its size from the scale', () => {
-		const sizes = { 1: '32px', 2: '26px', 3: '20px', 4: '16px', 5: '14.5px', 6: '14px' };
+		const sizes = { 1: '26px', 2: '24px', 3: '20px', 4: '16px', 5: '14.5px', 6: '14px' };
 		for (const [order, size] of Object.entries(sizes)) {
 			const html = render(LqTitle, { props: { order: Number(order) as 1 } }).body;
 			expect(markupOf(html)).toMatch(new RegExp(`^<h${order}[\\s>]`));
