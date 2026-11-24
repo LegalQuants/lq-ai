@@ -191,6 +191,7 @@
 		toggleDocument,
 		type PendingRequest
 	} from '$lib/lq-ai/run/composer';
+	import { createChatSelection } from '$lib/lq-ai/chat/selection';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
@@ -732,7 +733,7 @@
 		}
 		if (!projectIdFilter) {
 			try {
-				await selectChat(await chatsApi.getChat(chatId));
+				await selectChat(chatId);
 				return;
 			} catch (e) {
 				console.error('lq-ai: failed to open the chat holding the active run', e);
@@ -784,7 +785,13 @@
 		}
 	}
 
-	async function selectChat(chat: Chat) {
+	const { select: selectChat, begin: beginSelection, dispose } = createChatSelection(
+		activateChat,
+		(files) => (projectFiles = files)
+	);
+	onDestroy(dispose);
+
+	function activateChat(chat: Chat) {
 		activeChatStore.set(chat);
 		streamingMessageId = null;
 		sendError = null;
@@ -792,6 +799,10 @@
 		// An open slash popover listens on the window; it must not outlive its chat.
 		onSlashDismiss();
 		// Reset draft state.
+		pendingEnhancement = null;
+		pendingGate = null;
+		closeOverrideModal();
+		closeAttachKbModal();
 		composerText = '';
 		attachedSkillNames = [];
 		failedSkillNames = [];
@@ -818,45 +829,16 @@
 				modelByChat = { ...modelByChat, [chat.id]: persisted };
 			}
 		}
-		// Load messages.
-		try {
-			const page = await messagesApi.listMessages(chat.id, { limit: 100 });
-			messagesStore.set(page.items);
-		} catch (e) {
-			console.error('lq-ai: failed to load messages', e);
-			messagesStore.set([]);
-		}
-		// Load attached project skills/files context.
-		await refreshProjectContext(chat);
-	}
-
-	async function refreshProjectContext(chat: Chat) {
-		projectFiles = [];
-		if (!chat.project_id) return;
-		try {
-			const project = await projectsApi.getProject(chat.project_id);
-			// Update the projects-store entry too.
-			projectsStore.update(($projects) =>
-				$projects.map((p) => (p.id === project.id ? project : p))
-			);
-			// Project-attached files are surfaced read-only per Project context inheritance.
-			if (project.attached_file_ids && project.attached_file_ids.length > 0) {
-				projectFiles = await Promise.all(
-					project.attached_file_ids.map((id) => filesApi.getFile(id).catch(() => null))
-				).then((items) => items.filter((x): x is FileMeta => x !== null));
-			}
-		} catch (e) {
-			console.error('lq-ai: failed to load project context', e);
-		}
 	}
 
 	async function createNewChat() {
+		const current = beginSelection();
 		try {
 			const chat = await chatsApi.createChat({
 				project_id: projectIdFilter ?? activeProject?.id ?? null
 			});
 			chatsStore.update(($chats) => [chat, ...$chats]);
-			selectChat(chat);
+			await selectChat(chat, current);
 		} catch (e) {
 			console.error('lq-ai: failed to create chat', e);
 		}
@@ -1450,10 +1432,14 @@
 	}
 
 	onMount(async () => {
+		const current = beginSelection();
 		await loadShell();
+		if (!current()) return;
 		if (initialChatId) {
 			const found = get(chatsStore).find((c) => c.id === initialChatId);
-			if (found) await selectChat(found);
+			if (found) await selectChat(found, current);
+			else if (!projectIdFilter) await openUrlChat(initialChatId, current);
+			if (!current()) return;
 		}
 		// One-shot composer prefill — read + clear so a refresh doesn't
 		// re-prefill. Used by the standalone /lq-ai/saved-prompts page when
@@ -1544,11 +1530,11 @@
 	$: if (!projectIdFilter && initialChatId !== urlChatSeen) {
 		urlChatSeen = initialChatId;
 		if (initialChatId && initialChatId !== activeChat?.id) void openUrlChat(initialChatId);
+		else beginSelection();
 	}
-	async function openUrlChat(id: string): Promise<void> {
+	async function openUrlChat(id: string, current = beginSelection()): Promise<void> {
 		try {
-			const known = get(chatsStore).find((c) => c.id === id);
-			await selectChat(known ?? (await chatsApi.getChat(id)));
+			await selectChat(id, current);
 		} catch (e) {
 			console.error('lq-ai: failed to open the chat from the address', e);
 		}

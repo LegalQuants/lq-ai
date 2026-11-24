@@ -162,6 +162,17 @@ describe('contrast, recomputed from the shipped values (ADR 0045 §1)', () => {
 		'--lq-danger'
 	];
 
+	it('keeps the standalone Office sign-in field edge and focus ring visible without shell tokens', () => {
+		const page = read(join(webRoot, 'src/routes/lq-ai/word-addin/oauth-start/+page.svelte'));
+		const input = page.match(/\.form-row input\s*\{([^}]+)\}/)?.[1];
+		const focus = page.match(/\.form-row input:focus\s*\{([^}]+)\}/)?.[1];
+		expect(input).toContain(
+			`border: 1px solid var(--lq-border-strong, ${resolveToken('--lq-border-strong')})`
+		);
+		expect(focus).toContain(`outline: 2px solid var(--lq-accent, ${resolveToken('--lq-accent')})`);
+		expect(focus).toContain('outline-offset: 2px;');
+	});
+
 	it('meets 4.5:1 for every text colour on every light surface', () => {
 		for (const t of texts)
 			for (const s of surfaces) {

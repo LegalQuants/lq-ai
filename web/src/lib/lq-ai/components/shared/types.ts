@@ -78,8 +78,6 @@ export const LQ_WEIGHT_VAR: Record<LqWeight, string> = {
 // The type scale of ADR 0045 §4, in px. LqText and LqTitle carry this one
 // scale; each step is named by its size so a call site reads like the ADR's
 // table ("13.5" is navigation rows, buttons and pills; "20" is page titles).
-// "26" is not in the ADR's table: Houfu ruled on 11 November that the Home
-// greeting is 26 px (the ADR's row says 32).
 export const LQ_TYPE_SCALE = [
 	'11',
 	'12',
@@ -91,8 +89,7 @@ export const LQ_TYPE_SCALE = [
 	'16',
 	'20',
 	'24',
-	'26',
-	'32'
+	'26'
 ] as const;
 export type LqTypeStep = (typeof LQ_TYPE_SCALE)[number];
 
@@ -119,8 +116,7 @@ export const LQ_TEXT_SIZE_VAR: Record<LqTextSize, string> = {
 	'16': '16px',
 	'20': '20px',
 	'24': '24px',
-	'26': '26px',
-	'32': '32px'
+	'26': '26px'
 };
 
 // Letter spacing. `wide` is the uppercase label tracking (0.06em) that the
