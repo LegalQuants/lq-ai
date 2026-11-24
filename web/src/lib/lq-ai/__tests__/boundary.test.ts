@@ -66,11 +66,12 @@ interface Crossing {
 }
 
 /** ES `import … from '…'`, bare `import '…'`, and `export … from '…'`. */
-const staticImport = /(?:^|[^\w$.])(?:import|export)\s*(?:[^'";]*?\bfrom\s*)?['"]([^'"\n]+)['"]/g;
+const staticImport = /(?:^|[^\w$.@])(?:import|export)\s*(?:[^'";]*?\bfrom\s*)?['"]([^'"\n]+)['"]/g;
 /** `import('…')` */
 const dynamicImport = /\bimport\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g;
-/** CSS `@import '…'` and `@import url('…')` */
-const cssImport = /@import\s+(?:url\(\s*)?['"]([^'"\n]+)['"]/g;
+/** CSS import rules accept either a string or a URL with an optional quote pair. */
+const cssStringImport = /@import\s*(["'])(.*?)\1/gi;
+const cssUrlImport = /@import\s+url\(\s*(?:(["'])(.*?)\1|([^\s"'()]+))\s*\)/gi;
 
 function walk(dir: string, out: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {
@@ -91,8 +92,11 @@ function extensionOf(name: string): string {
 
 function specifiersIn(source: string): string[] {
 	const found: string[] = [];
-	for (const pattern of [staticImport, dynamicImport, cssImport]) {
+	for (const pattern of [staticImport, dynamicImport]) {
 		for (const match of source.matchAll(pattern)) found.push(match[1]);
+	}
+	for (const pattern of [cssStringImport, cssUrlImport]) {
+		for (const match of source.matchAll(pattern)) found.push(match[2] ?? match[3]);
 	}
 	return found;
 }
@@ -118,13 +122,50 @@ function crossingFor(file: string, specifier: string): Crossing | null {
 		return null; // $app/*, $env/*, $service-worker: SvelteKit, not OpenWebUI
 	} else if (specifier.startsWith('.')) {
 		target = resolve(dirname(file), specifier);
-	} else if (specifier.startsWith('/')) {
+	} else if (specifier.startsWith('/') && !specifier.startsWith('//')) {
 		target = join(webRoot, specifier); // Vite root-absolute import
 	} else {
 		return null; // bare package or builtin
 	}
 	return isInsideRoots(target) ? null : { file: toPosix(relative(webRoot, file)), specifier };
 }
+
+describe('CSS import scanning', () => {
+	// Assemble the rule at runtime: the boundary check also scans this test file.
+	const rule = '@import';
+	const source = join(roots[0], 'theme.css');
+	it.each([
+		['url(/src/app.css)', '/src/app.css'],
+		['URL(  ../../app.css  ) screen', '../../app.css'],
+		['url("/src/app.css") layer(base)', '/src/app.css'],
+		["url( '/src/app.css' )", '/src/app.css'],
+		['"/src/app.css"', '/src/app.css']
+	])('reports the crossing in %s', (target, expected) => {
+		const specifiers = specifiersIn(`${rule} ${target};`);
+		expect(specifiers).toEqual([expected]);
+		expect(crossingFor(source, expected)).toEqual({
+			file: 'src/lib/lq-ai/theme.css',
+			specifier: expected
+		});
+	});
+
+	it.each([
+		'./practice.css',
+		'/src/lib/lq-ai/theme.css',
+		'https://example.org/style.css',
+		'//example.org/style.css'
+	])('allows %s', (target) => {
+		const specifiers = specifiersIn(`${rule} url(${target});`);
+		expect(specifiers).toEqual([target]);
+		expect(crossingFor(source, target)).toBeNull();
+	});
+
+	it('ignores ordinary URL declarations and malformed unquoted imports', () => {
+		expect(
+			specifiersIn(`a { background: url(/images/bg.png); } ${rule} url(/src/bad path.css);`)
+		).toEqual([]);
+	});
+});
 
 describe('LQ.AI code stays inside the LQ.AI roots', () => {
 	const files = roots.flatMap((root) => walk(root));
