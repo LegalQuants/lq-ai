@@ -191,7 +191,7 @@
 		toggleDocument,
 		type PendingRequest
 	} from '$lib/lq-ai/run/composer';
-	import { createChatSelection } from '$lib/lq-ai/chat/selection';
+	import { createChatSelection, createListedChat } from '$lib/lq-ai/chat/selection';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
@@ -834,10 +834,7 @@
 	async function createNewChat() {
 		const current = beginSelection();
 		try {
-			const chat = await chatsApi.createChat({
-				project_id: projectIdFilter ?? activeProject?.id ?? null
-			});
-			chatsStore.update(($chats) => [chat, ...$chats]);
+			const chat = await createListedChat(projectIdFilter ?? activeProject?.id ?? null);
 			await selectChat(chat, current);
 		} catch (e) {
 			console.error('lq-ai: failed to create chat', e);

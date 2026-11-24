@@ -3,6 +3,12 @@ import { chatsApi, filesApi, messagesApi, projectsApi } from '../api';
 import { chatsStore, messagesStore, projectsStore } from '../stores';
 import type { Chat, FileMeta } from '../types';
 
+export async function createListedChat(projectId: string | null): Promise<Chat> {
+	const chat = await chatsApi.createChat({ project_id: projectId });
+	chatsStore.update((chats) => [chat, ...chats.filter((item) => item.id !== chat.id)]);
+	return chat;
+}
+
 /** Each panel owns its pending lookups and reads, including callbacks after unmount. */
 export function createChatSelection(
 	activate: (chat: Chat) => void,

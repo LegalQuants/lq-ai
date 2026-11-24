@@ -36,7 +36,7 @@
 	 */
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { browser } from '$app/environment';
-	import { afterNavigate } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import {
 		IconAdjustments,
 		IconBell,
@@ -65,6 +65,7 @@
 	import { createNotificationBell } from '$lib/lq-ai/autonomous/notification-bell-controller';
 	import { preferences } from '$lib/lq-ai/stores/preferences';
 	import { activeChatStore, chatsStore } from '$lib/lq-ai/stores';
+	import { createListedChat } from '$lib/lq-ai/chat/selection';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import { activeNavItemFor, visibleNav, type NavItem, type NavItemId } from '../nav';
 	import type { User } from '../tabs';
@@ -283,12 +284,37 @@
 		return () => query?.removeEventListener?.('change', apply);
 	});
 
+	let creatingChat = false;
+	let createChatError = '';
+	let navigation = 0;
+	beforeNavigate(() => {
+		navigation++;
+		createChatError = '';
+	});
+
+	async function startChat() {
+		if (creatingChat) return;
+		creatingChat = true;
+		createChatError = '';
+		const startedAt = navigation;
+		try {
+			const chat = await createListedChat(null);
+			if (navigation === startedAt) await goto(chatHref(chat.id));
+		} catch (error) {
+			if (navigation === startedAt)
+				createChatError = error instanceof Error ? error.message : 'Could not start a chat.';
+		} finally {
+			creatingChat = false;
+		}
+	}
+
 	afterNavigate(() => {
 		void lists.refresh();
 		void bell?.refresh();
 	});
 
 	onDestroy(() => {
+		navigation++;
 		if (bell && ownsBell) bell.destroy();
 		if (notificationsShown) clearRightSidebarOverlay();
 	});
@@ -531,10 +557,21 @@
 													</li>
 												{/each}
 											</ul>
+										{:else if item.id === 'new'}
+											<button
+												type="button"
+												class="lq-sidebar-row lq-sidebar-new"
+												data-nav-id={item.id}
+												disabled={creatingChat}
+												on:click={startChat}
+											>
+												<IconPlus size={16} stroke={1.75} aria-hidden="true" />
+												<span class="lq-sidebar-row-label">{item.label}</span>
+											</button>
+											{#if createChatError}<span role="alert">{createChatError}</span>{/if}
 										{:else}
 											<a
 												class="lq-sidebar-row"
-												class:lq-sidebar-new={item.id === 'new'}
 												class:lq-sidebar-row-current={currentNav(item.id)}
 												href={item.route}
 												aria-current={currentNav(item.id) ? 'page' : undefined}

@@ -15,6 +15,7 @@ export const DETERMINISTIC_SPECS = [
 	'cypress/e2e/lq-ai-table-skill-flow.cy.ts',
 	'cypress/e2e/matter-intake.cy.ts',
 	'cypress/e2e/lq-ai-matter-proposals.cy.ts',
+	'cypress/e2e/lq-ai-sidebar-new-chat.cy.ts',
 	'cypress/e2e/de263-community-skills.cy.ts',
 	// Real login/CRUD, with inference responses intercepted.
 	'cypress/e2e/m2-c2-citation-states.cy.ts',
