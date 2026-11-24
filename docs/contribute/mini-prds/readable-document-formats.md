@@ -65,7 +65,7 @@ Each document carries hand-written **expected-text assertions** in a sidecar fil
 | Measure | How |
 |---|---|
 | Text survival | % of must-contain assertions met, per document and per format |
-| Redline handling | Classify each converter's default output on redlined files: accepted-only / all changes inline / deletions dropped silently / garbled. Note whether author and date are recoverable at all. |
+| Redline handling | For each redlined DOCX, score the accepted text produced by the shipping configuration. Check that required insertions and retained phrases are present and that deleted phrases are absent. Record author, date and comment recovery separately. |
 | Comments | Retained / dropped, including the #9833 case |
 | Tables | Cell text present; header row identifiable |
 | Failure honesty | For each failure case: typed error / empty "success" / crash / hang. **An empty success is the worst outcome** (ADR 0033 decision 1). |
@@ -76,11 +76,11 @@ Each document carries hand-written **expected-text assertions** in a sidecar fil
 
 ### Decision rule — agree it before running
 
-Phase 1's PR states the rule *before* the results, so the results cannot shape it. Proposed rule, for the maintainer to confirm or change:
+Record the rule and the expected-text sidecars before running any converter. Give each candidate the original DOCX bytes and use the same pinned shipping configuration for every DOCX fixture. Score the canonical text that configuration would store. Switching readers, changing flags for an individual fixture or cleaning up text only for the benchmark invalidates the result.
 
-1. **Eligibility** (pass or fail). No network access in the configuration we would ship. A permissive licence, or one an existing ADR already accepts. A typed error or clear failure for every failure case: no empty successes, no hangs. Deterministic output.
-2. **Per-format clearance.** A format is advertised only if the chosen converter meets **≥ 90% of must-contain assertions** across that format's documents. Formats below the bar stay `unsupported_type` and are listed as such.
-3. **Choice.** Among eligible converters: most formats cleared first, then installed weight, then speed.
+1. **Eligibility for the default.** The shipping configuration runs offline, produces deterministic output, uses a permissive licence or one an existing ADR accepts, and gives a clear failure for every failure case. Empty successes and hangs fail eligibility. Opt-in candidates such as Docling serve as comparison baselines.
+2. **DOCX clearance.** Require at least 90% of the DOCX must-contain assertions across the corpus. Every redlined DOCX must also pass every accepted-text assertion. Required insertions and retained phrases must appear, and every must-not-appear phrase must be absent. One redline failure disqualifies the candidate.
+3. **Choice.** Rank qualifying candidates by their DOCX must-contain score, breaking ties by lower installed weight and then faster DOCX conversion. If none qualifies, report that outcome and leave the default undecided. Report other formats separately. Each additional format still needs to meet its own 90% threshold to be advertised, and its score carries no weight in the DOCX decision.
 
 ### Deliverables
 
@@ -89,7 +89,7 @@ Phase 1's PR states the rule *before* the results, so the results cannot shape i
 
 ## Phase 2 — Decision docs
 
-- **A new ADR** (numbered at PR time) that revises ADR 0017. It names the converter and the advertised formats, citing the benchmark. It states what the accepted view does with tracked changes, from the benchmark's redline findings. It names the revision layer as the follow-up. ADR 0017 gets a status notice pointing to the new ADR, and is not rewritten.
+- **A new ADR** (numbered at PR time) that revises ADR 0017. It records the DOCX benchmark outcome. If a converter qualifies, it names that converter and the formats cleared for the build. A no-winner result leaves Phase 3 on hold. It states what the accepted view does with tracked changes, from the benchmark's redline findings. It names the revision layer as the follow-up. ADR 0017 gets a status notice pointing to the new ADR, and is not rewritten.
 - **An ADR 0033 amendment** to decision 3: readable office formats ship in core, while heavy or ML adapters stay opt-in. It records the SBOM entry and its justification.
 - **PRD:** a DE for multi-format ingestion in §9 (or DE-387 rescoped), plus the §3 format note. Update DE-352, which becomes "reject what we still can't read".
 - **HONEST-STATE:** the ingest-formats row (`docs/HONEST-STATE.md:78`).
@@ -113,7 +113,7 @@ Behaviour:
 - **Routing.** Detect the format from the bytes, not the browser MIME. anydoc exposes `format_from_bytes`, and the existing text route already distrusts the MIME (`ingest.py:160-166`). Today `route_pdf` is decided by MIME type. A PDF uploaded under an office name or MIME could either be redirected to PyMuPDF by byte detection, or stay `unsupported_type`. Redirecting changes the existing PDF route, so the Phase 2 ADR makes that choice explicitly. Either way, PDF never goes through the new converter.
 - **Provenance.** Record the converter in `parser` and its exact version in `parser_version`, so a later converter upgrade can trigger re-ingest decisions.
 - **Errors.** Map every converter failure to an `ingestion_error`. Encrypted → `unsupported_content`, the code encrypted PDFs already get (`ParserUnsupported`, `ingest.py:263`). If the ADR wants a distinct `encrypted` code, it applies to both routes and the PDF mapping changes in the same PR. Then: resource limit → `parse_failed`; malformed or missing part → `parse_failed`; no extractable text → `unsupported_content`; a needs-OCR result → `needs_ocr` if ADR 0033 T1 has landed, otherwise `unsupported_content`. Formats the benchmark did not clear stay `unsupported_type`.
-- **Bounds.** Keep the existing upload cap (`LQ_AI_MAX_UPLOAD_SIZE_MB`), add a conversion timeout with the same `asyncio.wait_for` pattern as the PDF path, and rely on the converter's own decompression limits only after the benchmark's bomb case shows they work.
+- **Bounds.** Keep the existing upload cap (`LQ_AI_MAX_UPLOAD_SIZE_MB`). Enforce limits on elapsed time, memory and decompressed size during conversion. When a limit is reached, stop the converter and any child processes, release their resources, and record a terminal ingestion failure. The worker must be able to process the next file.
 - **User-facing copy.** `ingestion_error` is a free-text column (`api/app/models/file.py:69`), so a new code needs no migration. But the web client names the readable formats in its copy: `UNREADABLE_REASONS` in `web/src/lib/lq-ai/run/composer.ts` says "Runs read PDF with text, plain text and Markdown." Update that copy, and give every new error code a reason string there.
 - **No egress.** Never pass anydoc's `ocr="hosted"` (or any equivalent option). It sends the **whole document** to Firecrawl Parse. A test asserts that the adapter never sets it. Turning hosted OCR on would be a separate decision with its own review, because it means documents leave the operator's environment.
 
@@ -124,13 +124,13 @@ Behaviour:
 
 ## How we'd know it's done
 
-- [ ] **Phase 1:** the decision rule is merged or stated in the PR before the results. The corpus is redistributable and committed. One command re-runs the benchmark. Every candidate is version-pinned. The results report text survival, redline handling, failure honesty, determinism, network and weight for all four candidates.
+- [ ] **Phase 1:** the decision rule is merged or stated in the PR before the results. The corpus is redistributable and committed. One command re-runs the benchmark. Every candidate is version-pinned. The results report text survival, redline handling, failure honesty, determinism, network and weight for all four candidates. Report each candidate’s DOCX score and every redline assertion result for the pinned shipping configuration, including a no-winner outcome if applicable.
 - [ ] **Phase 2:** the new ADR cites the benchmark; ADR 0017 carries a status notice and is not edited in place; ADR 0033 decision 3 is amended on the record; the PRD DE and HONEST-STATE row match what Phase 3 ships.
 - [ ] **Phase 3:** for every advertised format, a fixture reaches `ready` with a `Document` and chunks.
 - [ ] **Phase 3:** the chunk offset-fidelity invariant holds for each new-format fixture.
 - [ ] **Phase 3:** a chat turn with a DOCX attached includes its text (test at the `_load_attached_file_contexts` level).
 - [ ] **Phase 3:** a knowledge base holding the DOCX returns a passage from it in retrieval.
-- [ ] **Phase 3:** each failure-case fixture gets its mapped `ingestion_error`. None ends `ready` with empty text, and none is left in `processing`.
+- [ ] **Phase 3:** each failure-case fixture gets its mapped `ingestion_error`. None ends `ready` with empty text, and none is left in `processing`. A worker test forces a conversion past its deadline and verifies that the conversion stops, its resources are released, the file reaches a terminal failure, and the worker can process the next file.
 - [ ] **Phase 3:** a test asserts the hosted-OCR option is never passed.
 - [ ] **Phase 3:** the dependency is pinned in the `api` and `ingest-worker` images.
 - [ ] **Phase 4:** processing and failure states are visible in chat and on the knowledge base. Oversized attachments are capped with a notice, or the limit is documented.
