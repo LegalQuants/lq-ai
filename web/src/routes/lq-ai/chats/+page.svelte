@@ -18,7 +18,7 @@
 	import { onMount } from 'svelte';
 	import { get } from 'svelte/store';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
 	import ChatPanel from '$lib/lq-ai/components/ChatPanel.svelte';
 	import { parseOAuthReturn } from '$lib/lq-ai/chat/toolGate';
 
@@ -27,6 +27,16 @@
 
 	let chatPanel: ChatPanel | null = null;
 	let mcpReturn: { status: 'connected' | 'error'; server: string | null } | null = null;
+
+	// Consume the All chats link after navigation so focus moves into the list
+	// after the router has finished restoring focus. Normal chat entry stays collapsed.
+	afterNavigate(({ to }) => {
+		if (to?.url.searchParams.get('view') !== 'all') return;
+		const url = new URL(to.url);
+		url.searchParams.delete('view');
+		replaceState(url, get(page).state);
+		void chatPanel?.showChatList();
+	});
 
 	onMount(() => {
 		const r = parseOAuthReturn(get(page).url.searchParams);

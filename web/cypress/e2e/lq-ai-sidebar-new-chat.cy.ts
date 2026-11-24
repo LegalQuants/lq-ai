@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-it('starts a fresh conversation from New on the chat route and uses All chats only to navigate', () => {
+function visitExistingChat() {
 	const user = {
 		id: 'user',
 		name: 'Test',
@@ -16,7 +16,11 @@ it('starts a fresh conversation from New on the chat route and uses All chats on
 		created_at: '2026-01-01',
 		updated_at: '2026-01-01'
 	});
-	const chats = [chat('existing')];
+	const chats = [
+		chat('existing'),
+		...Array.from({ length: 8 }, (_, i) => chat(`recent-${i}`)),
+		{ ...chat('Older conversation'), updated_at: '2025-01-01' }
+	];
 	const page = (items: unknown[]) => ({ items, next_cursor: null });
 
 	cy.intercept('**/api/**', (req) => {
@@ -74,15 +78,45 @@ it('starts a fresh conversation from New on the chat route and uses All chats on
 			);
 		}
 	});
-	cy.contains('Old conversation').should('be.visible');
-	cy.get('[data-testid="lq-ai-composer-input"]').type('Unsent draft');
-	cy.get('[data-nav-id="new"]').click();
-	cy.wait('@createChat');
-	cy.location('search').should('eq', '?id=fresh');
-	cy.get('[data-testid="lq-ai-chat-header"]').should('contain.text', 'fresh');
-	cy.get('[data-testid="lq-ai-composer-input"]').should('have.value', '');
-	cy.contains('Old conversation').should('not.exist');
-	cy.get('[data-nav-id="all-chats"]').click();
-	cy.location('search').should('eq', '');
-	cy.get('@createChat.all').should('have.length', 1);
-});
+}
+
+for (const width of [390, 1440]) {
+	it(`starts a fresh chat and reveals the full chat list at ${width}px`, () => {
+		cy.viewport(width, 844);
+		const narrow = width === 390;
+		function openShell() {
+			if (narrow) cy.get('[data-testid="lq-shell-sidebar-open"]').click();
+		}
+		visitExistingChat();
+		cy.contains('Old conversation').should('be.visible');
+		cy.get('[data-testid="lq-ai-composer-input"]').type('Unsent draft');
+		if (narrow)
+			cy.get('[data-testid="lq-chat-list-toggle"]').should('have.attr', 'aria-expanded', 'false');
+		openShell();
+		cy.get('[data-nav-id="new"]').click();
+		cy.wait('@createChat');
+		cy.location('search').should('eq', '?id=fresh');
+		cy.get('[data-testid="lq-ai-chat-header"]').should('contain.text', 'fresh');
+		cy.get('[data-testid="lq-ai-composer-input"]').should('have.value', '');
+		cy.contains('Old conversation').should('not.exist');
+		function openAllChats() {
+			openShell();
+			cy.get('[data-testid="lq-shell-sidebar"]').should('not.contain.text', 'Older conversation');
+			cy.get('a[data-nav-id="all-chats"]').click();
+			cy.location('search').should('eq', '');
+			cy.get('[data-testid="lq-chat-list-sheet"]')
+				.contains('Older conversation')
+				.should('be.visible');
+			cy.focused().should('have.attr', 'data-testid', 'lq-ai-new-chat-btn');
+			cy.get('@createChat.all').should('have.length', 1);
+		}
+
+		openAllChats(); // From the selected new chat.
+		if (narrow) {
+			cy.focused().trigger('keydown', { key: 'Escape' });
+			cy.get('[data-testid="lq-chat-list-sheet"]').should('not.be.visible');
+			cy.focused().should('have.attr', 'data-testid', 'lq-chat-list-toggle');
+			openAllChats(); // From the same bare route after dismissing the drawer.
+		}
+	});
+}

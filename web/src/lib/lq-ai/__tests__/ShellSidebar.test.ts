@@ -78,7 +78,7 @@ describe('ShellSidebar rows and order (from nav.ts)', () => {
 			labs: '/lq-ai/autonomous',
 			skills: '/lq-ai/skills',
 			'all-matters': '/lq-ai/matters',
-			'all-chats': '/lq-ai/chats',
+			'all-chats': '/lq-ai/chats?view=all',
 			learn: '/lq-ai/learn',
 			trust: '/lq-ai/trust',
 			admin: '/lq-ai/admin/audit-log',

@@ -15,6 +15,7 @@
 	 */
 	import { tick } from 'svelte';
 	import { IconMessages } from '@tabler/icons-svelte';
+	import { NARROW_QUERY } from '../rightSidebar';
 	import { drawerKeydown, firstVisibleFocusable } from '../chatListDrawer';
 
 	export let id = 'lq-chat-list';
@@ -34,12 +35,16 @@
 		toggleEl?.focus();
 	}
 
-	async function toggle(): Promise<void> {
-		if (open) return close();
-		open = true;
+	export async function reveal(): Promise<void> {
+		open = window.matchMedia(NARROW_QUERY).matches;
 		await tick();
 		// The first control the person can see (the list holds a hidden matter toggle).
 		firstVisibleFocusable(sheetEl)?.focus();
+	}
+
+	async function toggle(): Promise<void> {
+		if (open) return close();
+		await reveal();
 	}
 </script>
 

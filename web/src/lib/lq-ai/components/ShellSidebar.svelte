@@ -268,13 +268,6 @@
 			setLeftSidebarOpen(false, true);
 	}
 
-	// Following a link from the overlay closes it.
-	let lastLocation = `${pathname}?${urlChatId ?? ''}`;
-	$: if (`${pathname}?${urlChatId ?? ''}` !== lastLocation) {
-		lastLocation = `${pathname}?${urlChatId ?? ''}`;
-		if ($leftSidebarNarrow && $leftSidebarOpen) setLeftSidebarOpen(false, true);
-	}
-
 	onMount(() => {
 		const query = window.matchMedia?.(NARROW_QUERY);
 		const apply = () => syncLeftSidebar(!!query?.matches, undefined, sidebarPage);
@@ -308,7 +301,8 @@
 		}
 	}
 
-	afterNavigate(() => {
+	afterNavigate(({ type }) => {
+		if (type !== 'enter' && $leftSidebarNarrow && $leftSidebarOpen) setLeftSidebarOpen(false, true);
 		void lists.refresh();
 		void bell?.refresh();
 	});

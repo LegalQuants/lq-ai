@@ -1495,6 +1495,10 @@
 	const shellOwner = Symbol('ChatPanel');
 	// The chat list's narrow-screen sheet (ChatListDrawer), closed after a choice.
 	let chatListDrawer: ChatListDrawer | undefined;
+
+	export function showChatList() {
+		return chatListDrawer?.reveal();
+	}
 	onDestroy(() => clearShellContext(shellOwner));
 	$: publishShellContext(
 		shellOwner,

@@ -118,7 +118,8 @@ export const NAV: readonly NavSection[] = [
       {
         id: 'all-chats',
         label: 'All chats',
-        route: '/lq-ai/chats',
+        route: '/lq-ai/chats?view=all',
+        matches: '/lq-ai/chats',
         visibility: 'all',
         note: 'C10. Chats outside a matter are listed above this row (P1.3).'
       }
