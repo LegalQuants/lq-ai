@@ -142,7 +142,7 @@ def _general_survival(language: str) -> _Survival | None:
         scope = text
     else:
         return None
-    if re.search(r"\b(?:unless|whichever|earlier|later|provided|subject to|if)\b", scope):
+    if re.search(r"\b(?:not|may|unless|whichever|earlier|later|provided|subject to|if)\b", scope):
         return None
     if re.search(r"\b(?:full|duration of the|duration of this) term\b", scope) or re.search(
         r"\b(?:terminate\w*|expire\w*)\b.{0,30}\bupon expiration\b", scope
@@ -158,9 +158,9 @@ def _general_survival(language: str) -> _Survival | None:
 
 def _acknowledger(language: str) -> str | None:
     text = _text(language)
-    if re.search(r"\b(?:if|unless|provided|subject to)\b", text, re.I):
+    if re.search(r"\b(?:not|if|unless|provided|subject to)\b", text, re.I):
         return None
-    if not re.search(r"irreparable harm", text, re.I):
+    if not re.search(r"irreparable (?:harm|injury)", text, re.I):
         return None
     match = re.search(
         r"\b(?:the )?(parties|both parties|each party|receiving party|disclosing party) acknowledg\w*\b",
@@ -179,11 +179,68 @@ def _acknowledger(language: str) -> str | None:
     }[actor]
 
 
+def _own_and_reasonable_care(language: str) -> bool:
+    text = _text(language).casefold()
+    if re.search(
+        r"\b(?:may|unless|except|provided|not required|not use|no obligation|only if)\b", text
+    ):
+        return False
+    return bool(
+        re.search(r"\breasonable care\b", text)
+        and re.search(r"\bown\b.{0,100}\binformation\b", text)
+        and (
+            (
+                re.search(r"\bat least the same\b.{0,70}\bcare\b.{0,100}\bown\b", text)
+                and re.search(r"\bin no event less than reasonable care\b", text)
+            )
+            or re.search(
+                r"\buse reasonable care\b.{0,180}\bwhich shall in no event be less than\b"
+                r".{0,90}\bown\b",
+                text,
+            )
+        )
+    )
+
+
+def _while_trade_secret(language: str) -> bool:
+    text = _text(language).casefold()
+    # Isolate the trade-secret item so a separate general-information period
+    # cannot be mistaken for a cap on trade-secret protection.
+    parts = re.split(r"\([a-z]\)", text)
+    scope = next((p for p in parts if "trade secret" in p and "qualif" in p), text)
+    if re.search(r"\b(?:not|may|unless|provided|subject to|maximum|whichever|until)\b", scope):
+        return False
+    return bool(
+        _duration(scope) is None
+        and not re.search(r"\b(?:years?|months?|days?)\b", scope)
+        and re.search(
+            r"\bfor (?:so|as) long as\b.{0,100}\bqualif\w*\b.{0,35}\btrade secret\b", scope
+        )
+    )
+
+
+def _return_election(language: str) -> str | None:
+    text = _text(language).casefold()
+    if not re.search(r"\ball confidential information\b", text) or re.search(
+        r"\b(?:except|excluding|unless|provided|retain)\b", text
+    ):
+        return None
+    explicit = re.search(
+        r"\bat (?:the )?(disclosing|receiving) party's (?:option|election)\b", text
+    )
+    if explicit:
+        return "the " + explicit[1].title() + " Party"
+    if re.search(r"\bthe receiving party shall,? at its option,?\b", text):
+        return "the Receiving Party"
+    return None
+
+
 def tier_comparison(issue: str, standard: str, alternative: str) -> str | None:
     """Describe unambiguous source facts in ALTERNATIVE-versus-STANDARD order.
 
-    Limit this correction to explicit agreement durations, general-information
-    survival timing, and acknowledgement actors. Do not guess at other effects.
+    State only recognized source facts, including when those facts are the
+    same. Do not invent a difference or compare a different issue from a
+    shared source paragraph.
     """
     identity = issue_identity(issue)
     if identity == "Term":
@@ -192,6 +249,10 @@ def tier_comparison(issue: str, standard: str, alternative: str) -> str | None:
             return f"Agreement term: {after} in the alternative, compared with {before} in the standard."
     if identity == "Survival of General Information":
         before_period, after_period = _general_survival(standard), _general_survival(alternative)
+        if before_period and before_period == after_period:
+            if before_period.timing == "during_term":
+                return "Both clauses limit protection for general confidential information to the agreement term."
+            return f"Both clauses continue protection for general confidential information for {before_period.duration} after the agreement ends."
         if before_period and after_period and before_period != after_period:
             if before_period.timing == "during_term" and after_period.timing == "after_term":
                 return (
@@ -208,6 +269,18 @@ def tier_comparison(issue: str, standard: str, alternative: str) -> str | None:
                     "Post-termination protection for general confidential information: "
                     f"{after_period.duration} in the alternative versus {before_period.duration} in the standard."
                 )
+    if identity == "Survival of Trade Secrets" and all(
+        _while_trade_secret(s) for s in [standard, alternative]
+    ):
+        return "Both tie continuing trade-secret protection to the information continuing to qualify as a trade secret."
+    if identity == "Standard of Care" and all(
+        _own_and_reasonable_care(s) for s in [standard, alternative]
+    ):
+        return "Both clauses require at least reasonable care and at least the care used for the Receiving Party's own similar confidential information."
+    if identity == "Return or Destruction":
+        before_election, after_election = _return_election(standard), _return_election(alternative)
+        if before_election and after_election and before_election != after_election:
+            return f"The alternative gives {after_election} the return-or-destroy election; the standard gives it to {before_election}. Both cover all Confidential Information."
     if identity == "Remedies":
         before_actor, after_actor = _acknowledger(standard), _acknowledger(alternative)
         if before_actor and after_actor and before_actor != after_actor:
@@ -244,6 +317,16 @@ def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
             r"\bno licen[cs]e\b.{0,180}\bgrant|\bnothing\b.{0,80}\bgrants?\b|\bdoes not grant\b"
         )
         if all(re.search(negative, _text(s), re.I) for s in sources):
+            if (
+                all("otherwise" in _text(s).casefold() for s in sources)
+                and re.search(
+                    r"\b(?:narrow\w*|restrict\w*|exclud\w*|rather than|instead of)\b", text
+                )
+                and any(
+                    word in text and word not in source for word in ("express", "direct", "implied")
+                )
+            ):
+                return True
             return bool(
                 re.search(
                     r"\b(?:limits?|narrows?|restricts?|extends?|expands?|permits?|allows?)\b"
@@ -251,6 +334,13 @@ def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
                     text,
                 )
             )
+    if identity == "Return or Destruction":
+        alternative = _text(sources[-1]).casefold()
+        return bool(
+            "all confidential information" in alternative
+            and not re.search(r"\b(?:except|excluding|other than)\b", alternative)
+            and re.search(r"\bexclud\w*\b.{0,90}\b(?:extracts?|derivative)\b", text)
+        )
     if identity == "Jurisdiction":
         conditional_federal = any(
             re.search(

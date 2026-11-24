@@ -41,7 +41,12 @@ from app.errors import GatewayInvalidResponse
 from app.models.document import Document
 from app.playbooks.easy.issue_identity import issue_identity
 from app.playbooks.easy.json_output import unwrap_json_answer
-from app.playbooks.easy.source_anchor import anchor_quote, complete_connected_item, repair_context
+from app.playbooks.easy.source_anchor import (
+    anchor_quote,
+    complete_connected_item,
+    remedy_context,
+    repair_context,
+)
 from app.playbooks.easy.source_facts import source_issue
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
@@ -139,6 +144,10 @@ standard of care. Use "Security Safeguards" for those measures. When a uniform
 survival rule expressly covers trade secrets and other confidential information,
 identify both issues using the complete shared sentence(s), without inventing
 a separate survival period.
+
+For remedies, retain the immediately adjacent acknowledgement of irreparable
+harm and the relief entitlement when they form one passage. Do not quote only
+the injunction sentence and thereby omit who acknowledges the harm.
 
 For an NDA, reuse these labels when they fit: "Definition of Confidential
 Information", "Exclusions from Confidential Information", "Standard of Care",
@@ -500,6 +509,8 @@ def _anchor_extracted_clauses(
         if match is None:
             rejected.append(clause)
         else:
+            if issue_identity(clause.issue) == "Remedies":
+                match = remedy_context(source, match.text) or match
             anchored.append(
                 clause.model_copy(
                     update={

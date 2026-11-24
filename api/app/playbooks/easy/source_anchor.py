@@ -111,3 +111,37 @@ def complete_connected_item(source: str, quote: str) -> SourceMatch | None:
     ):
         return None
     return complete
+
+
+def remedy_context(source: str, quote: str) -> SourceMatch | None:
+    """Retain an adjacent acknowledgement/relief pair from one source passage.
+
+    A complete sentence can still omit the immediately adjacent sentence on
+    the same remedies issue. Expand only this explicit pair, without crossing
+    a paragraph or section boundary, and revalidate the exact source slice.
+    """
+    match = anchor_quote(source, quote)
+    if match is None:
+        return None
+    actor = r"(?:the )?(?:receiving party|disclosing party|parties|each party|both parties|non-breaching party)"
+    ack = actor + r" acknowledg\w*[^.!?]*irreparable (?:harm|injury)[^.!?]*\."
+    relief = actor + r" shall be entitled[^.!?]*(?:injunctive|equitable) relief[^.!?]*\."
+    ack, relief = ack.replace(" ", r"\s+"), relief.replace(" ", r"\s+")
+    start, end = match.start, match.end
+    if re.search(relief, _normalized(match.text)[0], re.I) and not re.search(
+        r"\backnowledg\w*\b", match.text, re.I
+    ):
+        before = source[max(0, start - 1200) : start]
+        previous = re.search(r"(" + ack + r")\s*$", before, re.I)
+        if previous:
+            start = max(0, match.start - 1200) + previous.start(1)
+    elif re.search(ack, _normalized(match.text)[0], re.I) and not re.search(
+        r"\b(?:injunctive|equitable) relief\b", match.text, re.I
+    ):
+        following = re.match(r"\s*(" + relief + r")", source[end : end + 1200], re.I)
+        if following:
+            end += following.end(1)
+    context = source[start:end]
+    if (start, end) == (match.start, match.end) or re.search(r"\n\s*\n", context):
+        return None
+    return anchor_quote(source, context)

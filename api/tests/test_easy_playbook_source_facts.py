@@ -14,6 +14,7 @@ from app.models.document import Document
 from app.playbooks.easy.assembly import _describe_tier, _ground_metadata
 from app.playbooks.easy.clustering import ClauseInput, cluster_clauses_by_issue
 from app.playbooks.easy.extractor import extract_clauses_from_document
+from app.playbooks.easy.source_anchor import remedy_context
 from app.playbooks.easy.source_facts import (
     source_issue,
     tier_comparison,
@@ -419,3 +420,174 @@ async def test_new_captured_wording_defects_cannot_survive_positive_verdict(
 )
 def test_new_guards_keep_supported_wording(issue: str, sources: list[str], prose: str) -> None:
     assert not unsupported_metadata(issue, sources, prose)
+
+
+REMAINING = json.loads(
+    (Path(__file__).parent / "fixtures/easy_playbook/remaining_prose_regressions.json").read_text()
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "case", REMAINING["edits"][:5], ids=[c["issue"] for c in REMAINING["edits"][:5]]
+)
+@pytest.mark.parametrize("verdict", [True, False])
+async def test_remaining_captured_comparisons_are_corrected(
+    case: dict[str, Any], verdict: bool
+) -> None:
+    position = PositionCreate(
+        issue=case["issue"],
+        standard_language=case["standard_language"],
+        description="Review standard.",
+        severity_if_missing="medium",
+        fallback_tiers=[
+            FallbackTier(
+                rank=1,
+                language=case["alternative_language"],
+                description=case["generated_description"],
+            )
+        ],
+    )
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = response(
+        {
+            "checks": [
+                {
+                    "id": "tier/0/1",
+                    "description_supported": verdict,
+                    "source_quotes": [case["standard_language"], case["alternative_language"]],
+                }
+            ]
+        }
+    )
+    await _ground_metadata([position], gateway=gateway, judge_model="smart")
+    actual = position.fallback_tiers[0].description
+    assert actual != case["generated_description"]
+    if case["issue"] == "No License":
+        assert actual == "Alternative source language: " + case["alternative_language"]
+    elif case["issue"] == "Return or Destruction":
+        assert "the Disclosing Party" in actual and "the Receiving Party" in actual
+        assert "Both cover all Confidential Information" in actual
+    elif case["issue"] == "Standard of Care":
+        assert actual.startswith("Both clauses require at least reasonable care")
+    elif case["issue"] == "Survival of General Information":
+        assert (
+            actual
+            == "Both clauses limit protection for general confidential information to the agreement term."
+        )
+        assert "trade secret" not in actual
+    else:
+        assert actual.startswith("Both tie continuing trade-secret protection")
+
+
+@pytest.mark.unit
+async def test_remedies_restore_captured_acknowledgement_before_drafting() -> None:
+    case = REMAINING["edits"][-1]
+    source = REMAINING["remedy_source"]
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = response(
+        {"extracted_clauses": [{"issue": "Remedies", "clause_text": case["alternative_language"]}]}
+    )
+    clauses = await extract_clauses_from_document(
+        document=Document(id=uuid.uuid4(), normalized_content=source), gateway=gateway
+    )
+    assert len(clauses) == 1
+    c = clauses[0]
+    assert c.clause_text == case["proposed_alternative_language_for_attorney_review"]
+    assert c.source_offsets is not None
+    assert source[c.source_offsets.start : c.source_offsets.end] == c.clause_text
+    assert gateway.chat_completion.await_count == 1
+    assert "the Receiving Party in the alternative" in (
+        tier_comparison("Remedies", case["standard_language"], c.clause_text) or ""
+    )
+
+
+@pytest.mark.unit
+def test_remedies_pair_is_retained_from_either_sentence_and_layout_wraps() -> None:
+    case = REMAINING["edits"][-1]
+    full = case["proposed_alternative_language_for_attorney_review"]
+    ack = full[: full.index(". ") + 1]
+    match = remedy_context(full, ack)
+    assert match is not None and match.text == full
+    wrapped = full.replace("The Receiving Party", "The Receiving\nParty")
+    match = remedy_context(wrapped, case["alternative_language"])
+    assert match is not None and match.text == wrapped
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "source,quote",
+    [
+        (
+            "The Receiving Party acknowledges irreparable harm.\n\nThe Disclosing Party shall be entitled to seek injunctive relief.",
+            "The Disclosing Party shall be entitled to seek injunctive relief.",
+        ),
+        (
+            "The Receiving Party acknowledges receipt of information. The Disclosing Party shall be entitled to seek injunctive relief.",
+            "The Disclosing Party shall be entitled to seek injunctive relief.",
+        ),
+        (
+            "The Receiving Party acknowledges irreparable harm.\n8. Other Issue\nThe Disclosing Party shall be entitled to seek injunctive relief.",
+            "The Disclosing Party shall be entitled to seek injunctive relief.",
+        ),
+    ],
+)
+def test_remedy_context_does_not_import_unrelated_or_separate_passages(
+    source: str, quote: str
+) -> None:
+    assert remedy_context(source, quote) is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "issue,standard,alternative",
+    [
+        (
+            "Standard of Care",
+            "Use reasonable care only.",
+            "Use the same care as for own information.",
+        ),
+        (
+            "Standard of Care",
+            "Use at least the same care as for own information but in no event less than reasonable care unless otherwise agreed.",
+            "Use reasonable care only.",
+        ),
+        (
+            "Survival of Trade Secrets",
+            "Protection continues for so long as information qualifies as a trade secret, subject to a maximum of five years.",
+            "Protection continues for so long as information qualifies as a trade secret.",
+        ),
+        (
+            "Survival of Trade Secrets",
+            "Protection continues for five years.",
+            "Protection continues for so long as information qualifies as a trade secret.",
+        ),
+        (
+            "Return or Destruction",
+            "The Receiving Party shall, at its option, return all Confidential Information except retained records.",
+            "At the Disclosing Party's election, return all Confidential Information.",
+        ),
+    ],
+)
+def test_new_fact_checks_leave_ambiguous_or_different_terms_to_drafting(
+    issue: str, standard: str, alternative: str
+) -> None:
+    assert tier_comparison(issue, standard, alternative) is None
+
+
+@pytest.mark.unit
+def test_explicit_return_exception_and_factual_no_license_wording_are_kept() -> None:
+    assert not unsupported_metadata(
+        "Return or Destruction",
+        [
+            "Return all Confidential Information.",
+            "Return all Confidential Information except extracts and derivative materials.",
+        ],
+        "The alternative excludes extracts and derivative materials.",
+    )
+    c = REMAINING["edits"][0]
+    assert not unsupported_metadata(
+        "No License",
+        [c["standard_language"], c["alternative_language"]],
+        c["proposed_description_for_attorney_review"],
+    )

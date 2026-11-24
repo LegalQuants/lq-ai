@@ -208,6 +208,16 @@ Preserve conditional court priority (federal courts only if another court lacks
 jurisdiction). A no-license clause does not make a license grant. A recipient's
 own-information care benchmark is not an industry or customary-care benchmark.
 
+Compare only the named ISSUE, even when a shared quotation also discusses
+other issues. If the relevant facts match, say so; do not invent a difference.
+Two reasonable-care/own-information floors remain the same when their order
+is reversed. Survival while information qualifies as a trade secret is not
+limited to the agreement term merely because the clause also mentions that
+term. Omission of examples from "all Confidential Information" is not an
+exclusion of those examples. Omission of the word estoppel from a no-rights
+clause retaining "or otherwise" does not establish an express/implied-rights
+distinction.
+
 Output STRICTLY VALID JSON:
 
   {"description": "<one short sentence>"}

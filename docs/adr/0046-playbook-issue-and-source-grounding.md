@@ -80,6 +80,21 @@ source-text/neutral-strategy fallback, even after an affirmative model verdict.
 Supported generated prose remains unchanged. Both completed attempts and their
 exact failed comparisons are retained as evidence and regression fixtures.
 
+The next six captured defects are addressed within the same drafting path.
+Keep an immediately adjacent irreparable-harm acknowledgement and relief
+entitlement together as an exact source passage, from either extracted sentence;
+never cross a paragraph or section boundary. Compare only the named issue in
+shared survival quotations. Matching explicit during-term general-information
+rules, trade-secret qualification conditions, and reasonable-care/own-information
+floors are reported as matching facts rather than invented differences. These
+checks do not declare whole clauses legally equivalent. Explicit return/destroy
+elections can be compared without treating omitted examples as exclusions from
+an all-information obligation. Unsupported express/implied-rights narrowing
+claims for no-rights clauses retaining “or otherwise” use the existing fallback.
+Conditional, capped, or otherwise unrecognized language keeps the normal
+generated drafting/check/fallback path. All six exact outputs and source pairs
+are regression fixtures; a fresh five-NDA run remains required evidence.
+
 The first full-corpus consistency request exhausted its 8,192-token response
 budget and conservatively replaced all prose with source text. Bound each
 check to six items and 4,096 response tokens; an invalid or truncated batch

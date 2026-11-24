@@ -195,6 +195,12 @@ Checks also reject a no-license prohibition described as a license grant,
 unsupported care benchmarks or legal rationales, and omitted conditional court
 priority through the same existing fallbacks.
 
+Comparisons stay on the named issue in shared quotations and describe matching
+explicit requirements when no difference is supported. Remedies extraction
+retains an adjacent acknowledgement/relief pair from the same source passage.
+Checks also reject unsupported narrowing of implied rights and inferred
+exclusions based only on omitted examples from an all-information clause.
+
 Local-model responses may include a prose preamble before one JSON answer or
 exact duplicate fenced copies of that answer. The reader accepts those wrappers
 without changing the answer. Invalid JSON, conflicting answers, malformed

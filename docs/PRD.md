@@ -845,6 +845,9 @@ not replace attorney review. See [ADR 0046](adr/0046-playbook-issue-and-source-g
 The 2026-11-25 defect fixes retain this drafting behavior: bounded source-fact
 checks separate technical safeguards from disclosure prohibitions and preserve
 the direction of explicit duration, survival, and acknowledgement comparisons.
+The six subsequent prose/context regressions also preserve adjacent remedies
+context and keep comparisons on their named issue, stating matching explicit
+requirements rather than inventing differences or exclusions.
 
 1. Upload 5–20 prior agreements of the same contract type.
 2. System extracts clauses, clusters by issue, identifies the user's most-common positions.
