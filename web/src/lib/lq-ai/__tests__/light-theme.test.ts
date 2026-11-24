@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
-import { applyLQAILightTheme, isLQAIPath } from '../light-theme';
+import { applyLQAILightTheme } from '../light-theme';
 
 const html = readFileSync(new URL('../../../app.html', import.meta.url), 'utf8');
 const bootstrap = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
@@ -48,14 +48,6 @@ function fixture(pathname = '/lq-ai/chats', savedTheme = 'system', prefersDark =
 }
 
 describe('LQ.AI light-only theme', () => {
-	it.each(['/lq-ai', '/lq-ai/login', '/lq-ai/chats'])('recognizes shell route %s', (path) => {
-		expect(isLQAIPath(path)).toBe(true);
-	});
-
-	it.each(['/', '/auth', '/lq-ai-other'])('does not capture unrelated route %s', (path) => {
-		expect(isLQAIPath(path)).toBe(false);
-	});
-
 	it('clears inherited dark/OLED styling when entering the shell', () => {
 		const f = fixture();
 		f.root.classList.add('dark', 'oled-dark', 'her', 'unrelated');
