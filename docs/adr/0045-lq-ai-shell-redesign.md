@@ -1,6 +1,10 @@
 # ADR 0045 — The LQ.AI shell redesign: colour, themes, type and navigation
 
-**Status:** Proposed (2026-11-09). First draft 25 October 2026, revised 9 and 11 November.
+**Status:** Accepted (2026-11-22) — committee-approved at the weekly call.
+**Approval record:** [Committee decision](https://github.com/LegalQuants/lq-ai/pull/804#issuecomment-7081247950),
+confirmed by [@joelakaufmann-lgtm](https://github.com/LegalQuants/lq-ai/pull/804#issuecomment-7081317238).
+First draft 25 October 2026, proposed 9 November, revised 9 and 11 November.
+Implementation PRs remain subject to their own review.
 **Revised 9 November:** four rulings by Houfu (the grey token's name, the type-class migration, the
 light field-edge value, and a darker light governance orange), and the committee's 25 October
 palette asks, answered in
@@ -188,8 +192,8 @@ reaches over 18:1 on the canvas in either theme.
 
 ### 3. The accessibility check follows the theme
 
-The check's mini-PRD requires "its own maintainer-reviewed decision" to change what it scans. Once
-Accepted, this ADR is that decision, and only for the following changes:
+The check's mini-PRD requires "its own maintainer-reviewed decision" to change what it scans.
+This accepted ADR is that decision, and only for the following changes:
 - **The matrix keeps its 28 variants:** 7 route states × desktop and phone × a saved input of
   light or dark. Each variant pins its theme input, so no variant follows the CI runner's OS
   setting.
@@ -200,7 +204,7 @@ Accepted, this ADR is that decision, and only for the following changes:
   Exceptions keep shrinking, as the check requires.
 - **The check's mini-PRD and `cypress.a11y.config.ts` change in that same PR.**
 
-### 4. Typography: the system typeface and one type scale (resolves F3, if agreed)
+### 4. Typography: the system typeface and one type scale (resolves F3)
 
 - **Typeface:** `-apple-system, "SF Pro Text", "Segoe UI", sans-serif` (C2): SF on Apple
   devices, Segoe UI on Windows, the platform's sans-serif elsewhere. Apple's licence does not allow
@@ -362,7 +366,7 @@ The committee asked for two palette changes and one exploration.
 - **A more welcoming or distinctive feel.** Not answered by this ADR: it fixes the neutral base,
   and any distinctive feature is a separate proposal.
 
-## Committee questions this ADR answers if adopted
+## Committee questions resolved on 22 November 2026
 
 - **F1:** the palette departs from ADR 0043.
 - **F3:** the system typeface.
