@@ -1,7 +1,13 @@
 # Word redline library: contract, document representation and limits
 
-> **Status:** Proposal. For discussion on [#697](https://github.com/LegalQuants/lq-ai/issues/697).
+> **Status:** Contract direction approved by the committee (2026-11-22), as recorded in the [maintainer's decision comment](https://github.com/LegalQuants/lq-ai/pull/791#issuecomment-7081249418). Implementation remains subject to review. Discussion: [#697](https://github.com/LegalQuants/lq-ai/issues/697).
 > **Scope:** The reusable Word capability: reading the document, addressing paragraphs, previewing tracked-change edits and writing them back. The shared API contract between the add-in and LQ.AI: the document snapshot the add-in sends and the typed edit proposal LQ.AI returns. The note proposes #314 as the canonical lane for [ADR 0032](../adr/0032-word-add-in-1.0-slice.md) decision 2. How LQ.AI produces the proposal (prompt assembly, skill execution, model routing, policy controls) belongs to LQ.AI's agents and adapters. This note states only what the result must satisfy.
+
+## Committee decision
+
+The committee approved the Word redline contract direction at its 22 November meeting. The ownership and data boundaries below keep local interaction, approval and write-back in Word, backend execution under LQ.AI's agents and adapters, and the shared contract independent of the editing engine.
+
+This records approval of the contract direction, not acceptance of an implementation. The canonical Word lane under ADR 0032 decision 2, the specific editing engine and the LQ.AI execution entry point remain separate decisions. GitHub review, DCO and CI remain separate merge requirements. The maintainer's decision comment asks @joelakaufmann-lgtm to follow up on the decision record.
 
 ## Summary
 
@@ -281,7 +287,7 @@ The server cannot run the full preview, because it has no copy of the document's
 5. Call `editActiveWordDocument(approved, author, snapshot.paragraphs.map(p => p.text))`.
 6. If the library refuses because the document changed, re-read the document and send a new request.
 
-Steps 3 to 6 run in the add-in and make no backend call.
+Preview, approval and application happen locally. If stale content requires a new proposal, the add-in sends a new request.
 
 **Apply outcome.** The add-in records the result of each apply in an engine-neutral form:
 
