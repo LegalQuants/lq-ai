@@ -495,9 +495,8 @@ CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
 The sketch above does not show `messages.kind`. Migration 0020 added it, with
 `chk_messages_kind` over `user`, `ai`, `refusal` and `system`. Migration
 [0074](../api/alembic/versions/0074_runs_in_chat.py) changes `messages` as below.
-It is implemented, and
-[ADR 0038](adr/0038-governed-runs-in-chat.md) is proposed, not
-ratified.
+The migration shipped in v0.9.1 with the experimental implementation described
+in [ADR 0038](adr/0038-governed-runs-in-chat.md).
 
 ```sql
 ALTER TABLE messages DROP CONSTRAINT chk_messages_kind;
@@ -2193,8 +2192,8 @@ An unreadable policy fail-closes: no dispatch, refused audit row with
 
 ### Governed runs in chat and closing a run (0074 to 0077; ADR 0038 proposed)
 
-Implemented; [ADR 0038](adr/0038-governed-runs-in-chat.md)
-is proposed, not ratified. The four migrations are additive on a 0.8.0 database, which
+The experimental implementation described in [ADR 0038](adr/0038-governed-runs-in-chat.md)
+shipped in v0.9.1. The four migrations are additive on a 0.8.0 database, which
 already carries the orchestration tables. The authoritative DDL for the first two is in
 [`0074_runs_in_chat.py`](../api/alembic/versions/0074_runs_in_chat.py) and
 [`0075_close_uncertain_runs.py`](../api/alembic/versions/0075_close_uncertain_runs.py);

@@ -266,7 +266,7 @@ Two of the changed files are generated artifacts. **Both auto-merge cleanly** �
 ```bash
 git checkout --theirs web/package-lock.json web/static/pyodide/pyodide-lock.json
 # after package.json is settled:
-cd web && npm install    # regenerates package-lock.json
+cd web && ONNXRUNTIME_NODE_INSTALL_CUDA=skip npm install    # regenerates package-lock.json
 ```
 
 **`pyodide-lock.json` regenerates itself** — `npm run build` runs `pyodide:fetch` (`scripts/prepare-pyodide.js`) before `vite build`, so there is no separate step. Note that script resolves versions live from PyPI, so the file can drift for reasons unrelated to the rebase (observed: `black` 26.3.1 → 26.5.1 on an unrelated `npm ci`). Do not read a rebase signal into a diff there.

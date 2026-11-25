@@ -80,13 +80,9 @@ model in the main chat, "New harness": an experimental entry in the model picker
 answers a request that needs nothing read, or plans the request as one to four tasks that
 the owner approves and that approved sub-agents carry out, with tools to read the
 documents the owner selected and to search the matter's knowledge bases by keyword. A chat
-need not be in a matter. The ADR is not ratified. Its direct answer, a run in a chat
-that is in no matter, and the selection of a file a knowledge-base search finds amend ADR
-0035 D1, D2 and D3, which are Accepted; ADR 0038 D1 gives the words, and they are ratified
-with it.
-The requirements below are implemented, pending
-ratification and review; they are in no release, and both profile switches default to off.
-The accepted scope above stands for released software.
+need not be in a matter. New harness shipped as an experiment in v0.9.1, with both
+profile switches off by default. The [ADR decision and review record](../adr/0038-governed-runs-in-chat.md#decision-and-review-record)
+records the implementation review and links the open ratification question.
 
 | Proposed requirement | Acceptance criterion |
 |---|---|
@@ -106,8 +102,8 @@ build's recorded walkthrough was removed from the branch. One of the present des
 by an agent on a local model, was recorded on 2026-10-14
 ([record](../uat/adr38-runs-in-chat/README.md)). None of the six has a recorded human acceptance or a run on a configured
 provider (the maintainer used the present design on a local model on 2026-10-09 and said
-that it passes C1's acceptance statement), and
-the changes have had no maintainer or security review. R12 rests on controlled-provider
+that it passes C1's acceptance statement). The [#599 merge receipt](https://github.com/LegalQuants/lq-ai/commit/be6de07e13a82265445cebed74f7a4fb4d98d4e3)
+records the security-path review at `ca96056`. R12 rests on controlled-provider
 tests and those single runs: its limits are placeholders not measured on real documents,
 its quotation checks use only the Citation Engine's exact and tolerant stages, and its
 knowledge-base search is by keyword only. On a route that pseudonymizes, the gateway
