@@ -267,7 +267,7 @@
 							{r.user_id ?? '—'}
 						</LqText>
 						<LqText as="td" size="14" tone="primary" class="px-2 py-1">
-							{r.resource_type}{#if r.resource_id}/<span class="md:hidden">{r.resource_id}</span><span class="hidden md:inline" title={r.resource_id}>{r.resource_id.slice(0, 8)}…</span>{/if}
+							{r.resource_type}{#if r.resource_id}/<span class="full-resource-id">{r.resource_id}</span><span class="short-resource-id" title={r.resource_id}>{r.resource_id.slice(0, 8)}…</span>{/if}
 						</LqText>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
@@ -287,7 +287,7 @@
 					</tr>
 				{:else}
 					<tr>
-						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-left md:text-center">
+						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-center">
 							{loading ? 'Loading…' : 'No audit entries match.'}
 						</LqText>
 					</tr>
@@ -320,6 +320,7 @@
 	}
 
 	.lq-table-wrap {
+		container: audit-entries / inline-size;
 		border-radius: var(--lq-radius);
 		border: 1px solid var(--lq-border);
 	}
@@ -329,21 +330,35 @@
 		outline-offset: 2px;
 	}
 
-	@media (max-width: 767px) {
+	.lq-table-wrap :global(th) {
+		white-space: nowrap;
+	}
+	.full-resource-id {
+		display: none;
+	}
+
+	/* Nine columns need room for identifiers even when the shell's sidebar is open. */
+	@container audit-entries (max-width: 60rem) {
 		.lq-table-wrap :global(table) {
-			min-width: 54rem;
+			min-width: 60rem;
 		}
-		.lq-table-wrap :global(th) {
-			white-space: nowrap;
-		}
-		/* Keep identifiers and JSON readable on touch screens without relying on hover titles. */
 		.lq-row :global(td) {
 			white-space: normal;
 			overflow-wrap: anywhere;
 		}
-		.lq-row :global(.font-mono) {
+		.lq-row :global(td:not(:nth-child(6))) {
+			/* All fields except the single-digit tier can carry long values. */
 			min-width: 14ch;
 			max-width: 28ch;
+		}
+		.full-resource-id {
+			display: inline;
+		}
+		.short-resource-id {
+			display: none;
+		}
+		.lq-table-wrap :global(td[colspan]) {
+			text-align: left;
 		}
 	}
 
