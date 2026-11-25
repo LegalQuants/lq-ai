@@ -793,6 +793,10 @@
 	.lq-sidebar-row-current {
 		background: var(--lq-selected);
 	}
+	/* Trust & Privacy is a governance entry point: its icon is orange, its label ink. */
+	.lq-sidebar-row[data-nav-id='trust'] :global(svg) {
+		color: var(--lq-governance);
+	}
 	.lq-sidebar-row-label {
 		flex: 1;
 		min-width: 0;

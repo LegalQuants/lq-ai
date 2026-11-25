@@ -174,7 +174,7 @@
     {#if matter.privileged || tierLabel}
       <div class="mrm-badges">
         {#if matter.privileged}
-          <TrustPill variant="secure" label="Privileged" />
+          <TrustPill variant="secure" tone="slate" label="Privileged" />
         {/if}
         {#if tierLabel}
           <TrustPill variant="tier" label={tierLabel} />

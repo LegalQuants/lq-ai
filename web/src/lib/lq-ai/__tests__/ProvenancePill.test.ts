@@ -16,10 +16,10 @@ describe('ProvenancePill helpers', () => {
 		expect(iconFor('enhanced')).toBe('✨');
 	});
 
-	it('maps kinds to sage by default; tier mismatch flips to amber', () => {
+	it('maps kinds to sage by default; tier mismatch flips to governance', () => {
 		expect(toneFor('skill', false)).toBe('sage');
 		expect(toneFor('tier', false)).toBe('slate');
-		expect(toneFor('tier', true)).toBe('amber');
+		expect(toneFor('tier', true)).toBe('governance');
 		expect(toneFor('provider', false)).toBe('sage');
 	});
 

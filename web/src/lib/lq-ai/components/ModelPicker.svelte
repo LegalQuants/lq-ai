@@ -280,11 +280,11 @@
 <style>
 	@import '../styles/practice.css';
 
-	/* Trigger pill — slate variant per spec */
+	/* Trigger pill: a neutral control (ADR 0045); the tier chip inside it is governance. */
 	.lq-model-pill {
-		background: var(--lq-tier-soft);
-		color: var(--lq-tier);
-		border: 1px solid var(--lq-tier-border);
+		background: var(--lq-canvas);
+		color: var(--lq-text);
+		border: 1px solid var(--lq-border-strong);
 		padding: 4px 10px;
 		border-radius: var(--lq-radius-pill);
 		font-size: 12px;
@@ -295,7 +295,7 @@
 		opacity: 0.85;
 	}
 	.lq-model-pill:focus-visible {
-		outline: 2px solid var(--lq-tier);
+		outline: 2px solid var(--lq-accent);
 		outline-offset: 2px;
 	}
 
@@ -311,8 +311,8 @@
 	.lq-tier-chip {
 		padding: 1px 4px;
 		border-radius: var(--lq-radius-sm);
-		background: var(--lq-tier-soft);
-		color: var(--lq-tier);
+		background: var(--lq-surface-muted);
+		color: var(--lq-governance);
 		font-size: 10px;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
