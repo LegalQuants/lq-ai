@@ -16,7 +16,7 @@
  * before matching (`/* *\/` in CSS and script, `//` in script, `<!-- -->` in
  * markup), so an issue number such as `#282` in a comment is not a colour.
  *
- * Four rules, each with its own context:
+ * Five rules, each with its own context:
  *
  * 1. No hex colour literal in CSS contexts: `.css` files, `<style>` blocks,
  *    `style="…"` attributes and `style:prop=` values. The token files are where
@@ -32,6 +32,13 @@
  *    names live in ternaries and helper functions).
  * 4. No `dark:` utility in the same class contexts: the shell is light-only.
  *    The rules are independent, so `dark:bg-gray-900` counts under 3 and 4.
+ * 5. No retired typography class (`lq-text-label`, `-caption`, `-body-sm`,
+ *    `-body`, `-panel-h`, `-page-h`, `-welcome`, and the never-defined
+ *    `-section-h` and `-h4`) anywhere outside comments: in markup, CSS
+ *    selectors or strings. ADR 0045 §4 migrated them to `LqText` and `LqTitle`.
+ *    The `--lq-text-*` colour tokens and the `lq-text-mono` and
+ *    `lq-text-truncate` classes that `LqText` emits are not matched. This rule
+ *    has no allowlist entries.
  *
  * Code that predates the rules is listed in ALLOWED with an exact count per
  * file and rule and a reason. The list only shrinks: a count above the entry
@@ -57,13 +64,14 @@ const TOKEN_FILES = new Set([
 /** ADR 0043 primitives may carry fallbacks. Not scanned by rule 2. */
 const FALLBACK_DIRECTORY = 'src/lib/lq-ai/components/shared/';
 
-type Rule = 'hex' | 'fallback' | 'palette-class' | 'dark-class';
+type Rule = 'hex' | 'fallback' | 'palette-class' | 'dark-class' | 'type-class';
 
 const RULE_TEXT: Record<Rule, string> = {
 	hex: 'rule 1, hex colour literal in CSS',
 	fallback: 'rule 2, var(--lq-…, fallback)',
 	'palette-class': 'rule 3, Tailwind palette colour class',
-	'dark-class': 'rule 4, dark: utility'
+	'dark-class': 'rule 4, dark: utility',
+	'type-class': 'rule 5, retired .lq-text-* typography class'
 };
 
 const RULE_FIX: Record<Rule, string> = {
@@ -72,7 +80,9 @@ const RULE_FIX: Record<Rule, string> = {
 		'write var(--lq-…) without a fallback; define the token in practice.css if it is missing',
 	'palette-class':
 		'use a class in the component <style> block that reads a --lq-* token (the lq-t-* classes are the pattern)',
-	'dark-class': 'remove it; the LQ.AI shell is light-only and dark: never applies'
+	'dark-class': 'remove it; the LQ.AI shell is light-only and dark: never applies',
+	'type-class':
+		'use LqText or LqTitle (components/shared/) with a size from LQ_TYPE_SCALE, per ADR 0045 §4'
 };
 
 interface Allowed {
@@ -124,6 +134,10 @@ const paletteClass =
 const darkClass = /(?<![\w-])dark:(?:[\w-]+:)*[\w-]+(?:\/\d+)?/g;
 const hexColour = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
 const lqFallback = /var\(\s*--lq-[\w-]+\s*,/g;
+// The lookbehind keeps the --lq-text-* colour tokens out; lq-text-mono and
+// lq-text-truncate (emitted by LqText) are not in the list.
+const retiredTypeClass =
+	/(?<![\w-])lq-text-(?:label|caption|body-sm|body|panel-h|page-h|welcome|section-h|h4)(?![\w-])/g;
 const anyFallback = /var\(\s*--[\w-]+\s*,/g;
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -475,6 +489,7 @@ function hitsIn(file: string, src: string): Hit[] {
 	if (!file.startsWith(FALLBACK_DIRECTORY)) {
 		for (const m of code.matchAll(lqFallback)) add('fallback', m[0], m.index ?? 0);
 	}
+	for (const m of code.matchAll(retiredTypeClass)) add('type-class', m[0], m.index ?? 0);
 	for (const span of classes) {
 		const text = code.slice(span.start, span.end);
 		for (const m of text.matchAll(paletteClass))
@@ -526,6 +541,22 @@ describe('LQ.AI code uses --lq-* tokens, not hard-coded colours', () => {
 			).toEqual([]);
 		});
 	}
+
+	it('allows no retired typography class anywhere', () => {
+		expect(ALLOWED.filter((a) => a.rule === 'type-class')).toEqual([]);
+		// Custom properties (even one named like a retired class) and LqText's own classes pass.
+		expect(
+			'--lq-text-secondary --lq-text-label lq-text-mono lq-text-truncate'.match(retiredTypeClass)
+		).toBeNull();
+		expect('class="lq-text-body mt-1"'.match(retiredTypeClass)).toEqual(['lq-text-body']);
+		// The rule runs on markup, CSS and strings, and not on comments.
+		const sample =
+			'<p class="lq-text-caption">a</p>\n<!-- lq-text-body -->\n<style>\n.x .lq-text-label { margin: 0; }\n</style>';
+		expect(hitsIn('sample.svelte', sample).filter((h) => h.rule === 'type-class')).toEqual([
+			{ rule: 'type-class', text: 'lq-text-caption', line: 1 },
+			{ rule: 'type-class', text: 'lq-text-label', line: 4 }
+		]);
+	});
 
 	it('keeps the allowlist exact', () => {
 		const stale = ALLOWED.filter(
