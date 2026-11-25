@@ -439,7 +439,7 @@ does a label outside the set. The column is `varchar(32)`, so a label must fit i
 | `autonomous_executor` | A legacy single autonomous session's model calls |
 | `orchestration_run` | A governed run's model calls: planning (which may be the orchestrator's own answer), tasks and the combined answer |
 
-**Proposed (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
+**Shipped in v0.9.1 (ADR 0038 D2).** Only `chat`, `embedding`, `judge_paraphrase` and
 `tabular_bulk_op` were in the set before. The other labels were already sent by the backend and recorded as
 `chat`; recording them as themselves, and the chat and message identifiers on a run's
 model calls, are implemented. Two Easy Playbook assembly labels,

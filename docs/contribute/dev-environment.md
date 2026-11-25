@@ -104,8 +104,9 @@ run `docker compose up -d web` without the override; `.env`'s default
 `WEB_HOST_PORT=3000` takes over.
 
 When deliberately changing a Web dependency, use `npm install <package>` (or `npm
-uninstall`) and commit both `web/package.json` and `web/package-lock.json`; use `npm ci`
-for ordinary setup.
+uninstall`) with `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` and commit both `web/package.json` and
+`web/package-lock.json`. Use `make install-web` for ordinary setup; it calls the same CPU-only
+installer as CI and Docker. See [the frontend setup guide](../../web/docs/frontend-dev.md).
 
 ## Migrations
 
