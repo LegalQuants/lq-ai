@@ -11,19 +11,26 @@
 	 * and when the person closed it, so the middle column widens. Below
 	 * 1280 px it is a sheet over the page. Escape or the close button closes
 	 * it and returns focus to the header's toggle.
+	 *
+	 * Shell content (the notification list, P1.3b) can show over the page's
+	 * own (`showRightSidebarOverlay`). Closing it only dismisses it, returning
+	 * focus to the control that opened it; the page's content and remembered
+	 * state come back untouched. Moving to another page dismisses it too.
 	 */
 	import { onMount } from 'svelte';
 	import { IconX } from '@tabler/icons-svelte';
 	import {
 		RIGHT_SIDEBAR_ID,
 		NARROW_QUERY,
+		clearRightSidebarOverlay,
+		closeRightSidebar,
 		focusRightSidebarOpener,
 		handleRightSidebarKeydown,
 		rightSidebarContent,
 		rightSidebarMode,
 		rightSidebarNarrow,
 		rightSidebarOpen,
-		setRightSidebarOpen,
+		rightSidebarOverlayLabel,
 		syncRightSidebarForPage
 	} from '../rightSidebar';
 
@@ -38,17 +45,25 @@
 		return () => query?.removeEventListener?.('change', apply);
 	});
 
+	// A shell overlay belongs to the page it was opened on.
+	let overlayPage = pathname;
+	$: if (pathname !== overlayPage) {
+		overlayPage = pathname;
+		clearRightSidebarOverlay();
+	}
+
 	$: syncRightSidebarForPage(pathname, $rightSidebarNarrow);
 
 	$: mode = rightSidebarMode({
 		hasContent: !!$rightSidebarContent,
-		open: $rightSidebarOpen,
+		open: $rightSidebarOverlayLabel !== null || $rightSidebarOpen,
 		narrow: $rightSidebarNarrow
 	});
 
 	function close(): void {
-		focusRightSidebarOpener();
-		setRightSidebarOpen(pathname, false, $rightSidebarNarrow);
+		const closed = closeRightSidebar(pathname, $rightSidebarNarrow);
+		if (closed.overlay && closed.opener?.isConnected) closed.opener.focus();
+		else focusRightSidebarOpener();
 	}
 
 	function onKeydown(event: KeyboardEvent): void {

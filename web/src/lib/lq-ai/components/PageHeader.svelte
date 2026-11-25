@@ -14,11 +14,13 @@
 	import { IconLayoutSidebarRight } from '@tabler/icons-svelte';
 	import {
 		RIGHT_SIDEBAR_ID,
+		closeRightSidebar,
 		focusRightSidebar,
 		pageHeaderContent,
 		rightSidebarContent,
 		rightSidebarNarrow,
 		rightSidebarOpen,
+		rightSidebarOverlayLabel,
 		setRightSidebarOpen
 	} from '../rightSidebar';
 
@@ -26,14 +28,17 @@
 	export let pathname: string;
 
 	$: label = $rightSidebarContent?.label.toLowerCase() ?? '';
+	// Shell content shown over the page's own (the notification list) is always open.
+	$: shown = $rightSidebarOverlayLabel !== null || $rightSidebarOpen;
 
 	async function toggle(): Promise<void> {
-		const next = !$rightSidebarOpen;
-		setRightSidebarOpen(pathname, next, $rightSidebarNarrow);
-		if (next) {
-			await tick();
-			focusRightSidebar();
+		if (shown) {
+			closeRightSidebar(pathname, $rightSidebarNarrow);
+			return;
 		}
+		setRightSidebarOpen(pathname, true, $rightSidebarNarrow);
+		await tick();
+		focusRightSidebar();
 	}
 </script>
 
@@ -45,9 +50,9 @@
 				type="button"
 				class="lq-page-header-toggle"
 				aria-controls={RIGHT_SIDEBAR_ID}
-				aria-expanded={$rightSidebarOpen}
-				aria-label={$rightSidebarOpen ? `Hide ${label}` : `Show ${label}`}
-				title={$rightSidebarOpen ? `Hide ${label}` : `Show ${label}`}
+				aria-expanded={shown}
+				aria-label={shown ? `Hide ${label}` : `Show ${label}`}
+				title={shown ? `Hide ${label}` : `Show ${label}`}
 				data-testid="lq-page-header-sidebar-toggle"
 				on:click={toggle}
 			>
