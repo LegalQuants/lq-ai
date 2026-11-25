@@ -32,6 +32,12 @@
   export let open: boolean = false;
   export let chatId: string;
   export let onClose: () => void = () => {};
+  /**
+   * True inside the shell's right sidebar (developer switch, Annex B P1.4):
+   * a section of that sidebar instead of its own complementary landmark,
+   * at the sidebar's width.
+   */
+  export let embedded: boolean = false;
 
   let events: ReceiptEvent[] = [];
   let selectedKinds: ReceiptEventKind[] = [
@@ -93,7 +99,12 @@
 </script>
 
 {#if open}
-<aside class="receipts-drawer" aria-label="Receipts drawer">
+<svelte:element
+  this={embedded ? 'section' : 'aside'}
+  class="receipts-drawer"
+  class:embedded
+  aria-label="Receipts drawer"
+>
   <header>
     <span class="title">📜 Receipts</span>
     <button class="close" on:click={onClose} aria-label="Close receipts drawer">×</button>
@@ -119,7 +130,7 @@
       {exporting ? 'Exporting…' : '⤓ Export JSONL'}
     </button>
   </footer>
-</aside>
+</svelte:element>
 {/if}
 
 <style>
@@ -131,6 +142,13 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+  }
+  .receipts-drawer.embedded {
+    width: auto;
+    height: auto;
+    border-left: 0;
+    border-top: 1px solid var(--lq-border);
+    padding: 10px 12px;
   }
   header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .title { font-weight: 600; font-size: 11px; color: #374151; }
