@@ -1,7 +1,10 @@
 # ADR 0042 — Matter access and central policy administration
 
-**Status:** Proposed — maintainer-authorised replacement implementation for PR #536;
-code and security review remain required before merge.
+**Status:** Proposed. Separate ratification is unconfirmed.
+**Implementation record:** The maintainer-authorized replacement for PR #536
+merged on 2026-10-15 in [#719](https://github.com/LegalQuants/lq-ai/pull/719).
+Matter sharing with ethical screens and audited central policy administration
+shipped in [v0.9.1](../releases/v0.9.1.md).
 **Date:** 2026-10-13
 **Credit:** @sergiomaldo's PR #536 supplies the membership, sharing and resolver foundation;
 Sergio is credited as co-author of the replacement contribution.

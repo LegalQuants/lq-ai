@@ -42,7 +42,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { beforeNavigate, afterNavigate } from '$app/navigation';
-	import { applyLQAILightTheme, isLQAIPath } from '$lib/lq-ai/light-theme';
+	import { applyLQAILightTheme } from '$lib/lq-ai/light-theme';
+	import { isLQAIPath } from '$lib/lq-ai/paths';
 	import { updated } from '$app/state';
 
 	import i18n, { initI18n, getLanguages, changeLanguage } from '$lib/i18n';

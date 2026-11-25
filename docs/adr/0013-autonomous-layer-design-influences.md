@@ -1,6 +1,10 @@
 # ADR 0013 — Autonomous Layer design influences (M4 / LQVern)
 
 **Status:** Proposed
+**Implementation record:** The design landed in [#100](https://github.com/LegalQuants/lq-ai/pull/100)
+and underpins the shipped [M4 Autonomous Layer](../M4-IMPLEMENTATION-PLAN.md).
+The [roadmap](../ROADMAP.md#after-10) treats D5 as the current rule for Project
+context. Separate ratification of the full ADR is unconfirmed.
 **Date:** 2026-05-24
 **Owner:** M4 / LQVern kickoff (feature branch `feat/lqvern-m4-autonomous`)
 
