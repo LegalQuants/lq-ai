@@ -17,19 +17,25 @@ export function drawerKeydown(
 
 const FOCUSABLE = 'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-/**
- * The first control in the sheet a person can see and reach: rendered
- * (it has a layout box) and not disabled. A hidden control, such as the
- * matter list toggle that only shows on a matter page, is skipped.
- */
-export function firstVisibleFocusable(
-	root: Pick<ParentNode, 'querySelectorAll'> | null | undefined
-): HTMLElement | null {
-	if (!root) return null;
-	for (const el of Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE))) {
-		if ((el as HTMLButtonElement).disabled) continue;
-		if (el.getClientRects().length === 0) continue;
-		return el;
-	}
-	return null;
+type Sheet = Pick<ParentNode, 'querySelectorAll'> | null | undefined;
+
+function visibleControls(root: Sheet): HTMLElement[] {
+	return Array.from(root?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
+		(el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0
+	);
+}
+
+export function firstVisibleFocusable(root: Sheet): HTMLElement | null {
+	return visibleControls(root)[0] ?? null;
+}
+
+/** Let the browser traverse the list, wrapping at the two ends of an open sheet. */
+export function wrapSheetTab(event: KeyboardEvent, root: Sheet, open: boolean): void {
+	if (!open || event.key !== 'Tab') return;
+	const controls = visibleControls(root);
+	const first = controls[0];
+	const last = controls[controls.length - 1];
+	if (!first || event.target !== (event.shiftKey ? first : last)) return;
+	event.preventDefault();
+	(event.shiftKey ? last : first).focus();
 }

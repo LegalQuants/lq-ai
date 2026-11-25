@@ -13,10 +13,10 @@
 	 * ChatPanel uses it only outside a matter; a matter page keeps its own
 	 * `CompactPanel` toggles (`#matter-chats-toggle`).
 	 */
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { IconMessages } from '@tabler/icons-svelte';
 	import { NARROW_QUERY } from '../rightSidebar';
-	import { drawerKeydown, firstVisibleFocusable } from '../chatListDrawer';
+	import { drawerKeydown, firstVisibleFocusable, wrapSheetTab } from '../chatListDrawer';
 
 	export let id = 'lq-chat-list';
 	/** Off: the wrapper renders as if absent at every width (a matter page). */
@@ -26,6 +26,19 @@
 
 	let toggleEl: HTMLButtonElement | undefined;
 	let sheetEl: HTMLDivElement | undefined;
+
+	onMount(() => {
+		const media = window.matchMedia(NARROW_QUERY);
+		const resize = () => {
+			if (!media.matches) open = false;
+		};
+		media.addEventListener('change', resize);
+		return () => media.removeEventListener('change', resize);
+	});
+
+	function sheetKeydown(event: KeyboardEvent): void {
+		if (!drawerKeydown(event, open, () => void close())) wrapSheetTab(event, sheetEl, open);
+	}
 
 	/** Close the sheet; focus returns to the toggle. */
 	export async function close(): Promise<void> {
@@ -73,8 +86,11 @@
 		id="{id}-sheet"
 		class="drawer-sheet"
 		class:open
+		role={open ? 'dialog' : undefined}
+		aria-modal={open ? true : undefined}
+		aria-label={open ? label : undefined}
 		data-testid="lq-chat-list-sheet"
-		on:keydown={(event) => drawerKeydown(event, open, () => void close())}
+		on:keydown={sheetKeydown}
 	>
 		<slot />
 	</div>

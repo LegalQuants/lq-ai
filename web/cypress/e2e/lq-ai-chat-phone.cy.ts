@@ -59,6 +59,10 @@ describe('Phone Chats in the sidebar shell', () => {
 		cy.get(toggle).should('have.attr', 'aria-expanded', 'false');
 		cy.get(toggle).focus().type('{enter}');
 		cy.get('[data-testid="lq-ai-new-chat-btn"]').should('be.focused');
+		cy.focused().trigger('keydown', { key: 'Tab', shiftKey: true });
+		cy.contains('[data-testid="lq-chat-list-sheet"] button', chat.title).should('be.focused');
+		cy.focused().trigger('keydown', { key: 'Tab' });
+		cy.get('[data-testid="lq-ai-new-chat-btn"]').should('be.focused');
 		cy.contains('[data-testid="lq-chat-list-sheet"] button', chat.title).focus().type('{enter}');
 		cy.get(toggle).should('be.focused').and('have.attr', 'aria-expanded', 'false');
 		cy.contains(notice + ' .line', 'a provider call has no confirmed outcome').should(($line) => {

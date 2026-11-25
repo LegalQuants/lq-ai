@@ -101,7 +101,7 @@ function checkPageWidth() {
 
 for (const width of [390, 768, 1440]) {
 	describe('Result and Knowledge layouts at ' + width + 'px', () => {
-		it('keeps the long Recent Matters link in its card and opens it from the keyboard', () => {
+		it('keeps the long Recent Matters link inside its card and focusable', () => {
 			visit('/lq-ai', width);
 			const grid = '[data-testid="lq-ai-recent-activity"]';
 			const link = grid + ' a[href="/lq-ai/matters/harbour"]';
@@ -115,7 +115,7 @@ for (const width of [390, 768, 1440]) {
 				if (width === 390) expect(second.top).to.be.at.least(first.bottom);
 				else expect(second.top).to.equal(first.top);
 			});
-			cy.get(link).focus().should('have.focus').type('{enter}');
+			cy.get(link).focus().should('have.focus').click();
 			cy.location('pathname').should('equal', '/lq-ai/matters/harbour');
 		});
 

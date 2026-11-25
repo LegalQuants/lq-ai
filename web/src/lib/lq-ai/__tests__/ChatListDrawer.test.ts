@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'svelte/server';
 
 import ChatListDrawer from '../components/ChatListDrawer.svelte';
-import { drawerKeydown, firstVisibleFocusable } from '../chatListDrawer';
+import { drawerKeydown, firstVisibleFocusable, wrapSheetTab } from '../chatListDrawer';
 import { NARROW_QUERY } from '../rightSidebar';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,7 +129,7 @@ describe('ChatPanel wiring', () => {
 
 describe('focus when the sheet opens', () => {
 	const el = (name: string, rects: number, disabled = false) =>
-		({ name, disabled, getClientRects: () => ({ length: rects }) }) as unknown as HTMLElement;
+		({ name, disabled, tabIndex: 0, focus: vi.fn(), getClientRects: () => ({ length: rects }) }) as unknown as HTMLElement;
 	const root = (els: HTMLElement[]) => ({ querySelectorAll: () => els }) as unknown as ParentNode;
 
 	it('skips hidden and disabled controls and takes the first one a person can see', () => {
@@ -142,6 +142,24 @@ describe('focus when the sheet opens', () => {
 	it('finds nothing in an empty or missing sheet', () => {
 		expect(firstVisibleFocusable(root([el('hidden', 0)]))).toBeNull();
 		expect(firstVisibleFocusable(null)).toBeNull();
+	});
+
+	it('wraps both open-sheet endpoints and leaves interior and inline traversal native', () => {
+		const [first, middle, last] = ['New', 'Recent', 'Older'].map((name) => el(name, 1));
+		const sheet = root([el('hidden', 0), first, middle, last, el('disabled', 1, true)]);
+		function tab(target: HTMLElement, shiftKey: boolean, open = true) {
+			const event = { key: 'Tab', target, shiftKey, preventDefault: vi.fn() };
+			wrapSheetTab(event as unknown as KeyboardEvent, sheet, open);
+			return event.preventDefault;
+		}
+		expect(tab(first, true)).toHaveBeenCalledOnce();
+		expect(last.focus).toHaveBeenCalledOnce();
+		expect(tab(last, false)).toHaveBeenCalledOnce();
+		expect(first.focus).toHaveBeenCalledOnce();
+		expect(tab(middle, false)).not.toHaveBeenCalled();
+		expect(tab(middle, true)).not.toHaveBeenCalled();
+		expect(tab(last, false, false)).not.toHaveBeenCalled();
+		expect(tab(first, true, false)).not.toHaveBeenCalled();
 	});
 
 	it('moves focus there on open, and Escape on the toggle closes it too', () => {
