@@ -54,6 +54,7 @@ describe('client-side redirects from the protected shell', () => {
 			cy.wait('@changePassword');
 			cy.location('pathname').should('eq', '/lq-ai/login');
 			cy.get('[data-testid="lq-ai-login-email"]').should('be.visible');
+			cy.get('[data-testid="lq-ai-dual-branding-footer"]').should('have.length', 1);
 			cy.window().then((win) => expect(win.localStorage.getItem('lq_ai_auth')).to.be.null);
 			cy.get('@protectedProjects.all').should('have.length', 0);
 		});
@@ -63,6 +64,7 @@ describe('client-side redirects from the protected shell', () => {
 		visitHome(401);
 		cy.location('pathname').should('eq', '/lq-ai/login');
 		cy.get('[data-testid="lq-ai-login-email"]').should('be.visible');
+		cy.get('[data-testid="lq-ai-dual-branding-footer"]').should('have.length', 1);
 		cy.get('[data-testid="lq-shell-sidebar"]').should('not.exist');
 		cy.get('@protectedProjects.all').should('have.length', 0);
 	});

@@ -4,7 +4,6 @@
 
 	import { authApi, bootstrapApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
-	import DualBrandingFooter from '$lib/lq-ai/components/DualBrandingFooter.svelte';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
@@ -171,7 +170,6 @@
 			</button>
 		</form>
 	</main>
-	<DualBrandingFooter />
 </div>
 
 <style>
