@@ -10,6 +10,8 @@
 	import CompactPanel from '$lib/lq-ai/components/CompactPanel.svelte';
 	import { bannerVisible } from './proposal-helpers';
 	import { createProposalInbox } from './proposal-inbox';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let matter: Project | null = null;
 	let loading = true;
@@ -91,24 +93,30 @@
 </script>
 
 {#if loading}
-	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-text-secondary);">
+	<LqText as="p" size="14" tone="secondary" style="padding: var(--lq-space-6);">
 		Loading matter...
-	</p>
+	</LqText>
 {:else if error || !matter}
-	<p class="lq-text-body" style="padding: var(--lq-space-6); color: var(--lq-error);">
+	<LqText as="p" size="14" tone="danger" style="padding: var(--lq-space-6);">
 		{error ?? 'Matter not found'}
-	</p>
+	</LqText>
 {:else}
 	<div class="matter-page">
 		{#if showProposalBanner}
 			<section class="proposal-banner" aria-label="Context proposals">
 				<header class="proposal-banner-header">
-					<h2 class="lq-text-panel-h proposal-banner-title">Context proposals</h2>
+					<LqTitle
+						order={2}
+						size="16"
+						weight="semibold"
+						tone="primary"
+						class="proposal-banner-title">Context proposals</LqTitle
+					>
 					{#if proposals.length > 0}
-						<span class="lq-text-caption proposal-banner-count">
+						<LqText as="span" size="12" tone="secondary" class="proposal-banner-count">
 							{$inbox.totalCount} pending — showing {proposals.length}. Accept to append to this
 							matter's context, or reject to discard.
-						</span>
+						</LqText>
 					{/if}
 				</header>
 
@@ -128,9 +136,9 @@
 							<li class="proposal-row">
 								<div class="proposal-body">
 									<p class="proposal-text">{proposal.suggested_md}</p>
-									<span class="lq-text-caption proposal-date">
+									<LqText as="span" size="12" tone="secondary" class="proposal-date">
 										Proposed {new Date(proposal.created_at).toLocaleDateString()}
-									</span>
+									</LqText>
 								</div>
 								<div class="proposal-actions">
 									<button
@@ -243,12 +251,8 @@
 		flex-wrap: wrap;
 	}
 
-	.proposal-banner-title {
+	.proposal-banner-header :global(.proposal-banner-title) {
 		margin: 0;
-	}
-
-	.proposal-banner-count {
-		color: var(--lq-text-secondary);
 	}
 
 	.proposal-message {
@@ -304,10 +308,6 @@
 		color: var(--lq-text);
 		white-space: pre-wrap;
 		word-break: break-word;
-	}
-
-	.proposal-date {
-		color: var(--lq-text-secondary);
 	}
 
 	.proposal-actions {

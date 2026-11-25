@@ -18,6 +18,7 @@
 	import { adminApi } from '$lib/lq-ai/api';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { ProviderKeyStatus } from '$lib/lq-ai/api/admin';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let rows: ProviderKeyStatus[] = [];
 	let loading = false;
@@ -151,7 +152,7 @@
 
 <div class="provider-keys-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Provider keys</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Provider keys</LqTitle>
 		<p class="page-intro">
 			Add the API key for each AI provider you use (OpenAI, Anthropic, …). Keys are
 			<strong>encrypted at rest</strong> by the on-device Inference Gateway and

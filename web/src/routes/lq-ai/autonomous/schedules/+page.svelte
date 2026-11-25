@@ -33,6 +33,7 @@
 	import type { SkillSummary } from '$lib/lq-ai/types';
 	import type { KnowledgeBase, Project } from '$lib/lq-ai/types';
 	import CronInput from '$lib/lq-ai/components/CronInput.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// List state
@@ -312,7 +313,7 @@
 	<header class="page-header">
 		<div class="page-header-row">
 			<div>
-				<h1 class="lq-text-page-h">Schedules</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Schedules</LqTitle>
 				<p class="page-intro">
 					Cron-driven autonomous runs. LQVern executes the assigned playbook or skill on the
 					configured schedule. Results land in the Sessions view.
@@ -444,7 +445,7 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<div class="modal-panel" on:click|stopPropagation on:keydown|stopPropagation>
-			<h2 id="sched-modal-title" class="lq-text-page-h modal-title">New schedule</h2>
+			<LqTitle order={2} size="20" weight="bold" tone="primary" id="sched-modal-title" class="modal-title">New schedule</LqTitle>
 
 			<form on:submit|preventDefault={handleSubmit} class="modal-form" novalidate>
 				<!-- Name (optional) -->
@@ -892,7 +893,7 @@
 		overflow-y: auto;
 	}
 
-	.modal-title {
+	.modal-panel :global(.modal-title) {
 		margin: 0 0 var(--lq-space-5);
 	}
 

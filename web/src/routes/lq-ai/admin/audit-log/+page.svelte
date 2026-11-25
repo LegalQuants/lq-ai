@@ -20,6 +20,8 @@
 	import { auditLogApi } from '$lib/lq-ai/api';
 	import { auth } from '$lib/lq-ai/auth/store';
 	import type { AuditLogEntry, AuditLogFilters } from '$lib/lq-ai/api/auditLog';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let rows: AuditLogEntry[] = [];
 	let nextCursor: string | null = null;
@@ -120,11 +122,11 @@
 
 <div class="p-4 max-w-7xl mx-auto" data-testid="lq-ai-admin-audit-log">
 	<header class="mb-4">
-		<h1 class="lq-text-page-h">Audit log</h1>
-		<p class="lq-text-caption mt-1" style="color: var(--lq-text-tertiary);">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Audit log</LqTitle>
+		<LqText as="p" size="12" tone="tertiary" class="mt-1">
 			Every state-changing API call writes one row here (PRD §5.3). Filters compose with AND;
 			leaving a field blank means "any". Most-recent rows first.
-		</p>
+		</LqText>
 	</header>
 
 	<form
@@ -133,7 +135,7 @@
 		data-testid="lq-ai-admin-audit-log-filters"
 	>
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Privilege</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Privilege</LqText>
 			<select
 				bind:value={privilegeMarked}
 				class="rounded lq-t-border-strong text-sm"
@@ -146,7 +148,7 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Routed tier</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Routed tier</LqText>
 			<select
 				bind:value={routedTier}
 				class="rounded lq-t-border-strong text-sm"
@@ -162,7 +164,7 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Action (exact)</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Action (exact)</LqText>
 			<input
 				type="text"
 				placeholder="e.g. chat.message_sent"
@@ -173,7 +175,7 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">User ID (UUID)</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">User ID (UUID)</LqText>
 			<input
 				type="text"
 				placeholder="00000000-0000-…"
@@ -184,7 +186,7 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Since</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Since</LqText>
 			<input
 				type="datetime-local"
 				bind:value={since}
@@ -194,7 +196,7 @@
 		</label>
 
 		<label class="flex flex-col">
-			<span class="lq-text-label mb-1">Until</span>
+			<LqText as="span" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="mb-1">Until</LqText>
 			<input
 				type="datetime-local"
 				bind:value={until}
@@ -206,7 +208,7 @@
 		<div class="col-span-full flex items-center gap-2 justify-end">
 			<button
 				type="button"
-				class="lq-btn-secondary lq-text-body-sm"
+				class="lq-btn-secondary"
 				on:click={resetFilters}
 				data-testid="lq-ai-audit-filter-reset"
 			>
@@ -214,7 +216,7 @@
 			</button>
 			<button
 				type="submit"
-				class="lq-btn-primary lq-text-body-sm"
+				class="lq-btn-primary"
 				disabled={loading}
 				data-testid="lq-ai-audit-filter-apply"
 			>
@@ -232,19 +234,25 @@
 		</div>
 	{/if}
 
-	<div class="lq-table-wrap overflow-x-auto">
-		<table class="min-w-full lq-text-body" data-testid="lq-ai-admin-audit-log-table">
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users scroll this region with the arrow keys) -->
+	<div
+		class="lq-table-wrap overflow-x-auto"
+		role="region"
+		aria-label="Audit log entries"
+		tabindex="0"
+	>
+		<LqText as="table" size="14" tone="primary" class="min-w-full" data-testid="lq-ai-admin-audit-log-table">
 			<thead class="lq-thead">
 				<tr>
-					<th class="px-2 py-1 text-left lq-text-label">Timestamp</th>
-					<th class="px-2 py-1 text-left lq-text-label">Action</th>
-					<th class="px-2 py-1 text-left lq-text-label">User</th>
-					<th class="px-2 py-1 text-left lq-text-label">Resource</th>
-					<th class="px-2 py-1 text-left lq-text-label">Priv</th>
-					<th class="px-2 py-1 text-left lq-text-label">Tier</th>
-					<th class="px-2 py-1 text-left lq-text-label">Provider</th>
-					<th class="px-2 py-1 text-left lq-text-label">IP</th>
-					<th class="px-2 py-1 text-left lq-text-label">Details</th>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Timestamp</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Action</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">User</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Resource</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Priv</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Tier</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Provider</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">IP</LqText>
+					<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="px-2 py-1 text-left">Details</LqText>
 				</tr>
 			</thead>
 			<tbody>
@@ -253,14 +261,14 @@
 						class="lq-row align-top"
 						class:lq-t-warning-bg={r.privilege_marked}
 					>
-						<td class="px-2 py-1 font-mono whitespace-nowrap lq-text-caption" style="color: var(--lq-text-tertiary);">{formatTimestamp(r.timestamp)}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.action}</td>
-						<td class="px-2 py-1 font-mono truncate max-w-[12ch] lq-text-body" title={r.user_id ?? ''}>
+						<LqText as="td" size="12" tone="tertiary" class="px-2 py-1 font-mono whitespace-nowrap">{formatTimestamp(r.timestamp)}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.action}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono truncate max-w-[12ch]" title={r.user_id ?? ''}>
 							{r.user_id ?? '—'}
-						</td>
-						<td class="px-2 py-1 lq-text-body">
-							{r.resource_type}{r.resource_id ? `/${r.resource_id.slice(0, 8)}…` : ''}
-						</td>
+						</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1">
+							{r.resource_type}{#if r.resource_id}/<span class="full-resource-id">{r.resource_id}</span><span class="short-resource-id" title={r.resource_id}>{r.resource_id.slice(0, 8)}…</span>{/if}
+						</LqText>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
 								<span class="px-1.5 py-0.5 rounded lq-t-warning-strong-bg lq-t-warning-text text-[10px]">
@@ -270,29 +278,29 @@
 								—
 							{/if}
 						</td>
-						<td class="px-2 py-1 lq-text-body">{r.routed_inference_tier ?? '—'}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.routed_provider ?? '—'}</td>
-						<td class="px-2 py-1 font-mono lq-text-body">{r.ip_address ?? '—'}</td>
-						<td class="px-2 py-1 font-mono truncate max-w-[28ch] lq-text-body" title={formatDetails(r.details)}>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1">{r.routed_inference_tier ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.routed_provider ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono">{r.ip_address ?? '—'}</LqText>
+						<LqText as="td" size="14" tone="primary" class="px-2 py-1 font-mono truncate max-w-[28ch]" title={formatDetails(r.details)}>
 							{formatDetails(r.details)}
-						</td>
+						</LqText>
 					</tr>
 				{:else}
 					<tr>
-						<td colspan="9" class="px-2 py-6 text-center lq-text-body" style="color: var(--lq-text-tertiary);">
+						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-center">
 							{loading ? 'Loading…' : 'No audit entries match.'}
-						</td>
+						</LqText>
 					</tr>
 				{/each}
 			</tbody>
-		</table>
+		</LqText>
 	</div>
 
 	{#if nextCursor}
 		<div class="flex justify-center mt-3">
 			<button
 				type="button"
-				class="lq-btn-secondary lq-text-body-sm"
+				class="lq-btn-secondary"
 				on:click={loadMore}
 				disabled={loading}
 				data-testid="lq-ai-admin-audit-log-load-more"
@@ -312,8 +320,46 @@
 	}
 
 	.lq-table-wrap {
+		container: audit-entries / inline-size;
 		border-radius: var(--lq-radius);
 		border: 1px solid var(--lq-border);
+	}
+
+	.lq-table-wrap:focus-visible {
+		outline: 2px solid var(--lq-text);
+		outline-offset: 2px;
+	}
+
+	.lq-table-wrap :global(th) {
+		white-space: nowrap;
+	}
+	.full-resource-id {
+		display: none;
+	}
+
+	/* Nine columns need room for identifiers even when the shell's sidebar is open. */
+	@container audit-entries (max-width: 60rem) {
+		.lq-table-wrap :global(table) {
+			min-width: 60rem;
+		}
+		.lq-row :global(td) {
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
+		.lq-row :global(td:not(:nth-child(6))) {
+			/* All fields except the single-digit tier can carry long values. */
+			min-width: 14ch;
+			max-width: 28ch;
+		}
+		.full-resource-id {
+			display: inline;
+		}
+		.short-resource-id {
+			display: none;
+		}
+		.lq-table-wrap :global(td[colspan]) {
+			text-align: left;
+		}
 	}
 
 	.lq-thead {

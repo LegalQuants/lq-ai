@@ -24,6 +24,7 @@
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 	import type { AutonomousMemoryRead, MemoryState } from '$lib/lq-ai/api/autonomous';
 	import { emptyStateMessage, formatMemoryDate, MEMORY_TABS } from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -210,7 +211,7 @@
 
 <div class="memory-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Memory</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Memory</LqTitle>
 		<p class="page-intro">
 			LQVern proposes memory entries as it works. Review them here: keep what's accurate,
 			edit before keeping, or dismiss what doesn't apply. You own what persists.

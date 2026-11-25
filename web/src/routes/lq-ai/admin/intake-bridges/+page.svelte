@@ -29,6 +29,7 @@
 		slackDisplayName,
 		teamsDisplayName
 	} from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let list: IntakeBridgesList | null = null;
 	let loading = false;
@@ -130,7 +131,7 @@
 
 <div class="intake-bridges-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Intake bridges</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Intake bridges</LqTitle>
 		<p class="page-intro">
 			Connect Slack workspaces and Microsoft Teams tenants to this LQ.AI deployment. The slash
 			command surface (<code>/lq</code> and <code>/lq ask</code>) is descoped to M4 / community

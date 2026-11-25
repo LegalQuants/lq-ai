@@ -28,6 +28,7 @@
 		installConfirmMessage,
 		shortSha
 	} from './page-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	let catalog: CommunityCatalogResponse | null = null;
 	let loading = false;
@@ -162,7 +163,7 @@
 
 <div class="community-skills-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Community skills</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Community skills</LqTitle>
 		<p class="page-intro">
 			Review a community skill, then install a fixed version for a team or yourself. Team members
 			can use shared skills; team admins manage them. Source declarations are shown separately from

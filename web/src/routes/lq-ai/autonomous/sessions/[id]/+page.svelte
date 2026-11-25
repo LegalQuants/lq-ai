@@ -28,6 +28,7 @@
 	import { formatCost, isHaltable, skillRefusalMessage, statusPillClass } from '../../page-helpers';
 	import { buildTimeline } from '$lib/lq-ai/autonomous/receipt-timeline';
 	import type { TimelineNode } from '$lib/lq-ai/autonomous/receipt-timeline';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// State
@@ -143,7 +144,7 @@
 		<!-- ------------------------------------------------------------------ -->
 		<header class="receipt-header">
 			<div class="receipt-header-top">
-				<h1 class="lq-text-page-h">Session receipt</h1>
+				<LqTitle order={1} size="20" weight="bold" tone="primary">Session receipt</LqTitle>
 				{#if isHaltable(session.status)}
 					<button type="button" class="halt-button" on:click={haltSession} disabled={haltPending}>
 						{haltPending ? 'Halting…' : 'Halt session'}

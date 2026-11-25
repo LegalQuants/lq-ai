@@ -54,6 +54,7 @@
 	import { forkTableSeed, type TableSkillDefaults } from '$lib/lq-ai/skills/builtinsBrowser';
 	import type { EditableColumn, SkillOutputMode } from '$lib/lq-ai/skills/tableColumns';
 	import type { UserSkillCreate } from '$lib/lq-ai/types';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 
 	interface WizardInitial {
 		slug?: string;
@@ -216,7 +217,7 @@
 
 <main class="lq-skills-new" data-testid="lq-ai-user-skill-new">
 	{#if loading}
-		<p class="lq-text-body" data-testid="lq-ai-user-skill-new-loading">Loading…</p>
+		<LqText as="p" size="14" tone="primary" data-testid="lq-ai-user-skill-new-loading">Loading…</LqText>
 	{:else}
 		{#if loadError}
 			<div class="banner" role="status" data-testid="lq-ai-user-skill-new-load-error">

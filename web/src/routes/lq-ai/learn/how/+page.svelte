@@ -1,3 +1,8 @@
+<script lang="ts">
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
+</script>
+
 <!--
   /lq-ai/learn/how — "How It Works" visualization page.
 
@@ -32,21 +37,21 @@
 <main class="lq-learn-how-page" data-testid="lq-ai-learn-how-page">
 	<header class="lq-page-header">
 		<a href="/lq-ai/learn" class="lq-back-link">← Learn</a>
-		<h1 class="lq-text-page-h">How It Works</h1>
-		<p class="lq-text-body lq-page-intro">
+		<LqTitle order={1} size="20" weight="bold" tone="primary">How It Works</LqTitle>
+		<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-page-intro">
 			Twenty-two interactive surfaces. Together they tell the story of how LQ.AI works from request
 			to response — the engine, its boundaries, the M3 capability surfaces built on top, the
 			governed tool boundary, and the fiduciary-grade cluster that records, verifies, and derives
 			from what that boundary retrieves. Each playground links to the source files that implement
 			what it shows — if a visualization makes a claim, the linked file is where you verify it.
-		</p>
+		</LqText>
 	</header>
 
 	<div class="lq-how-sections">
 		<!-- 1: System Architecture -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-architecture">
 			<h2 class="lq-section-h">1. The big picture: System Architecture</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				LQ.AI is three services: the FastAPI backend (<code>api/</code>), the Inference Gateway (<code
 					>gateway/</code
 				>), and the SvelteKit web frontend (<code>web/</code>). They communicate over HTTP using
@@ -54,7 +59,7 @@
 				the security boundary — the only component that holds provider API keys and makes outbound
 				inference calls. This map shows the service topology, the network boundaries, and the trust
 				model.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/system-architecture.html"
@@ -83,21 +88,21 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Every interaction starts at the frontend and travels through the backend to the Gateway. The
 			next playground traces that path step by step.
-		</p>
+		</LqText>
 
 		<!-- 2: Request Lifecycle -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-lifecycle">
 			<h2 class="lq-section-h">2. A request, end to end: Lifecycle of a chat send</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				When you press Enter in the composer, the message travels through at least six distinct
 				processing stages before the model sees it — and through three more before the response
 				reaches your screen. Each stage can add context (skill prompt, KB chunks, tier metadata),
 				apply a policy check, or produce an audit record. This playground walks the full path so you
 				can see where each transformation happens and which file implements it.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/request-lifecycle.html"
@@ -132,16 +137,16 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			One of the Gateway's most consequential processing steps is tier enforcement — deciding
 			whether the requested provider is permitted for the matter's sensitivity level. The next
 			playground makes that decision legible.
-		</p>
+		</LqText>
 
 		<!-- 3: Tier System -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-tier">
 			<h2 class="lq-section-h">3. The tier system: when the Gateway says no</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The Gateway enforces five data-sensitivity tiers (Tier 1 = local / air-gapped, most secure;
 				Tier 5 = consumer, least secure). When a request arrives, the Gateway compares the requested
 				provider's tier against the matter's configured floor. A floor of Tier N means "require Tier
@@ -155,7 +160,7 @@
 					target="_blank"
 					rel="noopener noreferrer">gateway/app/tier_floor.py</a
 				>.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/tier-system.html"
@@ -184,15 +189,15 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			If the tier check passes, the Gateway forwards the request. But what exactly does the model
 			receive? The next playground disassembles the assembled prompt so you can see each layer.
-		</p>
+		</LqText>
 
 		<!-- 4: Skill Composition -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-skill-composition">
 			<h2 class="lq-section-h">4. What the model actually sees: Skill Composition</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				When a skill is invoked, the final prompt the model receives is an assembly of layers: the
 				skill's system prompt, any input variables resolved against the user's message, reference
 				file content, KB chunks retrieved for this specific message, and the conversation history.
@@ -204,7 +209,7 @@
 					target="_blank"
 					rel="noopener noreferrer">api/app/pipeline/</a
 				>.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/skill-composition.html"
@@ -233,24 +238,24 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Once the model responds, the chat surface renders the output — but every citation the model
 			emits has to be verified against the source before it counts. The next playground walks the
 			4-stage cascade that decides which citations show up as verified, which show up as "verified
 			with caveats," and which surface as unverified.
-		</p>
+		</LqText>
 
 		<!-- 5: Citation Engine 4-stage cascade -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-citation-engine">
 			<h2 class="lq-section-h">5. Verifying what the model said: Citation Engine cascade</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Every <code>"&lt;quote&gt;" (Source: [N])</code> the model emits runs through a four-stage
 				verification cascade: exact match → tolerant match → paraphrase judge → optional ensemble.
 				The first stage to verify wins; failures cascade. A citation that misses every stage is not
 				persisted — its absence is the "unverified" signal the M2-C2 UI consumes. This playground
 				lets you pick or craft a (source, quote) pair and watch which stage verifies, what the
 				persisted <code>verification_method</code> would be, and how the chat surface would render it.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/citation-engine-cascade.html"
@@ -285,17 +290,17 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The Citation Engine answers "did the model quote the source faithfully" — but a parallel
 			question is "what did the model see in the first place?" The Anonymization Layer pseudonymizes
 			sensitive entities before any chat content leaves the gateway and rehydrates pseudonyms on the
 			return path. The next playground shows the full pipeline.
-		</p>
+		</LqText>
 
 		<!-- 6: Anonymization Layer pre/post middleware -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-anonymization">
 			<h2 class="lq-section-h">6. Confidentiality: Anonymization Layer pre/post</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The gateway's Anonymization Layer (M2-B3) is pre/post middleware that pseudonymizes detected
 				entities (PERSON, ORGANIZATION, EMAIL_ADDRESS, PHONE_NUMBER, LOCATION, US_BANK_NUMBER +
 				custom CASE_NUMBER and MATTER_NUMBER) before requests leave for the model provider, and
@@ -305,8 +310,8 @@
 					>lq_ai_skip_anonymization</code
 				> so source quotes reach the model intact for citation grounding. This playground walks the full
 				pipeline with toggles for both skip behaviors.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest validation posture:</strong> the custom recognizers and middleware
 				integration are tested; Presidio default-recognizer recall/precision on legal-document
 				corpus specifically is empirically unmeasured —
@@ -318,7 +323,7 @@
 					>docs/security/anonymization.md §"What's validated vs unvalidated"</a
 				>
 				for the risk framing and route-to-Tier-1 guidance.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/anonymization-layer.html"
@@ -353,16 +358,16 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Understanding what the model receives answers the "what" — but procurement and security teams
 			also need to know where that data is stored and whether it ever leaves the operator's
 			environment. The next playground addresses that directly.
-		</p>
+		</LqText>
 
 		<!-- 7: Data Residency -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-data-residency">
 			<h2 class="lq-section-h">7. Where your data lives: Data Residency</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				LQ.AI is self-hosted. By default, all conversation data, knowledge base content, and skill
 				definitions stay within the operator's deployment — they never touch LegalQuants
 				infrastructure. The only outbound path is the inference call from the Gateway to the chosen
@@ -371,7 +376,7 @@
 				middleware (M2-shipped — see playground 6 above) is one of the controls that crosses this
 				surface; this map shows where its pre/post substitution sits relative to every storage and
 				egress point in the system.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/data-residency.html"
@@ -405,16 +410,16 @@
 				</span>
 			</div>
 		</section>
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The seven playgrounds above trace the engine and its boundaries. The final three demonstrate
 			the M3 capability surfaces — Playbooks, Tabular Review, and the Word add-in — built on that
 			engine.
-		</p>
+		</LqText>
 
 		<!-- 8: Playbook execution cascade -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-playbook-cascade">
 			<h2 class="lq-section-h">8. Reviewing a contract: the Playbook execution cascade</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				A Playbook codifies an organization's standard positions on common contract issues. Applying
 				one runs a four-node LangGraph cascade — retrieve → classify → redline → compile — that
 				walks each position, extracts the matching clause, classifies it against the standard, and
@@ -422,7 +427,7 @@
 				position-by-position against synthetic NDAs. The per-position references are the verbatim
 				matched clause text (lexical FTS), not the M2 Citation Engine verification cascade — that
 				integration is deferred.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/playbook-cascade.html"
@@ -457,22 +462,22 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			A Playbook reviews one contract against many positions. Tabular Review inverts that — many
 			contracts against a few questions, in a grid.
-		</p>
+		</LqText>
 
 		<!-- 9: Tabular Review grid -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-tabular-review">
 			<h2 class="lq-section-h">9. Comparing many contracts: the Tabular Review grid</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Tabular Review extracts the same set of questions across a set of documents and lays the
 				answers out in a grid — one row per document, one column per question. Each cell is grounded
 				in the chunks the model cited; click a cell to open its citation drawer. This playground
 				renders a small grid of synthetic NDAs; the citation drawer shows the same fields the real
 				surface does. Per-cell citations are display-only chunk references today (a synthetic
 				citation id), not Citation-Engine-resolved provenance.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/tabular-review.html"
@@ -507,15 +512,15 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Playbooks and Tabular Review run in the web app. The Word add-in brings the deployment into
 			the operator's editor — the last playground walks its install and auth flow.
-		</p>
+		</LqText>
 
 		<!-- 10: Word add-in install + auth flow -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-word-addin-flow">
 			<h2 class="lq-section-h">10. Into the editor: the Word add-in install + auth flow</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The Word add-in is an Office.js task pane installed against the operator's own deployment.
 				This playground walks the four-stage flow: admin generates a per-deployment manifest, the
 				operator sideloads the unsigned manifest via the Microsoft 365 Admin Center (which warns
@@ -523,7 +528,7 @@
 				deployment, and the version handshake confirms compatibility. M3 shipped the plumbing only —
 				the in-pane feature surface (chat, skills, playbooks) is deferred (DE-287; M4 closed without
 				it — community-friendly), and the signed distribution package is community-led.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/word-addin-flow.html"
@@ -558,24 +563,24 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Every chat-send, playbook run, and tabular extraction emits a distributed trace. The final
 			playground makes the full span hierarchy visible — from the HTTP boundary at the api down
 			through inference dispatch, anonymization, and citation verification — so operators can answer
 			latency, cost, and data-handling questions from a single trace view.
-		</p>
+		</LqText>
 
 		<!-- 11: OTel trace visualizer -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-otel-eval">
 			<h2 class="lq-section-h">11. Seeing it all at once: the observability trace</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Every chat-send is one OpenTelemetry trace spanning api → gateway → provider, with domain
 				spans for citation verification, anonymization, skill dispatch, and inference carrying
 				counts and types only — never raw entity values, prompt text, or response content. This
 				playground lets you toggle the citation path, anonymization state, workflow type, and
 				provider tier to see how the span tree changes, and shows which span attribute answers each
 				of the five questions an operator is most likely to ask in production.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/otel-eval.html"
@@ -611,13 +616,13 @@
 		</section>
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-autonomous-flow">
 			<h2 class="lq-section-h">12. Autonomy you can audit: the Autonomous flow</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The Autonomous Layer (M4, shipped) runs a single agent on your behalf — on a schedule, or
 				when documents arrive — without you watching each step. Because no human approves each
 				action, the agent runs through declared phases behind one brake-checked chokepoint, and
 				every run produces an auditable receipt. Step through a session below and trip each brake
 				yourself.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/autonomous-flow.html"
@@ -652,18 +657,18 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The flow above showed a single session start to finish. But what schedules those sessions,
 			what feeds them documents, and what captures what they learn? The next playground breaks the
 			Autonomous Layer into its four primitives.
-		</p>
+		</LqText>
 
 		<!-- 13: autonomous-primitives -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-autonomous-primitives">
 			<h2 class="lq-section-h">
 				13. The four autonomous primitives: watches, schedules, memory, precedent
 			</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				An autonomous session does not run in isolation — it is wired to four primitives that decide
 				when it runs and what it carries across runs. <strong>Watches</strong> trigger a session
 				when matching documents arrive; <strong>schedules</strong> trigger it on a cron-like
@@ -671,7 +676,7 @@
 				and the <strong>precedent lifecycle</strong> promotes vetted work product into reusable precedent.
 				This playground steps through each primitive and shows how it feeds the session you saw in playground
 				12. The Autonomous Layer shipped in M4.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/autonomous-primitives.html"
@@ -706,16 +711,16 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Every one of these surfaces — chat, playbooks, autonomous sessions — leans on the same
 			retrieval foundation: finding the right knowledge-base chunks for a given query. The next
 			playground opens up how that retrieval actually works.
-		</p>
+		</LqText>
 
 		<!-- 14: kb-hybrid-retrieval -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-kb-hybrid-retrieval">
 			<h2 class="lq-section-h">14. Finding the right chunks: knowledge-base hybrid retrieval</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				When a message needs grounding context, LQ.AI does not rely on vector search alone. It runs <strong
 					>hybrid retrieval</strong
 				>: a lexical full-text-search pass (Postgres FTS) and a vector cosine-similarity pass run in
@@ -723,7 +728,7 @@
 				matches and semantically-related passages surface. This playground lets you issue a query
 				against synthetic KB chunks and watch the lexical scores, the vector scores, and the fused
 				ranking that the engine ultimately uses. Knowledge-base retrieval shipped in M1.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/kb-hybrid-retrieval.html"
@@ -758,23 +763,23 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Retrieval finds the right chunks, but the chunks are only part of the context. A matter's
 			organization profile, its attachments, and its privilege and tier settings all shape what a
 			request is allowed to do. The next playground shows that context being assembled.
-		</p>
+		</LqText>
 
 		<!-- 15: projects-org-tiers -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-projects-org-tiers">
 			<h2 class="lq-section-h">15. The matter's context: projects, org profile, and tier floors</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Every request runs inside a matter (a project), and the matter carries the context that
 				shapes it: the organization profile (the house voice and standard positions), the matter's
 				attachments and knowledge bases, and its privilege flag and tier floor. This playground lets
 				you configure a matter and watch how each of those settings flows into the assembled request
 				— including how a privileged matter or a stricter tier floor narrows which providers the
 				Gateway will permit. Projects, organization profiles, and tier floors shipped in M1.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/projects-org-tiers.html"
@@ -809,28 +814,28 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Everything so far has been about work already inside LQ.AI. The last playground covers getting
 			work in — the Slack and Teams intake bridges — and is honest about how much of it is verified
 			today.
-		</p>
+		</LqText>
 
 		<!-- 16: intake-bridges -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-intake-bridges">
 			<h2 class="lq-section-h">16. Getting work in: the Slack/Teams intake bridges</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The intake bridges let an operator connect a Slack workspace or a Microsoft Teams tenant so
 				that requests can flow into LQ.AI from where the business already works. This playground
 				walks the OAuth install flow and the admin lifecycle (list, soft-delete) for a connected
 				bridge.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest partial state:</strong> the backend plumbing and admin lifecycle shipped in
 				M3, but the live OAuth install handshake is unverified against real Slack and Teams tenants
 				(<strong>DE-312</strong>), and the inbound <code>/lq</code> command path is inert — it does
 				not yet dispatch a request (<strong>DE-288</strong>). Treat this surface as scaffolding, not
 				a production-ready intake channel.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/intake-bridges.html"
@@ -865,16 +870,16 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The newest capability lets the assistant look up case law and reach operator-approved
 			connectors — without ever loosening the security boundary. This last playground walks that
 			governed path and lets you switch each guardrail off to see how the boundary reacts.
-		</p>
+		</LqText>
 
 		<!-- 17: governed-tool-flow -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-governed-tool-flow">
 			<h2 class="lq-section-h">17. Case-law &amp; connectors: the governed tool boundary</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				When the assistant looks up case law (CourtListener) or calls an operator-approved connector
 				(an MCP server), the request leaves your environment only through the Inference Gateway —
 				the single audited egress. The operator chooses which connectors exist; every call is
@@ -886,7 +891,7 @@
 				and connect prompts that render this gate inside the chat, rich case-law provenance — source-kinded
 				citations with provenance pills for the external sources a tool call pulled in — and the procedural
 				case-law research skill.
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/governed-tool-flow.html"
@@ -927,7 +932,7 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The governed tool boundary above answers "what can the assistant reach, and how is that reach
 			controlled." The five playgrounds below answer what happens to what it reaches: where that
 			authority content is registered, where the record of what was read lives, how a turn's
@@ -935,27 +940,27 @@
 			after the fact (is this still good law?), and the governed agentic session that orchestrates
 			all four across the life of a matter — plan, act, observe, replan, one brake-checked
 			chokepoint at a time. This is the fiduciary-grade cluster.
-		</p>
+		</LqText>
 
 		<!-- 18: authority-sources -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-authority-sources">
 			<h2 class="lq-section-h">18. Where authority comes from: the content-source registry</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Every authority citation traces back to a registered content source — CourtListener, SEC
 				EDGAR, EUR-Lex, and the others in the 4-entry registry. Each source declares its name, type,
 				jurisdiction, coverage, content kinds, and the operations it supports; the registry is what
 				the governed tool boundary (section 17) consults to decide what an authority lookup can
 				reach. This playground lets you inspect each source, toggle whether it is
 				operator-configured, and see how the registry reports availability.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest state:</strong> EUR-Lex is get-by-CELEX only — no keyword search (<strong
 					>DE-374</strong
 				>) or treaty lookup (<strong>DE-375</strong>) yet. Sources are operator-config-gated; a
 				registered source with no configured provider is reported unavailable-with-reason, never
 				silently omitted. The registry exposes name / type / jurisdiction / coverage / content_kinds
 				/ ops only — never auth keys, cost, or secrets (ADR 0021).
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/authority-sources.html"
@@ -990,26 +995,26 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The registry says what a lookup is allowed to reach. The next playground shows what gets
 			recorded once it does.
-		</p>
+		</LqText>
 
 		<!-- 19: citation-ledger -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-citation-ledger">
 			<h2 class="lq-section-h">19. The record of what was read: the Citation Ledger</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				Every claim a turn makes against a source — quoted or provenance-only — writes a ledger
 				entry: the claim text, the source id, and (for quote-bearing claims) a character offset into
 				that source. This playground shows a turn's ledger entries; click a quote-bearing claim to
 				trace it to its source id and offset, and see how a provenance-only entry (a source a tool
 				call surfaced but that no claim quotes) differs.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest state:</strong> the ledger references content by id + character offset only — no
 				raw payloads live in the audit layer (P3). A trace resolves an id + offset; the quoted text itself
 				is not stored in the ledger row (ADR 0018).
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/citation-ledger.html"
@@ -1044,27 +1049,27 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			A ledger entry is a record, not a verdict. The next playground shows how a turn's ledger
 			entries are recomputed into a pass/fail decision before the response is allowed to render.
-		</p>
+		</LqText>
 
 		<!-- 20: fiduciary-gate -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-fiduciary-gate">
 			<h2 class="lq-section-h">20. Derive, don't assert: the fiduciary-grade gate</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				The gate assembles a turn's citation set from its ledger entries and recomputes a PASS /
 				SUPPORTED / FAIL verdict live and deterministically — it never trusts a previously-stored
 				verdict. This playground lets you assemble a citation set from quote-bearing and
 				provenance-only claims and watch the verdict recompute as you add or remove entries.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest state:</strong> chat vs autonomous verdict-tier parity gaps remain (<strong
 					>DE-370</strong
 				>
 				/ <strong>DE-371</strong>) — the gate runs on both the chat and autonomous paths, but tier
 				handling is not yet identical across them (ADR 0018 D3).
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/fiduciary-gate.html"
@@ -1099,28 +1104,28 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			The gate verifies a citation at the moment it renders. A separate question is whether the case
 			behind that citation is still good law months or years later — the next playground covers what
 			gets derived after the fact.
-		</p>
+		</LqText>
 
 		<!-- 21: treatment-layer -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-treatment-layer">
 			<h2 class="lq-section-h">21. Is it still good law? the derived treatment layer</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				For a cited case, the treatment layer computes a rollup — how citing cases have treated it —
 				from the citation graph plus a bounded judge pass over citing-case signals. This playground
 				lets you pick a cited case and inspect the derived treatment rollup alongside the
 				citing-case signals that produced it.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest state:</strong> derived, not editorial — computed from the citation graph
 				plus a judge pass, not an authoritative citator. Judge input snippets are transient and
 				never stored (P3); the stored row is a rollup (<code
 					>derived_method='citation_graph+judge'</code
 				>) with a 30-day TTL and a bounded judge budget (ADR 0019).
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/treatment-layer.html"
@@ -1155,28 +1160,28 @@
 			</div>
 		</section>
 
-		<p class="lq-transition lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed" class="lq-transition">
 			Registry, ledger, gate, and treatment layer are four separate mechanisms. The last playground
 			puts them together inside a single governed session that plans, acts, observes, and replans
 			over the life of a matter.
-		</p>
+		</LqText>
 
 		<!-- 22: matter-session-flow -->
 		<section class="lq-how-section" data-testid="lq-ai-learn-how-section-matter-session-flow">
 			<h2 class="lq-section-h">22. Putting it together: a governed agentic matter session</h2>
-			<p class="lq-text-body">
+			<LqText as="p" size="14" tone="primary" leading="relaxed">
 				A matter session runs a plan → act → observe → replan loop over a matter's research — the
 				same brakes that gate autonomous flow (section 12), plus a per-phase step cap. Each act step
 				is a governed tool call: the model chooses which registered source to query and when, the
 				ledger records what it read, and the gate verifies each citation before it reaches you. This
 				playground steps through a session and lets you trip each brake yourself.
-			</p>
-			<p class="lq-text-body" style="font-size: 13px; color: var(--lq-text-secondary);">
+			</LqText>
+			<LqText as="p" size="13" tone="secondary" leading="relaxed">
 				<strong>Honest state:</strong> the backend is shipped; there is no dedicated matter-intake UI
 				yet — this capability reuses the autonomous session UI. An out-of-allowlist planner proposal is
 				rejected, not executed; the model chooses which governed tool and when — it never invents one
 				(ADR 0020 / ADR 0015).
-			</p>
+			</LqText>
 			<div class="lq-playground-wrap">
 				<iframe
 					src="/learn/playgrounds/matter-session-flow.html"
@@ -1219,11 +1224,11 @@
 	</div>
 
 	<footer class="lq-how-footer">
-		<p class="lq-text-body">
+		<LqText as="p" size="14" tone="secondary" leading="relaxed">
 			<a href="/lq-ai/learn/build" class="lq-link">Ready to contribute?</a>
 			— The build page explains how to contribute a skill, a mini-PRD, or a bug fix.
-		</p>
-		<p class="lq-text-body">
+		</LqText>
+		<LqText as="p" size="14" tone="secondary" leading="relaxed">
 			Want the architect's view? Read
 			<a
 				href="https://github.com/LegalQuants/lq-ai/blob/main/docs/architecture.md"
@@ -1232,7 +1237,7 @@
 				rel="noopener noreferrer">docs/architecture.md</a
 			>
 			with its Mermaid diagram.
-		</p>
+		</LqText>
 	</footer>
 </main>
 
@@ -1259,9 +1264,7 @@
 		margin-bottom: var(--lq-space-6);
 	}
 
-	.lq-page-intro {
-		color: var(--lq-text-secondary);
-		margin-top: var(--lq-space-2);
+	.lq-page-header :global(.lq-page-intro) {
 		max-width: 68ch;
 		line-height: 1.6;
 	}
@@ -1285,15 +1288,7 @@
 		margin: 0;
 	}
 
-	.lq-text-body {
-		margin: 0;
-		font-size: 14px;
-		line-height: 1.6;
-		color: var(--lq-text);
-	}
-
-	.lq-transition {
-		color: var(--lq-text-secondary);
+	.lq-how-sections :global(.lq-transition) {
 		font-style: italic;
 		padding: var(--lq-space-4) 0;
 		border-top: 1px dashed var(--lq-border);
@@ -1349,9 +1344,5 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--lq-space-3);
-	}
-
-	.lq-how-footer .lq-text-body {
-		color: var(--lq-text-secondary);
 	}
 </style>

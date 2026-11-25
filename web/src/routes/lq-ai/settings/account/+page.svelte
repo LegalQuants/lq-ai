@@ -1,16 +1,18 @@
 <script lang="ts">
 	import MfaEnrollmentPanel from '$lib/lq-ai/components/MfaEnrollmentPanel.svelte';
 	import AccountExportDeletePanel from '$lib/lq-ai/components/AccountExportDeletePanel.svelte';
+	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
 
-<h2 class="lq-text-page-h" style="margin-bottom: var(--lq-space-6);">Account</h2>
+<LqTitle order={2} size="20" weight="bold" tone="primary" style="margin-bottom: var(--lq-space-6);">Account</LqTitle>
 
 <!-- ── Multi-factor authentication ──────────────────── -->
 <section class="account-section">
 	<h3 class="section-heading">Multi-factor authentication</h3>
-	<p class="lq-text-body section-description">
+	<LqText as="p" size="14" tone="secondary" class="section-description">
 		Protect your account with a TOTP authenticator app (Google Authenticator, Authy, 1Password, etc.).
-	</p>
+	</LqText>
 	<MfaEnrollmentPanel />
 </section>
 
@@ -19,9 +21,9 @@
 <!-- ── Change password ──────────────────────────────── -->
 <section class="account-section">
 	<h3 class="section-heading">Password</h3>
-	<p class="lq-text-body section-description">
+	<LqText as="p" size="14" tone="secondary" class="section-description">
 		Update your login password. You will be signed out of all sessions after changing.
-	</p>
+	</LqText>
 	<a href="/lq-ai/change-password" class="lq-btn-secondary">Change password</a>
 </section>
 
@@ -45,8 +47,7 @@
 		margin-bottom: var(--lq-space-1);
 	}
 
-	.section-description {
-		color: var(--lq-text-secondary);
+	.account-section :global(.section-description) {
 		margin-bottom: var(--lq-space-3);
 	}
 

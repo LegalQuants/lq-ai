@@ -33,6 +33,7 @@
 		validateIntakeForm,
 		type IntakeFormState
 	} from './intake-helpers';
+	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 
 	// ---------------------------------------------------------------------------
 	// Form state
@@ -137,7 +138,7 @@
 
 <div class="matters-page">
 	<header class="page-header">
-		<h1 class="lq-text-page-h">Describe your matter</h1>
+		<LqTitle order={1} size="20" weight="bold" tone="primary">Describe your matter</LqTitle>
 		<p class="page-intro">
 			Describe what you need done and pick the skill or playbook that guides the analysis. LQVern
 			runs once, plans against your description, and stops at the cost cap (R4). You are redirected
