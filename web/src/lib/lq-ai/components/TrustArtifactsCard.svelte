@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 	/**
 	 * TrustArtifactsCard — links to procurement-grade in-repo artifacts.
 	 *
@@ -41,29 +43,29 @@
 </script>
 
 <div class="lq-card">
-	<h3 class="lq-text-panel-h card-title">Trust artifacts</h3>
+	<LqTitle order={3} size="16" weight="semibold" tone="primary" class="card-title">Trust artifacts</LqTitle>
 	<ul class="artifact-list">
 		{#each artifacts as a}
 			<li class="artifact-row">
 				<div class="artifact-meta">
-					<a
+					<LqText as="a" size="14" tone="accent"
 						href={a.href}
-						class="lq-text-body artifact-link"
+						class="artifact-link"
 						target={a.external ? '_blank' : undefined}
 						rel={a.external ? 'noopener noreferrer' : undefined}
 					>
 						{a.label}{a.external ? ' ↗' : ''}
-					</a>
+					</LqText>
 					{#if a.note}
-						<span class="lq-text-caption artifact-note">{a.note}</span>
+						<LqText as="span" size="12" tone="tertiary" class="artifact-note">{a.note}</LqText>
 					{/if}
 				</div>
 			</li>
 		{/each}
 	</ul>
-	<p class="lq-text-caption footer-note">
+	<LqText as="p" size="12" tone="tertiary" class="footer-note">
 		Share this page with your GC or procurement team. Every link above points to a verifiable, public artifact.
-	</p>
+	</LqText>
 </div>
 
 <style>
@@ -77,7 +79,7 @@
 		gap: var(--lq-space-3);
 	}
 
-	.card-title {
+	.lq-card :global(.card-title) {
 		margin: 0;
 	}
 
@@ -105,21 +107,15 @@
 		gap: 2px;
 	}
 
-	.artifact-link {
-		color: var(--lq-accent);
+	.artifact-meta :global(.artifact-link) {
 		text-decoration: none;
 	}
 
-	.artifact-link:hover {
+	.artifact-meta :global(.artifact-link:hover) {
 		text-decoration: underline;
 	}
 
-	.artifact-note {
-		color: var(--lq-text-tertiary);
-	}
-
-	.footer-note {
-		color: var(--lq-text-tertiary);
+	.lq-card :global(.footer-note) {
 		margin: 0;
 	}
 </style>

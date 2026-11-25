@@ -16,6 +16,7 @@
 	 */
 	import { enhance, recordOutcome } from '$lib/lq-ai/api/enhancePrompt';
 	import TrustPill from './TrustPill.svelte';
+	import LqText from './shared/LqText.svelte';
 
 	export let originalText: string;
 	export let chatId: string | null = null;
@@ -147,16 +148,16 @@
 		{#if state.kind === 'loading'}
 			<div class="lq-enhance-loading" data-testid="lq-ai-enhance-loading">
 				<span class="lq-spinner" aria-hidden="true"></span>
-				<span class="lq-text-caption">Enhancing… ✨</span>
+				<LqText as="span" size="11" tone="secondary">Enhancing… ✨</LqText>
 			</div>
 		{:else if state.kind === 'shown'}
 			{#if !jitDismissed}
 				<div class="lq-enhance-jit" data-testid="lq-ai-enhance-jit">
-					<span class="lq-text-caption lq-enhance-jit-msg">
+					<LqText as="span" size="11" tone="secondary" class="lq-enhance-jit-msg">
 						Tip: ✨ rewrites your prompt so the AI has more to work with. Pick
 						<strong>Use enhanced</strong>, tweak with <strong>Edit enhanced</strong>, or
 						<strong>Keep original</strong>. (⌘E)
-					</span>
+					</LqText>
 					<button
 						type="button"
 						class="lq-btn-ghost lq-enhance-jit-dismiss"
@@ -196,7 +197,7 @@
 					{#if state.reasoning.length > 0}
 						<ul class="lq-enhance-reasoning">
 							{#each state.reasoning as bullet}
-								<li class="lq-text-caption">{bullet}</li>
+								<LqText as="li" size="11" tone="secondary">{bullet}</LqText>
 							{/each}
 						</ul>
 					{/if}
@@ -231,9 +232,9 @@
 			</div>
 		{:else if state.kind === 'skipped'}
 			<div class="lq-enhance-skipped" data-testid="lq-ai-enhance-skipped">
-				<span class="lq-text-caption">
+				<LqText as="span" size="11" tone="secondary">
 					No expansion needed — your prompt is already structured. ({state.skipReason})
-				</span>
+				</LqText>
 				<button
 					type="button"
 					class="lq-btn-secondary"
@@ -245,9 +246,9 @@
 			</div>
 		{:else if state.kind === 'error'}
 			<div class="lq-enhance-error" data-testid="lq-ai-enhance-error">
-				<span class="lq-text-caption lq-enhance-error-msg">
+				<LqText as="span" size="11" tone="danger" class="lq-enhance-error-msg">
 					Enhance Prompt failed: {state.message}
-				</span>
+				</LqText>
 				<div class="lq-enhance-error-actions">
 					<button
 						type="button"
@@ -368,11 +369,6 @@
 		gap: 2px;
 	}
 
-	.lq-text-caption {
-		font-size: 11px;
-		color: var(--lq-text-secondary);
-	}
-
 	.lq-enhance-actions {
 		display: flex;
 		align-items: center;
@@ -414,10 +410,6 @@
 		gap: var(--lq-space-2);
 	}
 
-	.lq-enhance-error-msg {
-		color: var(--lq-error);
-	}
-
 	.lq-enhance-jit {
 		display: flex;
 		align-items: center;
@@ -429,7 +421,7 @@
 		border: 1px solid var(--lq-warn-border);
 		color: var(--lq-warn);
 	}
-	.lq-enhance-jit-msg { flex: 1; }
+	.lq-enhance-jit :global(.lq-enhance-jit-msg) { flex: 1; }
 	.lq-enhance-jit-dismiss { flex-shrink: 0; }
 
 	.lq-enhance-error-actions {

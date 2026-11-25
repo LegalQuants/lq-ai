@@ -220,6 +220,7 @@
 	import SkillWizardSection from './SkillWizardSection.svelte';
 	import SkillTryItPane from './SkillTryItPane.svelte';
 	import ColumnEditor from './ColumnEditor.svelte';
+	import LqText from './shared/LqText.svelte';
 	import { LQAIApiError } from '$lib/lq-ai/api/client';
 
 	export let initial: {
@@ -605,7 +606,7 @@
 
 		{#if outputMode === 'table'}
 			{#if tableDefaults.ensemble_verification !== undefined || tableDefaults.minimum_inference_tier !== undefined}
-				<p class="lq-text-caption" data-testid="lq-ai-table-defaults">
+				<LqText as="p" size="12" tone="tertiary" data-testid="lq-ai-table-defaults">
 					Inherited skill defaults:
 					{#if tableDefaults.ensemble_verification !== undefined}
 						ensemble {tableDefaults.ensemble_verification ? 'on' : 'off'}.
@@ -614,7 +615,7 @@
 						Maximum tier number {tableDefaults.minimum_inference_tier}.
 					{/if}
 					A column override takes precedence.
-				</p>
+				</LqText>
 			{/if}
 			<ColumnEditor bind:columns />
 		{:else}

@@ -34,6 +34,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { SkillResourceFile } from '../types';
+	import LqText from './shared/LqText.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	export let slug: string;
 	export let files: SkillResourceFile[] = [];
@@ -79,21 +81,36 @@
 </script>
 
 <section class="resources" aria-label="On-demand references">
-	<h2 class="lq-text-label">On-demand references</h2>
-	<p class="lq-text-body note">{modelReadLabel(referenceReadEnabled)}</p>
-	<p class="lq-text-caption note">
+	<LqTitle
+		order={2}
+		size="12"
+		weight="semibold"
+		tone="tertiary"
+		transform="uppercase"
+		tracking="wide">On-demand references</LqTitle
+	>
+	<LqText as="p" size="14" tone="secondary" class="note"
+		>{modelReadLabel(referenceReadEnabled)}</LqText
+	>
+	<LqText as="p" size="12" tone="secondary" class="note">
 		These are separate from references included in every use of the skill. Currently available: up
 		to 64 text files in the skill's references folder. Files of any size remain listed; each read
 		returns at most 64 KiB. Request another portion when needed. Other bundled paths are not
 		available for on-demand reading yet.
-	</p>
+	</LqText>
 	{#if files.length === 0}
-		<p class="lq-text-body note">This skill has no on-demand references.</p>
+		<LqText as="p" size="14" tone="secondary" class="note"
+			>This skill has no on-demand references.</LqText
+		>
 	{:else}
 		{#if loading}
-			<p class="lq-text-body note" role="status">Loading reference contents…</p>
+			<LqText as="p" size="14" tone="secondary" class="note" role="status"
+				>Loading reference contents…</LqText
+			>
 		{:else if error}
-			<p class="lq-text-body error" role="alert">Couldn't load reference contents: {error}</p>
+			<LqText as="p" size="14" tone="danger" class="error" role="alert"
+				>Couldn't load reference contents: {error}</LqText
+			>
 			<button type="button" on:click={load}>Retry</button>
 		{/if}
 		{#each files as file (file.path)}
@@ -105,11 +122,11 @@
 					{@const source = contents.find((entry) => entry.path === file.path)}
 					{#if source}
 						{#if source.size_bytes !== undefined}
-							<p class="lq-text-caption note" role="status">
+							<LqText as="p" size="12" tone="secondary" class="note" role="status">
 								Bytes {source.offset_bytes.toLocaleString()}–{source.end_offset_bytes.toLocaleString()}
 								(end exclusive) of {source.size_bytes.toLocaleString()}.
 								{source.has_more ? 'More remains.' : 'End of file.'}
-							</p>
+							</LqText>
 						{/if}
 						<pre>{source.content}</pre>
 						{#if pageErrors[source.path]}
@@ -132,12 +149,14 @@
 							>
 						{/if}
 					{:else}
-						<p class="lq-text-body note">
+						<LqText as="p" size="14" tone="secondary" class="note">
 							This reference is no longer available. Reload the skill to refresh its file list.
-						</p>
+						</LqText>
 					{/if}
 				{:else}
-					<p class="lq-text-body note">{loading ? 'Loading…' : 'Contents are unavailable.'}</p>
+					<LqText as="p" size="14" tone="secondary" class="note"
+						>{loading ? 'Loading…' : 'Contents are unavailable.'}</LqText
+					>
 				{/if}
 			</details>
 		{/each}

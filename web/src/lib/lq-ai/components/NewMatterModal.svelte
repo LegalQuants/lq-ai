@@ -44,6 +44,7 @@
 	import { projectsApi } from '$lib/lq-ai/api';
 	import type { Project } from '$lib/lq-ai/types';
 	import InfoTip from './InfoTip.svelte';
+	import LqTitle from './shared/LqTitle.svelte';
 
 	export let onClose: () => void;
 	export let onCreated: (matter: Project) => void;
@@ -130,7 +131,9 @@
 >
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div class="nmm-panel" on:click|stopPropagation on:keydown|stopPropagation>
-		<h2 id="nmm-title" class="lq-text-page-h nmm-title">New matter</h2>
+		<LqTitle order={2} size="20" weight="bold" tone="primary" id="nmm-title" class="nmm-title"
+			>New matter</LqTitle
+		>
 
 		<form on:submit|preventDefault={handleSubmit} class="nmm-form" novalidate>
 			<!-- Name -->
@@ -253,7 +256,7 @@
 		overflow-y: auto;
 	}
 
-	.nmm-title {
+	.nmm-panel :global(.nmm-title) {
 		margin: 0 0 var(--lq-space-5);
 	}
 

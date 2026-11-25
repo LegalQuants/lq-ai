@@ -30,6 +30,8 @@
 </script>
 
 <script lang="ts">
+  import LqText from './shared/LqText.svelte';
+  import LqTitle from './shared/LqTitle.svelte';
   export let open: boolean;
   export let tabId: TabId;
   export let wave: string | undefined;
@@ -56,14 +58,14 @@
       role="document"
       on:click|stopPropagation
     >
-      <h2 id="coming-soon-title" class="lq-text-page-h">{title}</h2>
-      <p class="lq-text-body" style="margin-top: var(--lq-space-3);">{body}</p>
-      <p class="lq-text-caption" style="margin-top: var(--lq-space-3);">
+      <LqTitle order={2} size="20" weight="bold" tone="primary" id="coming-soon-title">{title}</LqTitle>
+      <LqText as="p" size="14" tone="primary" style="margin-top: var(--lq-space-3);">{body}</LqText>
+      <LqText as="p" size="12" tone="tertiary" style="margin-top: var(--lq-space-3);">
         Design spec:
         <a href="https://github.com/LegalQuants/lq-ai/blob/main/docs/superpowers/specs/2026-05-10-m1-frontend-design.md" target="_blank" rel="noopener noreferrer">
           docs/superpowers/specs/2026-05-10-m1-frontend-design.md
         </a>
-      </p>
+      </LqText>
       <div style="margin-top: var(--lq-space-6); display: flex; justify-content: flex-end;">
         <button type="button" class="lq-btn-primary" on:click={onClose}>Got it</button>
       </div>
