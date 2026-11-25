@@ -68,7 +68,10 @@ cd web && npm run dev
 
 When deliberately changing Web dependencies, use `npm install <package>` (or
 `npm uninstall <package>`) and commit both `web/package.json` and
-`web/package-lock.json`. Use `npm ci` for ordinary setup and verification.
+`web/package-lock.json`. Set `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` for those dependency changes;
+the frontend does not use Node's CUDA provider. For ordinary setup and verification, use
+`make install-web`, or `sh scripts/install-dependencies.sh` from `web/`. The shared installer
+runs `npm ci` with this CPU-only policy; browser-test workflows still install Cypress normally.
 
 Run the test suite before submitting:
 

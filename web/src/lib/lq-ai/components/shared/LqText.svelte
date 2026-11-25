@@ -9,7 +9,7 @@
 	 * off this file's shared token scales instead of one-off Tailwind
 	 * color/size classes per call site.
 	 *
-	 * `size` takes a step of ADR 0045's type scale ("11" to "32") or one of
+	 * `size` takes a step of ADR 0045's type scale (11–26 px) or one of
 	 * the older named steps. `tracking` and `transform` carry the uppercase
 	 * label style; `leading` sets a line height, which is otherwise inherited.
 	 */
