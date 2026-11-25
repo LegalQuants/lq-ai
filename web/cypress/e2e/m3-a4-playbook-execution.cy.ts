@@ -316,7 +316,18 @@ describe('M3-A4 — Playbook execution happy path', () => {
 
 		// 12. Expand the first row → "Suggested redline" section visible
 		//     (the deviates positions in the mock all have a redline payload).
-		cy.get('[data-testid="lq-pbx-row"]').first().find('.lq-pbx-chev-btn').click();
-		cy.contains('Suggested redline').should('be.visible');
+		const disclosure = '[data-position-id="pos-3"] button';
+		cy.get(disclosure)
+			.should('have.attr', 'aria-label', 'Expand details for Position 3')
+			.and('have.attr', 'aria-expanded', 'false');
+		cy.get(disclosure).click();
+		cy.get(disclosure)
+			.should('have.attr', 'aria-label', 'Collapse details for Position 3')
+			.and('have.attr', 'aria-expanded', 'true')
+			.and('have.attr', 'aria-controls', 'lq-pbx-detail-pos-3');
+		cy.get('#lq-pbx-detail-pos-3').contains('Suggested redline').should('be.visible');
+		cy.get(disclosure).should('be.focused').click();
+		cy.get(disclosure).should('have.attr', 'aria-label', 'Expand details for Position 3');
+		cy.get('#lq-pbx-detail-pos-3').should('not.exist');
 	});
 });

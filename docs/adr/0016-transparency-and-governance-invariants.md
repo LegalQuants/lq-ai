@@ -1,6 +1,10 @@
 # ADR 0016 — Transparency and governance invariants (the engineering posture, made enforceable)
 
 **Status:** Proposed
+**Implementation record:** [#209](https://github.com/LegalQuants/lq-ai/pull/209)
+merged this record with CI checks for P1, P3, P4 and P5. The enforcement summary
+below distinguishes those checks from review and follow-up work. Separate
+ratification of the full ADR is unconfirmed.
 **Date:** 2026-06-20
 **Owner:** Maintainer team (transparency-posture hardening)
 

@@ -28,13 +28,13 @@
 # - ADR 0034: ../docs/adr/0034-review-capacity-and-reviewer-roles.md
 # ============================================================
 
-# Default — all changes require maintainer review
+# Default — changes require maintainer review unless overridden below
 *                              @LegalQuants/lq-ai-maintainers
 
 # ---------- Repository-level governance ----------
 /LICENSE                       @LegalQuants/lq-ai-maintainers
 /CODE_OF_CONDUCT.md            @LegalQuants/lq-ai-maintainers
-/GOVERNANCE.md                 @LegalQuants/lq-ai-maintainers
+/GOVERNANCE.md                 @LegalQuants/lq-ai-committee
 /CONTRIBUTING.md               @LegalQuants/lq-ai-maintainers
 /SECURITY.md                   @LegalQuants/lq-ai-maintainers
 /.github/CODEOWNERS            @LegalQuants/lq-ai-maintainers
@@ -71,9 +71,15 @@
 /skills/                       @LegalQuants/lq-ai-maintainers
 /skills/CONTRIBUTING.md        @LegalQuants/lq-ai-maintainers
 
-# ---------- Canonical specification ----------
-# PRD changes affect every downstream artifact.
-/docs/PRD.md                   @LegalQuants/lq-ai-maintainers
-/docs/architecture.md          @LegalQuants/lq-ai-maintainers
-/docs/adr/                     @LegalQuants/lq-ai-maintainers
+# ---------- Product direction and architectural decisions ----------
+# The committee owns scope, roadmap, and architectural decision documents.
+/docs/PRD.md                   @LegalQuants/lq-ai-committee
+/docs/ROADMAP.md               @LegalQuants/lq-ai-committee
+/docs/architecture.md          @LegalQuants/lq-ai-committee
+/docs/adr/                     @LegalQuants/lq-ai-committee
+/docs/prds/                    @LegalQuants/lq-ai-committee
+/docs/proposals/               @LegalQuants/lq-ai-committee
+/docs/contribute/mini-prds/     @LegalQuants/lq-ai-committee
+
+# ---------- Skill authoring specification ----------
 /docs/skill-authoring-guide.md @LegalQuants/lq-ai-maintainers
