@@ -4,20 +4,10 @@
 	export let enabled = true;
 	export let spaced = false;
 	let expanded = false;
-	let toggle: HTMLButtonElement;
-
-	/** Return focus when a choice closes this inline disclosure. */
-	export function close(): void {
-		if (expanded && toggle.getClientRects().length) {
-			expanded = false;
-			toggle.focus();
-		}
-	}
 </script>
 
 <div class="compact-panel" class:enabled class:spaced>
 	<button
-		bind:this={toggle}
 		id={`${id}-toggle`}
 		type="button"
 		class="panel-toggle"

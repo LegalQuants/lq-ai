@@ -19,6 +19,16 @@ const position = {
 	justification: 'Compare the notice period.'
 };
 
+const longMatter = {
+	id: 'harbour',
+	name: 'North Harbour disclosure timetable ' + 'and supporting documents '.repeat(5).trim(),
+	owner_id: user.id,
+	updated_at: '2026-01-12T08:00:00Z',
+	archived_at: null,
+	attached_file_ids: [],
+	attached_skill_names: []
+};
+
 function visit(path: string, width: number) {
 	rejectUnexpectedApiRequests();
 	cy.intercept('GET', '**/api/config', {
@@ -27,7 +37,15 @@ function visit(path: string, width: number) {
 	cy.intercept('GET', '**/api/version', { body: { version: 'test' } });
 	cy.intercept('GET', '**/api/v1/users/me', { body: user });
 	cy.intercept('GET', '**/api/v1/users/me/preferences', { body: { autonomous_enabled: false } });
-	cy.intercept('GET', '**/api/v1/projects*', { body: [] });
+	cy.intercept('GET', '**/api/v1/projects*', { body: path === '/lq-ai' ? [longMatter] : [] });
+	if (path === '/lq-ai') {
+		cy.intercept('GET', '**/api/v1/projects/harbour', { body: longMatter });
+		for (const endpoint of ['skills', 'user-skills', 'teams', 'saved-prompts']) {
+			cy.intercept('GET', '**/api/v1/' + endpoint + '*', { body: [] });
+		}
+		cy.intercept('GET', '**/api/v1/models*', { body: { data: [] } });
+		cy.intercept('GET', '**/api/v1/admin/usage*', { body: { rows: [], total_request_count: 0 } });
+	}
 	cy.intercept('GET', '**/api/v1/chats*', { body: { items: [], next_cursor: null } });
 	cy.intercept('GET', '**/api/v1/knowledge-bases*', { body: [] });
 	cy.intercept('GET', '**/api/v1/playbooks/review', {
@@ -83,6 +101,24 @@ function checkPageWidth() {
 
 for (const width of [390, 768, 1440]) {
 	describe('Result and Knowledge layouts at ' + width + 'px', () => {
+		it('keeps the long Recent Matters link in its card and opens it from the keyboard', () => {
+			visit('/lq-ai', width);
+			const grid = '[data-testid="lq-ai-recent-activity"]';
+			const link = grid + ' a[href="/lq-ai/matters/harbour"]';
+			cy.contains(link + ' .chat-title', longMatter.name).should('have.text', longMatter.name);
+			cy.get(grid).should(($grid) => {
+				const cards = $grid[0].querySelectorAll('.activity-card');
+				const first = cards[0].getBoundingClientRect();
+				const second = cards[1].getBoundingClientRect();
+				expect(second.right).to.be.at.most(width);
+				expect(second.left).to.be.at.least(0);
+				if (width === 390) expect(second.top).to.be.at.least(first.bottom);
+				else expect(second.top).to.equal(first.top);
+			});
+			cy.get(link).focus().should('have.focus').type('{enter}');
+			cy.location('pathname').should('equal', '/lq-ai/matters/harbour');
+		});
+
 		it('keeps playbook labels and columns readable and retains access to every position', () => {
 			visit('/lq-ai/playbook-executions/complete', width);
 			cy.get('.lq-pbx-filters label, .lq-pbx-filters__count')

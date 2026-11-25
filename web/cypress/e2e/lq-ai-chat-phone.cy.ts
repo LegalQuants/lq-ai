@@ -4,7 +4,7 @@ import { rejectUnexpectedApiRequests } from '../support/mocked-api';
 
 const chat = { id: 'review', title: 'Notice review', project_id: null, archived_at: null };
 const user = { id: 'owner', display_name: 'Reviewer', role: 'admin', must_change_password: false };
-const toggle = '#chat-list-toggle';
+const toggle = '[data-testid="lq-chat-list-toggle"]';
 const notice = '[data-testid="lq-ai-run-active-notice"]';
 
 describe('Phone Chats in the sidebar shell', () => {
@@ -46,7 +46,6 @@ describe('Phone Chats in the sidebar shell', () => {
 		cy.viewport(390, 844);
 		cy.visit('/lq-ai/chats', {
 			onBeforeLoad(win) {
-				win.localStorage.setItem('lq-ai.shell', 'sidebar');
 				win.localStorage.setItem(
 					'lq_ai_auth',
 					JSON.stringify({
@@ -59,7 +58,8 @@ describe('Phone Chats in the sidebar shell', () => {
 		});
 		cy.get(toggle).should('have.attr', 'aria-expanded', 'false');
 		cy.get(toggle).focus().type('{enter}');
-		cy.contains('#chat-list-content button', chat.title).focus().type('{enter}');
+		cy.get('[data-testid="lq-ai-new-chat-btn"]').should('be.focused');
+		cy.contains('[data-testid="lq-chat-list-sheet"] button', chat.title).focus().type('{enter}');
 		cy.get(toggle).should('be.focused').and('have.attr', 'aria-expanded', 'false');
 		cy.contains(notice + ' .line', 'a provider call has no confirmed outcome').should(($line) => {
 			const el = $line[0];
@@ -72,8 +72,9 @@ describe('Phone Chats in the sidebar shell', () => {
 			expect(rect.height / parseFloat(getComputedStyle(el).lineHeight)).to.be.at.most(4);
 		});
 		cy.get(toggle).click();
-		cy.contains('#chat-list-content button', chat.title).should('be.visible');
-		cy.get(toggle).click();
+		cy.contains('[data-testid="lq-chat-list-sheet"] button', chat.title).should('be.visible');
+		cy.focused().type('{esc}');
+		cy.get(toggle).should('be.focused').and('have.attr', 'aria-expanded', 'false');
 		cy.get(notice).should('be.visible');
 	});
 });

@@ -45,7 +45,7 @@
   }
 </script>
 
-<section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters} style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--lq-space-4); margin-bottom: var(--lq-space-6);">
+<section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters}>
   <!-- Recent chats -->
   <div class="activity-card">
     <LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Recent chats</LqText>
@@ -96,6 +96,13 @@
 </section>
 
 <style>
+  section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--lq-space-4);
+    margin-bottom: var(--lq-space-6);
+  }
+
   .activity-card {
     background: var(--lq-canvas);
     border: 1px solid var(--lq-border);
@@ -141,7 +148,7 @@
 
   @media (max-width: 640px) {
     section {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>
