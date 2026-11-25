@@ -2,8 +2,9 @@
 
 **Status:** Accepted (2026-10-04) — committee-ratified at the weekly call. Decision 5 was
 amended on 2026-10-07, after the call, to state the sole-maintainer bypass and the team
-membership rule.
-**Date:** 2026-09-09 (amended 2026-10-07)
+membership rule. The 2026-11-22 amendment records committee document ownership and the
+repository-owner-approved team permission change (PR #826).
+**Date:** 2026-09-09 (amended 2026-10-07 and 2026-11-22)
 **Owner:** Maintainer team (houfu)
 **Related:** [ADR 0022 — committee governance and meeting records](0022-committee-governance-and-meeting-records.md),
 [ADR 0030 — pacing 1.0](0030-pacing-1.0-preconditions-and-named-trains.md),
@@ -123,10 +124,19 @@ the metric ADR 0030's precondition P3 depends on.
 
 ### 5. CODEOWNERS routes to teams that exist, and the routing is enforced
 
-- **Every entry points at a real team.** `@LegalQuants/lq-ai-maintainers` is the only team that
-  exists today, so it is what the file names. Specialist routing (`security`, `counsel`,
+- **Every entry points at a real, eligible team.** CODEOWNERS names
+  `@LegalQuants/lq-ai-maintainers` and `@LegalQuants/lq-ai-committee`. Each team must be visible
+  and have explicit write access to the repository; triage access is insufficient for
+  code-owner routing. Specialist routing (`security`, `counsel`,
   `practicing-attorneys`) returns **when those teams are created and staffed** — the file records
   the intent in comments rather than routing to a void.
+- **The committee owns product direction and architectural decision documents.**
+  `@LegalQuants/lq-ai-committee` reviews `GOVERNANCE.md`, `docs/PRD.md`, `docs/ROADMAP.md`,
+  `docs/architecture.md`, and all files under `docs/adr/`, `docs/prds/`, `docs/proposals/`, and
+  `docs/contribute/mini-prds/` (including nested annexes). This routes scope, roadmap, governance,
+  and architectural decisions to the committee under GOVERNANCE.md. The maintainer team remains
+  the default owner for other paths, including security-sensitive code, workflows, skills,
+  implementation plans, and CODEOWNERS itself.
 - **The `main` ruleset is changed** to `require_code_owner_review: true` with
   `required_approving_review_count: 1`, so that CODEOWNERS routing actually holds a PR. This is a
   repository-settings change, not a code change; it is an action item on this ADR's acceptance,
@@ -165,7 +175,12 @@ constraint is real, but automating review before there are reviewers solves the 
 - **CONTRIBUTING.md**: the honest SLA, the review-slots practice, and no Discord.
 - **skills/CONTRIBUTING.md**: the attorney pool, the time expectation, and the
   attestation-vs-acceptance-run distinction. No Discord.
-- **.github/CODEOWNERS**: real team slugs; intent for specialist teams kept in comments.
+- **.github/CODEOWNERS**: committee ownership of product direction and architectural decision
+  documents; maintainer ownership elsewhere; intent for specialist teams kept in comments.
+- **Committee repository access**: upgraded from triage to write on 2026-11-22 with the repository
+  owner's approval, enabling the document routing above. This permission change alone does not
+  satisfy ADR 0030's second-maintainer precondition, which requires sustained merge and
+  security-review activity.
 - **CLAUDE.md**: the security-routing sentence matches what is enforced.
 - **Three repository-settings action items**, none of which a PR can carry. This ADR is not fully
   discharged until all three are done:

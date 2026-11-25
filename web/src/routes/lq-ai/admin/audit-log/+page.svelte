@@ -234,7 +234,13 @@
 		</div>
 	{/if}
 
-	<div class="lq-table-wrap overflow-x-auto">
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex (keyboard users scroll this region with the arrow keys) -->
+	<div
+		class="lq-table-wrap overflow-x-auto"
+		role="region"
+		aria-label="Audit log entries"
+		tabindex="0"
+	>
 		<LqText as="table" size="14" tone="primary" class="min-w-full" data-testid="lq-ai-admin-audit-log-table">
 			<thead class="lq-thead">
 				<tr>
@@ -261,7 +267,7 @@
 							{r.user_id ?? '—'}
 						</LqText>
 						<LqText as="td" size="14" tone="primary" class="px-2 py-1">
-							{r.resource_type}{r.resource_id ? `/${r.resource_id.slice(0, 8)}…` : ''}
+							{r.resource_type}{#if r.resource_id}/<span class="md:hidden">{r.resource_id}</span><span class="hidden md:inline" title={r.resource_id}>{r.resource_id.slice(0, 8)}…</span>{/if}
 						</LqText>
 						<td class="px-2 py-1">
 							{#if r.privilege_marked}
@@ -281,7 +287,7 @@
 					</tr>
 				{:else}
 					<tr>
-						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-center">
+						<LqText as="td" size="14" tone="tertiary" colspan="9" class="px-2 py-6 text-left md:text-center">
 							{loading ? 'Loading…' : 'No audit entries match.'}
 						</LqText>
 					</tr>
@@ -316,6 +322,29 @@
 	.lq-table-wrap {
 		border-radius: var(--lq-radius);
 		border: 1px solid var(--lq-border);
+	}
+
+	.lq-table-wrap:focus-visible {
+		outline: 2px solid var(--lq-text);
+		outline-offset: 2px;
+	}
+
+	@media (max-width: 767px) {
+		.lq-table-wrap :global(table) {
+			min-width: 54rem;
+		}
+		.lq-table-wrap :global(th) {
+			white-space: nowrap;
+		}
+		/* Keep identifiers and JSON readable on touch screens without relying on hover titles. */
+		.lq-row :global(td) {
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
+		.lq-row :global(.font-mono) {
+			min-width: 14ch;
+			max-width: 28ch;
+		}
 	}
 
 	.lq-thead {
