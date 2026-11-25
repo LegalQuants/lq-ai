@@ -1,6 +1,10 @@
 # ADR 0041 — Community skill catalog served from the local submodule
 
-**Status:** Proposed (2026-07-25) — authored in-PR with roadmap item 3.8 (DE-263, community skill installer admin UI); reviewable at PR time. New admin endpoints carry **security review** per the auth-touching-surface rule in CLAUDE.md / CODEOWNERS.
+**Status:** Proposed (2026-07-25). Separate ratification is unconfirmed.
+**Implementation record:** [#710](https://github.com/LegalQuants/lq-ai/pull/710)
+merged on 2026-10-11. Admin team distribution with immutable provenance shipped
+in [v0.9.1](../releases/v0.9.1.md). New admin endpoints carry **security review**
+under the auth-touching rule in CLAUDE.md and CODEOWNERS.
 
 **Relates to:** [ADR 0004](0004-skill-loader-locus.md) (the skill loader lives in the backend; filesystem-canonical skills), [ADR 0012](0012-db-backed-user-skills.md) (DB-backed user skills, `forked_from` documentary lineage, audit-log lineage records), [ADR 0014](0014-gateway-egress-boundary-for-tool-providers.md) / [ADR 0016](0016-transparency-and-governance-invariants.md) (the gateway is the only egress path; the backend makes no outbound HTTP calls beyond its single gateway client — enforced by `tests/test_transparency_invariants.py`). Realizes **DE-263**.
 
