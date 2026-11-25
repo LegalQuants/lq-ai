@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconChevronDown, IconChevronRight } from '@tabler/icons-svelte';
 	import { onDestroy, onMount } from 'svelte';
 	import { page } from '$app/stores';
 
@@ -185,11 +186,16 @@
 								<button
 									type="button"
 									class="lq-pbx-chev-btn"
+									aria-label={`${isOpen ? 'Collapse' : 'Expand'} details for ${pos.issue.trim() || pos.position_id}`}
 									aria-expanded={isOpen}
 									aria-controls={`lq-pbx-detail-${pos.position_id}`}
 									on:click={() => toggleExpand(pos.position_id)}
 								>
-									{isOpen ? '▼' : '▶'}
+									{#if isOpen}<IconChevronDown
+											size={14}
+											stroke={1.75}
+											aria-hidden="true"
+										/>{:else}<IconChevronRight size={14} stroke={1.75} aria-hidden="true" />{/if}
 								</button>
 							</td>
 							<td>

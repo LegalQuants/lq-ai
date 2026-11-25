@@ -14,7 +14,7 @@
 </script>
 
 <footer class="lq-footer" aria-label="Chat status">
-  <TrustPill variant="provider" label="● {provider} · {tier}" />
+  <TrustPill variant="provider" dot label="{provider} · {tier}" />
 </footer>
 
 <style>

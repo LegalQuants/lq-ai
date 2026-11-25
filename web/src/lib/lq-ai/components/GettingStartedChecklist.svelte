@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconCheck, IconCircle } from '@tabler/icons-svelte';
   import { onMount } from 'svelte';
   import { auth } from '$lib/lq-ai/auth/store';
   import {
@@ -47,7 +48,9 @@
     <div class="checklist">
       {#each items as item, i (i)}
         <div class="checklist-row" class:done={item.done}>
-          <span class="check-icon" aria-hidden="true">{item.done ? '✓' : '○'}</span>
+          <span class="check-icon" aria-hidden="true"
+            >{#if item.done}<IconCheck size={14} stroke={1.75} aria-hidden="true" />{:else}<IconCircle size={14} stroke={1.75} aria-hidden="true" />{/if}</span
+          >
           <LqText
             as="span"
             size="14"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	/**
 	 * AliasForm — modal/inline form for create + edit (D0.5).
 	 *
@@ -203,7 +204,7 @@
 					on:click={() => removeFallback(idx)}
 					aria-label="Remove fallback"
 				>
-					×
+					<IconX size={14} stroke={1.75} aria-hidden="true" />
 				</button>
 			</div>
 		{/each}

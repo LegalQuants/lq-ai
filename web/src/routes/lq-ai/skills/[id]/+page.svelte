@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconGitFork } from '@tabler/icons-svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
@@ -81,7 +83,7 @@
 					class="lq-btn-ghost"
 					data-testid="lq-ai-skill-fork-link"
 					aria-label={`Fork ${skill.title ?? skill.name} as my own`}
-				>🔱 Fork as my own</a>
+				><IconGitFork size={14} stroke={1.75} aria-hidden="true" /> Fork as my own</a>
 				{#if skill.scope !== 'builtin' && skill.id}
 					<a href={`/lq-ai/skills/${encodeURIComponent(skill.id)}/edit`} class="lq-btn-primary"
 						>Edit</a
@@ -131,7 +133,8 @@
 						{usageNote.uses.join(', ')}
 						{#if usageNote.warning}
 							<p class="lq-tool-usage-warning" data-testid="skill-tool-usage-warning">
-								⚠ {usageNote.warning}
+								<LqToneIcon tone="warning" />
+								{usageNote.warning}
 							</p>
 						{/if}
 					</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconDots, IconNotes } from '@tabler/icons-svelte';
   /**
    * MessageOverflowMenu — generic ⋯ menu rendered on assistant message
    * footers (Wave D.2 Task 5.3). Composable by intent: callers pass in an
@@ -103,7 +104,7 @@
       data-testid="lq-ai-message-overflow-trigger"
       bind:this={triggerEl}
       on:click={toggle}
-    >⋯</button>
+    ><IconDots size={16} stroke={1.75} aria-hidden="true" /></button>
     {#if open}
       <ul class="menu">
         {#if captureInOverflow}
@@ -113,7 +114,7 @@
               disabled={captureDisabled}
               data-testid="lq-ai-message-overflow-capture"
               on:click={handleCapture}
-            >📝 Capture as skill</button>
+            ><IconNotes size={14} stroke={1.75} aria-hidden="true" /> Capture as skill</button>
           </li>
         {/if}
       </ul>

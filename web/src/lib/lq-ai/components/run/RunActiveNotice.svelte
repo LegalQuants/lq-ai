@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * Names the run that is holding the owner's single active-run allowance, in any
 	 * chat, so the composer can say what is blocking a new one (ADR 0038 D1, D6).
@@ -37,7 +38,10 @@
 	data-testid="lq-ai-run-active-notice"
 	data-status={active.status}
 >
-	<p class="line"><strong>{label}</strong> · {statusText}</p>
+	<p class="line">
+		{#if uncertain}<LqToneIcon tone="warning" />
+		{/if}<strong>{label}</strong> · {statusText}
+	</p>
 	{#if here}
 		{#if uncertain}
 			<p class="hint">Close it from its message in this thread to start another run.</p>

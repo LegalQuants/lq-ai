@@ -29,6 +29,7 @@
 </script>
 
 <script lang="ts">
+	import { IconAlertTriangle, IconShield, IconLock, IconFileText, IconLink } from '@tabler/icons-svelte';
 	import type { ToolConfirmationRequiredFrame, McpAuthorizationRequiredFrame } from '../types';
 	// Note: confirmHeading / tierChipLabel / connectBody / connectButtonLabel are
 	// declared in the module-context script above; Svelte merges the two blocks
@@ -62,7 +63,9 @@
 {#if variant === 'confirm' && confirm}
 	<div class="tool-gate" data-testid="tool-gate-confirm">
 		<div class="header">
-			<span class="icon" aria-hidden="true">{confirm.destructive ? '⚠️' : '🛡'}</span>
+			<span class="icon" aria-hidden="true"
+				>{#if confirm.destructive}<IconAlertTriangle size={16} stroke={1.75} aria-hidden="true" />{:else}<IconShield size={16} stroke={1.75} aria-hidden="true" />{/if}</span
+			>
 			<strong>{confirmHeading(confirm.destructive)}</strong>
 		</div>
 		<p class="body">
@@ -92,17 +95,23 @@
 			</button>
 		</div>
 		<div class="pills">
-			<span class="pill pill-tier" data-testid="tool-gate-tier">🔒 {tierChipLabel(confirm.tier)}</span>
+			<span class="pill pill-tier" data-testid="tool-gate-tier"
+				><IconLock size={12} stroke={1.75} aria-hidden="true" /> {tierChipLabel(confirm.tier)}</span
+			>
 			{#if confirm.destructive}
-				<span class="pill pill-destructive" data-testid="tool-gate-destructive">⚠️ destructive</span>
+				<span class="pill pill-destructive" data-testid="tool-gate-destructive"
+					><IconAlertTriangle size={12} stroke={1.75} aria-hidden="true" /> destructive</span
+				>
 			{/if}
-			<span class="pill pill-audited">📜 audited</span>
+			<span class="pill pill-audited"
+				><IconFileText size={12} stroke={1.75} aria-hidden="true" /> audited</span
+			>
 		</div>
 	</div>
 {:else if variant === 'connect' && connect}
 	<div class="tool-gate" data-testid="tool-gate-connect-card">
 		<div class="header">
-			<span class="icon" aria-hidden="true">🔗</span>
+			<span class="icon" aria-hidden="true"><IconLink size={16} stroke={1.75} aria-hidden="true" /></span>
 			<strong>Connection needed</strong>
 		</div>
 		<p class="body">{connectBody(connect.server)}</p>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconPackage, IconBug, IconGitPullRequest, IconLock, IconFileText } from '@tabler/icons-svelte';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
@@ -294,35 +295,35 @@
 			<h2 class="lq-section-h">GitHub</h2>
 			<div class="lq-github-links">
 				<a href="https://github.com/LegalQuants/lq-ai" class="lq-github-link" target="_blank" rel="noopener noreferrer">
-					<span class="lq-github-link-icon">📦</span>
+					<span class="lq-github-link-icon" aria-hidden="true"><IconPackage size={20} stroke={1.75} /></span>
 					<div>
 						<strong>Repository</strong>
 						<span>github.com/LegalQuants/lq-ai</span>
 					</div>
 				</a>
 				<a href="https://github.com/LegalQuants/lq-ai/issues" class="lq-github-link" target="_blank" rel="noopener noreferrer">
-					<span class="lq-github-link-icon">🐛</span>
+					<span class="lq-github-link-icon" aria-hidden="true"><IconBug size={20} stroke={1.75} /></span>
 					<div>
 						<strong>Issues</strong>
 						<span>Bug reports + feature requests</span>
 					</div>
 				</a>
 				<a href="https://github.com/LegalQuants/lq-ai/pulls" class="lq-github-link" target="_blank" rel="noopener noreferrer">
-					<span class="lq-github-link-icon">🔀</span>
+					<span class="lq-github-link-icon" aria-hidden="true"><IconGitPullRequest size={20} stroke={1.75} /></span>
 					<div>
 						<strong>Pull Requests</strong>
 						<span>Active contributions in review</span>
 					</div>
 				</a>
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/SECURITY.md" class="lq-github-link" target="_blank" rel="noopener noreferrer">
-					<span class="lq-github-link-icon">🔒</span>
+					<span class="lq-github-link-icon" aria-hidden="true"><IconLock size={20} stroke={1.75} /></span>
 					<div>
 						<strong>Security Policy</strong>
 						<span>Responsible disclosure process</span>
 					</div>
 				</a>
 				<a href="https://github.com/LegalQuants/lq-ai/blob/main/CODE_OF_CONDUCT.md" class="lq-github-link" target="_blank" rel="noopener noreferrer">
-					<span class="lq-github-link-icon">📜</span>
+					<span class="lq-github-link-icon" aria-hidden="true"><IconFileText size={20} stroke={1.75} /></span>
 					<div>
 						<strong>Code of Conduct</strong>
 						<span>Community standards</span>

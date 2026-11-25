@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * A governed run, presented as a turn in the chat thread (ADR 0038 D1, D2).
 	 *
@@ -237,7 +238,10 @@
 		<p class="status" role="status" data-testid="lq-ai-run-status" data-status={run.status}>
 			{headline}
 		</p>
-		{#if detail}<p class="detail" class:warn={run.status === 'uncertain'}>{detail}</p>{/if}
+		{#if detail}<p class="detail" class:warn={run.status === 'uncertain'}>
+				{#if run.status === 'uncertain'}<LqToneIcon tone="warning" />
+				{/if}{detail}
+			</p>{/if}
 
 		<RunActivity
 			{run}

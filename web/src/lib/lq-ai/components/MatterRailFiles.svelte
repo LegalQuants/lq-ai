@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { IconX } from '@tabler/icons-svelte';
   import { filesApi, projectsApi } from '$lib/lq-ai/api';
   import type { FileMeta, Project } from '$lib/lq-ai/types';
   import { onMount } from 'svelte';
@@ -144,7 +145,7 @@
             on:click={() => detachFile(file)}
             disabled={detachingId === file.id}
           >
-            {detachingId === file.id ? '…' : '×'}
+            {#if detachingId === file.id}…{:else}<IconX size={14} stroke={1.75} aria-hidden="true" />{/if}
           </button>
         </li>
       {/each}

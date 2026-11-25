@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+	import { IconScale, IconChevronUp, IconChevronDown } from '@tabler/icons-svelte';
 	import type { ToolSource } from '../types';
 
 	/** External-source provenance rows for this message. Empty → renders nothing. */
@@ -30,9 +31,11 @@
 			on:click={() => (expanded = !expanded)}
 			aria-expanded={expanded}
 		>
-			<span class="lq-sources-icon" aria-hidden="true">⚖</span>
+			<span class="lq-sources-icon" aria-hidden="true"><IconScale size={14} stroke={1.75} aria-hidden="true" /></span>
 			<span class="lq-sources-label">Sources consulted ({sources.length})</span>
-			<span class="lq-sources-chevron" aria-hidden="true">{expanded ? '▴' : '▾'}</span>
+			<span class="lq-sources-chevron" aria-hidden="true"
+				>{#if expanded}<IconChevronUp size={14} stroke={1.75} aria-hidden="true" />{:else}<IconChevronDown size={14} stroke={1.75} aria-hidden="true" />{/if}</span
+			>
 		</button>
 		{#if expanded}
 			<ul class="lq-sources-list" data-testid="lq-ai-tool-sources-list">

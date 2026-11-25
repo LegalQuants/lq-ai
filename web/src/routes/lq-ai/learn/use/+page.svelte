@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconNotes, IconPaperclip, IconListDetails } from '@tabler/icons-svelte';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
@@ -92,7 +93,8 @@
 		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-capture">
 			<h2 class="lq-section-h">3. Capture a chat reply as a skill</h2>
 			<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-use-body">
-				Under any assistant message, a <strong>📝 Capture</strong> button opens the Skill
+				Under any assistant message, a <strong>Capture as skill</strong> button
+				(<IconNotes size={14} stroke={1.75} aria-hidden="true" />) opens the Skill
 				Wizard with the reply pre-filled as the seed content. You give it a name, add input
 				variables or examples if needed, and save. The new skill is immediately available
 				via <code>/</code> in the composer and visible in <a href="/lq-ai/skills" class="lq-link">Skills</a>.
@@ -173,7 +175,8 @@
 		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-kb">
 			<h2 class="lq-section-h">6. Attach a knowledge base to a chat</h2>
 			<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-use-body">
-				In the composer, press the <strong>📎</strong> button to open the KB attach modal.
+				In the composer, press the <strong>Attach knowledge base</strong> button
+				(<IconPaperclip size={14} stroke={1.75} aria-hidden="true" />) to open the KB attach modal.
 				Select one or more knowledge bases from the list. Once attached, each message in
 				that conversation retrieves relevant chunks from the KB via hybrid retrieval (vector
 				similarity + full-text search) and appends them to the model context. You can also
@@ -227,7 +230,8 @@
 		<section class="lq-use-section" data-testid="lq-ai-learn-use-section-receipts">
 			<h2 class="lq-section-h">8. Read receipts</h2>
 			<LqText as="p" size="14" tone="primary" leading="relaxed" class="lq-use-body">
-				Every model response has a provenance record. Press the <strong>📜</strong> button
+				Every model response has a provenance record. Press the <strong>Toggle receipts</strong> button
+				(<IconListDetails size={14} stroke={1.75} aria-hidden="true" />)
 				in the composer toolbar to open the receipts drawer. Each receipt entry shows: the
 				request timestamp, the model and provider used, the tier in effect, the full
 				assembled prompt (including any skill system prompt and KB chunks), and — when a

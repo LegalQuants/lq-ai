@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconSparkles, IconX } from '@tabler/icons-svelte';
 	/**
 	 * EnhancePromptExpansion — inline expansion panel shown between the composer
 	 * and AmbientFooter after the user clicks ✨.
@@ -148,13 +150,15 @@
 		{#if state.kind === 'loading'}
 			<div class="lq-enhance-loading" data-testid="lq-ai-enhance-loading">
 				<span class="lq-spinner" aria-hidden="true"></span>
-				<LqText as="span" size="11" tone="secondary">Enhancing… ✨</LqText>
+				<LqText as="span" size="11" tone="secondary">Enhancing…</LqText>
 			</div>
 		{:else if state.kind === 'shown'}
 			{#if !jitDismissed}
 				<div class="lq-enhance-jit" data-testid="lq-ai-enhance-jit">
 					<LqText as="span" size="11" tone="secondary" class="lq-enhance-jit-msg">
-						Tip: ✨ rewrites your prompt so the AI has more to work with. Pick
+						<LqToneIcon tone="info" size={12} />
+						Tip: Enhance (<IconSparkles size={11} stroke={1.75} aria-hidden="true" />) rewrites your
+						prompt so the AI has more to work with. Pick
 						<strong>Use enhanced</strong>, tweak with <strong>Edit enhanced</strong>, or
 						<strong>Keep original</strong>. (⌘E)
 					</LqText>
@@ -181,7 +185,7 @@
 						aria-label="Dismiss enhancement"
 						on:click={handleDismiss}
 					>
-						×
+						<IconX size={14} stroke={1.75} aria-hidden="true" />
 					</button>
 				</div>
 			</div>
@@ -192,7 +196,9 @@
 					<p class="lq-enhance-card-body">{state.original}</p>
 				</div>
 				<div class="lq-enhance-card lq-enhance-card--enhanced" data-testid="lq-ai-enhance-enhanced">
-					<div class="lq-enhance-card-label">Enhanced ✨</div>
+					<div class="lq-enhance-card-label">
+						Enhanced <IconSparkles size={11} stroke={1.75} aria-hidden="true" />
+					</div>
 					<p class="lq-enhance-card-body">{state.enhanced}</p>
 					{#if state.reasoning.length > 0}
 						<ul class="lq-enhance-reasoning">

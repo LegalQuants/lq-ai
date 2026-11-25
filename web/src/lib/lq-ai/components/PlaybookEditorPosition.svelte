@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconArrowUp, IconArrowDown, IconX } from '@tabler/icons-svelte';
 	/**
 	 * PlaybookEditorPosition — inline editor for one playbook position
 	 * (M3-A6 Phase 6 / Step 3). Composes a list of
@@ -95,7 +96,7 @@
 				disabled={disabled || !canMoveUp}
 				aria-label="Move position up"
 			>
-				↑
+				<IconArrowUp size={14} stroke={1.75} aria-hidden="true" />
 			</button>
 			<button
 				type="button"
@@ -104,7 +105,7 @@
 				disabled={disabled || !canMoveDown}
 				aria-label="Move position down"
 			>
-				↓
+				<IconArrowDown size={14} stroke={1.75} aria-hidden="true" />
 			</button>
 			<button
 				type="button"
@@ -226,7 +227,7 @@
 						{disabled}
 						aria-label="Remove keyword"
 					>
-						×
+						<IconX size={12} stroke={1.75} aria-hidden="true" />
 					</button>
 				</span>
 			{/each}

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
+	import { IconX } from '@tabler/icons-svelte';
 	import { createEventDispatcher, onMount } from 'svelte';
 	import type { TabularCellResult } from '$lib/lq-ai/types';
 	import { citationPassage } from './tabular-citation';
@@ -66,13 +68,15 @@
 			class="lq-tabcm__close"
 			data-testid="lq-tabcm-close"
 			on:click={close}
-			aria-label="Close citations">×</button
+			aria-label="Close citations"><IconX size={16} stroke={1.75} aria-hidden="true" /></button
 		>
 	</header>
 
 	<section class="lq-tabcm__body">
 		{#if cell.confidence === 'failed'}
-			<p class="lq-tabcm__failed"><strong>Not found.</strong> Extraction failed for this cell.</p>
+			<p class="lq-tabcm__failed">
+				<LqToneIcon tone="warning" /> <strong>Not found.</strong> Extraction failed for this cell.
+			</p>
 			{#if cell.error}
 				<pre class="lq-tabcm__error" data-testid="lq-tabcm-error">{cell.error}</pre>
 			{/if}

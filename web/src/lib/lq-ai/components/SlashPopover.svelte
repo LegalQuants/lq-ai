@@ -142,14 +142,18 @@
 		return resp.results;
 	}
 
-	/** Glyph to display when a result omits a custom icon (matches AttachedSkillPill). */
-	export function displayIcon(icon: string | null | undefined): string {
-		return icon ? icon : '📜';
+	/**
+	 * The result's own icon as the skill author wrote it, or null when it has none; the row
+	 * then draws the Tabler fallback (matches AttachedSkillPill).
+	 */
+	export function displayIcon(icon: string | null | undefined): string | null {
+		return icon ? icon : null;
 	}
 </script>
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { IconTool } from '@tabler/icons-svelte';
 
 	export let query: string;
 	export let onSelect: (skill: SkillAutocompleteItem) => void;
@@ -289,7 +293,12 @@
 				on:mousedown={(e) => onRowMouseDown(e, r)}
 				on:mouseenter={() => (activeIndex = i)}
 			>
-				<span class="lq-slash-popover__icon" aria-hidden="true">{displayIcon(r.icon)}</span>
+				<span class="lq-slash-popover__icon" aria-hidden="true"
+					>{#if displayIcon(r.icon)}{displayIcon(r.icon)}{:else}<IconTool
+							size={14}
+							stroke={1.75}
+						/>{/if}</span
+				>
 				<span class="lq-slash-popover__body">
 					<span class="lq-slash-popover__title">{r.title}</span>
 					<span class="lq-slash-popover__desc">{r.description ?? ''}</span>

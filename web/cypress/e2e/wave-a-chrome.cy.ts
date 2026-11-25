@@ -34,7 +34,7 @@ describe('Wave A — LQ.AI chrome', () => {
   });
 
   it('renders ambient trust chrome in the top bar', () => {
-    cy.contains('● self-hosted').should('be.visible');
+    cy.contains('self-hosted').should('be.visible');
     cy.contains('⌘K').should('be.visible');
   });
 

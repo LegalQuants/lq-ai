@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	import { sessionActivity, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import LqText from './shared/LqText.svelte';
 </script>
@@ -8,7 +9,9 @@
 		role="alert"
 		class="lq-session-toast"
 	>
-		<LqText as="p" size="14" tone="primary"><strong>Session expires in 5 minutes.</strong></LqText>
+		<LqText as="p" size="14" tone="primary"
+			><LqToneIcon tone="warning" /> <strong>Session expires in 5 minutes.</strong></LqText
+		>
 		<LqText as="p" size="12" tone="tertiary" style="margin-top: var(--lq-space-1);">
 			You'll need to log in again if you stay idle.
 		</LqText>

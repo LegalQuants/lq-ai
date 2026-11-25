@@ -10,6 +10,7 @@
 	 *   filters the sidebar to that project's chats.
 	 */
 	import type { Chat, Project } from '../types';
+	import { IconLock } from '@tabler/icons-svelte';
 
 	export let groups: Array<{ project: Project | null; chats: Chat[] }> = [];
 	export let activeChatId: string | null = null;
@@ -81,9 +82,10 @@
 						{group.project?.name ?? 'Without a project'}
 						{#if group.project?.privileged}
 							<span
-								class="ml-1 inline-block px-1 py-0.5 rounded text-[10px] font-semibold lq-t-error-soft lq-t-error align-middle"
+								class="lq-chat-sidebar-privileged ml-1 px-1 py-0.5 rounded text-[10px] font-semibold align-middle"
 								title="Privileged matter — minimum_inference_tier enforced"
 							>
+								<IconLock size={11} stroke={2} aria-hidden="true" />
 								PRIVILEGED
 							</span>
 						{/if}
@@ -225,10 +227,12 @@
 	}
 
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
-	.lq-t-error {
-		color: var(--lq-error);
-	}
-	.lq-t-error-soft {
-		background-color: var(--lq-error-soft);
+	/* ADR 0045 §1: privileged matters are governance, not error. */
+	.lq-chat-sidebar-privileged {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		color: var(--lq-governance);
+		background: var(--lq-governance-soft);
 	}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconSettings } from '@tabler/icons-svelte';
 	/**
 	 * LQ.AI shell layout. Acts as the auth gate + force-change-password gate
 	 * for every route under `/lq-ai/*` except `/lq-ai/login` and
@@ -129,7 +130,7 @@
 					{#if $autonomousChromeEnabled}
 						<NotificationBell />
 					{/if}
-					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm);">⚙</a>
+					<a href="/lq-ai/settings/appearance" aria-label="Settings" title="Settings" style="color: var(--lq-text-secondary); text-decoration: none; padding: var(--lq-space-1) var(--lq-space-2); border-radius: var(--lq-radius-sm); display: inline-flex;"><IconSettings size={18} stroke={1.75} aria-hidden="true" /></a>
 				</div>
 			</header>
 			<TopTabBar user={$auth.user ?? null} pathname={pathname} />
@@ -154,6 +155,10 @@
 	   here doesn't disturb it. min-height: 0 lets flex children shrink
 	   correctly inside the column. */
 	.lq-shell { background: var(--lq-canvas); color: var(--lq-text); height: 100vh; display: flex; flex-direction: column; }
+	/* Tailwind's preflight makes every svg a block. LQ.AI's Tabler icons sit in a line of text
+	   (a note's warning icon, an icon in a sentence), so they flow inline with it; in a flex
+	   row they are flex items either way (ADR 0045 §5, S1-3b). */
+	.lq-shell :global(.tabler-icon) { display: inline-block; vertical-align: -0.125em; }
 	.lq-topbar {
 		display: flex; align-items: center; justify-content: space-between;
 		padding: var(--lq-space-3) var(--lq-space-4);

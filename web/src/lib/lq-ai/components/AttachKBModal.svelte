@@ -106,6 +106,7 @@
 </script>
 
 <script lang="ts">
+	import { IconX } from '@tabler/icons-svelte';
 	import { onMount } from 'svelte';
 	import { listKnowledgeBases, createKnowledgeBase } from '$lib/lq-ai/api/knowledgeBases';
 	import { attachKnowledgeBase, detachKnowledgeBase } from '$lib/lq-ai/api/projectKnowledgeBases';
@@ -294,7 +295,9 @@
 						content="Knowledge bases are document collections you attach to a chat or matter. The AI can search and cite from them when answering. Documents are processed once at upload, then available across all your chats. You can attach multiple knowledge bases to a single matter."
 					/>
 				</h2>
-				<button type="button" class="akm-close" aria-label="Close" on:click={onClose}>×</button>
+				<button type="button" class="akm-close" aria-label="Close" on:click={onClose}
+					><IconX size={16} stroke={1.75} aria-hidden="true" /></button
+				>
 			</header>
 
 			<div class="akm-toolbar">
@@ -320,7 +323,7 @@
 						type="button"
 						class="akm-banner-dismiss"
 						on:click={dismissBanner}
-						aria-label="Dismiss tip">×</button
+						aria-label="Dismiss tip"><IconX size={14} stroke={1.75} aria-hidden="true" /></button
 					>
 				</div>
 			{/if}

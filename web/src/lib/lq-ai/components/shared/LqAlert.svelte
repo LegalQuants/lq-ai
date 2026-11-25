@@ -9,6 +9,7 @@
 	 * `tone` without breaking existing callers.
 	 */
 	import { IconX } from '@tabler/icons-svelte';
+	import LqToneIcon from './LqToneIcon.svelte';
 	import type { LqTone } from './types';
 
 	export let tone: LqTone = 'neutral';
@@ -21,6 +22,9 @@
 </script>
 
 <div {...$$restProps} class="lq-alert lq-alert-tone-{tone} {klass}" {role}>
+	{#if tone === 'warning' || tone === 'info'}
+		<LqToneIcon {tone} size={16} class="lq-alert-icon" />
+	{/if}
 	<div class="lq-alert-body">
 		{#if title}
 			<div class="lq-alert-title">{title}</div>
@@ -47,6 +51,10 @@
 		border-left-width: 3px;
 		font-size: 13px;
 		line-height: 1.4;
+	}
+
+	.lq-alert :global(.lq-alert-icon) {
+		margin-top: 1px;
 	}
 
 	.lq-alert-body {

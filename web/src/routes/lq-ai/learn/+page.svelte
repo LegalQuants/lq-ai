@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { IconClipboardList, IconSearch, IconTool, IconScale } from '@tabler/icons-svelte';
 	import LqText from '$lib/lq-ai/components/shared/LqText.svelte';
 	import LqTitle from '$lib/lq-ai/components/shared/LqTitle.svelte';
 </script>
@@ -36,7 +37,9 @@
 
 	<div class="lq-learn-grid">
 		<a class="lq-learn-card" href="/lq-ai/learn/use" data-testid="lq-ai-learn-card-use">
-			<span class="lq-learn-card-icon" aria-hidden="true">📋</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconClipboardList size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How to Use</h2>
 			<p class="lq-learn-card-desc">
 				What every feature does, in plain language. With links to source for every claim.
@@ -45,7 +48,9 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/how" data-testid="lq-ai-learn-card-how">
-			<span class="lq-learn-card-icon" aria-hidden="true">🔍</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconSearch size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How It Works</h2>
 			<p class="lq-learn-card-desc">
 				Interactive playgrounds that show how the system fits together. Click any visualization to
@@ -55,7 +60,8 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/build" data-testid="lq-ai-learn-card-build">
-			<span class="lq-learn-card-icon" aria-hidden="true">🔧</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"><IconTool size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How to Build</h2>
 			<p class="lq-learn-card-desc">
 				How to contribute a skill, a mini-PRD, or a bug fix. What's open right now.
@@ -64,7 +70,9 @@
 		</a>
 
 		<a class="lq-learn-card" href="/lq-ai/learn/compare" data-testid="lq-ai-learn-card-compare">
-			<span class="lq-learn-card-icon" aria-hidden="true">⚖️</span>
+			<span class="lq-learn-card-icon" aria-hidden="true"
+				><IconScale size={22} stroke={1.75} /></span
+			>
 			<h2 class="lq-learn-card-title">How It Compares</h2>
 			<p class="lq-learn-card-desc">
 				An evidence-linked, vendor-neutral comparison — every capability claim links to the code,

@@ -9,6 +9,13 @@
 	 * model; they are interpolated, never rendered as HTML.
 	 */
 	import type { ActivityState } from '$lib/lq-ai/run/activity';
+	import {
+		IconCheck,
+		IconCircle,
+		IconCircleDot,
+		IconMinus,
+		IconSquare
+	} from '@tabler/icons-svelte';
 
 	export let state: ActivityState;
 	export let label: string;
@@ -17,12 +24,13 @@
 	/** Draw the open/close mark (the line is a `<summary>`). */
 	export let foldable = false;
 
-	const GLYPH: Record<ActivityState, string> = {
-		done: '✓',
-		current: '●',
-		pending: '○',
-		stopped: '■',
-		skipped: '–'
+	/** Tabler line icons (ADR 0045 §5); the sr-only word beside each names the state. */
+	const GLYPH: Record<ActivityState, typeof IconCheck> = {
+		done: IconCheck,
+		current: IconCircleDot,
+		pending: IconCircle,
+		stopped: IconSquare,
+		skipped: IconMinus
 	};
 	const WORD: Record<ActivityState, string> = {
 		done: 'done',
@@ -36,7 +44,9 @@
 </script>
 
 <span class="line {state}">
-	<span class="mark" aria-hidden="true">{GLYPH[state]}</span>
+	<span class="mark" aria-hidden="true"
+		><svelte:component this={GLYPH[state]} size={12} stroke={2} aria-hidden="true" /></span
+	>
 	<span class="text" title={full}>
 		<span class="sr-only">({WORD[state]}) </span><span class="label">{label}</span
 		>{#if summary}<span class="summary-text">{' · '}{summary}</span>{/if}

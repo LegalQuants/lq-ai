@@ -97,7 +97,7 @@
 		{
 			value: 'labels',
 			label: 'Labels',
-			description: '"● self-hosted" — full label on the pill.'
+			description: '"self-hosted" — full label on the pill.'
 		},
 		{
 			value: 'dots',
@@ -121,7 +121,7 @@
 		{
 			value: 'collapsed',
 			label: 'Collapsed; expand on hover',
-			description: 'Single "🔍 details" affordance per reply.'
+			description: 'Single "details" affordance per reply.'
 		}
 	]}
 	onChange={(v) => setPreference('provenance_pills', v as ProvenancePills)}
@@ -170,8 +170,8 @@
 		<span>
 			<strong>Skill capture button</strong>
 			<span style="display: block; color: var(--lq-text-secondary); font-size: 12px;">
-				Show 📝 Capture-as-skill inline on every AI message. When off, the action
-				stays in the message's overflow (⋯) menu.
+				Show Capture-as-skill inline on every AI message. When off, the action
+				stays in the message's overflow (More actions) menu.
 			</span>
 		</span>
 	</LqText>

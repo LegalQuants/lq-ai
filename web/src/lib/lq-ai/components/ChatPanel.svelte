@@ -1500,6 +1500,10 @@
 	// chat's title into its page header. With the switch off nothing here
 	// publishes and the panels render beside the chat as before.
 	let sidebarShell = false;
+	let viewportWidth: number;
+	let chatListPanel: CompactPanel;
+	$: phoneChatList = sidebarShell && !projectIdFilter && viewportWidth < 768;
+	$: compactLayout = !!projectIdFilter || phoneChatList;
 	const shellOwner = Symbol('ChatPanel');
 	onMount(() => {
 		sidebarShell = readShellSwitch() === 'sidebar';
@@ -1672,20 +1676,33 @@
 	$: enhanceButtonAriaLabel = enhanceIsRefine ? 'Refine prompt' : 'Enhance prompt';
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
+
 <div
 	class="flex flex-1 h-full min-h-0 overflow-hidden"
-	class:compact-matter={!!projectIdFilter}
+	class:compact-layout={compactLayout}
 	data-testid="lq-ai-chat-shell"
 >
-	<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
+	<CompactPanel
+		bind:this={chatListPanel}
+		id={projectIdFilter ? 'matter-chats' : 'chat-list'}
+		title="Chats"
+		enabled={compactLayout}
+	>
 		<ChatSidebar
 			groups={filteredGroups}
 			activeChatId={activeChat?.id ?? null}
 			activeProjectId={activeProject?.id ?? null}
 			{archivedToggle}
 			hideProjectFilter={!!projectIdFilter}
-			onSelectChat={selectChat}
-			onNewChat={createNewChat}
+			onSelectChat={(chat) => {
+				if (phoneChatList) chatListPanel.close();
+				return selectChat(chat);
+			}}
+			onNewChat={() => {
+				if (phoneChatList) chatListPanel.close();
+				return createNewChat();
+			}}
 			onSelectProject={selectProject}
 			onToggleArchived={toggleArchived}
 		/>
@@ -2053,20 +2070,20 @@
 	}
 
 	@media (max-width: 1279px) {
-		.compact-matter {
+		.compact-layout {
 			flex-direction: column;
 			min-width: 0;
 		}
 
-		.compact-matter .chat-conversation {
+		.compact-layout .chat-conversation {
 			min-height: 0;
 		}
 
-		.compact-matter .composer-row {
+		.compact-layout .composer-row {
 			flex-wrap: wrap;
 		}
 
-		.compact-matter .lq-composer-wrap {
+		.compact-layout .lq-composer-wrap {
 			flex: 1 0 100%;
 		}
 	}

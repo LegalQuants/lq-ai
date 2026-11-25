@@ -1,4 +1,5 @@
 <script lang="ts">
+	import LqToneIcon from '$lib/lq-ai/components/shared/LqToneIcon.svelte';
 	/**
 	 * /lq-ai/admin/community-skills — DE-263 community skill installer.
 	 *
@@ -204,6 +205,7 @@
 
 	{#if catalog && catalog.load_errors.length > 0}
 		<div class="warn-banner" role="alert">
+			<LqToneIcon tone="warning" />
 			<strong
 				>{catalog.load_errors.length} catalog entr{catalog.load_errors.length === 1 ? 'y' : 'ies'} failed
 				to parse and cannot be installed:</strong
