@@ -72,8 +72,16 @@ Then install `web/`'s frontend dependencies on the host once:
 
 ```bash
 cd web
-npm install
+sh scripts/install-dependencies.sh
 ```
+
+The frontend uses ONNX Runtime in the browser and does not need the Node CUDA provider.
+The shared installer sets `ONNXRUNTIME_NODE_INSTALL_CUDA=skip`: the locked Node package
+otherwise tries to download an unused GPU archive, and a missing archive prevents installation.
+The Makefile, frontend Dockerfile, and Web, accessibility, and Cypress workflows call this same
+script. It preserves CPU support, other dependency install scripts, and Cypress installation
+for browser tests. New frontend setup workflows should call it too. The script uses the supported
+environment variable rather than a custom `.npmrc` key, which npm has deprecated.
 
 ## Day to day
 

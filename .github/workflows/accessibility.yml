@@ -27,7 +27,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install locked test dependencies
-        run: npm ci
+        run: sh scripts/install-dependencies.sh
       - name: Typecheck the standalone scanner
         run: npx tsc --project tsconfig.a11y.json
       - name: Build the production frontend (no API or model stack)

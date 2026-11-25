@@ -336,6 +336,26 @@ describe('the check itself', () => {
 		expect(() => expectOnlyText(both(own), ['text'], 'own icon')).not.toThrow();
 	});
 
+	it.each(Object.entries(RUN_OWN_ICONS))('recognizes the component profile for %s', (name, icon) => {
+		const props =
+			name === 'alert-triangle'
+				? { size: 14, stroke: 1.75, class: 'lq-tone-icon ', 'aria-hidden': 'true' }
+				: { size: 12, stroke: 2, 'aria-hidden': 'true' };
+		const rendered = markup(icon, props);
+		expect(withoutOwnIcons(rendered)).not.toContain('<svg');
+	});
+
+	it.each([
+		['omitted width', own.replace(' width="12"', '')],
+		['duplicate width', own.replace(' width="12"', ' width="12" width="12"')],
+		['extra detail', own.replace('<svg ', '<svg data-detail="example" ')],
+		['different size', own.replace(' height="12"', ' height="16"')],
+		['extra class', own.replace('tabler-icon-check', 'tabler-icon-check extra')]
+	])('keeps the icon with %s in the inspected markup', (_what, different) => {
+		expect(different).not.toBe(own);
+		expect(withoutOwnIcons(different)).toBe(different);
+	});
+
 	it('catches an svg that is not one of them, even when the plain page has it too', () => {
 		const forged = [
 			['an svg from the text', '<svg onload="alert(1)"></svg>'],

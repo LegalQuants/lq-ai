@@ -1,18 +1,6 @@
 /**
- * The Tabler icons the run components draw themselves, and nothing else.
- *
- * The run panel's render tests are an injection guard: no `<svg>` may appear in a page
- * built from untrusted text. Since S1-3b (ADR 0045 §5) the components draw a few Tabler
- * line icons of their own: RunLine's state marks, and the warning icon on four notes.
- * `withoutOwnIcons` removes exactly those, so the guard still fails on any other svg.
- *
- * An svg counts as one of ours only when all of these hold:
- *  - its class names one of the icons below (`tabler-icon tabler-icon-<name>`);
- *  - its attributes are Tabler's own, with Tabler's values: no event handler, no link;
- *  - it is hidden from assistive technology (`aria-hidden="true"`);
- *  - its body is exactly the body that Tabler icon renders, character for character.
- * A forged svg that borrows the class, an icon not on the list, or a real icon with an
- * extra attribute or a changed body is left in the markup, and the guard catches it.
+ * Exact server-rendered SVGs owned by RunLine and the run warning notes.
+ * The text-escaping tests remove only these known renderings before checking the page.
  */
 import { render } from 'svelte/server';
 import {
@@ -34,57 +22,25 @@ export const RUN_OWN_ICONS = {
 	square: IconSquare
 } as const;
 
-const withoutComments = (html: string) => html.replace(/<!--[^>]*-->/g, '');
-const SVG = /<svg\b([^>]*)>([\s\S]*?)<\/svg>/g;
-const ATTRIBUTE = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-const NUMBER = /^\d+(?:\.\d+)?$/;
+const SVG = /<svg\b[^>]*>[\s\S]*?<\/svg>/g;
 
-/** Tabler's attributes and the values they may take; `class` and `aria-hidden` are checked apart. */
-const TABLER_VALUES: Record<string, (value: string) => boolean> = {
-	xmlns: (v) => v === 'http://www.w3.org/2000/svg',
-	width: (v) => NUMBER.test(v),
-	height: (v) => NUMBER.test(v),
-	viewbox: (v) => v === '0 0 24 24',
-	fill: (v) => v === 'none',
-	stroke: (v) => v === 'currentColor',
-	'stroke-width': (v) => NUMBER.test(v),
-	'stroke-linecap': (v) => v === 'round',
-	'stroke-linejoin': (v) => v === 'round'
-};
-const CLASS = /^tabler-icon tabler-icon-([a-z0-9-]+)(?:\s+[\w-]+)*\s*$/;
-
-function bodyOf(component: unknown): string {
-	const html = withoutComments(render(component as never, { props: {} as never }).body);
-	const match = /<svg\b[^>]*>([\s\S]*?)<\/svg>/.exec(html);
-	if (!match) throw new Error('a Tabler icon rendered no svg');
-	return match[1];
+// RunLine draws 12px state marks. The notes use LqToneIcon's default warning profile.
+// Compare whole SVGs so the opening tag, classes and body must match together.
+const ownMarkup = new Set<string>();
+for (const [name, component] of Object.entries(RUN_OWN_ICONS)) {
+	const props =
+		name === 'alert-triangle'
+			? { size: 14, stroke: 1.75, class: 'lq-tone-icon ', 'aria-hidden': true }
+			: { size: 12, stroke: 2, 'aria-hidden': true };
+	const icons = render(component, { props }).body.match(SVG);
+	if (icons?.length !== 1) throw new Error(`Expected one Tabler SVG for ${name}`);
+	ownMarkup.add(icons[0]);
+	// The render-test reader also inspects markup with Svelte's SSR comments removed.
+	ownMarkup.add(icons[0].replace(/<!--[^>]*-->/g, ''));
 }
 
-const BODIES = new Map<string, string>(
-	Object.entries(RUN_OWN_ICONS).map(([name, component]) => [name, bodyOf(component)])
-);
-
-/** Whether one `<svg …>…</svg>` is exactly one of the run components' own icons. */
 export function isOwnIcon(svg: string): boolean {
-	const match = /^<svg\b([^>]*)>([\s\S]*?)<\/svg>$/.exec(svg);
-	if (!match) return false;
-	let name: string | undefined;
-	let hidden = false;
-	for (const attribute of match[1].matchAll(ATTRIBUTE)) {
-		const key = attribute[1].toLowerCase();
-		const value = attribute[2] ?? attribute[3] ?? attribute[4] ?? '';
-		if (key === 'class') {
-			name = CLASS.exec(value)?.[1];
-			if (!name) return false;
-		} else if (key === 'aria-hidden') {
-			if (value !== 'true') return false;
-			hidden = true;
-		} else if (!TABLER_VALUES[key]?.(value)) {
-			return false;
-		}
-	}
-	if (!name || !hidden || !BODIES.has(name)) return false;
-	return withoutComments(match[2]) === BODIES.get(name);
+	return ownMarkup.has(svg);
 }
 
 /** The markup with the run components' own icons taken out; every other svg stays. */

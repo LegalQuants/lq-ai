@@ -42,7 +42,7 @@ run; the historical acceptance results below do not verify this revision.
 From `web/`:
 
 ```sh
-npm ci
+sh scripts/install-dependencies.sh
 NODE_OPTIONS=--max-old-space-size=6144 npm run build
 npm run cy:a11y
 npm run cy:a11y:proof
