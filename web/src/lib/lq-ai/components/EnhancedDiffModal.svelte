@@ -112,13 +112,13 @@
 		font-size: 14px;
 		font-weight: 600;
 		margin: 0;
-		color: #111827;
+		color: var(--lq-text);
 	}
 	.close {
 		background: transparent;
 		border: 0;
 		font-size: 22px;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		cursor: pointer;
 		padding: 0 6px;
 	}
@@ -138,29 +138,29 @@
 		font-size: 11px;
 		font-weight: 600;
 		text-transform: uppercase;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		margin: 0 0 6px 0;
 		letter-spacing: 0.04em;
 	}
 	pre {
-		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-family: var(--lq-font-mono);
 		font-size: 12px;
 		line-height: 1.5;
 		white-space: pre-wrap;
 		word-break: break-word;
-		background: #f9fafb;
+		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
 		padding: 10px;
-		color: #111827;
+		color: var(--lq-text);
 		margin: 0;
 	}
 	.empty {
 		font-size: 12px;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		font-style: italic;
-		background: #f9fafb;
-		border: 1px dashed #d1d5db;
+		background: var(--lq-inset);
+		border: 1px dashed var(--lq-border);
 		border-radius: 6px;
 		padding: 10px;
 		margin: 0;

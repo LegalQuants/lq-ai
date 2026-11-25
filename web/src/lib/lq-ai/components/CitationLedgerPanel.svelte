@@ -141,7 +141,7 @@
 		color: var(--lq-text-secondary);
 		cursor: pointer;
 		padding: 0 2px;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 	}
 	.lq-ledger-close:hover {
 		color: var(--lq-text);

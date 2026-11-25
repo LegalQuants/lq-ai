@@ -107,7 +107,7 @@
 		background: var(--lq-canvas);
 		color: var(--lq-text);
 		border: 1px solid var(--lq-border-strong);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 0.25rem 0.65rem;
 		font-size: 0.78rem;
 		cursor: pointer;

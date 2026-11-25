@@ -515,7 +515,7 @@
 
 	.picker-select {
 		padding: var(--lq-space-1) var(--lq-space-2);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		background: var(--lq-bg);
 		color: var(--lq-text);
@@ -546,7 +546,7 @@
 
 	.action-button {
 		padding: var(--lq-space-1) var(--lq-space-3);
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		font-size: 13px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);

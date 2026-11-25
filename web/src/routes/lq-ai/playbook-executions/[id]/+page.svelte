@@ -346,7 +346,7 @@
 	}
 	.lq-pbx-filters select {
 		padding: 0.25rem 0.5rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.375rem;
 		background: var(--lq-surface);
 		font-size: 0.875rem;

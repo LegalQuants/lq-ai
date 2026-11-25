@@ -72,7 +72,7 @@
 </script>
 
 <div
-	class="min-h-screen flex flex-col lq-t-canvas lq-t-text"
+	class="min-h-screen flex flex-col lq-login-ground lq-t-text"
 	data-testid="lq-ai-login-page"
 >
 	<main class="flex-1 flex items-center justify-center">
@@ -172,6 +172,11 @@
 </div>
 
 <style>
+	/* The page is the inset grey and the card raised white, as the redesign draws it. */
+	.lq-login-ground {
+		background-color: var(--lq-inset);
+	}
+
 	.lq-form-card {
 		padding: var(--lq-space-6);
 		border-radius: var(--lq-radius-lg);
@@ -184,7 +189,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -198,15 +203,9 @@
 	}
 
 	.lq-bootstrap-hint {
-		background: #fffbeb;
-		border-color: #fcd34d;
-		color: #78350f;
-	}
-
-	:global(.dark) .lq-bootstrap-hint {
-		background: rgba(120, 53, 15, 0.25);
-		border-color: rgba(252, 211, 77, 0.4);
-		color: #fde68a;
+		background: var(--lq-warning-soft);
+		border-color: var(--lq-warning-border);
+		color: var(--lq-warning);
 	}
 
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */

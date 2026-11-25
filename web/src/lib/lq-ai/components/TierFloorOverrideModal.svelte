@@ -169,7 +169,7 @@
 	label {
 		display: block;
 		font-size: 12px;
-		color: #374151;
+		color: var(--lq-text);
 		margin-bottom: 4px;
 	}
 	textarea {
@@ -178,19 +178,19 @@
 		font-family: inherit;
 		font-size: 13px;
 		padding: 8px;
-		border: 1px solid #d1d5db;
-		border-radius: 4px;
+		border: 1px solid var(--lq-border-strong);
+		border-radius: var(--lq-radius-input);
 		box-sizing: border-box;
 	}
 	.counter {
 		font-size: 11px;
-		color: #6b7280;
+		color: var(--lq-text-tertiary);
 		text-align: right;
 		margin-top: 2px;
 	}
 	.error-banner {
-		background: #fef2f2;
-		color: #991b1b;
+		background: var(--lq-danger-soft);
+		color: var(--lq-danger);
 		padding: 8px;
 		border-radius: 4px;
 		margin: 8px 0;
@@ -203,11 +203,11 @@
 		margin-top: 16px;
 	}
 	.primary {
-		background: #4338ca;
-		color: var(--lq-canvas);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 6px 14px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 13px;
 	}
@@ -217,9 +217,9 @@
 	}
 	.cancel {
 		background: transparent;
-		border: 1px solid #d1d5db;
+		border: 1px solid var(--lq-border-strong);
 		padding: 6px 14px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 13px;
 	}

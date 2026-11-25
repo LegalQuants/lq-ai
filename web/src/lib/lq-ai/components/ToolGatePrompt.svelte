@@ -122,8 +122,8 @@
 
 <style>
 	.tool-gate {
-		background: #eef2ff;
-		border: 1px solid #6366f1;
+		background: var(--lq-inset);
+		border: 1px solid var(--lq-border);
 		border-radius: 8px;
 		padding: 12px;
 		margin-bottom: 8px;
@@ -138,23 +138,24 @@
 		font-size: 16px;
 	}
 	strong {
-		color: #3730a3;
+		color: var(--lq-text);
 	}
 	.body {
 		font-size: 13px;
-		color: #312e81;
+		color: var(--lq-text);
 		line-height: 1.5;
 		margin: 0 0 8px 0;
 	}
 	.tool {
-		background: #e0e7ff;
+		background: var(--lq-surface-muted);
 		padding: 1px 5px;
 		border-radius: 4px;
 		font-size: 12px;
 	}
 	.args {
-		background: #1e1b4b;
-		color: #c7d2fe;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text);
+		font-family: var(--lq-font-mono);
 		font-size: 11px;
 		line-height: 1.4;
 		padding: 8px;
@@ -171,20 +172,20 @@
 		margin-bottom: 8px;
 	}
 	.primary {
-		background: #4338ca;
-		color: var(--lq-canvas);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.secondary {
 		background: var(--lq-canvas);
-		color: #4338ca;
-		border: 1px solid #4338ca;
+		color: var(--lq-accent);
+		border: 1px solid var(--lq-accent);
 		padding: 4px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
@@ -204,15 +205,15 @@
 		font-size: 10px;
 	}
 	.pill-tier {
-		background: #e0e7ff;
-		color: #3730a3;
+		background: var(--lq-surface-muted);
+		color: var(--lq-governance);
 	}
 	.pill-destructive {
-		background: #fee2e2;
-		color: #991b1b;
+		background: var(--lq-danger-soft);
+		color: var(--lq-danger);
 	}
 	.pill-audited {
-		background: #dbeafe;
-		color: #1e40af;
+		background: var(--lq-surface-muted);
+		color: var(--lq-text-secondary);
 	}
 </style>

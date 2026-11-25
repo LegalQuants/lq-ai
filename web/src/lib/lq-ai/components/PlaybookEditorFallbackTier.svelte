@@ -130,7 +130,7 @@
 		font-size: 0.75rem;
 		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
-		border-radius: 0.25rem;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 	}
 	.lq-playbook-editor-tier__btn:disabled {
@@ -162,7 +162,7 @@
 	.lq-playbook-editor-tier__input,
 	.lq-playbook-editor-tier__textarea {
 		padding: 0.375rem 0.5rem;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 0.25rem;
 		background: var(--lq-surface);
 		color: var(--lq-text-primary);

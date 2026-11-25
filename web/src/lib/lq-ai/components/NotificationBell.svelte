@@ -214,7 +214,7 @@
 		color: var(--lq-text-secondary);
 		font-size: 16px;
 		line-height: 1;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 	}
 
 	.trigger:hover {
@@ -286,7 +286,7 @@
 		font-weight: 500;
 		color: var(--lq-accent);
 		cursor: pointer;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 		white-space: nowrap;
 	}
 
@@ -366,7 +366,7 @@
 	.mark-read {
 		flex-shrink: 0;
 		padding: 2px 8px;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 		font-size: 12px;
 		cursor: pointer;
 		border: 1px solid var(--lq-border);

@@ -84,16 +84,16 @@
 
 <style>
 	.lq-banner-primary {
-		background: #059669;
-		color: var(--lq-canvas);
+		background: var(--lq-accent);
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 3px 10px;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 12px;
 	}
 	.lq-banner-primary:hover {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 	.lq-banner-dismiss {
 		background: transparent;

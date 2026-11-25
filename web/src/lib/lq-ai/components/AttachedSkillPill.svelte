@@ -100,7 +100,7 @@
 		line-height: 1;
 		cursor: pointer;
 		opacity: 0.6;
-		border-radius: 2px;
+		border-radius: var(--lq-radius-pill);
 	}
 
 	.lq-skill-pill__remove:hover {

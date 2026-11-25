@@ -621,7 +621,7 @@
 	.lq-tabres__export {
 		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-surface);
 		font-size: 0.875rem;
 		cursor: pointer;
@@ -670,7 +670,7 @@
 	.lq-tabres__cancel {
 		padding: 0.25rem 0.625rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.25rem;
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-surface);
 		font-size: 0.75rem;
 		cursor: pointer;
@@ -806,7 +806,7 @@
 		min-height: 2.5rem;
 		padding: 0.5rem 0.75rem;
 		border: 1px solid var(--lq-border);
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		background: var(--lq-canvas);
 		color: var(--lq-text);
 		font: inherit;

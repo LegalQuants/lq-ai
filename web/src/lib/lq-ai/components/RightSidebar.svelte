@@ -165,6 +165,6 @@
 		bottom: 0;
 		z-index: 40;
 		width: min(340px, 100vw);
-		border-left: 1px solid var(--lq-border-strong);
+		border-left: 1px solid var(--lq-border);
 	}
 </style>

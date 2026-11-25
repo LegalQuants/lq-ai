@@ -251,7 +251,7 @@
 
 	.form-row input {
 		padding: var(--lq-space-2) var(--lq-space-3);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 4px;
 		background: var(--lq-bg);
 		color: var(--lq-text);
@@ -279,7 +279,7 @@
 		background: var(--lq-accent);
 		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 4px;
+		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);
 		font-weight: 500;
 		font-size: 14px;

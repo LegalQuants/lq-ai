@@ -3,50 +3,65 @@
  *
  * Semantic tokens (--lq-*) so the open-source community can swap palette
  * by overriding these variables without touching component logic.
- * See docs/superpowers/specs/2026-05-10-m1-frontend-design.md §5.4 and §10.
+ *
+ * Values are the light theme of ADR 0045 (docs/adr/0045-lq-ai-shell-redesign.md),
+ * which amends ADR 0043's tone values, typography and radii. Colour means
+ * governance (orange) or error (red); everything else is neutral, and the accent
+ * is ink. Soft and border shades derive from each role's base value with
+ * color-mix(), as ADR 0045 §1 asks; it sets no separate values for them.
+ * LQ.AI is light only until the dark theme (ADR 0045 §2) ships.
  */
 :root {
-  /* Canvas + surfaces */
+  /* Neutrals (ADR 0045 §1, neutral tokens) */
   --lq-canvas: #ffffff;
-  --lq-inset: #fafbfa;
-  --lq-inset-secure: #f7faf8;
+  --lq-inset: #f9f9fa;
+  --lq-surface-muted: #f1f1f3;
+  --lq-raised: #ffffff;
+  --lq-selected: #e9e9ec;
+  --lq-border: #e4e4e7;
+  --lq-border-strong: #80828a;
 
   /* Text */
-  --lq-text: #1a1a1a;
-  --lq-text-secondary: #4b5563;
-  --lq-text-tertiary: #9ca3af;
+  --lq-text: #111114;
+  --lq-text-secondary: #4f5158;
+  --lq-text-tertiary: #65676f;
 
-  /* Sage primary (secure state, primary actions) */
-  --lq-accent: #1f7a6b;
-  --lq-accent-soft: #e8f4ec;
-  --lq-accent-border: #c5e6d1;
+  /* Accent: ink. Primary buttons, selection, focus, links. */
+  --lq-accent: #111114;
+  --lq-on-accent: #ffffff;
+  --lq-accent-rgb: 17, 17, 20;
+  --lq-accent-soft: color-mix(in srgb, var(--lq-accent) 6%, var(--lq-canvas));
+  --lq-accent-border: color-mix(in srgb, var(--lq-accent) 20%, var(--lq-canvas));
 
-  /* Slate (privilege / tier) */
-  --lq-tier: #355a82;
-  --lq-tier-soft: #e8eff7;
-  --lq-tier-border: #d4e2f1;
+  /* Governance: the model tier, privileged matters, Trust & Privacy, and nothing
+     else. Text and marks on neutral surfaces. */
+  --lq-governance: #a34a00;
+  --lq-governance-soft: color-mix(in srgb, var(--lq-governance) 8%, var(--lq-canvas));
+  --lq-governance-border: color-mix(in srgb, var(--lq-governance) 30%, var(--lq-canvas));
 
-  /* Amber (warning, tier-override, JIT pre-action) */
-  --lq-warn: #a16e1f;
-  --lq-warn-soft: #fdf3e2;
-  --lq-warn-border: #ead9c5;
+  /* Danger: errors and destructive confirmations, and nothing else. */
+  --lq-danger: #b42318;
+  --lq-danger-soft: color-mix(in srgb, var(--lq-danger) 8%, var(--lq-canvas));
+  --lq-danger-border: color-mix(in srgb, var(--lq-danger) 25%, var(--lq-canvas));
 
-  /* Red (audit unhealthy, errors — rare) */
-  --lq-error: #b54848;
-  --lq-error-soft: #fbeaea;
-  --lq-error-border: #f1d2d2;
+  /* Info and warning: neutral ink, told apart by a distinct icon (ADR 0045 §1).
+     There is no success role; outcomes are monochrome. */
+  --lq-info: var(--lq-text);
+  --lq-info-soft: var(--lq-surface-muted);
+  --lq-info-border: var(--lq-border);
+  --lq-warning: var(--lq-text);
+  --lq-warning-soft: var(--lq-surface-muted);
+  --lq-warning-border: var(--lq-border);
 
-  /* Neutral borders */
-  --lq-border: #e5e7eb;
-  --lq-border-strong: #d4d4d4;
-
-  /* Radii */
-  --lq-radius-sm: 4px;
-  --lq-radius: 6px;
-  --lq-radius-lg: 8px;
+  /* Radii (ADR 0045 §5). Names from the design system's tokens.json. */
+  --lq-radius-tile: 10px;
+  --lq-radius-input: 12px;
+  --lq-radius-card: 16px;
+  --lq-radius-list: 18px;
+  --lq-radius-composer: 24px;
   --lq-radius-pill: 999px;
 
-  /* Spacing scale (Inter-aligned) */
+  /* Spacing scale */
   --lq-space-1: 4px;
   --lq-space-2: 8px;
   --lq-space-3: 12px;
@@ -55,30 +70,35 @@
   --lq-space-6: 24px;
   --lq-space-8: 32px;
 
-  /* Compatibility values for tokens components already used but this file never
-     defined (interface-redesign work plan, Annex B P1.1, hygiene step). Each is the
-     value the majority of call sites carried as a fallback, or an alias of an
-     existing token. The palette flip replaces them with the shell ADR values. */
+  /* Compatibility names. Components still use these; each now points at an
+     ADR 0045 role or neutral, and they go as components migrate (ADR 0045 §1,
+     "Retired"). */
+  --lq-inset-secure: var(--lq-surface-muted);
+  --lq-tier: var(--lq-governance);
+  --lq-tier-soft: var(--lq-governance-soft);
+  --lq-tier-border: var(--lq-governance-border);
+  --lq-warn: var(--lq-warning);
+  --lq-warn-soft: var(--lq-warning-soft);
+  --lq-warn-border: var(--lq-warning-border);
+  --lq-error: var(--lq-danger);
+  --lq-error-soft: var(--lq-danger-soft);
+  --lq-error-border: var(--lq-danger-border);
+  --lq-error-bg: var(--lq-danger-soft);
+  --lq-error-text: var(--lq-danger);
+  --lq-warning-bg: var(--lq-warning-soft);
+  --lq-warning-text: var(--lq-warning);
+  --lq-info-bg: var(--lq-info-soft);
+  --lq-info-text: var(--lq-info);
+  --lq-success: var(--lq-text);
+  --lq-success-bg: var(--lq-surface-muted);
+  --lq-success-border: var(--lq-border);
+  --lq-success-soft: var(--lq-surface-muted);
+  --lq-success-text: var(--lq-text);
+  --lq-radius-sm: var(--lq-radius-tile);
+  --lq-radius: var(--lq-radius-input);
+  --lq-radius-lg: var(--lq-radius-card);
   --lq-surface: var(--lq-canvas);
   --lq-surface-hover: rgba(0, 0, 0, 0.04);
   --lq-bg: var(--lq-canvas);
   --lq-text-primary: var(--lq-text);
-  --lq-on-accent: #ffffff;
-  --lq-accent-rgb: 31, 122, 107;
-  --lq-danger: var(--lq-error);
-  --lq-error-bg: #fee;
-  --lq-error-text: #800;
-  --lq-success: #166534;
-  --lq-success-bg: #efe;
-  --lq-success-border: #bfb;
-  --lq-success-soft: var(--lq-inset);
-  --lq-success-text: #060;
-  --lq-warning: #92400e;
-  --lq-warning-bg: #fff8e1;
-  --lq-warning-border: #ffe08a;
-  --lq-warning-soft: #fef3c7;
-  --lq-warning-text: #92400e;
-  --lq-info-bg: #e8f4fd;
-  --lq-info-border: #9ed3f5;
-  --lq-info-text: #0a5fa8;
 }

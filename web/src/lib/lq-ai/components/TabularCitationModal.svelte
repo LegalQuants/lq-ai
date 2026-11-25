@@ -196,7 +196,7 @@
 		height: 2rem;
 		background: var(--lq-inset);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		font: inherit;
 		font-size: 1.5rem;
 		cursor: pointer;

@@ -191,7 +191,7 @@
 	.lq-copy-btn {
 		background: transparent;
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 12px;
 		color: var(--lq-text-secondary);

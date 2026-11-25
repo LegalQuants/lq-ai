@@ -98,7 +98,7 @@
     flex-shrink: 0;
     padding: var(--lq-space-2) var(--lq-space-4);
     border: 1px solid var(--lq-border);
-    border-radius: var(--lq-radius-sm);
+    border-radius: var(--lq-radius-pill);
     background: var(--lq-surface);
     color: var(--lq-text);
     font-size: 13px;

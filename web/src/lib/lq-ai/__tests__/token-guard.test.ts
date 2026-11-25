@@ -84,37 +84,7 @@ interface Allowed {
 	why: string;
 }
 
-const HEX_WHY = 'non-exact hex, recolour work for the palette flip (S1-3)';
-
 const ALLOWED: readonly Allowed[] = [
-	{ file: 'src/lib/lq-ai/components/AttachKBModal.svelte', rule: 'hex', count: 7, why: HEX_WHY },
-	{
-		file: 'src/lib/lq-ai/components/EnhancedDiffModal.svelte',
-		rule: 'hex',
-		count: 8,
-		why: HEX_WHY
-	},
-	{ file: 'src/lib/lq-ai/components/LedgerEntryRow.svelte', rule: 'hex', count: 5, why: HEX_WHY },
-	{ file: 'src/lib/lq-ai/components/M2Citations.svelte', rule: 'hex', count: 8, why: HEX_WHY },
-	{ file: 'src/lib/lq-ai/components/ReceiptsDrawer.svelte', rule: 'hex', count: 6, why: HEX_WHY },
-	{ file: 'src/lib/lq-ai/components/ReceiptsList.svelte', rule: 'hex', count: 7, why: HEX_WHY },
-	{
-		file: 'src/lib/lq-ai/components/RefusalMessageBubble.svelte',
-		rule: 'hex',
-		count: 12,
-		why: HEX_WHY
-	},
-	{
-		file: 'src/lib/lq-ai/components/TierFloorOverrideModal.svelte',
-		rule: 'hex',
-		count: 7,
-		why: HEX_WHY
-	},
-	{ file: 'src/lib/lq-ai/components/ToolGatePrompt.svelte', rule: 'hex', count: 16, why: HEX_WHY },
-	{ file: 'src/lib/lq-ai/components/ToolSourcesPanel.svelte', rule: 'hex', count: 5, why: HEX_WHY },
-	{ file: 'src/routes/lq-ai/chats/+page.svelte', rule: 'hex', count: 1, why: HEX_WHY },
-	{ file: 'src/routes/lq-ai/login/+page.svelte', rule: 'hex', count: 4, why: HEX_WHY },
-	{ file: 'src/routes/lq-ai/skills/[id]/+page.svelte', rule: 'hex', count: 1, why: HEX_WHY },
 	{
 		file: 'src/routes/lq-ai/word-addin/oauth-start/+page.svelte',
 		rule: 'fallback',

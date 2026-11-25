@@ -142,7 +142,7 @@
 		background: var(--lq-accent);
 		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		font-size: 0.875rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -216,7 +216,7 @@
 		background: var(--lq-accent);
 		color: var(--lq-on-accent);
 		border: none;
-		border-radius: 0.375rem;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 0.875rem;
 		font-weight: 500;

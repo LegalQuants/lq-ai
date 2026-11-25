@@ -137,7 +137,7 @@
     color: var(--lq-text-tertiary);
     font-size: 16px;
     line-height: 1;
-    border-radius: var(--lq-radius-sm);
+    border-radius: var(--lq-radius-pill);
   }
 
   .trigger:hover {

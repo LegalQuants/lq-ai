@@ -325,7 +325,7 @@
 	.lq-field input,
 	.lq-field textarea {
 		background: var(--lq-canvas);
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: var(--lq-radius);
 		padding: var(--lq-space-2) var(--lq-space-3);
 		font-size: 14px;
@@ -486,7 +486,7 @@
 		background: var(--lq-accent);
 		color: white;
 		border: 0;
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 500;
@@ -497,7 +497,7 @@
 	}
 
 	.lq-btn-primary:hover:not(:disabled) {
-		filter: brightness(0.95);
+		opacity: 0.85;
 	}
 
 	.lq-btn-primary:disabled {
@@ -509,7 +509,7 @@
 		background: transparent;
 		color: var(--lq-text-secondary);
 		border: 1px solid var(--lq-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 6px 12px;
 		font-size: 13px;
 		cursor: pointer;

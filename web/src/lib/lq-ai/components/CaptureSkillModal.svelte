@@ -408,7 +408,7 @@
 	textarea {
 		width: 100%;
 		padding: 8px;
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		border-radius: 6px;
 		font-size: 14px;
 		font-family: inherit;
@@ -421,7 +421,7 @@
 		margin: 12px 0 0;
 		padding: 8px 12px;
 		border-radius: 6px;
-		background: rgba(181, 72, 72, 0.08);
+		background: var(--lq-danger-soft);
 		color: var(--lq-error);
 		font-size: 13px;
 	}
@@ -437,7 +437,7 @@
 		background: transparent;
 		border: 1px solid var(--lq-border);
 		padding: 8px 16px;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 14px;
 	}
@@ -446,7 +446,7 @@
 		color: white;
 		border: 0;
 		padding: 8px 16px;
-		border-radius: 6px;
+		border-radius: var(--lq-radius-pill);
 		cursor: pointer;
 		font-size: 14px;
 		font-weight: 500;

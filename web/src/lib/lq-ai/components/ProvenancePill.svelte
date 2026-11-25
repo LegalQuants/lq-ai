@@ -110,7 +110,7 @@
 		border-color: var(--lq-warn-border);
 	}
 	.lq-prov-pill:hover {
-		filter: brightness(0.97);
+		opacity: 0.85;
 	}
 	.lq-prov-pill:focus-visible {
 		outline: 2px solid var(--lq-accent);

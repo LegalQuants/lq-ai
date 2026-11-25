@@ -180,7 +180,7 @@
 		background: white;
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
-		border-radius: var(--lq-radius);
+		border-radius: var(--lq-radius-pill);
 		padding: 4px 10px;
 		font-size: 13px;
 		cursor: pointer;
@@ -217,7 +217,7 @@
 	}
 
 	.lq-search-input {
-		border: 1px solid var(--lq-border);
+		border: 1px solid var(--lq-border-strong);
 		color: var(--lq-text);
 		background: var(--lq-canvas);
 	}

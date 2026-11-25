@@ -154,7 +154,7 @@
 		font-weight: 600;
 		text-decoration: underline;
 		cursor: pointer;
-		border-radius: var(--lq-radius-sm);
+		border-radius: var(--lq-radius-pill);
 	}
 	.lq-notes-link-button:disabled {
 		color: var(--lq-text-secondary);
