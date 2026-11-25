@@ -24,6 +24,8 @@
 	let loadError: string | null = null;
 
 	let expanded = new Set<string>();
+	let tableWidth = 0;
+	let tableViewportWidth = 0;
 	let severityFilter: SeverityFilter = 'all';
 	let outcomeFilter: OutcomeFilter = 'all';
 
@@ -163,105 +165,115 @@
 				</div>
 			</div>
 
-			<table class="lq-pbx-table" data-testid="lq-pbx-table">
-				<thead>
-					<tr>
-						<th class="lq-pbx-table__chev" scope="col">&nbsp;</th>
-						<th scope="col">Severity</th>
-						<th scope="col">Issue</th>
-						<th scope="col">Outcome</th>
-						<th scope="col">Citations</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each filteredPositions as pos (pos.position_id)}
-						{@const isOpen = expanded.has(pos.position_id)}
-						<tr
-							class="lq-pbx-row"
-							class:lq-pbx-row--open={isOpen}
-							data-testid="lq-pbx-row"
-							data-position-id={pos.position_id}
-						>
-							<td class="lq-pbx-table__chev">
-								<button
-									type="button"
-									class="lq-pbx-chev-btn"
-									aria-label={`${isOpen ? 'Collapse' : 'Expand'} details for ${pos.issue.trim() || pos.position_id}`}
-									aria-expanded={isOpen}
-									aria-controls={`lq-pbx-detail-${pos.position_id}`}
-									on:click={() => toggleExpand(pos.position_id)}
-								>
-									{#if isOpen}<IconChevronDown
-											size={14}
-											stroke={1.75}
-											aria-hidden="true"
-										/>{:else}<IconChevronRight size={14} stroke={1.75} aria-hidden="true" />{/if}
-								</button>
-							</td>
-							<td>
-								<span class="lq-severity-pill {severityClass(pos.severity_if_missing)}">
-									{severityLabel(pos.severity_if_missing)}
-								</span>
-							</td>
-							<td class="lq-pbx-table__issue">{pos.issue}</td>
-							<td>
-								<span class="lq-outcome-pill {outcomeClass(pos.verdict)}">
-									{outcomeLabel(pos.verdict)}
-								</span>
-							</td>
-							<td>{pos.cited_chunk_ids.length}</td>
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex (focus lets keyboard users scroll the overflowing table) -->
+			<div
+				class="lq-pbx-table-wrap"
+				role="region"
+				aria-label="Playbook positions"
+				bind:clientWidth={tableViewportWidth}
+				tabindex={tableWidth > tableViewportWidth ? 0 : undefined}
+			>
+				<table class="lq-pbx-table" bind:clientWidth={tableWidth} data-testid="lq-pbx-table">
+					<thead>
+						<tr>
+							<th class="lq-pbx-table__chev" scope="col">&nbsp;</th>
+							<th scope="col">Severity</th>
+							<th scope="col">Issue</th>
+							<th scope="col">Outcome</th>
+							<th scope="col">Citations</th>
 						</tr>
-						{#if isOpen}
-							<tr id={`lq-pbx-detail-${pos.position_id}`} class="lq-pbx-detail-row">
-								<td colspan="5">
-									<div class="lq-pbx-detail">
-										<div class="lq-pbx-detail__field">
-											<div class="lq-pbx-detail__label">Confidence</div>
-											<div>{(pos.confidence * 100).toFixed(0)}%</div>
-										</div>
-										{#if pos.matched_text}
-											<div class="lq-pbx-detail__field">
-												<div class="lq-pbx-detail__label">Contract clause</div>
-												<blockquote class="lq-pbx-detail__quote">{pos.matched_text}</blockquote>
-											</div>
-										{/if}
-										<div class="lq-pbx-detail__field">
-											<div class="lq-pbx-detail__label">Justification</div>
-											<div>{pos.justification}</div>
-										</div>
-										{#if pos.redline}
-											<div class="lq-pbx-detail__field lq-pbx-detail__redline">
-												<div class="lq-pbx-detail__label">Suggested redline</div>
-												<div class="lq-pbx-detail__redline-old">{pos.redline.old_text}</div>
-												<div class="lq-pbx-detail__redline-new">{pos.redline.new_text}</div>
-												<div class="lq-pbx-detail__redline-just">
-													{pos.redline.justification}
-												</div>
-											</div>
-										{/if}
-										{#if pos.cited_chunk_ids.length > 0}
-											<div class="lq-pbx-detail__field">
-												<div class="lq-pbx-detail__label">Cited chunks</div>
-												<div class="lq-pbx-detail__chunks">
-													{#each pos.cited_chunk_ids as chunkId (chunkId)}
-														<code class="lq-pbx-detail__chunk-id">{chunkId}</code>
-													{/each}
-												</div>
-											</div>
-										{/if}
-									</div>
+					</thead>
+					<tbody>
+						{#each filteredPositions as pos (pos.position_id)}
+							{@const isOpen = expanded.has(pos.position_id)}
+							<tr
+								class="lq-pbx-row"
+								class:lq-pbx-row--open={isOpen}
+								data-testid="lq-pbx-row"
+								data-position-id={pos.position_id}
+							>
+								<td class="lq-pbx-table__chev">
+									<button
+										type="button"
+										class="lq-pbx-chev-btn"
+										aria-label={`${isOpen ? 'Collapse' : 'Expand'} details for ${pos.issue.trim() || pos.position_id}`}
+										aria-expanded={isOpen}
+										aria-controls={`lq-pbx-detail-${pos.position_id}`}
+										on:click={() => toggleExpand(pos.position_id)}
+									>
+										{#if isOpen}<IconChevronDown
+												size={14}
+												stroke={1.75}
+												aria-hidden="true"
+											/>{:else}<IconChevronRight size={14} stroke={1.75} aria-hidden="true" />{/if}
+									</button>
 								</td>
+								<td>
+									<span class="lq-severity-pill {severityClass(pos.severity_if_missing)}">
+										{severityLabel(pos.severity_if_missing)}
+									</span>
+								</td>
+								<td class="lq-pbx-table__issue">{pos.issue}</td>
+								<td>
+									<span class="lq-outcome-pill {outcomeClass(pos.verdict)}">
+										{outcomeLabel(pos.verdict)}
+									</span>
+								</td>
+								<td>{pos.cited_chunk_ids.length}</td>
 							</tr>
-						{/if}
-					{/each}
-				</tbody>
-			</table>
+							{#if isOpen}
+								<tr id={`lq-pbx-detail-${pos.position_id}`} class="lq-pbx-detail-row">
+									<td colspan="5">
+										<div class="lq-pbx-detail">
+											<div class="lq-pbx-detail__field">
+												<div class="lq-pbx-detail__label">Confidence</div>
+												<div>{(pos.confidence * 100).toFixed(0)}%</div>
+											</div>
+											{#if pos.matched_text}
+												<div class="lq-pbx-detail__field">
+													<div class="lq-pbx-detail__label">Contract clause</div>
+													<blockquote class="lq-pbx-detail__quote">{pos.matched_text}</blockquote>
+												</div>
+											{/if}
+											<div class="lq-pbx-detail__field">
+												<div class="lq-pbx-detail__label">Justification</div>
+												<div>{pos.justification}</div>
+											</div>
+											{#if pos.redline}
+												<div class="lq-pbx-detail__field lq-pbx-detail__redline">
+													<div class="lq-pbx-detail__label">Suggested redline</div>
+													<div class="lq-pbx-detail__redline-old">{pos.redline.old_text}</div>
+													<div class="lq-pbx-detail__redline-new">{pos.redline.new_text}</div>
+													<div class="lq-pbx-detail__redline-just">
+														{pos.redline.justification}
+													</div>
+												</div>
+											{/if}
+											{#if pos.cited_chunk_ids.length > 0}
+												<div class="lq-pbx-detail__field">
+													<div class="lq-pbx-detail__label">Cited chunks</div>
+													<div class="lq-pbx-detail__chunks">
+														{#each pos.cited_chunk_ids as chunkId (chunkId)}
+															<code class="lq-pbx-detail__chunk-id">{chunkId}</code>
+														{/each}
+													</div>
+												</div>
+											{/if}
+										</div>
+									</td>
+								</tr>
+							{/if}
+						{/each}
+					</tbody>
+				</table>
+			</div>
 		{/if}
 	{/if}
 </section>
 
 <style>
 	.lq-pbx-page {
+		container-type: inline-size;
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
@@ -360,6 +372,38 @@
 	.lq-pbx-filters__count {
 		margin-left: auto;
 		color: var(--lq-text-secondary);
+	}
+
+	.lq-pbx-table-wrap {
+		overflow-x: auto;
+	}
+	.lq-pbx-table-wrap:focus-visible {
+		outline: 2px solid var(--lq-text);
+		outline-offset: 2px;
+	}
+	@container (max-width: 36rem) {
+		.lq-pbx-summary {
+			grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+		}
+		.lq-pbx-filters {
+			flex-wrap: wrap;
+		}
+		.lq-pbx-filters label,
+		.lq-pbx-filters__count {
+			white-space: nowrap;
+		}
+		.lq-pbx-filters__count {
+			margin-left: 0;
+		}
+		.lq-pbx-table {
+			min-width: 31rem;
+		}
+		.lq-pbx-table th {
+			white-space: nowrap;
+		}
+		.lq-pbx-detail {
+			max-width: calc(100cqi - 2rem);
+		}
 	}
 
 	.lq-pbx-table {

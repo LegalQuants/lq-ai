@@ -14,6 +14,7 @@ export const DETERMINISTIC_SPECS = [
 	'cypress/e2e/m4-autonomous.cy.ts',
 	'cypress/e2e/lq-ai-skill-workspaces.cy.ts',
 	'cypress/e2e/lq-ai-audit-table.cy.ts',
+	'cypress/e2e/lq-ai-responsive-results.cy.ts',
 	'cypress/e2e/lq-ai-chat-phone.cy.ts',
 	'cypress/e2e/lq-ai-table-skill-flow.cy.ts',
 	'cypress/e2e/matter-intake.cy.ts',
