@@ -31,17 +31,26 @@
 	import '$lib/lq-ai/styles/typography.css';
 
 	let booted = false;
+	let mounted = false;
+	let gateRun = 0;
 
 	function isAuthExempt(pathname: string): boolean {
 		return pathname === '/lq-ai/login' || pathname === '/lq-ai/change-password';
 	}
 
 	$: pathname = $page.url.pathname;
+	// The layout survives redirects. Check again when entering or leaving an
+	// auth page, while keeping the shell mounted between protected pages.
+	$: authPage = isAuthExempt(pathname) ? pathname : null;
+	$: if (mounted) void gate(authPage);
 
-	async function gate() {
+	async function gate(authPage: string | null) {
+		const run = ++gateRun;
+		booted = false;
 		if (!$auth.access_token) {
-			if (!isAuthExempt(pathname)) {
-				goto('/lq-ai/login');
+			if (!authPage) {
+				void goto('/lq-ai/login');
+				return;
 			}
 			booted = true;
 			return;
@@ -50,20 +59,26 @@
 		// Refresh `/users/me` to pick up server-side flag changes.
 		try {
 			const user = await authApi.getCurrentUser();
-			if (user.must_change_password && pathname !== '/lq-ai/change-password') {
-				goto('/lq-ai/change-password');
+			if (run !== gateRun) return;
+			if (user.must_change_password && authPage !== '/lq-ai/change-password') {
+				void goto('/lq-ai/change-password');
 				return;
 			}
 		} catch (e: unknown) {
+			if (run !== gateRun) return;
 			if (e instanceof PasswordChangeRequiredError) {
-				goto('/lq-ai/change-password');
-				return;
+				if (authPage !== '/lq-ai/change-password') {
+					void goto('/lq-ai/change-password');
+					return;
+				}
+			} else if (e instanceof LQAIApiError && e.status === 401) {
+				if (authPage !== '/lq-ai/login') {
+					void goto('/lq-ai/login');
+					return;
+				}
+			} else {
+				console.error('lq-ai: failed to refresh user', e);
 			}
-			if (e instanceof LQAIApiError && e.status === 401) {
-				goto('/lq-ai/login');
-				return;
-			}
-			console.error('lq-ai: failed to refresh user', e);
 		}
 		booted = true;
 	}
@@ -86,7 +101,7 @@
 			preferenceUserId = userId;
 			if (userId) void initPreferences();
 		});
-		gate();
+		mounted = true;
 		if (!isAuthExempt($page.url.pathname)) {
 			startTracker(() => goto('/lq-ai/login?reason=idle-timeout'));
 			activityHandler = () => noteActivity();
@@ -98,6 +113,7 @@
 	});
 
 	onDestroy(() => {
+		gateRun++;
 		stopTracker();
 		if (activityHandler) {
 			(['mousedown', 'keydown', 'scroll', 'touchstart'] as const).forEach((e) =>
