@@ -1868,7 +1868,7 @@
 				<div class="composer-row flex items-end gap-2">
 					<div class="lq-composer-wrap flex-1">
 						<textarea
-							class="lq-composer w-full text-sm resize-none"
+							class="lq-composer w-full text-base/5 resize-none"
 							rows="3"
 							placeholder={harnessChosen ? 'Ask New harness…' : 'Type a message…'}
 							bind:value={composerText}

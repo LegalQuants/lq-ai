@@ -222,6 +222,8 @@ describe('DE-323 Matter proposal inbox regressions', () => {
 	}
 
 	function usableComposer(width: number, height: number) {
+		cy.get('[data-testid="lq-ai-composer-input"]').should('have.css', 'font-size', '16px');
+		cy.get('[data-testid="lq-ai-chat-header"] .lq-title').should('have.css', 'font-size', '16px');
 		for (const id of ['lq-ai-composer-input', 'lq-ai-send-btn']) {
 			cy.get(`[data-testid="${id}"]`).should(($control) => {
 				const rect = $control[0].getBoundingClientRect();
