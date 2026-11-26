@@ -133,6 +133,27 @@ describe('practice.css carries ADR 0045 light values', () => {
 		}
 	});
 
+	it('keeps each theme preview colour equal to the value its theme gives that token', () => {
+		// Appearance draws a small preview of each theme in fixed colours (ThemeChoiceCards).
+		const css = read(join(lqRoot, 'styles', 'practice.css')).replace(/\/\*[\s\S]*?\*\//g, '');
+		const darkBlock = css.match(/:root\[data-lq-theme='dark'\]\s*\{([\s\S]*?)\n\}/);
+		expect(darkBlock, 'dark block').not.toBeNull();
+		const dark = new Map(
+			[...darkBlock![1].matchAll(/(--lq-[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()])
+		);
+		for (const role of ['canvas', 'inset', 'text']) {
+			expect(tokens.get(`--lq-preview-light-${role}`), `light ${role}`).toBe(
+				tokens.get(`--lq-${role}`)
+			);
+			expect(tokens.get(`--lq-preview-dark-${role}`), `dark ${role}`).toBe(
+				dark.get(`--lq-${role}`)
+			);
+			// A preview must not change with the theme.
+			expect(dark.has(`--lq-preview-light-${role}`)).toBe(false);
+			expect(dark.has(`--lq-preview-dark-${role}`)).toBe(false);
+		}
+	});
+
 	it('sets the radii of ADR 0045 §5', () => {
 		expect(resolveToken('--lq-radius-tile')).toBe('10px');
 		expect(resolveToken('--lq-radius-input')).toBe('12px');

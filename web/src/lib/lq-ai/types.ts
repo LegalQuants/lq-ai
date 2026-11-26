@@ -19,6 +19,9 @@ export type WorkspaceLayout = 'three_pane' | 'two_pane' | 'one_pane';
 export type TrustPills = 'labels' | 'dots';
 export type ProvenancePills = 'always' | 'collapsed';
 
+/** `appearance_theme` on `/api/v1/users/me/preferences`: Light, Dark or Match system. */
+export type AppearanceTheme = 'light' | 'dark' | 'system';
+
 export interface Preferences {
 	reasoning_visibility: ReasoningVisibility;
 	featured_tools: FeaturedTools;
@@ -26,6 +29,12 @@ export interface Preferences {
 	trust_pills: TrustPills;
 	provenance_pills: ProvenancePills;
 	autonomous_enabled: boolean;
+	/**
+	 * The theme choice saved to the account (ADR 0045 §2). Optional: an API
+	 * from before the preference existed leaves it out, and the browser's copy
+	 * then stands.
+	 */
+	appearance_theme?: AppearanceTheme;
 }
 
 export type PreferencesUpdate = Partial<Preferences>;

@@ -2,16 +2,22 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import {
-	LQAI_MATCH_SYSTEM_OFFERED,
+	LQAI_THEME_CHOICES,
 	LQAI_THEME_COLOR,
+	LQAI_THEME_EVENT,
+	LQAI_THEME_LABEL,
 	LQAI_THEME_STORAGE_KEY,
 	applyCurrentLQAITheme,
 	applyLQAITheme,
 	isLQAIFixedLightPath,
+	isLQAIThemeChoice,
 	leaveLQAITheme,
+	nextLQAIThemeChoice,
 	readLQAIThemeChoice,
 	resolveLQAITheme,
-	syncThemeToPath
+	setLQAIThemeChoice,
+	syncThemeToPath,
+	writeLQAIThemeChoice
 } from '../theme';
 
 const html = readFileSync(new URL('../../../app.html', import.meta.url), 'utf8');
@@ -34,6 +40,7 @@ function fixture(pathname = '/lq-ai/chats', stored: Stored = {}, prefersDark = t
 	const properties = new Map<string, string>();
 	const meta = new Map<string, string>();
 	const listeners: Array<(event: { matches: boolean }) => void> = [];
+	const events: Array<{ type: string; detail: unknown }> = [];
 	const root = {
 		classList: {
 			add: (...values: string[]) => values.forEach((value) => classes.add(value)),
@@ -61,6 +68,7 @@ function fixture(pathname = '/lq-ai/chats', stored: Stored = {}, prefersDark = t
 	if (stored.lq !== undefined) values.set(LQAI_THEME_STORAGE_KEY, stored.lq);
 	const storage = {
 		getItem: (key: string) => values.get(key) ?? null,
+		setItem: (key: string, value: string) => void values.set(key, value),
 		get theme() {
 			return values.get('theme');
 		},
@@ -76,9 +84,23 @@ function fixture(pathname = '/lq-ai/chats', stored: Stored = {}, prefersDark = t
 		matchMedia: () => ({
 			matches: prefersDark,
 			addListener: (listener: (event: { matches: boolean }) => void) => listeners.push(listener)
-		})
+		}),
+		dispatchEvent: (event: { type: string; detail?: unknown }) => {
+			events.push({ type: event.type, detail: event.detail });
+			return true;
+		}
 	};
-	const context = { document: doc, localStorage: storage, window: win };
+	/** The inline script runs in its own realm, so it gets an event class of its own. */
+	class FixtureEvent {
+		detail: unknown;
+		constructor(
+			public type: string,
+			init?: { detail?: unknown }
+		) {
+			this.detail = init?.detail;
+		}
+	}
+	const context = { document: doc, localStorage: storage, window: win, CustomEvent: FixtureEvent };
 	const state = () => ({
 		classes: [...classes].sort(),
 		lqTheme: attributes.get('data-lq-theme'),
@@ -96,6 +118,7 @@ function fixture(pathname = '/lq-ai/chats', stored: Stored = {}, prefersDark = t
 		win,
 		values,
 		listeners,
+		events,
 		context,
 		state
 	};
@@ -120,14 +143,24 @@ const DARK = {
 };
 
 describe('LQ.AI theme: resolving the choice', () => {
-	it('renders dark only for an explicit dark choice while dark is not offered', () => {
-		expect(LQAI_MATCH_SYSTEM_OFFERED).toBe(false);
+	it('offers Light, Dark and Match system, in that order', () => {
+		expect(LQAI_THEME_CHOICES).toEqual(['light', 'dark', 'system']);
+		expect(LQAI_THEME_LABEL).toEqual({ light: 'Light', dark: 'Dark', system: 'Match system' });
+		expect(nextLQAIThemeChoice('light')).toBe('dark');
+		expect(nextLQAIThemeChoice('dark')).toBe('system');
+		expect(nextLQAIThemeChoice('system')).toBe('light');
+		expect(['light', 'dark', 'system'].every(isLQAIThemeChoice)).toBe(true);
+		expect([undefined, null, '', 'oled-dark', 'Dark', 1].some(isLQAIThemeChoice)).toBe(false);
+	});
+
+	it('follows the device for Match system and nothing else', () => {
 		for (const prefersDark of [true, false]) {
 			expect(resolveLQAITheme('dark', prefersDark)).toBe('dark');
 			expect(resolveLQAITheme('light', prefersDark)).toBe('light');
-			// ADR 0045 §2: until dark is offered, the default resolves to light.
-			expect(resolveLQAITheme('system', prefersDark)).toBe('light');
 		}
+		// ADR 0045 §2: Match system follows the device's prefers-color-scheme.
+		expect(resolveLQAITheme('system', true)).toBe('dark');
+		expect(resolveLQAITheme('system', false)).toBe('light');
 	});
 
 	it('reads the browser copy and treats anything else as system', () => {
@@ -150,11 +183,32 @@ describe('LQ.AI theme: resolving the choice', () => {
 		).toBe('system');
 	});
 
+	it('writes the browser copy, and survives storage that refuses', () => {
+		const f = fixture();
+		for (const choice of LQAI_THEME_CHOICES) {
+			writeLQAIThemeChoice(f.win.localStorage, choice);
+			expect(f.values.get(LQAI_THEME_STORAGE_KEY)).toBe(choice);
+			expect(readLQAIThemeChoice(f.win.localStorage)).toBe(choice);
+		}
+		expect(() =>
+			writeLQAIThemeChoice(
+				{
+					setItem: () => {
+						throw new Error('Quota exceeded');
+					}
+				},
+				'dark'
+			)
+		).not.toThrow();
+		expect(() => writeLQAIThemeChoice(undefined, 'dark')).not.toThrow();
+	});
+
 	it("keeps the Word add-in's sign-in dialog light, whatever is stored", () => {
 		expect(isLQAIFixedLightPath('/lq-ai/word-addin/oauth-start')).toBe(true);
 		expect(isLQAIFixedLightPath('/lq-ai/word-addins')).toBe(false);
 		expect(isLQAIFixedLightPath('/lq-ai/chats')).toBe(false);
 		expect(resolveLQAITheme('dark', true, '/lq-ai/word-addin/oauth-start')).toBe('light');
+		expect(resolveLQAITheme('system', true, '/lq-ai/word-addin/oauth-start')).toBe('light');
 		const f = fixture('/lq-ai/word-addin/oauth-start', { lq: 'dark' });
 		expect(applyCurrentLQAITheme(asWindow(f))).toBe('light');
 		expect(f.state()).toEqual(LIGHT);
@@ -179,15 +233,47 @@ describe('LQ.AI theme: applying it', () => {
 		expect(f.state()).toEqual({ ...LIGHT, classes: ['light', 'unrelated'] });
 	});
 
-	it('survives storage that throws', () => {
-		const f = fixture('/lq-ai/login', { lq: 'dark' });
-		Object.defineProperty(f.win, 'localStorage', {
-			get: () => {
-				throw new Error('Storage unavailable');
-			}
-		});
-		expect(applyCurrentLQAITheme(asWindow(f))).toBe('light');
+	it('follows the device when storage throws', () => {
+		for (const prefersDark of [true, false]) {
+			const f = fixture('/lq-ai/login', { lq: 'dark' }, prefersDark);
+			Object.defineProperty(f.win, 'localStorage', {
+				get: () => {
+					throw new Error('Storage unavailable');
+				}
+			});
+			expect(applyCurrentLQAITheme(asWindow(f))).toBe(prefersDark ? 'dark' : 'light');
+			expect(f.state()).toEqual(prefersDark ? DARK : LIGHT);
+		}
+	});
+
+	it('announces the theme it applied, so the toasts can follow', () => {
+		const f = fixture('/lq-ai/chats', { lq: 'dark' });
+		applyCurrentLQAITheme(asWindow(f));
+		expect(f.events).toEqual([{ type: LQAI_THEME_EVENT, detail: 'dark' }]);
+	});
+
+	it('saves a choice to the browser, applies it and announces it', () => {
+		const f = fixture('/lq-ai/chats', { lq: 'light', upstream: 'dark' }, true);
+		expect(setLQAIThemeChoice(asWindow(f), 'dark')).toBe('dark');
+		expect(f.values.get(LQAI_THEME_STORAGE_KEY)).toBe('dark');
+		expect(f.state()).toEqual(DARK);
+		expect(setLQAIThemeChoice(asWindow(f), 'system')).toBe('dark');
+		expect(f.values.get(LQAI_THEME_STORAGE_KEY)).toBe('system');
+		expect(setLQAIThemeChoice(asWindow(f), 'light')).toBe('light');
 		expect(f.state()).toEqual(LIGHT);
+		expect(f.events.map((event) => event.detail)).toEqual(['dark', 'dark', 'light']);
+		// Open WebUI's saved theme is never ours to write.
+		expect(f.values.get('theme')).toBe('dark');
+	});
+
+	it('saves a choice made outside the shell without touching that page', () => {
+		const f = fixture('/auth', { upstream: 'light' });
+		f.root.classList.add('light');
+		expect(setLQAIThemeChoice(asWindow(f), 'dark')).toBeNull();
+		expect(f.values.get(LQAI_THEME_STORAGE_KEY)).toBe('dark');
+		expect([...f.classes]).toEqual(['light']);
+		expect(f.attributes.has('data-lq-theme')).toBe(false);
+		expect(f.events).toEqual([]);
 	});
 });
 
@@ -211,22 +297,27 @@ describe('LQ.AI theme: the inline script in app.html agrees with the module', ()
 			const applied = fixture(path, { lq, upstream }, prefersDark);
 			applyCurrentLQAITheme(asWindow(applied));
 			expect(booted.state()).toEqual(applied.state());
-			// Only an explicit dark renders dark, and never on the fixed-light page.
-			expect(booted.state()).toEqual(lq === 'dark' && !isLQAIFixedLightPath(path) ? DARK : LIGHT);
+			expect(booted.events).toEqual(applied.events);
+			// Light and Dark are fixed; anything else follows the device. One page is always light.
+			const dark =
+				!isLQAIFixedLightPath(path) && (lq === 'dark' || (lq !== 'light' && prefersDark));
+			expect(booted.state()).toEqual(dark ? DARK : LIGHT);
 			// The shell never writes Open WebUI's saved theme.
 			expect(booted.values.get('theme')).toBe(upstream);
 		}
 	);
 
-	it('boots light when storage is unavailable', () => {
-		const f = fixture('/lq-ai/login', { lq: 'dark' });
-		Object.defineProperty(f.context, 'localStorage', {
-			get: () => {
-				throw new Error('Storage unavailable');
-			}
-		});
-		runInNewContext(bootstrap, f.context);
-		expect(f.state()).toEqual(LIGHT);
+	it('follows the device when storage is unavailable', () => {
+		for (const prefersDark of [true, false]) {
+			const f = fixture('/lq-ai/login', { lq: 'dark' }, prefersDark);
+			Object.defineProperty(f.context, 'localStorage', {
+				get: () => {
+					throw new Error('Storage unavailable');
+				}
+			});
+			runInNewContext(bootstrap, f.context);
+			expect(f.state()).toEqual(prefersDark ? DARK : LIGHT);
+		}
 	});
 
 	it.each(['light', 'dark'])('keeps %s when the device changes its colour scheme', (lq) => {
@@ -237,6 +328,22 @@ describe('LQ.AI theme: the inline script in app.html agrees with the module', ()
 		expect(f.state()).toEqual(lq === 'dark' ? DARK : LIGHT);
 	});
 
+	it.each([undefined, 'system'])(
+		'follows the device when it changes and the choice is Match system (stored %s)',
+		(lq) => {
+			const f = fixture('/lq-ai/chats', { lq, upstream: 'light' }, false);
+			runInNewContext(bootstrap, f.context);
+			expect(f.state()).toEqual(LIGHT);
+			f.listeners.forEach((listener) => listener({ matches: true }));
+			expect(f.state()).toEqual(DARK);
+			f.listeners.forEach((listener) => listener({ matches: false }));
+			expect(f.state()).toEqual(LIGHT);
+			expect(f.events.map((event) => event.detail)).toEqual(['light', 'dark', 'light']);
+			// Open WebUI's saved theme played no part.
+			expect(f.values.get('theme')).toBe('light');
+		}
+	);
+
 	it('applies the LQ.AI theme when the device changes after client navigation into the shell', () => {
 		const f = fixture('/auth', { upstream: 'system', lq: 'dark' }, false);
 		runInNewContext(bootstrap, f.context);
@@ -245,17 +352,50 @@ describe('LQ.AI theme: the inline script in app.html agrees with the module', ()
 		f.listeners.forEach((listener) => listener({ matches: true }));
 		expect(f.state()).toEqual(DARK);
 	});
+
+	it("never takes Open WebUI's class inside the shell when the device changes", () => {
+		// Open WebUI's own listener handles its `system`; it must not run on an LQ.AI page.
+		const f = fixture('/lq-ai/chats', { lq: 'light', upstream: 'system' }, false);
+		runInNewContext(bootstrap, f.context);
+		f.listeners.forEach((listener) => listener({ matches: true }));
+		expect(f.state()).toEqual(LIGHT);
+	});
 });
 
 describe("Open WebUI's theme outside the shell", () => {
-	it('keeps the upstream system theme light under a dark OS (the #280 carried patch)', () => {
-		const f = fixture('/auth', { upstream: 'system' }, true);
+	// ADR 0045 §2 reverts #280's stopgap: `/` renders as upstream does, in each of its themes.
+	it.each([true, false])(
+		'follows the device for the upstream system theme (dark OS=%s)',
+		(dark) => {
+			const f = fixture('/auth', { upstream: 'system' }, dark);
+			runInNewContext(bootstrap, f.context);
+			expect([...f.classes]).toEqual([dark ? 'dark' : 'light']);
+			expect(f.meta.get('content')).toBe(dark ? '#171717' : '#ffffff');
+			expect(f.attributes.has('data-lq-theme')).toBe(false);
+			expect(f.root.style.colorScheme).toBe('');
+			expect(f.events).toEqual([]);
+			f.listeners.forEach((listener) => listener({ matches: !dark }));
+			expect([...f.classes]).toEqual([dark ? 'light' : 'dark']);
+			expect(f.meta.get('content')).toBe(dark ? '#ffffff' : '#171717');
+		}
+	);
+
+	it.each(['light', 'dark', 'oled-dark', 'her'])(
+		'keeps the upstream %s theme when the device changes',
+		(upstream) => {
+			const f = fixture('/auth', { upstream }, false);
+			runInNewContext(bootstrap, f.context);
+			const before = f.state();
+			f.listeners.forEach((listener) => listener({ matches: true }));
+			expect(f.state()).toEqual(before);
+		}
+	);
+
+	it('gives a first visit the upstream system theme', () => {
+		const f = fixture('/auth', {}, true);
 		runInNewContext(bootstrap, f.context);
-		expect([...f.classes]).toEqual(['light']);
-		expect(f.meta.get('content')).toBe('#ffffff');
-		expect(f.attributes.has('data-lq-theme')).toBe(false);
-		f.listeners.forEach((listener) => listener({ matches: true }));
-		expect([...f.classes]).toEqual(['light']);
+		expect(f.values.get('theme')).toBe('system');
+		expect([...f.classes]).toEqual(['dark']);
 	});
 
 	it("ignores LQ.AI's choice on an Open WebUI page", () => {
@@ -265,14 +405,17 @@ describe("Open WebUI's theme outside the shell", () => {
 		expect(f.attributes.has('data-lq-theme')).toBe(false);
 	});
 
-	it.each(['system', 'light', 'dark', 'oled-dark', 'her'])(
-		'gets the document back as a fresh load would leave it (saved %s)',
-		(upstream) => {
+	const leaving = ['system', 'light', 'dark', 'oled-dark', 'her'].flatMap((upstream) =>
+		[true, false].map((prefersDark) => ({ upstream, prefersDark }))
+	);
+	it.each(leaving)(
+		'gets the document back as a fresh load would leave it (saved $upstream, dark OS=$prefersDark)',
+		({ upstream, prefersDark }) => {
 			// A fresh load of an Open WebUI page with this saved theme.
-			const fresh = fixture('/auth', { upstream });
+			const fresh = fixture('/auth', { upstream }, prefersDark);
 			runInNewContext(bootstrap, fresh.context);
 			// The same page reached by client navigation out of a dark LQ.AI shell.
-			const left = fixture('/lq-ai/chats', { upstream, lq: 'dark' });
+			const left = fixture('/lq-ai/chats', { upstream, lq: 'dark' }, prefersDark);
 			expect(syncThemeToPath(asWindow(left))).toBe('dark');
 			left.win.location.pathname = '/auth';
 			expect(syncThemeToPath(asWindow(left))).toBeNull();
@@ -284,7 +427,7 @@ describe("Open WebUI's theme outside the shell", () => {
 	it('leaves a document it never themed alone', () => {
 		const f = fixture('/auth', { upstream: 'dark' });
 		f.root.classList.add('dark');
-		leaveLQAITheme(asDocument(f), 'light');
+		leaveLQAITheme(asDocument(f), 'light', true);
 		expect([...f.classes]).toEqual(['dark']);
 	});
 });

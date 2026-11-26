@@ -492,24 +492,25 @@ grep -rn "utils\.mcp\.client\|utils/mcp/client" web/backend/
 
 Note that ADR 0014 is enforced in **two** places, not one: this module, and the MCP type toggle in `src/lib/components/AddToolServerModal.svelte` (§5.4). The second one auto-merges silently. Check both.
 
-### 6.1 Carried patch: the `system` theme resolves to light (#280, DE-394)
+### 6.1 Carried patch: LQ.AI's own theme hook (ADR 0045 §2)
 
-Since [#280](https://github.com/LegalQuants/lq-ai/pull/280), five upstream files carry a small patch: `src/app.html`, `src/app.css`, `src/lib/components/chat/Overview/Flow.svelte`, `src/lib/components/chat/Settings/General.svelte` and `src/routes/+layout.svelte`. Upstream resolves the `system` theme from the OS `prefers-color-scheme`; we resolve it to light, because LQ.AI's dark styling is partial and an OS-dark visitor got a half-light, half-dark UI.
+Two upstream files carry LQ.AI's theme hook: `src/app.html` and `src/routes/+layout.svelte`. LQ.AI has a theme of its own (Light, Dark or Match system), separate from Open WebUI's, and these are the two places that apply it on `/lq-ai` paths.
 
-**Keep ours, and expect it to be silent.** Taking upstream's version of any of the five restores the OS lookup without a conflict marker, and no test or CI check notices. After resolving, confirm:
+- **`src/app.html`.** The inline theme script has an LQ.AI branch. On `/lq-ai` paths it reads `localStorage['lq-ai.theme']` and sets `data-lq-theme`, the `light` or `dark` class, `color-scheme` and the browser theme colour. The script's one `prefers-color-scheme` listener has two branches: LQ.AI's on `/lq-ai` paths, upstream's everywhere else.
+- **`src/routes/+layout.svelte`.** Five sites: the import from `$lib/lq-ai/theme`, an `afterNavigate` handler, a listener for the `lq-ai:theme` event (so the toasts follow a theme change that has no navigation), and two `isLQAIPath` branches in upstream's own theme code.
+
+**Keep ours in both, and keep everything else upstream's.** Outside those sites the two files handle themes exactly as upstream does. After resolving, confirm:
 
 ```bash
-git grep -n "prefers-color-scheme" -- web/src ':!web/src/lib/lq-ai' ':!web/src/app.html'
-# must print nothing
 git grep -c "lq-ai.theme" web/src/app.html
-# must print a count: the LQ.AI theme hook below is still there
+# must print a count: the LQ.AI branch is still there
+git grep -c "LQAI_THEME_EVENT\|syncThemeToPath\|applyCurrentLQAITheme" web/src/routes/+layout.svelte
+# must print a count: the layout's sites are still there
 ```
 
-**The same two files also carry LQ.AI's own theme hook (ADR 0045 §2).** In `src/app.html` the inline theme script has an LQ.AI branch: on `/lq-ai` paths it reads `localStorage['lq-ai.theme']` and sets `data-lq-theme`, the `light` or `dark` class, `color-scheme` and the browser theme colour, and its one `prefers-color-scheme` listener re-applies that. In `src/routes/+layout.svelte` four call sites import from `$lib/lq-ai/theme` and apply the same theme after client-side navigation. Keep ours in both. Unlike the `system` patch, this one is not silent: `web/src/lib/lq-ai/__tests__/theme.test.ts` runs the inline script against the module and fails if they disagree, and the accessibility check asserts the applied theme in all 28 variants.
+This patch is not silent. `web/src/lib/lq-ai/__tests__/theme.test.ts` runs the inline script against the module for every stored value, path and device setting and fails if they disagree. It also checks that an Open WebUI page gets upstream's theme, for each of upstream's themes. The accessibility check asserts the applied theme in all 28 variants.
 
-If upstream has added a new `prefers-color-scheme` site elsewhere, it belongs to the same patch: strip it the same way.
-
-**This is a stopgap, not a design.** [PRD §9 DE-394](PRD.md#de-394--define-dark-mode-for-lqai-palette-coverage-and-what-system-resolves-to) tracks defining dark mode properly; when it lands, `system` should most likely follow the OS again. At that point, drop this subsection and take theirs.
+**History: the `system` stopgap is gone.** From [#280](https://github.com/LegalQuants/lq-ai/pull/280) until ADR 0045 §2 was built, five upstream files resolved Open WebUI's `system` theme to light, because LQ.AI had no dark styling of its own. That patch is reverted: `src/app.css`, `Flow.svelte` and `General.svelte` are upstream's again, and Open WebUI's `system` follows the device. Do not strip `prefers-color-scheme` from upstream files any more. If a refresh brings a new one, take it.
 
 ---
 

@@ -45,9 +45,13 @@ finding that a dark variant has and its light variant of the same state does
 not have is fixed, never added to the baseline. That pull request added no
 exception: the baseline had no entries before it and has none after.
 
-Dark exists but is not offered. Until Appearance offers the choice, only an
-explicit saved `dark` renders dark; `system` and a missing value render light.
-The check's dark variants are what keep dark from regressing meanwhile.
+People choose Light, Dark or Match system, and Match system, the default,
+follows the device. No variant uses it: each pins Light or Dark, so the check
+never depends on the runner's setting. The account's saved choice
+(`appearance_theme`) would win over the pinned browser copy if a response
+carried it, so the check's synthetic preferences leave it out, as they did
+before the preference existed. The Appearance state now includes the three
+theme cards, in both themes.
 
 The shared branding footer is scanned for contrast with zero exceptions before
 each page audit, in both themes. It reads the `--lq-*` tokens.

@@ -42,7 +42,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { beforeNavigate, afterNavigate } from '$app/navigation';
-	import { applyCurrentLQAITheme, syncThemeToPath } from '$lib/lq-ai/theme';
+	import { LQAI_THEME_EVENT, applyCurrentLQAITheme, syncThemeToPath } from '$lib/lq-ai/theme';
 	import { isLQAIPath } from '$lib/lq-ai/paths';
 	import { updated } from '$app/state';
 
@@ -109,8 +109,16 @@
 	// LQ.AI's own theme inside the shell (ADR 0045 §2); Open WebUI's again on the way out.
 	afterNavigate(() => {
 		const lqTheme = syncThemeToPath(window);
-		if (lqTheme) theme.set(lqTheme);
+		// Outside the shell the store goes back to Open WebUI's saved theme, as on a fresh load.
+		theme.set(lqTheme ?? localStorage.theme ?? 'system');
 	});
+	// A theme applied without a navigation (a choice in Appearance or the sidebar, the
+	// account's value arriving, the device changing) reaches the toasts through this.
+	if (typeof window !== 'undefined') {
+		window.addEventListener(LQAI_THEME_EVENT, (event) => {
+			theme.set(event.detail);
+		});
+	}
 
 	setContext('i18n', i18n);
 
@@ -928,10 +936,8 @@
 			const themes = ['dark', 'light', 'oled-dark'];
 			let themeToApply =
 				newTheme === 'oled-dark' ? 'dark' : newTheme === 'her' ? 'light' : newTheme;
-			// LQ.AI: dark mode isn't a supported deployment theme (see app.html);
-			// 'system' always resolves to light rather than the OS preference.
 			if (newTheme === 'system') {
-				themeToApply = 'light';
+				themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
 			themes
 				.filter((e) => e !== themeToApply)
@@ -1360,7 +1366,13 @@
 {/if}
 
 <Toaster
-	theme={$theme.includes('dark') ? 'dark' : 'light'}
+	theme={$theme.includes('dark')
+		? 'dark'
+		: $theme === 'system'
+			? window.matchMedia('(prefers-color-scheme: dark)').matches
+				? 'dark'
+				: 'light'
+			: 'light'}
 	richColors
 	position="top-right"
 	closeButton

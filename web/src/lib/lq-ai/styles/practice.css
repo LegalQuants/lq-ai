@@ -67,6 +67,16 @@
      box-shadow: ..., 0 0 0 1px var(--lq-raised-edge). */
   --lq-raised-edge: transparent;
 
+  /* Theme previews in Appearance. A preview shows its own theme whatever the
+     page is in, so these do not change with the theme. A test holds each one
+     equal to the value its theme gives the token it is named after. */
+  --lq-preview-light-canvas: #ffffff;
+  --lq-preview-light-inset: #f9f9fa;
+  --lq-preview-light-text: #111114;
+  --lq-preview-dark-canvas: #0e0f12;
+  --lq-preview-dark-inset: #08080a;
+  --lq-preview-dark-text: #f4f4f5;
+
   /* Radii (ADR 0045 §5). Names from the design system's tokens.json. */
   --lq-radius-tile: 10px;
   --lq-radius-input: 12px;
@@ -121,7 +131,7 @@
    (src/lib/lq-ai/theme.ts, and the inline script in src/app.html). Only the
    tokens that carry a literal colour are restated: every soft, border and
    compatibility token above derives from these and follows by itself.
-   Dark is not offered yet; see the theme module's header. */
+   People choose Light, Dark or Match system; see the theme module's header. */
 :root[data-lq-theme='dark'] {
   /* Neutrals */
   --lq-canvas: #0e0f12;

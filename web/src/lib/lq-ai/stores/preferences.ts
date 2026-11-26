@@ -8,6 +8,8 @@ import { auth } from '../auth/store';
 import { shouldShowBell } from '../autonomous/notification-bell';
 import type { Preferences, PreferencesUpdate } from '../types';
 import { getPreferences, patchPreferences } from '../api/preferences';
+import type { LQAIThemeChoice } from '../theme';
+import { adoptAccountTheme, applyThemeChoice } from './theme';
 
 const STORAGE_KEY = 'lq-ai:preferences-cache';
 
@@ -88,6 +90,8 @@ export function initPreferences(): Promise<void> {
 			preferences.set(fresh);
 			writeCache(fresh);
 			preferencesReadyFor.set(userId);
+			// The account's theme wins over the browser's copy once it arrives (ADR 0045 §2).
+			adoptAccountTheme(fresh.appearance_theme);
 		} catch {
 			// Cached appearance remains available; autonomous chrome stays unconfirmed.
 		} finally {
@@ -118,7 +122,19 @@ export async function setPreference<K extends keyof Preferences>(
 		preferences.set(fresh);
 		writeCache(fresh);
 		preferencesReadyFor.set(userId);
+		adoptAccountTheme(fresh.appearance_theme);
 	} catch {
 		// Keep existing optimistic appearance behavior; a failed opt-in never enables chrome.
 	}
+}
+
+/**
+ * A person chose a theme. This browser shows and remembers it at once; when
+ * someone is signed in it is also saved to the account. If that save fails the
+ * browser keeps the choice until the account's older value next arrives, as
+ * with every other preference here.
+ */
+export function chooseTheme(choice: LQAIThemeChoice): Promise<void> {
+	applyThemeChoice(choice);
+	return currentUserId ? setPreference('appearance_theme', choice) : Promise.resolve();
 }
