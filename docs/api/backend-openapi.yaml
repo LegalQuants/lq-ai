@@ -9127,6 +9127,15 @@ components:
             Wave B v2 — PRD §3.2.1 / frontend spec §4.3. Per-message
             skill/tier/provider pill row visibility: ``always`` (visible
             by default) vs. ``collapsed`` (hidden until expanded).
+        appearance_theme:
+          type: string
+          enum: [light, dark, system]
+          default: system
+          description: |
+            ADR 0045 §2 (migration 0080). LQ.AI shell theme: ``light``,
+            ``dark``, or ``system`` (Match system; default). Stored and
+            returned only: the web shell renders light until the dark
+            theme ships. Modifiable via ``PATCH /users/me/preferences``.
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at:
@@ -9136,10 +9145,11 @@ components:
     UserPreferences:
       type: object
       description: |
-        All 6 personalization preference fields. Wave A (``reasoning_visibility``)
+        All 7 personalization preference fields. Wave A (``reasoning_visibility``)
         per PRD §3.2; Wave B v2 fields per PRD §3.2.1 and frontend spec §4.3;
-        ``autonomous_enabled`` per PRD §5 / M4-C2.
-      required: [reasoning_visibility, featured_tools, workspace_layout, trust_pills, provenance_pills, autonomous_enabled]
+        ``appearance_theme`` per ADR 0045 §2; ``autonomous_enabled`` per
+        PRD §5 / M4-C2.
+      required: [reasoning_visibility, featured_tools, workspace_layout, trust_pills, provenance_pills, appearance_theme, autonomous_enabled]
       properties:
         reasoning_visibility:
           type: string
@@ -9161,6 +9171,14 @@ components:
           type: string
           enum: [always, collapsed]
           default: always
+        appearance_theme:
+          type: string
+          enum: [light, dark, system]
+          default: system
+          description: |
+            ADR 0045 §2. Shell theme; ``system`` is Match system. Stored
+            and returned only: the web shell renders light until the dark
+            theme ships.
         autonomous_enabled:
           type: boolean
 
@@ -9169,7 +9187,8 @@ components:
       description: |
         All fields optional; only supplied keys are updated. Wave B v2 adds
         four personalization fields per PRD §3.2.1 and frontend spec §4.3;
-        ``autonomous_enabled`` per PRD §5 / M4-C2.
+        ``appearance_theme`` per ADR 0045 §2; ``autonomous_enabled`` per
+        PRD §5 / M4-C2.
       properties:
         reasoning_visibility:
           type: string
@@ -9186,6 +9205,13 @@ components:
         provenance_pills:
           type: string
           enum: [always, collapsed]
+        appearance_theme:
+          type: string
+          enum: [light, dark, system]
+          description: |
+            ADR 0045 §2. Shell theme; ``system`` is Match system. Stored
+            and returned only: the web shell renders light until the dark
+            theme ships.
         autonomous_enabled:
           type: boolean
 

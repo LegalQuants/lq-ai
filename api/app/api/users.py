@@ -88,6 +88,11 @@ WorkspaceLayout = Literal["three_pane", "two_pane", "one_pane"]
 TrustPills = Literal["labels", "dots"]
 ProvenancePills = Literal["always", "collapsed"]
 
+# ADR 0045 §2 — LQ.AI shell theme. ``system`` is "Match system" (the default).
+# Stored and returned only: the web shell renders light until the dark theme
+# ships, so nothing acts on this value yet.
+AppearanceTheme = Literal["light", "dark", "system"]
+
 
 class UserPreferencesUpdate(BaseModel):
     """PATCH body for ``/users/me/preferences`` — all fields optional.
@@ -103,6 +108,8 @@ class UserPreferencesUpdate(BaseModel):
     workspace_layout: WorkspaceLayout | None = None
     trust_pills: TrustPills | None = None
     provenance_pills: ProvenancePills | None = None
+    # ADR 0045 §2 — shell theme (migration 0080)
+    appearance_theme: AppearanceTheme | None = None
     # M4-C2 — Autonomous Layer opt-in (off by default)
     autonomous_enabled: bool | None = None
 
@@ -169,6 +176,8 @@ class UserPreferencesResponse(BaseModel):
     workspace_layout: WorkspaceLayout
     trust_pills: TrustPills
     provenance_pills: ProvenancePills
+    # ADR 0045 §2 — shell theme (migration 0080)
+    appearance_theme: AppearanceTheme
     # M4-C2 — Autonomous Layer opt-in (off by default)
     autonomous_enabled: bool
 
@@ -322,6 +331,7 @@ async def get_me_preferences(user: ActiveUser) -> UserPreferencesResponse:
         workspace_layout=getattr(user, "workspace_layout", "three_pane"),
         trust_pills=getattr(user, "trust_pills", "labels"),
         provenance_pills=getattr(user, "provenance_pills", "always"),
+        appearance_theme=getattr(user, "appearance_theme", "system"),
         autonomous_enabled=getattr(user, "autonomous_enabled", False),
     )
 
@@ -398,6 +408,13 @@ async def patch_me_preferences(
             row.provenance_pills = after
             changed["provenance_pills"] = {"before": before, "after": after}
 
+    if payload.appearance_theme is not None:
+        before = row.appearance_theme
+        after = payload.appearance_theme
+        if before != after:
+            row.appearance_theme = after
+            changed["appearance_theme"] = {"before": before, "after": after}
+
     if payload.autonomous_enabled is not None:
         before = str(row.autonomous_enabled)
         after = str(payload.autonomous_enabled)
@@ -412,6 +429,7 @@ async def patch_me_preferences(
             workspace_layout=row.workspace_layout,
             trust_pills=row.trust_pills,
             provenance_pills=row.provenance_pills,
+            appearance_theme=row.appearance_theme,
             autonomous_enabled=row.autonomous_enabled,
         )
 
@@ -433,6 +451,7 @@ async def patch_me_preferences(
         workspace_layout=row.workspace_layout,
         trust_pills=row.trust_pills,
         provenance_pills=row.provenance_pills,
+        appearance_theme=row.appearance_theme,
         autonomous_enabled=row.autonomous_enabled,
     )
 

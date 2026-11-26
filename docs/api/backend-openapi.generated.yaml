@@ -8996,6 +8996,13 @@ components:
 
         can subscribe to preferences without watching the whole user object.'
       properties:
+        appearance_theme:
+          enum:
+          - light
+          - dark
+          - system
+          title: Appearance Theme
+          type: string
         autonomous_enabled:
           title: Autonomous Enabled
           type: boolean
@@ -9037,6 +9044,7 @@ components:
       - workspace_layout
       - trust_pills
       - provenance_pills
+      - appearance_theme
       - autonomous_enabled
       title: UserPreferencesResponse
       type: object
@@ -9050,6 +9058,15 @@ components:
 
         rather than each getting its own endpoint.'
       properties:
+        appearance_theme:
+          anyOf:
+          - enum:
+            - light
+            - dark
+            - system
+            type: string
+          - type: 'null'
+          title: Appearance Theme
         autonomous_enabled:
           anyOf:
           - type: boolean
@@ -9133,6 +9150,10 @@ components:
 
         leak it to the client.'
       properties:
+        appearance_theme:
+          default: system
+          title: Appearance Theme
+          type: string
         created_at:
           format: date-time
           title: Created At

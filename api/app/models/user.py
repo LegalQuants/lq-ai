@@ -83,6 +83,12 @@ class User(Base):
     provenance_pills: Mapped[Literal["always", "collapsed"]] = mapped_column(
         String, nullable=False, server_default=text("'always'")
     )
+    # ADR 0045 §2 — LQ.AI shell theme: Light, Dark or Match system (the
+    # default). Stored and returned only; nothing reads it yet. CHECK
+    # constraint enforced at the DB layer in migration 0080.
+    appearance_theme: Mapped[Literal["light", "dark", "system"]] = mapped_column(
+        String, nullable=False, server_default=text("'system'")
+    )
 
     # M4-C2 — Autonomous Layer per-user opt-in (PRD §3.10: off by default).
     # Gates the /autonomous/* mutate surface + the spawn paths
