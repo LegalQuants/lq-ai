@@ -743,19 +743,45 @@
 	}
 
 	// ---- bootstrap ----
-	async function loadShell() {
+	let listRequest = 0;
+	let requestedProject: string | undefined;
+	let listStatus: 'loading' | 'ready' | 'error' = 'loading';
+
+	async function loadChatList() {
+		const request = ++listRequest;
+		requestedProject = projectIdFilter;
+		listStatus = 'loading';
 		try {
-			const [projects, chatsPage, skills] = await Promise.all([
-				projectsApi.listProjects(),
-				chatsApi.listAllChats(projectIdFilter ? { project_id: projectIdFilter } : {}),
-				skillsApi.listSkills()
+			const [projects, chats] = await Promise.all([
+				projectsApi.listProjects({ archived: archivedToggle }),
+				chatsApi.listAllChats({ project_id: projectIdFilter, archived: archivedToggle })
 			]);
+			if (request !== listRequest) return;
 			projectsStore.set(projects);
-			chatsStore.set(chatsPage);
-			skillsStore.set(skills);
-		} catch (e) {
-			console.error('lq-ai: bootstrap load failed', e);
+			chatsStore.set(chats);
+			listStatus = 'ready';
+		} catch {
+			if (request === listRequest) listStatus = 'error';
 		}
+	}
+	onDestroy(() => {
+		listRequest++;
+	});
+
+	// The chats route stays mounted when its project_id query changes.
+	$: if (listRequest && requestedProject !== projectIdFilter) {
+		activeProject = null;
+		archivedToggle = false;
+		void loadChatList();
+	}
+
+	async function loadShell() {
+		await Promise.all([
+			loadChatList(),
+			skillsApi.listSkills()
+				.then(skillsStore.set)
+				.catch((e) => console.error('lq-ai: skill list load failed', e))
+		]);
 		// D0 — model list. Best-effort: if the gateway is unreachable the
 		// picker shows an empty state and the composer falls back to the
 		// "smart" alias on send so the chat still works.
@@ -847,20 +873,7 @@
 
 	function toggleArchived(next: boolean) {
 		archivedToggle = next;
-		// M1: archived listing reload. Per the backend OpenAPI sketch, omitting
-		// `archived` is equivalent to `archived=false`; `archived=true` returns
-		// archived rows only. So when the operator flips the toggle on we pass
-		// `archived: true`; when off, we omit the flag.
-		const baseOpts = projectIdFilter ? { project_id: projectIdFilter } : {};
-		Promise.all([
-			projectsApi.listProjects(next ? { archived: true } : {}),
-			chatsApi.listAllChats(next ? { ...baseOpts, archived: true } : baseOpts)
-		])
-			.then(([p, c]) => {
-				projectsStore.set(p);
-				chatsStore.set(c);
-			})
-			.catch((e) => console.error('lq-ai: archive toggle reload failed', e));
+		void loadChatList();
 	}
 
 	// ---- skill picker handlers ----
@@ -1433,7 +1446,9 @@
 		await loadShell();
 		if (!current()) return;
 		if (initialChatId) {
-			const found = get(chatsStore).find((c) => c.id === initialChatId);
+			const found = get(chatsStore).find(
+				(c) => c.id === initialChatId && (!projectIdFilter || c.project_id === projectIdFilter)
+			);
 			if (found) await selectChat(found, current);
 			else if (!projectIdFilter) await openUrlChat(initialChatId, current);
 			if (!current()) return;
@@ -1497,6 +1512,8 @@
 	let chatListDrawer: ChatListDrawer | undefined;
 
 	export function showChatList() {
+		activeProject = null;
+		if (archivedToggle) toggleArchived(false);
 		return chatListDrawer?.reveal();
 	}
 	onDestroy(() => clearShellContext(shellOwner));
@@ -1678,6 +1695,8 @@
 		<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
 			<ChatSidebar
 				groups={filteredGroups}
+				{listStatus}
+				onRetry={loadChatList}
 				activeChatId={activeChat?.id ?? null}
 				activeProjectId={activeProject?.id ?? null}
 				{archivedToggle}

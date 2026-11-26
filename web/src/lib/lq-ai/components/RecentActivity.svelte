@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { chatsApi, projectsApi } from '$lib/lq-ai/api';
+  import { ALL_CHATS_HREF } from '$lib/lq-ai/nav';
   import type { Chat, Project } from '$lib/lq-ai/types';
   import LqText from './shared/LqText.svelte';
 
@@ -67,7 +68,7 @@
           </li>
         {/each}
       </ul>
-      <LqText as="a" size="13.5" tone="accent" href="/lq-ai/chats" class="view-all">View all chats →</LqText>
+      <LqText as="a" size="13.5" tone="accent" href={ALL_CHATS_HREF} class="view-all">View all chats →</LqText>
     {/if}
   </div>
 

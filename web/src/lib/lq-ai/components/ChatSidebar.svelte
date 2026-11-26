@@ -13,6 +13,8 @@
 	import { IconLock } from '@tabler/icons-svelte';
 
 	export let groups: Array<{ project: Project | null; chats: Chat[] }> = [];
+	export let listStatus: 'loading' | 'ready' | 'error' = 'ready';
+	export let onRetry: () => void = () => undefined;
 	export let activeChatId: string | null = null;
 	export let activeProjectId: string | null = null;
 	export let archivedToggle: boolean = false;
@@ -62,7 +64,14 @@
 	{/if}
 
 	<div class="flex-1 overflow-y-auto">
-		{#if !hideProjectFilter}
+		{#if listStatus === 'loading'}
+			<p class="px-3 py-6 text-sm text-center" role="status">Loading chats…</p>
+		{:else if listStatus === 'error'}
+			<div class="px-3 py-6 text-sm text-center">
+				<p role="status">Could not load chats.</p>
+				<button type="button" class="underline" on:click={onRetry}>Retry</button>
+			</div>
+		{:else if !hideProjectFilter}
 			<button
 				type="button"
 				class="lq-project-row {activeProjectId === null ? 'lq-project-row--active' : ''}"

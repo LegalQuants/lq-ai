@@ -17,6 +17,8 @@
  */
 import { isVisibleUnder, type TabVisibilityOpts, type User, type VisibilityRule } from './tabs';
 
+export const ALL_CHATS_HREF = '/lq-ai/chats?view=all';
+
 export type NavSectionId = 'top' | 'primary' | 'matters' | 'chats' | 'foot';
 
 export type NavItemId =
@@ -118,7 +120,7 @@ export const NAV: readonly NavSection[] = [
       {
         id: 'all-chats',
         label: 'All chats',
-        route: '/lq-ai/chats?view=all',
+        route: ALL_CHATS_HREF,
         matches: '/lq-ai/chats',
         visibility: 'all',
         note: 'C10. Chats outside a matter are listed above this row (P1.3).'
