@@ -59,7 +59,7 @@
 	>
 		<!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
 		<div
-			class="lq-t-canvas rounded-lg shadow-xl border lq-t-border max-w-lg w-full lq-ledger-panel"
+			class="lq-t-canvas lq-t-panel rounded-lg max-w-lg w-full lq-ledger-panel"
 			on:click|stopPropagation
 			data-testid="lq-ledger-panel"
 		>
@@ -182,8 +182,12 @@
 	.lq-t-backdrop {
 		background-color: color-mix(in srgb, var(--lq-scrim-ink) 40%, transparent);
 	}
-	.lq-t-border {
-		border-color: var(--lq-border);
+	/* The panel's edge and shadow. The shadow mixes the shadow ink, so dark has none (ADR 0045 §1). */
+	.lq-t-panel {
+		border: 1px solid var(--lq-border);
+		box-shadow:
+			0 20px 25px -5px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent),
+			0 8px 10px -6px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent);
 	}
 	.lq-t-canvas {
 		background-color: var(--lq-canvas);
