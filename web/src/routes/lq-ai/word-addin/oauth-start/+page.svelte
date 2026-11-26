@@ -172,7 +172,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--lq-space-4, 16px);
-		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+		box-shadow: 0 4px 14px color-mix(in srgb, var(--lq-shadow-ink, #000000) 4%, transparent);
 	}
 
 	.oauth-header {
@@ -191,7 +191,7 @@
 		height: 36px;
 		border-radius: 10px;
 		background: var(--lq-accent, #111114);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 		font-weight: 700;
 		font-size: 13px;
 		letter-spacing: 0.04em;
@@ -245,7 +245,7 @@
 	.oauth-submit {
 		margin-top: 4px;
 		background: var(--lq-accent, #111114);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 		border: none;
 		border-radius: 999px;
 		padding: 9px 14px;

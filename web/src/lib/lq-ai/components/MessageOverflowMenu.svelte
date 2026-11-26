@@ -156,7 +156,7 @@
     background: var(--lq-canvas);
     border: 1px solid var(--lq-border);
     border-radius: var(--lq-radius);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--lq-shadow-ink) 8%, transparent);
     min-width: 180px;
     z-index: 10;
   }

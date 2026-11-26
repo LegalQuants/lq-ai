@@ -156,7 +156,7 @@
 		font-weight: 600;
 		line-height: 1;
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		vertical-align: middle;
 		/* Prevent badge from inheriting the link's text decoration / underline */
 		text-decoration: none;

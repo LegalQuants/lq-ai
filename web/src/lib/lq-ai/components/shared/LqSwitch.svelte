@@ -75,7 +75,7 @@
 		width: 14px;
 		height: 14px;
 		border-radius: 999px;
-		background: white;
+		background: var(--lq-on-accent, #ffffff);
 		transition: transform 120ms ease;
 	}
 	:global(.lq-switch-thumb[data-state='checked']) {

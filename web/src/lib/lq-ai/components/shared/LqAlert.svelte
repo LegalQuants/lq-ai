@@ -77,7 +77,7 @@
 		padding: 2px;
 	}
 	.lq-alert-close:hover {
-		background: rgba(0, 0, 0, 0.08);
+		background: color-mix(in srgb, var(--lq-text, #111114) 8%, transparent);
 	}
 	.lq-alert-close:focus-visible {
 		outline: 2px solid currentColor;

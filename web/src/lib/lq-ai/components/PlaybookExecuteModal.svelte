@@ -230,7 +230,7 @@
 	.lq-modal-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.4);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 40%, transparent);
 		z-index: 1000;
 	}
 	.lq-modal {

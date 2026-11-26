@@ -428,7 +428,7 @@
 	.install-button {
 		padding: var(--lq-space-2) var(--lq-space-4);
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: none;
 		border-radius: var(--lq-radius-pill);
 		font-size: 14px;

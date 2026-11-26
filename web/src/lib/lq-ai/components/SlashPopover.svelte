@@ -319,7 +319,7 @@
 		background: var(--lq-surface);
 		border: 1px solid var(--lq-border);
 		border-radius: var(--lq-radius);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+		box-shadow: 0 8px 24px color-mix(in srgb, var(--lq-shadow-ink) 8%, transparent);
 		padding: var(--lq-space-1);
 		font-family: var(--lq-font-sans);
 		font-size: 13px;

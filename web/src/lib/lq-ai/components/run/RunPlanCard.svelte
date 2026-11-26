@@ -355,7 +355,7 @@
 	}
 	.primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border-color: var(--lq-accent);
 	}
 	.secondary {

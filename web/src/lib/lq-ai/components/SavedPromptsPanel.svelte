@@ -451,7 +451,7 @@
 
 	.lq-btn-primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		border-radius: var(--lq-radius-pill);
 		padding: 4px 12px;
@@ -468,7 +468,7 @@
 	}
 
 	.lq-btn-secondary {
-		background: white;
+		background: var(--lq-canvas);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
 		border-radius: var(--lq-radius-pill);

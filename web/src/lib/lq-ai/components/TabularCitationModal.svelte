@@ -169,10 +169,10 @@
 		line-height: 1.5;
 		border: 1px solid var(--lq-border);
 		border-radius: var(--lq-radius-lg);
-		box-shadow: 0 24px 64px rgb(0 0 0 / 0.2);
+		box-shadow: 0 24px 64px color-mix(in srgb, var(--lq-shadow-ink) 20%, transparent);
 	}
 	.lq-tabcm::backdrop {
-		background: rgb(15 23 42 / 0.55);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 55%, transparent);
 	}
 	.lq-tabcm__header {
 		display: flex;

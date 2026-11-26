@@ -460,7 +460,7 @@
 	}
 	.close {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 1px solid var(--lq-accent);
 	}
 	.answer,

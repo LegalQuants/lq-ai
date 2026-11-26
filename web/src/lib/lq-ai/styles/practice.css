@@ -53,6 +53,13 @@
   --lq-warning-soft: var(--lq-surface-muted);
   --lq-warning-border: var(--lq-border);
 
+  /* Shadow and scrim inks (ADR 0045 §1, "Shadows"). Components keep their own
+     shadow shape and strength and mix this ink into it, so a theme can switch
+     every shadow at once: color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent).
+     Modal backdrops do the same with the scrim ink. */
+  --lq-shadow-ink: #000000;
+  --lq-scrim-ink: #000000;
+
   /* Radii (ADR 0045 §5). Names from the design system's tokens.json. */
   --lq-radius-tile: 10px;
   --lq-radius-input: 12px;

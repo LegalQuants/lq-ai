@@ -163,7 +163,7 @@
 <style>
 	.lq-btn-primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;

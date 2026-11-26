@@ -145,7 +145,7 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 50%, transparent);
 		display: flex;
 		align-items: center;
 		justify-content: center;

@@ -160,7 +160,7 @@
 		color: var(--lq-text-primary);
 		border: 1px solid var(--lq-border);
 		border-radius: 6px;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+		box-shadow: 0 4px 16px color-mix(in srgb, var(--lq-shadow-ink) 12%, transparent);
 		font-size: 12px;
 		line-height: 1.5;
 		text-align: left;

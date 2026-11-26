@@ -180,7 +180,7 @@
 
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
 	.lq-t-backdrop {
-		background-color: rgba(0, 0, 0, 0.4);
+		background-color: color-mix(in srgb, var(--lq-scrim-ink) 40%, transparent);
 	}
 	.lq-t-border {
 		border-color: var(--lq-border);

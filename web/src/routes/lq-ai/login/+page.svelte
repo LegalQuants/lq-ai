@@ -183,12 +183,12 @@
 		border-radius: var(--lq-radius-lg);
 		border: 1px solid var(--lq-border);
 		background: var(--lq-canvas);
-		box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+		box-shadow: 0 1px 4px color-mix(in srgb, var(--lq-shadow-ink) 6%, transparent);
 	}
 
 	.lq-btn-primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;

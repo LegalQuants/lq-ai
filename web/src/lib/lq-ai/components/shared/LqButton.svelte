@@ -65,7 +65,7 @@
 	/* tone: accent */
 	.lq-tone-accent.lq-btn-filled {
 		background: var(--lq-accent, #111114);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-accent.lq-btn-outline {
 		border-color: var(--lq-accent, #111114);
@@ -84,7 +84,7 @@
 	/* tone: governance (text and marks; ADR 0045 §1) */
 	.lq-tone-governance.lq-btn-filled {
 		background: var(--lq-governance, #a34a00);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-governance.lq-btn-outline {
 		border-color: var(--lq-governance, #a34a00);
@@ -103,7 +103,7 @@
 	/* tone: info */
 	.lq-tone-info.lq-btn-filled {
 		background: var(--lq-info, #111114);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-info.lq-btn-outline {
 		border-color: var(--lq-info, #111114);
@@ -122,7 +122,7 @@
 	/* tone: warning */
 	.lq-tone-warning.lq-btn-filled {
 		background: var(--lq-warning, #111114);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-warning.lq-btn-outline {
 		border-color: var(--lq-warning, #111114);
@@ -141,7 +141,7 @@
 	/* tone: danger */
 	.lq-tone-danger.lq-btn-filled {
 		background: var(--lq-danger, #b42318);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-danger.lq-btn-outline {
 		border-color: var(--lq-danger, #b42318);
@@ -160,7 +160,7 @@
 	/* tone: neutral */
 	.lq-tone-neutral.lq-btn-filled {
 		background: var(--lq-text-secondary, #4f5158);
-		color: white;
+		color: var(--lq-on-accent, #ffffff);
 	}
 	.lq-tone-neutral.lq-btn-outline {
 		border-color: var(--lq-border-strong, #80828a);
@@ -184,6 +184,6 @@
 	.lq-btn-filled.lq-tone-info:not(:disabled):hover,
 	.lq-btn-filled.lq-tone-warning:not(:disabled):hover {
 		filter: none;
-		background: color-mix(in srgb, var(--lq-accent, #111114) 82%, white);
+		background: color-mix(in srgb, var(--lq-accent, #111114) 82%, var(--lq-canvas, #ffffff));
 	}
 </style>
