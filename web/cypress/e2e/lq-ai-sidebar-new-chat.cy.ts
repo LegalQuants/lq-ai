@@ -221,3 +221,14 @@ it('ignores a pending matter list after the global list has loaded', () => {
 	cy.get(sheet).contains('button', 'Older conversation').click();
 	cy.get('[data-testid="lq-ai-chat-header"]').should('contain.text', 'Older conversation');
 });
+
+it('opens the conversation named by each Home recent chat link', () => {
+	cy.viewport(390, 844);
+	visitFixture('/lq-ai');
+	for (const id of ['existing', 'recent-2']) {
+		cy.get('[data-testid="lq-ai-recent-activity"]').contains('a.chat-row', id).click();
+		cy.location('search').should('eq', '?id=' + id);
+		cy.get('[data-testid="lq-ai-chat-header"]').should('contain.text', id);
+		cy.go('back');
+	}
+});

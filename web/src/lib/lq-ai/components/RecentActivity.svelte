@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { chatsApi, projectsApi } from '$lib/lq-ai/api';
   import { ALL_CHATS_HREF } from '$lib/lq-ai/nav';
+  import { chatHref } from '$lib/lq-ai/run/links';
   import type { Chat, Project } from '$lib/lq-ai/types';
   import LqText from './shared/LqText.svelte';
 
@@ -61,7 +62,7 @@
       <ul class="chat-list">
         {#each chats as chat (chat.id)}
           <li>
-            <a href="/lq-ai/chats" class="chat-row">
+            <a href={chatHref(chat.id)} class="chat-row">
               <LqText as="span" size="13.5" class="chat-title">{chat.title || 'Untitled chat'}</LqText>
               <LqText as="span" size="12" tone="tertiary" class="chat-date">{formatDate(chat.updated_at)}</LqText>
             </a>
