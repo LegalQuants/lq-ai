@@ -66,7 +66,7 @@
 	style:min-height={newHarness ? '4rem' : null}
 	data-testid="lq-ai-message-list"
 >
-	<LqStack gap={12}>
+	<LqStack gap={12} maxWidth="48rem" class="mx-auto w-full">
 		{#each messages as msg (msg.id)}
 			<MessageBubble
 				message={msg}

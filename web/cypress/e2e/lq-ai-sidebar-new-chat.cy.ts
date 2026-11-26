@@ -263,3 +263,52 @@ it('matches the Skills gap below collapsed and expanded Saved prompts in a new c
 		}
 	}
 });
+
+it('centers a shared reading column and keeps each message aligned within it', () => {
+	cy.viewport(1040, 1300);
+	const messages = [
+		{ id: 'question', role: 'user', content: 'When is the notice due?' },
+		{ id: 'answer', role: 'assistant', content: 'Within thirty days.' },
+		{
+			id: 'refused',
+			role: 'assistant',
+			kind: 'refusal',
+			content: '',
+			requested_tier: 'T3',
+			enforced_tier: 'T2'
+		}
+	];
+	visitFixture('/lq-ai/chats?id=existing', () => {
+		cy.intercept('GET', '**/chats/existing/messages?*', {
+			items: messages.map((m) => ({ ...m, chat_id: 'existing', created_at: '2026-01-01' })),
+			next_cursor: null
+		});
+	});
+	cy.get('[data-testid="refusal-bubble"]').should('exist');
+	for (const width of [1040, 390, 1440]) {
+		cy.viewport(width, 900);
+		cy.get('[data-testid="lq-ai-message-list"]').should(($list) => {
+			const viewport = $list[0];
+			const padding = getComputedStyle(viewport);
+			const left =
+				viewport.getBoundingClientRect().left +
+				viewport.clientLeft +
+				parseFloat(padding.paddingLeft);
+			const available =
+				viewport.clientWidth - parseFloat(padding.paddingLeft) - parseFloat(padding.paddingRight);
+			const measure = Math.min(
+				available,
+				48 * parseFloat(getComputedStyle(viewport.ownerDocument.documentElement).fontSize)
+			);
+			const column = viewport.firstElementChild!.getBoundingClientRect();
+			expect(column.width).to.be.closeTo(measure, 1);
+			expect(column.left - left).to.be.closeTo((available - measure) / 2, 1);
+			for (const msg of messages) {
+				const row = $list.find(`[data-testid="lq-ai-message-${msg.id}"]`)[0];
+				const bubble = row.firstElementChild!.getBoundingClientRect();
+				if (msg.role === 'user') expect(bubble.right).to.be.closeTo(column.right, 1);
+				else expect(bubble.left).to.be.closeTo(column.left, 1);
+			}
+		});
+	}
+});

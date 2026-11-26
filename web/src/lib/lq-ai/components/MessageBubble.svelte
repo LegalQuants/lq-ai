@@ -249,7 +249,7 @@
 </script>
 
 {#if message.kind === 'refusal'}
-	<LqStack gap={0} align="flex-start" maxWidth="48rem" data-testid={`lq-ai-message-${message.id}`}>
+	<LqStack gap={0} align="flex-start" data-testid={`lq-ai-message-${message.id}`}>
 		<RefusalMessageBubble
 			{message}
 			{currentUserRole}
@@ -262,7 +262,6 @@
 	<LqStack
 		gap={0}
 		align={message.role === 'user' ? 'flex-end' : 'flex-start'}
-		maxWidth="48rem"
 		data-testid={`lq-ai-message-${message.id}`}
 	>
 		{#if isRun}
