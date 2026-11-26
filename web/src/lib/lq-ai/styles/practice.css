@@ -109,3 +109,40 @@
   --lq-bg: var(--lq-canvas);
   --lq-text-primary: var(--lq-text);
 }
+
+/* Dark (ADR 0045 §1 and §2). The theme module sets data-lq-theme on <html>
+   (src/lib/lq-ai/theme.ts, and the inline script in src/app.html). Only the
+   tokens that carry a literal colour are restated: every soft, border and
+   compatibility token above derives from these and follows by itself.
+   Dark is not offered yet; see the theme module's header. */
+:root[data-lq-theme='dark'] {
+  /* Neutrals */
+  --lq-canvas: #0e0f12;
+  --lq-inset: #08080a;
+  --lq-surface-muted: #1a1b1f;
+  --lq-raised: #141518;
+  --lq-selected: #1e1f23;
+  --lq-border: #25262b;
+  --lq-border-strong: #6a6b72;
+
+  /* Text */
+  --lq-text: #f4f4f5;
+  --lq-text-secondary: #b4b4bb;
+  --lq-text-tertiary: #8e8e96;
+
+  /* Accent: ink, which is white on a dark page. */
+  --lq-accent: #ffffff;
+  --lq-on-accent: #08080a;
+  --lq-accent-rgb: 255, 255, 255;
+
+  --lq-governance: #f26b1f;
+  --lq-danger: #fda29b;
+
+  /* ADR 0045 §1: "light keeps a soft shadow on raised surfaces; dark has none."
+     Backdrops stay black. */
+  --lq-shadow-ink: transparent;
+
+  /* The hover wash turns from a darkening to a lightening. The ADR states no
+     value for it; 6% white is this file's choice. */
+  --lq-surface-hover: rgba(255, 255, 255, 0.06);
+}

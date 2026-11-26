@@ -1,0 +1,30 @@
+/*
+ * Rendered markdown in the dark theme (ADR 0045 §2).
+ *
+ * Tailwind Typography ("prose") sets its own fixed colours for rendered
+ * markdown: assistant messages and drafts. In dark they follow the --lq-*
+ * tokens. Light keeps the plugin's defaults, unchanged.
+ *
+ * This is a file of its own, loaded once by the LQ.AI layout, because
+ * practice.css is also imported into component style blocks, where a rule for
+ * a class the component does not use is reported as unused and dropped.
+ */
+:root[data-lq-theme='dark'] .prose {
+  --tw-prose-body: var(--lq-text);
+  --tw-prose-headings: var(--lq-text);
+  --tw-prose-lead: var(--lq-text-secondary);
+  --tw-prose-links: var(--lq-text);
+  --tw-prose-bold: var(--lq-text);
+  --tw-prose-counters: var(--lq-text-tertiary);
+  --tw-prose-bullets: var(--lq-text-tertiary);
+  --tw-prose-hr: var(--lq-border);
+  --tw-prose-quotes: var(--lq-text);
+  --tw-prose-quote-borders: var(--lq-border);
+  --tw-prose-captions: var(--lq-text-tertiary);
+  --tw-prose-kbd: var(--lq-text);
+  --tw-prose-code: var(--lq-text);
+  --tw-prose-pre-code: var(--lq-text);
+  --tw-prose-pre-bg: var(--lq-inset);
+  --tw-prose-th-borders: var(--lq-border-strong);
+  --tw-prose-td-borders: var(--lq-border);
+}

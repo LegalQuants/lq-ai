@@ -278,7 +278,7 @@
 			<div class="rounded-lg px-3 py-2 {bubbleClasses} max-w-full">
 				{#if message.role === 'assistant'}
 					<div
-						class="prose prose-sm dark:prose-invert max-w-none"
+						class="prose prose-sm max-w-none"
 						data-testid="lq-ai-message-content"
 						use:decorateCitationsInline={{
 							citations: fetchedCitations ?? [],

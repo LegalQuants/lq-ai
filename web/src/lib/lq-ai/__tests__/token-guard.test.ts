@@ -30,8 +30,11 @@
  *    contexts: `class=` attribute values, `class:name` directives, and string
  *    literals in `<script>` blocks and `.ts`/`.js` files (conditional class
  *    names live in ternaries and helper functions).
- * 4. No `dark:` utility in the same class contexts: the shell is light-only.
- *    The rules are independent, so `dark:bg-gray-900` counts under 3 and 4.
+ * 4. No `dark:` utility in the same class contexts. LQ.AI's dark theme comes
+ *    from the `--lq-*` tokens under `data-lq-theme` (ADR 0045 §2), never from
+ *    Tailwind's `dark:` variants. The rules are independent, so
+ *    `dark:bg-gray-900` counts under 3 and 4. This rule has no allowlist
+ *    entries.
  * 5. No retired typography class (`lq-text-label`, `-caption`, `-body-sm`,
  *    `-body`, `-panel-h`, `-page-h`, `-welcome`, and the never-defined
  *    `-section-h` and `-h4`) anywhere outside comments: in markup, CSS
@@ -90,7 +93,8 @@ const RULE_FIX: Record<Rule, string> = {
 		'write var(--lq-…) without a fallback; define the token in practice.css if it is missing',
 	'palette-class':
 		'use a class in the component <style> block that reads a --lq-* token (the lq-t-* classes are the pattern)',
-	'dark-class': 'remove it; the LQ.AI shell is light-only and dark: never applies',
+	'dark-class':
+		'remove it and use a --lq-* token; the dark theme redefines the tokens under data-lq-theme (ADR 0045 §2)',
 	'type-class':
 		'use LqText or LqTitle (components/shared/) with a size from LQ_TYPE_SCALE, per ADR 0045 §4',
 	'colour-literal':
@@ -112,24 +116,6 @@ const ALLOWED: readonly Allowed[] = [
 		rule: 'fallback',
 		count: 22,
 		why: 'renders under the root layout (Office OAuth hop) where the token file is not loaded; the fallbacks go when that is fixed. Three were added with rule 6, for the on-accent text (twice) and the shadow ink, which would otherwise have no value there'
-	},
-	{
-		file: 'src/lib/lq-ai/components/DualBrandingFooter.svelte',
-		rule: 'palette-class',
-		count: 6,
-		why: 'pre-token footer; S1-5 rewrites it'
-	},
-	{
-		file: 'src/lib/lq-ai/components/DualBrandingFooter.svelte',
-		rule: 'dark-class',
-		count: 3,
-		why: 'pre-token footer; S1-5 rewrites it'
-	},
-	{
-		file: 'src/lib/lq-ai/components/MessageBubble.svelte',
-		rule: 'dark-class',
-		count: 1,
-		why: 'dark:prose-invert is not a colour class but is still a dark: utility; counted until P1.2 decides on dark mode'
 	}
 ];
 
@@ -650,6 +636,12 @@ describe('LQ.AI code uses --lq-* tokens, not hard-coded colours', () => {
 				':root { --lq-surface-hover: rgba(0, 0, 0, 0.04); }'
 			)
 		).toEqual([]);
+	});
+
+	it('allows no dark: utility or palette class anywhere', () => {
+		expect(ALLOWED.filter((a) => a.rule === 'dark-class' || a.rule === 'palette-class')).toEqual(
+			[]
+		);
 	});
 
 	it('keeps the allowlist exact', () => {

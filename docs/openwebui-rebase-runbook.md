@@ -499,9 +499,13 @@ Since [#280](https://github.com/LegalQuants/lq-ai/pull/280), five upstream files
 **Keep ours, and expect it to be silent.** Taking upstream's version of any of the five restores the OS lookup without a conflict marker, and no test or CI check notices. After resolving, confirm:
 
 ```bash
-git grep -n "prefers-color-scheme" web/src
+git grep -n "prefers-color-scheme" -- web/src ':!web/src/lib/lq-ai' ':!web/src/app.html'
 # must print nothing
+git grep -c "lq-ai.theme" web/src/app.html
+# must print a count: the LQ.AI theme hook below is still there
 ```
+
+**The same two files also carry LQ.AI's own theme hook (ADR 0045 §2).** In `src/app.html` the inline theme script has an LQ.AI branch: on `/lq-ai` paths it reads `localStorage['lq-ai.theme']` and sets `data-lq-theme`, the `light` or `dark` class, `color-scheme` and the browser theme colour, and its one `prefers-color-scheme` listener re-applies that. In `src/routes/+layout.svelte` four call sites import from `$lib/lq-ai/theme` and apply the same theme after client-side navigation. Keep ours in both. Unlike the `system` patch, this one is not silent: `web/src/lib/lq-ai/__tests__/theme.test.ts` runs the inline script against the module and fails if they disagree, and the accessibility check asserts the applied theme in all 28 variants.
 
 If upstream has added a new `prefers-color-scheme` site elsewhere, it belongs to the same patch: strip it the same way.
 

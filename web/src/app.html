@@ -44,14 +44,30 @@
 			// On page load or when changing themes, best to add inline in `head` to avoid FOUC
 			(() => {
 				const metaThemeColorTag = document.querySelector('meta[name="theme-color"]');
-				// LQ.AI uses one light palette, including before Svelte hydrates.
+				// LQ.AI has its own theme (ADR 0045 §2), applied here before Svelte
+				// hydrates. Keep this in step with src/lib/lq-ai/theme.ts; a unit test
+				// runs this script against that module. Dark is not offered yet, so
+				// only an explicit stored 'dark' renders dark: 'system', a missing
+				// value and unavailable storage all render light.
 				const isLQAI = () =>
 					window.location.pathname === '/lq-ai' || window.location.pathname.startsWith('/lq-ai/');
-				const applyLQAILightTheme = () => {
-					document.documentElement.classList.remove('dark', 'oled-dark', 'her');
-					document.documentElement.classList.add('light');
-					document.documentElement.style.colorScheme = 'light';
-					metaThemeColorTag.setAttribute('content', '#ffffff');
+				const lqaiTheme = () => {
+					const path = window.location.pathname;
+					// The Word add-in's sign-in dialog does not load the tokens; it stays light.
+					if (path === '/lq-ai/word-addin' || path.startsWith('/lq-ai/word-addin/')) return 'light';
+					try {
+						return localStorage.getItem('lq-ai.theme') === 'dark' ? 'dark' : 'light';
+					} catch (e) {
+						return 'light';
+					}
+				};
+				const applyLQAITheme = () => {
+					const lqTheme = lqaiTheme();
+					document.documentElement.classList.remove('light', 'dark', 'oled-dark', 'her');
+					document.documentElement.classList.add(lqTheme);
+					document.documentElement.setAttribute('data-lq-theme', lqTheme);
+					document.documentElement.style.colorScheme = lqTheme;
+					metaThemeColorTag.setAttribute('content', lqTheme === 'dark' ? '#08080a' : '#ffffff');
 				};
 
 				if (!isLQAI() && !localStorage?.theme) {
@@ -59,7 +75,7 @@
 				}
 
 				if (isLQAI()) {
-					applyLQAILightTheme();
+					applyLQAITheme();
 				} else if (localStorage.theme === 'system') {
 					// LQ.AI: dark mode isn't a supported deployment theme, and most
 					// LQ.AI-authored components (ChatPanel, AppSidebar, etc.) have no
@@ -100,7 +116,7 @@
 
 				window.matchMedia('(prefers-color-scheme: dark)').addListener(() => {
 					if (isLQAI()) {
-						applyLQAILightTheme();
+						applyLQAITheme();
 					}
 				});
 				const isDarkMode = document.documentElement.classList.contains('dark');
