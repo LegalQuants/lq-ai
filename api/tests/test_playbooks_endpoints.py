@@ -16,12 +16,14 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import playbooks as playbooks_module
@@ -30,6 +32,8 @@ from app.main import app
 from app.models.document import Document
 from app.models.file import File as FileModel
 from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.user import User
 from app.security import create_access_token, hash_password
 
@@ -128,16 +132,20 @@ def _bearer(user: User) -> dict[str, str]:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("builtin", [False, True], ids=["own", "builtin"])
 async def test_execute_returns_202_with_pending_execution(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, builtin: bool
 ) -> None:
-    """The happy path: caller owns doc + playbook author = caller → 202."""
+    """A non-admin can execute every playbook visible to them on their own doc."""
     owner = await _make_user(db_session)
     _file, doc = await _make_document(db_session, owner=owner)
-    playbook = await _make_playbook(db_session, author=owner)
+    playbook = await _make_playbook(db_session, author=None if builtin else owner)
+
+    visible = await client.get(f"/api/v1/playbooks/{playbook.id}", headers=_bearer(owner))
+    assert visible.status_code == 200, visible.text
 
     # No-op the background task — executor itself is tested separately.
-    with patch.object(playbooks_module, "_run_in_background", new=_noop_background):
+    with patch.object(playbooks_module, "_run_in_background", new_callable=AsyncMock) as run:
         resp = await client.post(
             f"/api/v1/playbooks/{playbook.id}/execute",
             json={"target_document_id": str(doc.id)},
@@ -151,6 +159,11 @@ async def test_execute_returns_202_with_pending_execution(
     assert body["target_document_id"] == str(doc.id)
     assert body["user_id"] == str(owner.id)
     assert body["results"] is None
+
+    execution = await db_session.get(PlaybookExecution, uuid.UUID(body["id"]))
+    assert execution is not None
+    assert execution.user_id == owner.id
+    run.assert_awaited_once()
 
 
 @pytest.mark.integration
@@ -219,14 +232,15 @@ async def test_execute_non_author_non_admin_gets_404(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("builtin", [False, True], ids=["private", "builtin"])
 async def test_execute_admin_can_act_on_any_playbook(
-    client: AsyncClient, db_session: AsyncSession
+    client: AsyncClient, db_session: AsyncSession, builtin: bool
 ) -> None:
     """Admins can execute playbooks they didn't author (built-ins ship at deployment level)."""
     author = await _make_user(db_session)
     admin = await _make_user(db_session, is_admin=True)
-    _file, doc = await _make_document(db_session, owner=admin)
-    playbook = await _make_playbook(db_session, author=author)
+    _file, doc = await _make_document(db_session, owner=author)
+    playbook = await _make_playbook(db_session, author=None if builtin else author)
 
     with patch.object(playbooks_module, "_run_in_background", new=_noop_background):
         resp = await client.post(
@@ -236,6 +250,165 @@ async def test_execute_admin_can_act_on_any_playbook(
         )
 
     assert resp.status_code == 202
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("is_admin", [False, True], ids=["member", "admin"])
+async def test_execute_deleted_builtin_returns_404(
+    client: AsyncClient, db_session: AsyncSession, is_admin: bool
+) -> None:
+    caller = await _make_user(db_session, is_admin=is_admin)
+    _file, doc = await _make_document(db_session, owner=caller)
+    playbook = await _make_playbook(db_session)
+    playbook.deleted_at = datetime.now(UTC)
+    await db_session.flush()
+
+    with patch.object(playbooks_module, "_run_in_background", new_callable=AsyncMock) as run:
+        response = await client.post(
+            f"/api/v1/playbooks/{playbook.id}/execute",
+            json={"target_document_id": str(doc.id)},
+            headers=_bearer(caller),
+        )
+    assert response.status_code == 404, response.text
+    run.assert_not_awaited()
+    assert (
+        await db_session.scalar(
+            select(PlaybookExecution.id).where(PlaybookExecution.playbook_id == playbook.id)
+        )
+        is None
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("file_state", ["foreign", "deleted"])
+async def test_execute_builtin_rejects_unavailable_document(
+    client: AsyncClient, db_session: AsyncSession, file_state: str
+) -> None:
+    caller = await _make_user(db_session)
+    owner = await _make_user(db_session) if file_state == "foreign" else caller
+    file_row, doc = await _make_document(db_session, owner=owner)
+    if file_state == "deleted":
+        file_row.deleted_at = datetime.now(UTC)
+    playbook = await _make_playbook(db_session)
+    await db_session.flush()
+
+    with patch.object(playbooks_module, "_run_in_background", new_callable=AsyncMock) as run:
+        response = await client.post(
+            f"/api/v1/playbooks/{playbook.id}/execute",
+            json={"target_document_id": str(doc.id)},
+            headers=_bearer(caller),
+        )
+    assert response.status_code == 404, response.text
+    assert response.json()["detail"] == "target document not found"
+    run.assert_not_awaited()
+    assert (
+        await db_session.scalar(
+            select(PlaybookExecution.id).where(PlaybookExecution.playbook_id == playbook.id)
+        )
+        is None
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("is_admin", [False, True], ids=["member", "admin"])
+@pytest.mark.parametrize("project_state", ["foreign", "archived", "own"])
+async def test_execute_builtin_project_ownership(
+    client: AsyncClient, db_session: AsyncSession, project_state: str, is_admin: bool
+) -> None:
+    caller = await _make_user(db_session, is_admin=is_admin)
+    owner = await _make_user(db_session) if project_state == "foreign" else caller
+    _file, doc = await _make_document(db_session, owner=caller)
+    playbook = await _make_playbook(db_session)
+    project = Project(owner_id=owner.id, name="Synthetic matter", slug="execution-fixture")
+    if project_state == "archived":
+        project.archived_at = datetime.now(UTC)
+    db_session.add(project)
+    await db_session.flush()
+    if project_state == "foreign":
+        # Matter write access does not replace ownership for non-admins.
+        # Admins retain their ownership bypass, but still need this grant.
+        db_session.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=caller.id,
+                added_by_user_id=owner.id,
+                role="contributor",
+            )
+        )
+        await db_session.flush()
+
+    with patch.object(playbooks_module, "_run_in_background", new_callable=AsyncMock) as run:
+        response = await client.post(
+            f"/api/v1/playbooks/{playbook.id}/execute",
+            json={"target_document_id": str(doc.id), "project_id": str(project.id)},
+            headers=_bearer(caller),
+        )
+    execution = await db_session.scalar(
+        select(PlaybookExecution).where(PlaybookExecution.playbook_id == playbook.id)
+    )
+    if project_state == "own" or (project_state == "foreign" and is_admin):
+        assert response.status_code == 202, response.text
+        assert execution is not None
+        assert execution.project_id == project.id
+        assert execution.user_id == caller.id
+        assert response.json()["id"] == str(execution.id)
+        assert response.json()["status"] == "pending"
+        run.assert_awaited_once()
+    else:
+        assert response.status_code == 404, response.text
+        assert execution is None
+        run.assert_not_awaited()
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("is_admin", [False, True], ids=["member", "admin"])
+@pytest.mark.parametrize("scope", ["document", "explicit_project"])
+@pytest.mark.parametrize("membership,expected_status", [("blocked", 404), ("reader", 403)])
+async def test_execute_builtin_retains_matter_write_checks(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    is_admin: bool,
+    scope: str,
+    membership: str,
+    expected_status: int,
+) -> None:
+    caller = await _make_user(db_session, is_admin=is_admin)
+    # A screen must override ownership. Otherwise the explicit-project case
+    # could still return 404 from the ownership check if its matter guard broke.
+    # Readers remain non-owners because ownership itself grants lead access.
+    owner = caller if membership == "blocked" else await _make_user(db_session)
+    file_row, doc = await _make_document(db_session, owner=caller)
+    playbook = await _make_playbook(db_session)
+    project = Project(owner_id=owner.id, name="Restricted matter", slug="restricted-fixture")
+    db_session.add(project)
+    await db_session.flush()
+    db_session.add(
+        ProjectMember(
+            project_id=project.id,
+            user_id=caller.id,
+            added_by_user_id=owner.id,
+            role=membership,
+        )
+    )
+    payload = {"target_document_id": str(doc.id)}
+    if scope == "document":
+        file_row.project_id = project.id
+    else:
+        payload["project_id"] = str(project.id)
+    await db_session.flush()
+
+    with patch.object(playbooks_module, "_run_in_background", new_callable=AsyncMock) as run:
+        response = await client.post(
+            f"/api/v1/playbooks/{playbook.id}/execute", json=payload, headers=_bearer(caller)
+        )
+    assert response.status_code == expected_status, response.text
+    run.assert_not_awaited()
+    assert (
+        await db_session.scalar(
+            select(PlaybookExecution.id).where(PlaybookExecution.playbook_id == playbook.id)
+        )
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------

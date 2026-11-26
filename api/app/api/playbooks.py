@@ -48,13 +48,14 @@ Authorization
 All endpoints inherit the router-level ``Depends(get_active_user)``
 gate. The execute endpoint additionally:
 
-* Requires the caller to be an admin OR the playbook's ``created_by``.
-  Operators ship built-in playbooks at the deployment level; per-user
-  forking lands in M3-A4 + M3-A6.
-* Requires the caller to own the target file (the document's parent),
-  matching the per-user isolation posture for ``files`` (Task C4).
-* If ``project_id`` is supplied, requires the caller to own the
-  project (matches the projects-endpoint posture).
+* Requires the playbook to be visible to the caller: built-ins and
+  their own authored playbooks for non-admins; all non-deleted
+  playbooks for admins.
+* Requires non-admins to own the target file (the document's parent)
+  and, if ``project_id`` is supplied, the project. Admins retain their
+  ownership bypass.
+* Enforces document matter restrictions and write access to an explicit
+  project for every caller, including admins.
 
 The poll endpoint requires the caller to own the execution
 (``user_id`` match) OR be an admin.
@@ -456,17 +457,9 @@ async def execute_playbook(
     graph completes.
     """
 
-    # Reuse the visibility helper. Note: the execute path is stricter
-    # than read — it requires admin OR explicit ownership (built-ins
-    # cannot be executed by non-admins below). The helper enforces the
-    # admin-OR-visible-to-caller predicate; the stricter check follows.
-    playbook = await _load_visible_playbook(db, playbook_id, user)
-
-    # Per-user isolation: caller must be admin OR the playbook's
-    # author. Tightens to per-user scope once user-scoped playbooks
-    # land (M3-A4); for v0.3 builtins this means admin only.
-    if not user.is_admin and playbook.created_by != user.id:
-        raise HTTPException(status_code=404, detail="playbook not found")
+    # Execution uses the same playbook visibility rules as list and detail.
+    # Document and matter authorization below remain independent of visibility.
+    await _load_visible_playbook(db, playbook_id, user)
 
     document = await db.get(Document, body.target_document_id)
     if document is None:

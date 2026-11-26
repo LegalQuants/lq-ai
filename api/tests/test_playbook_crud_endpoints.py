@@ -519,17 +519,20 @@ async def test_delete_playbook_other_user_gets_404(
 
 
 @pytest.mark.integration
-async def test_delete_builtin_returns_403(client: AsyncClient, db_session: AsyncSession) -> None:
+@pytest.mark.parametrize("is_admin", [False, True], ids=["member", "admin"])
+async def test_delete_builtin_returns_403(
+    client: AsyncClient, db_session: AsyncSession, is_admin: bool
+) -> None:
     result = await db_session.execute(
         select(Playbook).where(Playbook.created_by.is_(None)).limit(1)
     )
     builtin = result.scalar_one_or_none()
     assert builtin is not None, "seed migration 0032 should have created builtin playbooks"
 
-    admin = await _make_user(db_session, is_admin=True)
+    caller = await _make_user(db_session, is_admin=is_admin)
     response = await client.delete(
         f"/api/v1/playbooks/{builtin.id}",
-        headers=_bearer(admin),
+        headers=_bearer(caller),
     )
     assert response.status_code == 403
     await db_session.refresh(builtin)

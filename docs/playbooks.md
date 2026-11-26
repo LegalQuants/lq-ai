@@ -456,10 +456,13 @@ that:
   403** (no information leakage), matching the files pattern.
 - **Mutate** (`PATCH` / `DELETE`) — built-ins are 403 (fork-then-edit);
   non-built-ins require ownership or admin.
-- **Execute** (`POST /playbooks/{id}/execute`) — caller must be admin
-  OR the playbook's author, must own the target document's parent file,
-  and (if `project_id` is supplied) must own the project. For v0.3
-  built-ins this means executing a built-in requires admin.
+- **Execute** (`POST /playbooks/{id}/execute`) — active users can run
+  any non-deleted playbook visible to them, including built-ins and their
+  own authored playbooks. Non-admins must own the target document's parent
+  file and (if `project_id` is supplied) the project; admins retain their
+  ownership bypass. Document matter restrictions and write access to an
+  explicit project still apply to everyone, including admins. This does
+  not permit editing or deleting built-ins or sharing private playbooks.
 - **Easy generation** (`POST /playbooks/easy`) — caller must own
   *every* document in `document_ids`; cross-user or missing IDs collapse
   into a single 404.
