@@ -73,13 +73,12 @@ describe('ShellSidebar rows and order (from nav.ts)', () => {
 	it('links each row to the route nav.ts gives it, Labs and Admin included', () => {
 		const body = html(adminByFlag, '/lq-ai', true);
 		const hrefs: Record<string, string> = {
-			new: '/lq-ai/chats',
 			home: '/lq-ai',
 			tabular: '/lq-ai/tabular',
 			labs: '/lq-ai/autonomous',
 			skills: '/lq-ai/skills',
 			'all-matters': '/lq-ai/matters',
-			'all-chats': '/lq-ai/chats',
+			'all-chats': '/lq-ai/chats?view=all',
 			learn: '/lq-ai/learn',
 			trust: '/lq-ai/trust',
 			admin: '/lq-ai/admin/audit-log',
@@ -87,6 +86,7 @@ describe('ShellSidebar rows and order (from nav.ts)', () => {
 		};
 		for (const [id, href] of Object.entries(hrefs))
 			expect(rowTag(body, id)).toContain(`href="${href}"`);
+		expect(rowTag(body, 'new')).toMatch(/^<button/);
 		// Customise is a group, not a page.
 		expect(rowTag(body, 'customise')).toMatch(/^<button/);
 		expect(rowTag(body, 'customise')).not.toContain('href=');

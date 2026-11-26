@@ -6,7 +6,7 @@
  * `refreshSession`, so every caller shares one refresh.
  */
 import { apiRequest } from './client';
-import { clearSession, setSession, setUser } from '../auth/store';
+import { clearSession, currentSessionGeneration, setSession, setUser } from '../auth/store';
 import type {
 	ChangePasswordRequest,
 	LoginRequest,
@@ -54,8 +54,9 @@ export async function changePassword(req: ChangePasswordRequest): Promise<void> 
 
 /** GET /api/v1/users/me. Updates the cached user in the auth store. */
 export async function getCurrentUser(): Promise<User> {
+	const owner = currentSessionGeneration();
 	const user = await apiRequest<User>('/users/me');
-	setUser(user);
+	if (owner !== null && owner === currentSessionGeneration()) setUser(user);
 	return user;
 }
 

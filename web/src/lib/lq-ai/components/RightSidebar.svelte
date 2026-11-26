@@ -2,8 +2,7 @@
 	/**
 	 * The contextual right sidebar of the redesigned LQ.AI shell
 	 * (interface-redesign work plan, Annex B P1.4; proposed ADR 0045 C6, C19),
-	 * rendered by `routes/lq-ai/+layout.svelte` only while the developer switch
-	 * is on.
+	 * rendered by `routes/lq-ai/+layout.svelte` on signed-in routes.
 	 *
 	 * It shows what the current page published (`$lib/lq-ai/rightSidebar`):
 	 * one shared frame (a 340 px column with a heading row and a close button)

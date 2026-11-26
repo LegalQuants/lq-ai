@@ -7,7 +7,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
 
 import ShellSidebar from '../components/ShellSidebar.svelte';
-import NotificationBell from '../components/NotificationBell.svelte';
 import NotificationsPanel from '../components/NotificationsPanel.svelte';
 import RightSidebar from '../components/RightSidebar.svelte';
 import { createSidebarLists } from '../sidebarLists';
@@ -311,16 +310,6 @@ describe('collapse', () => {
 			'aria-label="Close sidebar"'
 		);
 		expect(tag(body, 'data-testid="lq-shell-sidebar-open"')).toContain('aria-expanded="true"');
-	});
-});
-
-describe('today’s top-bar bell (switch off) is unchanged', () => {
-	it('still renders its own trigger and test ids', () => {
-		const body = render(NotificationBell).body;
-		expect(body).toContain('data-testid="lq-ai-notification-bell"');
-		expect(body).toContain('data-testid="lq-ai-notification-bell-trigger"');
-		expect(body).toContain('aria-label="Notifications"');
-		expect(body).not.toContain('lq-shell-');
 	});
 });
 

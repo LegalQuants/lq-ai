@@ -191,13 +191,12 @@
 		toggleDocument,
 		type PendingRequest
 	} from '$lib/lq-ai/run/composer';
-	import { createChatSelection } from '$lib/lq-ai/chat/selection';
+	import { createChatSelection, createListedChat } from '$lib/lq-ai/chat/selection';
 	import { chatHref } from '$lib/lq-ai/run/links';
 	import { fetchMessages, replaceMessage } from '$lib/lq-ai/run/thread';
 	import type { Chat, FileMeta, Message, Project, Skill } from '$lib/lq-ai/types';
 
 	import ChatSidebar from '$lib/lq-ai/components/ChatSidebar.svelte';
-	import AttachedFilesPanel from '$lib/lq-ai/components/AttachedFilesPanel.svelte';
 	import SkillPicker from '$lib/lq-ai/components/SkillPicker.svelte';
 	import ModelPicker from '$lib/lq-ai/components/ModelPicker.svelte';
 	import MessageList from '$lib/lq-ai/components/MessageList.svelte';
@@ -207,9 +206,7 @@
 	import EnhancePromptExpansion from '$lib/lq-ai/components/EnhancePromptExpansion.svelte';
 	import AttachKBModal from '$lib/lq-ai/components/AttachKBModal.svelte';
 	import TierFloorOverrideModal from '$lib/lq-ai/components/TierFloorOverrideModal.svelte';
-	import ReceiptsDrawer, {
-		readPersistedOpen as readReceiptsDrawerOpen
-	} from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
+	import { readPersistedOpen as readReceiptsDrawerOpen } from '$lib/lq-ai/components/ReceiptsDrawer.svelte';
 	import SlashPopover from '$lib/lq-ai/components/SlashPopover.svelte';
 	import RunActiveNotice from '$lib/lq-ai/components/run/RunActiveNotice.svelte';
 	import RunDocumentPicker from '$lib/lq-ai/components/run/RunDocumentPicker.svelte';
@@ -219,8 +216,8 @@
 	import { auth } from '$lib/lq-ai/auth/store';
 	import { createEventDispatcher } from 'svelte';
 	import CompactPanel from './CompactPanel.svelte';
+	import ChatListDrawer from './ChatListDrawer.svelte';
 	import ChatDetailsPanel from './ChatDetailsPanel.svelte';
-	import { readShellSwitch } from '$lib/lq-ai/shell';
 	import {
 		clearShellContext,
 		publishShellContext,
@@ -746,19 +743,45 @@
 	}
 
 	// ---- bootstrap ----
-	async function loadShell() {
+	let listRequest = 0;
+	let requestedProject: string | undefined;
+	let listStatus: 'loading' | 'ready' | 'error' = 'loading';
+
+	async function loadChatList() {
+		const request = ++listRequest;
+		requestedProject = projectIdFilter;
+		listStatus = 'loading';
 		try {
-			const [projects, chatsPage, skills] = await Promise.all([
-				projectsApi.listProjects(),
-				chatsApi.listAllChats(projectIdFilter ? { project_id: projectIdFilter } : {}),
-				skillsApi.listSkills()
+			const [projects, chats] = await Promise.all([
+				projectsApi.listProjects({ archived: archivedToggle }),
+				chatsApi.listAllChats({ project_id: projectIdFilter, archived: archivedToggle })
 			]);
+			if (request !== listRequest) return;
 			projectsStore.set(projects);
-			chatsStore.set(chatsPage);
-			skillsStore.set(skills);
-		} catch (e) {
-			console.error('lq-ai: bootstrap load failed', e);
+			chatsStore.set(chats);
+			listStatus = 'ready';
+		} catch {
+			if (request === listRequest) listStatus = 'error';
 		}
+	}
+	onDestroy(() => {
+		listRequest++;
+	});
+
+	// The chats route stays mounted when its project_id query changes.
+	$: if (listRequest && requestedProject !== projectIdFilter) {
+		activeProject = null;
+		archivedToggle = false;
+		void loadChatList();
+	}
+
+	async function loadShell() {
+		await Promise.all([
+			loadChatList(),
+			skillsApi.listSkills()
+				.then(skillsStore.set)
+				.catch((e) => console.error('lq-ai: skill list load failed', e))
+		]);
 		// D0 — model list. Best-effort: if the gateway is unreachable the
 		// picker shows an empty state and the composer falls back to the
 		// "smart" alias on send so the chat still works.
@@ -837,10 +860,7 @@
 	async function createNewChat() {
 		const current = beginSelection();
 		try {
-			const chat = await chatsApi.createChat({
-				project_id: projectIdFilter ?? activeProject?.id ?? null
-			});
-			chatsStore.update(($chats) => [chat, ...$chats]);
+			const chat = await createListedChat(projectIdFilter ?? activeProject?.id ?? null);
 			await selectChat(chat, current);
 		} catch (e) {
 			console.error('lq-ai: failed to create chat', e);
@@ -853,20 +873,7 @@
 
 	function toggleArchived(next: boolean) {
 		archivedToggle = next;
-		// M1: archived listing reload. Per the backend OpenAPI sketch, omitting
-		// `archived` is equivalent to `archived=false`; `archived=true` returns
-		// archived rows only. So when the operator flips the toggle on we pass
-		// `archived: true`; when off, we omit the flag.
-		const baseOpts = projectIdFilter ? { project_id: projectIdFilter } : {};
-		Promise.all([
-			projectsApi.listProjects(next ? { archived: true } : {}),
-			chatsApi.listAllChats(next ? { ...baseOpts, archived: true } : baseOpts)
-		])
-			.then(([p, c]) => {
-				projectsStore.set(p);
-				chatsStore.set(c);
-			})
-			.catch((e) => console.error('lq-ai: archive toggle reload failed', e));
+		void loadChatList();
 	}
 
 	// ---- skill picker handlers ----
@@ -1439,7 +1446,9 @@
 		await loadShell();
 		if (!current()) return;
 		if (initialChatId) {
-			const found = get(chatsStore).find((c) => c.id === initialChatId);
+			const found = get(chatsStore).find(
+				(c) => c.id === initialChatId && (!projectIdFilter || c.project_id === projectIdFilter)
+			);
 			if (found) await selectChat(found, current);
 			else if (!projectIdFilter) await openUrlChat(initialChatId, current);
 			if (!current()) return;
@@ -1494,51 +1503,49 @@
 		receiptsDrawerOpen = readReceiptsDrawerOpen(activeChat.id);
 	}
 
-	// Interface-redesign P1.4, behind the developer switch ($lib/lq-ai/shell).
-	// With the switch on, the attached files and the receipts move into the
-	// shell's shared right sidebar (same components, same props) and the
-	// chat's title into its page header. With the switch off nothing here
-	// publishes and the panels render beside the chat as before.
-	let sidebarShell = false;
-	let viewportWidth: number;
-	let chatListPanel: CompactPanel;
-	$: phoneChatList = sidebarShell && !projectIdFilter && viewportWidth < 768;
-	$: compactLayout = !!projectIdFilter || phoneChatList;
+	// Interface-redesign P1.4 (ADR 0045 §6): the attached files and the
+	// receipts live in the shell's shared right sidebar (same components, same
+	// props) and the chat's title in its page header. Every route that mounts
+	// this panel renders inside the LQ.AI layout, which hosts both.
 	const shellOwner = Symbol('ChatPanel');
-	onMount(() => {
-		sidebarShell = readShellSwitch() === 'sidebar';
-	});
-	onDestroy(() => clearShellContext(shellOwner));
-	$: if (sidebarShell)
-		publishShellContext(
-			shellOwner,
-			activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
-			activeChat
-				? {
-						label: 'Chat details',
-						component: ChatDetailsPanel,
-						props: {
-							chatId: activeChat.id,
-							chatFiles,
-							newHarness: harnessChosen,
-							projectFiles,
-							uploading,
-							attachLimitReached,
-							onUpload: uploadAttached,
-							onDetach: detachFile,
-							compact: !!projectIdFilter,
-							receiptsOpen: receiptsDrawerOpen,
-							onCloseReceipts: () => (receiptsDrawerOpen = false)
-						}
-					}
-				: null
-		);
+	// The chat list's narrow-screen sheet (ChatListDrawer), closed after a choice.
+	let chatListDrawer: ChatListDrawer | undefined;
 
-	// P1.3b, switch on only: the left sidebar links to `/lq-ai/chats?id=…`, which
+	export function showChatList() {
+		activeProject = null;
+		if (archivedToggle) toggleArchived(false);
+		return chatListDrawer?.reveal();
+	}
+	onDestroy(() => clearShellContext(shellOwner));
+	$: publishShellContext(
+		shellOwner,
+		activeChat ? { title: activeChat.title || 'Untitled chat' } : null,
+		activeChat
+			? {
+					label: 'Chat details',
+					component: ChatDetailsPanel,
+					props: {
+						chatId: activeChat.id,
+						chatFiles,
+						newHarness: harnessChosen,
+						projectFiles,
+						uploading,
+						attachLimitReached,
+						onUpload: uploadAttached,
+						onDetach: detachFile,
+						compact: !!projectIdFilter,
+						receiptsOpen: receiptsDrawerOpen,
+						onCloseReceipts: () => (receiptsDrawerOpen = false)
+					}
+				}
+			: null
+	);
+
+	// P1.3b: the left sidebar links to `/lq-ai/chats?id=…`, which
 	// changes `initialChatId` while this page stays mounted. Open that chat. The
 	// matter page passes its own selection here and keeps today's behaviour.
 	let urlChatSeen = initialChatId;
-	$: if (sidebarShell && !projectIdFilter && initialChatId !== urlChatSeen) {
+	$: if (!projectIdFilter && initialChatId !== urlChatSeen) {
 		urlChatSeen = initialChatId;
 		if (initialChatId && initialChatId !== activeChat?.id) void openUrlChat(initialChatId);
 		else beginSelection();
@@ -1676,37 +1683,37 @@
 	$: enhanceButtonAriaLabel = enhanceIsRefine ? 'Refine prompt' : 'Enhance prompt';
 </script>
 
-<svelte:window bind:innerWidth={viewportWidth} />
-
 <div
 	class="flex flex-1 h-full min-h-0 overflow-hidden"
-	class:compact-layout={compactLayout}
+	class:compact-matter={!!projectIdFilter}
+	class:compact-chats={!projectIdFilter}
 	data-testid="lq-ai-chat-shell"
 >
-	<CompactPanel
-		bind:this={chatListPanel}
-		id={projectIdFilter ? 'matter-chats' : 'chat-list'}
-		title="Chats"
-		enabled={compactLayout}
-	>
-		<ChatSidebar
-			groups={filteredGroups}
-			activeChatId={activeChat?.id ?? null}
-			activeProjectId={activeProject?.id ?? null}
-			{archivedToggle}
-			hideProjectFilter={!!projectIdFilter}
-			onSelectChat={(chat) => {
-				if (phoneChatList) chatListPanel.close();
-				return selectChat(chat);
-			}}
-			onNewChat={() => {
-				if (phoneChatList) chatListPanel.close();
-				return createNewChat();
-			}}
-			onSelectProject={selectProject}
-			onToggleArchived={toggleArchived}
-		/>
-	</CompactPanel>
+	<!-- Outside a matter, narrow screens get the list as a sheet behind a toggle
+	     (houfu, 11 Nov); a matter keeps its CompactPanel toggles. -->
+	<ChatListDrawer bind:this={chatListDrawer} enabled={!projectIdFilter}>
+		<CompactPanel id="matter-chats" title="Chats" enabled={!!projectIdFilter}>
+			<ChatSidebar
+				groups={filteredGroups}
+				{listStatus}
+				onRetry={loadChatList}
+				activeChatId={activeChat?.id ?? null}
+				activeProjectId={activeProject?.id ?? null}
+				{archivedToggle}
+				hideProjectFilter={!!projectIdFilter}
+				onSelectChat={(chat) => {
+					void chatListDrawer?.close();
+					return selectChat(chat);
+				}}
+				onNewChat={() => {
+					void chatListDrawer?.close();
+					return createNewChat();
+				}}
+				onSelectProject={selectProject}
+				onToggleArchived={toggleArchived}
+			/>
+		</CompactPanel>
+	</ChatListDrawer>
 
 	<section class="chat-conversation flex-1 flex flex-col overflow-hidden">
 		<div
@@ -1954,7 +1961,7 @@
 							title="Toggle receipts"
 							on:click={() => {
 								receiptsDrawerOpen = !receiptsDrawerOpen;
-								if (sidebarShell && receiptsDrawerOpen) revealRightSidebar();
+								if (receiptsDrawerOpen) revealRightSidebar();
 							}}
 							data-testid="lq-ai-receipts-toggle"
 						>
@@ -2012,30 +2019,6 @@
 		{/if}
 		<AmbientFooter provider={footerProvider} tier={footerTier} />
 	</section>
-
-	{#if !sidebarShell}
-		{#if activeChat}
-			<CompactPanel id="matter-files" title="Attached files" enabled={!!projectIdFilter}>
-				<AttachedFilesPanel
-					{chatFiles}
-					newHarness={harnessChosen}
-					{projectFiles}
-					{uploading}
-					{attachLimitReached}
-					onUpload={uploadAttached}
-					onDetach={detachFile}
-				/>
-			</CompactPanel>
-		{/if}
-
-		{#if activeChat && receiptsDrawerOpen}
-			<ReceiptsDrawer
-				bind:open={receiptsDrawerOpen}
-				chatId={activeChat.id}
-				onClose={() => (receiptsDrawerOpen = false)}
-			/>
-		{/if}
-	{/if}
 </div>
 
 {#if composerProjectId && attachKbModalOpen}
@@ -2069,23 +2052,36 @@
 		min-height: 0;
 	}
 
+	/* Narrow screens: the list (a matter's CompactPanel, or the chat page's
+	   sheet toggle) sits above the conversation, and the composer row wraps so
+	   the message box takes the full width. */
 	@media (max-width: 1279px) {
-		.compact-layout {
+		.compact-matter,
+		.compact-chats {
 			flex-direction: column;
 			min-width: 0;
 		}
 
-		.compact-layout .chat-conversation {
+		.compact-matter .chat-conversation,
+		.compact-chats .chat-conversation {
 			min-height: 0;
 		}
 
-		.compact-layout .composer-row {
+		.compact-matter .composer-row,
+		.compact-chats .composer-row {
 			flex-wrap: wrap;
 		}
 
-		.compact-layout .lq-composer-wrap {
+		.compact-matter .lq-composer-wrap,
+		.compact-chats .lq-composer-wrap {
 			flex: 1 0 100%;
 		}
+	}
+
+	/* Standalone chat options use display: contents, so the wrapper's spacing
+	   does not separate its last visible panel from the composer row. */
+	.compact-chats :global(.compact-panel + .composer-row) {
+		margin-block-start: var(--lq-space-2);
 	}
 
 	.lq-composer-wrap {

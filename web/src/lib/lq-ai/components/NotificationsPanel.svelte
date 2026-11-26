@@ -2,15 +2,15 @@
 	/**
 	 * The notification list shown in the right sidebar of the redesigned LQ.AI
 	 * shell (interface-redesign work plan, Annex B P1.3b; DE-324), opened from
-	 * the left sidebar's bell icon or its Notifications row, behind the
-	 * developer switch, and only when Automations is on.
+	 * the left sidebar's bell icon or its Notifications row, only when
+	 * Automations is on.
 	 *
-	 * It renders the state of the same controller the top bar's bell uses
+	 * It renders the state of the same controller the old top bar's bell used
 	 * (`createNotificationBell`): the newest unread items, per-item "Mark read",
 	 * "Mark shown read", distinct loading, error and empty states, and a link
 	 * to the full list in Automations. The controller is created by
 	 * `ShellSidebar`, which shares one instance between its two placements and
-	 * this list. Today's `NotificationBell` dropdown is unchanged.
+	 * this list. The old `NotificationBell` dropdown is no longer mounted (P1.3c).
 	 */
 	import { snippet } from '$lib/lq-ai/autonomous/notification-bell';
 	import type { createNotificationBell } from '$lib/lq-ai/autonomous/notification-bell-controller';

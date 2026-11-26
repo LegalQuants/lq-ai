@@ -306,6 +306,7 @@
 
 <style>
 	.lq-knowledge-page {
+		container-type: inline-size;
 		padding: var(--lq-space-6);
 		max-width: 1100px;
 		margin: 0 auto;
@@ -328,6 +329,15 @@
 		display: flex;
 		gap: var(--lq-space-2);
 		flex-shrink: 0;
+	}
+
+	@container (max-width: 36rem) {
+		.lq-page-header {
+			flex-direction: column;
+		}
+		.lq-header-actions {
+			flex-wrap: wrap;
+		}
 	}
 
 	.lq-create-card {

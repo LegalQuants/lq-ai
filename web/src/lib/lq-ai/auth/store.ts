@@ -53,6 +53,13 @@ function loadInitial(): AuthState {
 	}
 }
 
+// A new sign-in owns a new cache, even when the same person signs in again.
+let sessionGeneration = 0;
+
+export function currentSessionGeneration(): number | null {
+	return getAccessToken() ? sessionGeneration : null;
+}
+
 export const auth: Writable<AuthState> = writable(loadInitial());
 
 if (browser) {
@@ -78,6 +85,8 @@ export function setSession(params: {
 	expires_in: number;
 	user?: User | null;
 }): void {
+	// Token rotation keeps the current generation. Login supplies a user.
+	if (params.user || !getAccessToken()) sessionGeneration++;
 	const now = Date.now();
 	auth.update((state) => ({
 		access_token: params.access_token,

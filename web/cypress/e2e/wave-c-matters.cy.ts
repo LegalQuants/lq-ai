@@ -3,7 +3,7 @@
  *
  * Covers the five new surfaces that shipped in Wave C:
  *
- *   1. Matters tab routes to /lq-ai/matters — no ComingSoonModal; h1 renders
+ *   1. The sidebar's All matters row routes to /lq-ai/matters — no ComingSoonModal; h1 renders
  *   2. "+ New matter" button opens NewMatterModal; Cancel dismisses it
  *   3. Create matter → redirect to workspace → MatterRail + ChatPanel render
  *   4. Create chat in matter → new entry appears in MatterRail Chats section
@@ -29,10 +29,12 @@ describe('Wave C — Matters surfaces', () => {
   });
 
   // ── Test 1 ───────────────────────────────────────────────────────────────────
-  // Matters tab is now available=true; clicking it routes to /lq-ai/matters
-  // and shows the Matters page heading — no ComingSoonModal.
-  it('Matters tab routes to /lq-ai/matters with no ComingSoonModal', () => {
-    cy.contains('nav[aria-label="Primary"] button', 'Matters').click();
+  // The left sidebar's All matters row routes to /lq-ai/matters and shows the
+  // Matters page heading (the tab row's Matters tab before the sidebar cutover).
+  it('All matters row routes to /lq-ai/matters with no ComingSoonModal', () => {
+    cy.get('[data-testid="lq-shell-sidebar"] a[data-nav-id="all-matters"]')
+      .should('contain.text', 'All matters')
+      .click();
     cy.url().should('include', '/lq-ai/matters');
     // No dialog should be present (was the ComingSoonModal path).
     cy.get('[role="dialog"]').should('not.exist');

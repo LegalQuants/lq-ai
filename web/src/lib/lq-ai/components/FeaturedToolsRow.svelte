@@ -20,6 +20,9 @@
 		? '/lq-ai/autonomous'
 		: '/lq-ai/settings/autonomous';
 
+	// The cards carry no aria-label: each link is named by its visible text, so
+	// the name a screen reader announces contains the words on the card
+	// (WCAG 2.5.3, label in name; axe `label-content-name-mismatch`).
 	$: tools = [
 		{
 			id: 'enhance',
@@ -89,7 +92,6 @@
 				<a
 					href={tool.href}
 					class="tool-card"
-					aria-label={tool.title}
 					data-testid="lq-nav-{tool.id}"
 				>
 					<span class="tool-icon" aria-hidden="true"><svelte:component this={tool.icon} size={20} stroke={1.75} /></span>
@@ -114,7 +116,6 @@
 			<a
 				href={tool.href}
 				class="tool-inline-btn"
-				aria-label={tool.title}
 				data-testid="lq-nav-{tool.id}"
 			>
 				<span class="tool-icon-inline" aria-hidden="true"><svelte:component this={tool.icon} size={14} stroke={1.75} /></span>

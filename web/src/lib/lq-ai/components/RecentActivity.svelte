@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { chatsApi, projectsApi } from '$lib/lq-ai/api';
+  import { ALL_CHATS_HREF } from '$lib/lq-ai/nav';
+  import { chatHref } from '$lib/lq-ai/run/links';
   import type { Chat, Project } from '$lib/lq-ai/types';
   import LqText from './shared/LqText.svelte';
 
@@ -45,7 +47,7 @@
   }
 </script>
 
-<section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters} style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--lq-space-4); margin-bottom: var(--lq-space-6);">
+<section data-testid="lq-ai-recent-activity" aria-busy={loadingChats || loadingMatters}>
   <!-- Recent chats -->
   <div class="activity-card">
     <LqText as="p" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" style="margin-bottom: var(--lq-space-3);">Recent chats</LqText>
@@ -60,14 +62,14 @@
       <ul class="chat-list">
         {#each chats as chat (chat.id)}
           <li>
-            <a href="/lq-ai/chats" class="chat-row">
+            <a href={chatHref(chat.id)} class="chat-row">
               <LqText as="span" size="13.5" class="chat-title">{chat.title || 'Untitled chat'}</LqText>
               <LqText as="span" size="12" tone="tertiary" class="chat-date">{formatDate(chat.updated_at)}</LqText>
             </a>
           </li>
         {/each}
       </ul>
-      <LqText as="a" size="13.5" tone="accent" href="/lq-ai/chats" class="view-all">View all chats →</LqText>
+      <LqText as="a" size="13.5" tone="accent" href={ALL_CHATS_HREF} class="view-all">View all chats →</LqText>
     {/if}
   </div>
 
@@ -96,6 +98,13 @@
 </section>
 
 <style>
+  section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--lq-space-4);
+    margin-bottom: var(--lq-space-6);
+  }
+
   .activity-card {
     background: var(--lq-canvas);
     border: 1px solid var(--lq-border);
@@ -141,7 +150,7 @@
 
   @media (max-width: 640px) {
     section {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

@@ -38,7 +38,6 @@ import {
 	showRightSidebarOverlay,
 	type RightSidebarContent
 } from '../rightSidebar';
-import { sidebarChromeOn } from '../shell';
 
 class MemoryStorage {
 	map = new Map<string, string>();
@@ -180,12 +179,12 @@ describe('matter pages (houfu, 10 Nov: the composer keeps its width)', () => {
 		expect(get(leftSidebarOpen)).toBe(true);
 	});
 
-	it('with the switch off the footer still always shows, whatever the matter-page state', () => {
+	it('on the sign-in routes the footer still always shows, whatever the matter-page state', () => {
 		const s = new MemoryStorage();
 		syncLeftSidebar(false, () => s, 'matter');
 		expect(
 			attributionBelowPage({
-				sidebarChrome: sidebarChromeOn('tabs', false),
+				sidebarChrome: false,
 				open: get(leftSidebarOpen),
 				narrow: get(leftSidebarNarrow)
 			})

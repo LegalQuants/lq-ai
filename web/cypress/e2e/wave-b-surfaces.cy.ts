@@ -4,7 +4,7 @@
  * Covers the eight new surfaces that shipped in Wave B v2:
  *
  *   1. Post-login lands on the Guided Dashboard at /lq-ai (not the chat shell)
- *   2. Chats tab routes to /lq-ai/chats — no ComingSoonModal; chat shell renders
+ *   2. The sidebar's All chats row routes to /lq-ai/chats — no ComingSoonModal; chat shell renders
  *   3. /lq-ai/settings/appearance toggle persists across reload (real backend PATCH)
  *   4. /lq-ai/trust renders all four trust cards
  *   5. /lq-ai/admin/developer renders all five developer-support cards
@@ -114,10 +114,12 @@ describe('Wave B v2 — new surfaces', () => {
 	});
 
 	// ── Test 2 ───────────────────────────────────────────────────────────────────
-	// Chats tab is now available=true; clicking it routes to /lq-ai/chats and
-	// the chat shell renders instead of ComingSoonModal.
-	it('Chats tab routes to /lq-ai/chats with no ComingSoonModal', () => {
-		cy.contains('nav[aria-label="Primary"] button', 'Chats').click();
+	// The left sidebar's All chats row routes to /lq-ai/chats and the chat
+	// shell renders (the tab row's Chats tab before the sidebar cutover).
+	it('All chats row routes to /lq-ai/chats with no ComingSoonModal', () => {
+		cy.get('[data-testid="lq-shell-sidebar"] a[data-nav-id="all-chats"]')
+			.should('contain.text', 'All chats')
+			.click();
 		cy.url().should('include', '/lq-ai/chats');
 		// No dialog should be present (was the ComingSoonModal path).
 		cy.get('[role="dialog"]').should('not.exist');

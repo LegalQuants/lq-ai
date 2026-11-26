@@ -1,6 +1,6 @@
 /**
- * The right sidebar's state, as pure helpers (interface-redesign P1.4, behind
- * the developer switch): per-page remembered open state with storage absent,
+ * The right sidebar's state, as pure helpers (interface-redesign P1.4):
+ * per-page remembered open state with storage absent,
  * throwing or corrupt; open, closed and absent; the narrow-screen sheet; the
  * owner rule for published content; Escape and focus return.
  *

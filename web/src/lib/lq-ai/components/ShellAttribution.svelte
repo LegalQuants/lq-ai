@@ -2,8 +2,8 @@
 	/**
 	 * The ADR 0001 attribution footer below the page, for the LQ.AI layout.
 	 *
-	 * With the redesigned chrome off this is today's footer, unchanged and
-	 * always shown. With it on, `ShellSidebar` carries the footer in its foot
+	 * Without the sidebar chrome (the sign-in routes) this is the footer,
+	 * always shown. With it, `ShellSidebar` carries the footer in its foot
 	 * whenever its panel is rendered; when the sidebar is collapsed to its strip
 	 * (on a phone it starts that way) the footer shows here instead, so the
 	 * attribution is on screen without opening anything. Both read the same

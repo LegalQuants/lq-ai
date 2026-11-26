@@ -85,6 +85,8 @@ Secondary reasons emoji specifically are a poor icon vocabulary, independent of 
 
 The emoji glyphs still in `ProvenancePill`/`TrustPill`/the capture button are pre-existing and out of scope for this ADR to migrate wholesale — flagged as a natural Tabler-icon migration candidate for later, not undone here.
 
+*Follow-up under [ADR 0045](0045-lq-ai-shell-redesign.md):* those glyphs are now Tabler icons. The emoji of the old tab row left the interface with it: the left sidebar replaced the tab row and draws its rows with Tabler icons. The unmounted tab definitions (`web/src/lib/lq-ai/tabs.ts`) still carry their emoji until that file is removed.
+
 ## Scope / boundary
 
 Everything above lives under `web/src/lib/lq-ai/**`. Per ADR 0009, the OpenWebUI shell at `/` (`web/src/lib/components/**`) is untouched — this doesn't reopen that boundary. ADR 0009 already anticipated this: "the LQ.AI shell can be redesigned, refactored, or rewritten without touching upstream code."
