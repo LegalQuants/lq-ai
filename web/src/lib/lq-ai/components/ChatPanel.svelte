@@ -2078,6 +2078,12 @@
 		}
 	}
 
+	/* Standalone chat options use display: contents, so the wrapper's spacing
+	   does not separate its last visible panel from the composer row. */
+	.compact-chats :global(.compact-panel + .composer-row) {
+		margin-block-start: var(--lq-space-2);
+	}
+
 	.lq-composer-wrap {
 		/* Anchor for the slash-invocation popover (Wave D.2 Task 7.1).
 		   The popover renders absolutely-positioned just above the

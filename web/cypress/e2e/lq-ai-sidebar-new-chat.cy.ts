@@ -232,3 +232,34 @@ it('opens the conversation named by each Home recent chat link', () => {
 		cy.go('back');
 	}
 });
+
+it('matches the Skills gap below collapsed and expanded Saved prompts in a new chat', () => {
+	cy.viewport(1040, 1300);
+	visitFixture();
+	cy.contains('Old conversation').should('be.visible');
+	cy.get('[data-testid="lq-shell-sidebar-open"]').click();
+	cy.get('[data-nav-id="new"]').click();
+	cy.wait('@createChat');
+	cy.location('search').should('eq', '?id=fresh');
+	for (const [width, height] of [
+		[1040, 1300],
+		[390, 844],
+		[1440, 900]
+	]) {
+		cy.viewport(width, height);
+		for (const expanded of [false, true]) {
+			if (expanded) cy.get('[data-testid="lq-ai-saved-prompts-toggle"]').click();
+			cy.get('[data-testid="lq-ai-composer"]').should(($composer) => {
+				const box = (id: string) =>
+					$composer.find(`[data-testid="lq-ai-${id}"]`)[0].getBoundingClientRect();
+				const skills = box('skill-picker'),
+					prompts = box('saved-prompts'),
+					input = box('composer-input');
+				expect(prompts.top - skills.bottom).to.equal(8);
+				expect(input.top - prompts.bottom).to.equal(8);
+				expect(box('send-btn').bottom).to.be.at.most(height);
+			});
+			if (expanded) cy.get('[data-testid="lq-ai-saved-prompts-toggle"]').click();
+		}
+	}
+});
