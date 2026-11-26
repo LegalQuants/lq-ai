@@ -262,6 +262,23 @@ describe('M3-A6 — Easy Playbook wizard happy path', () => {
 		// 3. Land on the wizard at Step 1.
 		cy.url({ timeout: 10000 }).should('include', '/lq-ai/playbooks/easy');
 		cy.get('[data-testid="lq-easy-wizard-step-upload"]').should('be.visible');
+		// The current step is filled with the accent and labelled in the colour that
+		// sits on it. A weaker selector once left the fill unset, so the label had
+		// the colour of its own background and could not be read.
+		cy.contains('.lq-easy-wizard__step--active', '1. Upload').should(($step) => {
+			const style = getComputedStyle($step[0]);
+			const token = (name: string) => {
+				const probe = document.createElement('span');
+				probe.style.color = `var(${name})`;
+				$step[0].append(probe);
+				const value = getComputedStyle(probe).color;
+				probe.remove();
+				return value;
+			};
+			expect(style.backgroundColor, 'fill').to.equal(token('--lq-accent'));
+			expect(style.color, 'label').to.equal(token('--lq-on-accent'));
+			expect(style.backgroundColor, 'fill differs from label').not.to.equal(style.color);
+		});
 
 		// 4. Pick contract type + upload 3 stub PDFs.
 		cy.get('#lq-easy-wizard-contract-type').type('NDA');

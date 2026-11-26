@@ -542,11 +542,9 @@
 		border-radius: 999px;
 		background: var(--lq-surface);
 	}
-	.lq-easy-wizard__step--active {
-		/* Hardcoded fallbacks — the OpenWebUI fork doesn't always
-		   define `--lq-accent` on every theme, which collapsed the
-		   background to inherit (white) while the text stayed
-		   white-on-white. Matches the PlaybookExecuteModal pattern. */
+	/* The `li` in this selector is needed: without it the rule above wins and
+	   the step keeps the plain fill under a label meant for the accent. */
+	.lq-easy-wizard__steps li.lq-easy-wizard__step--active {
 		background: var(--lq-accent);
 		color: var(--lq-on-accent);
 		border-color: var(--lq-accent);
