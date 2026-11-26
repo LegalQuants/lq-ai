@@ -497,15 +497,17 @@ Note that ADR 0014 is enforced in **two** places, not one: this module, and the 
 Two upstream files carry LQ.AI's theme hook: `src/app.html` and `src/routes/+layout.svelte`. LQ.AI has a theme of its own (Light, Dark or Match system), separate from Open WebUI's, and these are the two places that apply it on `/lq-ai` paths.
 
 - **`src/app.html`.** The inline theme script has an LQ.AI branch. On `/lq-ai` paths it reads `localStorage['lq-ai.theme']` and sets `data-lq-theme`, the `light` or `dark` class, `color-scheme` and the browser theme colour. The script's one `prefers-color-scheme` listener has two branches: LQ.AI's on `/lq-ai` paths, upstream's everywhere else.
-- **`src/routes/+layout.svelte`.** Five sites: the import from `$lib/lq-ai/theme`, an `afterNavigate` handler, a listener for the `lq-ai:theme` event (so the toasts follow a theme change that has no navigation), and two `isLQAIPath` branches in upstream's own theme code.
+- **`src/routes/+layout.svelte`.** Seven sites: two imports (`$lib/lq-ai/theme` and `$lib/lq-ai/paths`, with `afterNavigate` added to the `$app/navigation` import), an `afterNavigate` handler, a listener for the `lq-ai:theme` event (so the toasts follow a theme change that has no navigation), and three `isLQAIPath` branches in upstream's own theme code: in the `theme:update` message handler, before `window.applyTheme`, and where the `theme` store is first set.
 
 **Keep ours in both, and keep everything else upstream's.** Outside those sites the two files handle themes exactly as upstream does. After resolving, confirm:
 
 ```bash
 git grep -c "lq-ai.theme" web/src/app.html
-# must print a count: the LQ.AI branch is still there
+# must print 3: the LQ.AI branch is still there
 git grep -c "LQAI_THEME_EVENT\|syncThemeToPath\|applyCurrentLQAITheme" web/src/routes/+layout.svelte
-# must print a count: the layout's sites are still there
+# must print 6: the layout's sites are still there
+git grep -c "isLQAIPath(window.location.pathname)" web/src/routes/+layout.svelte
+# must print 3: the three branches in upstream's theme code
 ```
 
 This patch is not silent. `web/src/lib/lq-ai/__tests__/theme.test.ts` runs the inline script against the module for every stored value, path and device setting and fails if they disagree. It also checks that an Open WebUI page gets upstream's theme, for each of upstream's themes. The accessibility check asserts the applied theme in all 28 variants.
