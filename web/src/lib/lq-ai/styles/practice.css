@@ -60,6 +60,13 @@
   --lq-shadow-ink: #000000;
   --lq-scrim-ink: #000000;
 
+  /* The edge of a raised surface that has no border of its own, such as a
+     dialog. Light shows such a surface by its shadow or by its fill against
+     the dimmed page, so the edge is clear. Dark has no shadows and the
+     surface has the page's colour, so there the edge is a hairline:
+     box-shadow: ..., 0 0 0 1px var(--lq-raised-edge). */
+  --lq-raised-edge: transparent;
+
   /* Radii (ADR 0045 §5). Names from the design system's tokens.json. */
   --lq-radius-tile: 10px;
   --lq-radius-input: 12px;
@@ -141,6 +148,7 @@
   /* ADR 0045 §1: "light keeps a soft shadow on raised surfaces; dark has none."
      Backdrops stay black. */
   --lq-shadow-ink: transparent;
+  --lq-raised-edge: var(--lq-border);
 
   /* The hover wash turns from a darkening to a lightening. The ADR states no
      value for it; 6% white is this file's choice. */

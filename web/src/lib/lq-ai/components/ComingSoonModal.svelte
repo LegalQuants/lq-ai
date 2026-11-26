@@ -86,7 +86,9 @@
     padding: var(--lq-space-6);
     max-width: 480px;
     width: calc(100% - 32px);
-    box-shadow: 0 24px 64px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent);
+    box-shadow:
+      0 24px 64px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent),
+      0 0 0 1px var(--lq-raised-edge);
   }
   .lq-btn-primary {
     background: var(--lq-accent); color: var(--lq-on-accent);

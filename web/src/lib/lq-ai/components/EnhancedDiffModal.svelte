@@ -104,7 +104,9 @@
 		max-height: 80vh;
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 12px 32px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent);
+		box-shadow:
+			0 12px 32px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent),
+			0 0 0 1px var(--lq-raised-edge);
 	}
 	header {
 		display: flex;
