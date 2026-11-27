@@ -21,20 +21,14 @@
 import { writable } from 'svelte/store';
 import {
 	isLQAIThemeChoice,
-	readLQAIThemeChoice,
+	currentLQAIThemeChoice,
 	setLQAIThemeChoice,
 	type LQAIThemeChoice
 } from '../theme';
 
-function browserStorage(): Storage | undefined {
-	try {
-		return typeof window === 'undefined' ? undefined : window.localStorage;
-	} catch {
-		return undefined;
-	}
-}
-
-export const themeChoice = writable<LQAIThemeChoice>(readLQAIThemeChoice(browserStorage()));
+export const themeChoice = writable<LQAIThemeChoice>(
+	typeof window === 'undefined' ? 'system' : currentLQAIThemeChoice(window)
+);
 
 /** A person chose a theme: this browser shows it now and remembers it. */
 export function applyThemeChoice(choice: LQAIThemeChoice): void {
@@ -44,8 +38,5 @@ export function applyThemeChoice(choice: LQAIThemeChoice): void {
 
 /** The account's saved choice, as a server response carried it. It wins over the browser's copy. */
 export function adoptAccountTheme(value: unknown): void {
-	if (!isLQAIThemeChoice(value)) return;
-	themeChoice.set(value);
-	if (typeof window === 'undefined') return;
-	if (readLQAIThemeChoice(browserStorage()) !== value) setLQAIThemeChoice(window, value);
+	if (isLQAIThemeChoice(value)) applyThemeChoice(value);
 }

@@ -15,6 +15,7 @@ import {
 	adoptStoredSession,
 	auth,
 	clearSession,
+	currentSessionGeneration,
 	getAccessToken,
 	getRefreshToken,
 	setSession,
@@ -144,6 +145,7 @@ async function rawRequest(path: string, options: RequestOptions): Promise<Respon
  * it is: a 502, 503 or 429 says nothing about whether the session is good.
  */
 async function postRefresh(): Promise<boolean> {
+	const owner = currentSessionGeneration();
 	const refresh_token = getRefreshToken();
 	if (!refresh_token) {
 		return false;
@@ -154,13 +156,15 @@ async function postRefresh(): Promise<boolean> {
 		skipAuth: true,
 		skipRefresh: true
 	});
-	if (res.status === 401) {
-		return false;
-	}
-	if (!res.ok) {
+	if (!res.ok && res.status !== 401) {
 		throw errorFor(res.status, await parseErrorBody(res));
 	}
-	const data = (await res.json()) as TokenResponse;
+	const data = res.ok ? ((await res.json()) as TokenResponse) : null;
+	// A delayed refresh must neither replace nor clear a subsequent sign-in.
+	if (owner !== currentSessionGeneration()) {
+		throw new UnauthorizedError('The session changed during refresh.');
+	}
+	if (!data) return false;
 	setSession({
 		access_token: data.access_token,
 		refresh_token: data.refresh_token,
@@ -299,7 +303,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 	let res = await rawRequest(path, options);
 
 	if (res.status === 401 && !options.skipRefresh && !options.skipAuth) {
+		options.signal?.throwIfAborted();
 		if (await renewAfter401(sentToken)) {
+			options.signal?.throwIfAborted();
 			res = await rawRequest(path, options);
 		}
 	}
@@ -308,6 +314,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 		const body = await parseErrorBody(res);
 		const err = errorFor(res.status, body);
 		if (err.status === 401) {
+			options.signal?.throwIfAborted();
 			clearSession();
 		}
 		throw err;

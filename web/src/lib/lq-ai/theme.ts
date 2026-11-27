@@ -30,6 +30,14 @@ import { isLQAIPath } from './paths';
 export type LQAITheme = 'light' | 'dark';
 export type LQAIThemeChoice = 'light' | 'dark' | 'system';
 
+// Shared with the pre-hydration device listener in app.html. This page can keep
+// its choice even when browser storage refuses writes or another tab changes it.
+declare global {
+	interface Window {
+		lqThemeChoice?: LQAIThemeChoice;
+	}
+}
+
 /** The choices, in the order Appearance shows them and the sidebar steps through them. */
 export const LQAI_THEME_CHOICES: readonly LQAIThemeChoice[] = ['light', 'dark', 'system'];
 
@@ -117,9 +125,13 @@ function prefersDark(win: Window): boolean {
 	return win.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
 }
 
+export function currentLQAIThemeChoice(win: Window): LQAIThemeChoice {
+	return (win.lqThemeChoice ??= readLQAIThemeChoice(storageOf(win)));
+}
+
 /** Resolves the theme for the page the window is on, applies it, announces it and returns it. */
 export function applyCurrentLQAITheme(win: Window): LQAITheme {
-	const theme = resolveLQAITheme(readLQAIThemeChoice(storageOf(win)), prefersDark(win));
+	const theme = resolveLQAITheme(currentLQAIThemeChoice(win), prefersDark(win));
 	applyLQAITheme(win.document, theme);
 	try {
 		win.dispatchEvent(new CustomEvent(LQAI_THEME_EVENT, { detail: theme }));
@@ -135,6 +147,7 @@ export function applyCurrentLQAITheme(win: Window): LQAITheme {
  * WebUI's, and stays as it is).
  */
 export function setLQAIThemeChoice(win: Window, choice: LQAIThemeChoice): LQAITheme | null {
+	win.lqThemeChoice = choice;
 	writeLQAIThemeChoice(storageOf(win), choice);
 	return isLQAIPath(win.location.pathname) ? applyCurrentLQAITheme(win) : null;
 }

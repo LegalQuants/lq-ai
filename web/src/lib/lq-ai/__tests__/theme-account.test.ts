@@ -102,7 +102,7 @@ describe('a person chooses a theme', () => {
 		expect(get(themeChoice)).toBe('dark');
 		expect(b.saved()).toBe('dark');
 		expect(b.showing()).toBe('dark');
-		expect(patchPreferences).toHaveBeenCalledWith({ appearance_theme: 'dark' });
+		expect(vi.mocked(patchPreferences).mock.calls[0][0]).toEqual({ appearance_theme: 'dark' });
 		saving.resolve(account('dark'));
 		await done;
 		expect(get(themeChoice)).toBe('dark');
@@ -137,22 +137,67 @@ describe('a person chooses a theme', () => {
 		expect(b.showing()).toBe('dark');
 	});
 
-	it('lets the last of two quick choices stand, whichever answer arrives last', async () => {
+	it('paints the selection immediately when storage refuses writes', async () => {
 		const b = browser();
 		signIn();
-		const first = deferred<Preferences>();
-		const second = deferred<Preferences>();
-		vi.mocked(patchPreferences)
-			.mockReturnValueOnce(first.promise)
-			.mockReturnValueOnce(second.promise);
+		vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+			throw new Error('Quota exceeded');
+		});
+		const saving = deferred<Preferences>();
+		vi.mocked(patchPreferences).mockReturnValue(saving.promise);
+		const done = chooseTheme('dark');
+		expect(b.showing()).toBe('dark');
+		expect(b.saved()).toBeUndefined();
+		saving.resolve(account('dark'));
+		await done;
+	});
+
+	it('persists the last choice when the first PATCH is delayed before commit', async () => {
+		const b = browser();
+		signIn();
+		let stored = account('system');
+		const first = deferred<void>();
+		vi.mocked(patchPreferences).mockImplementation(async ({ appearance_theme }) => {
+			if (appearance_theme === 'dark') await first.promise;
+			stored = account(appearance_theme);
+			return stored;
+		});
+		vi.mocked(getPreferences).mockImplementation(async () => stored);
+
 		const one = chooseTheme('dark');
 		const two = chooseTheme('light');
-		second.resolve(account('light'));
-		await two;
-		first.resolve(account('dark'));
-		await one;
+		const read = initPreferences();
+		expect(b.showing()).toBe('light');
+		expect(patchPreferences).toHaveBeenCalledTimes(1);
+		first.resolve();
+		await Promise.all([one, two, read]);
+		expect(getPreferences).toHaveBeenCalledOnce();
+		expect(get(preferences).appearance_theme).toBe('light');
 		expect(get(themeChoice)).toBe('light');
 		expect(b.saved()).toBe('light');
+		expect(b.showing()).toBe('light');
+	});
+
+	it('drops queued writes on sign-out and lets the new account save independently', async () => {
+		const b = browser();
+		signIn('a');
+		const slow = deferred<Preferences>();
+		vi.mocked(patchPreferences)
+			.mockReturnValueOnce(slow.promise)
+			.mockResolvedValue(account('system'));
+		const first = chooseTheme('dark');
+		const queued = chooseTheme('light');
+		const signal = vi.mocked(patchPreferences).mock.calls[0][1];
+		clearSession();
+		signIn('b');
+		await chooseTheme('system');
+		expect(signal?.aborted).toBe(true);
+		slow.resolve(account('dark'));
+		await Promise.all([first, queued]);
+		expect(vi.mocked(patchPreferences).mock.calls.map(([patch]) => patch.appearance_theme)).toEqual(
+			['dark', 'system']
+		);
+		expect(get(themeChoice)).toBe('system');
 		expect(b.showing()).toBe('light');
 	});
 
@@ -173,6 +218,20 @@ describe("the account's value arrives", () => {
 		await initPreferences();
 		expect(get(themeChoice)).toBe('dark');
 		expect(b.saved()).toBe('dark');
+		expect(b.showing()).toBe('dark');
+	});
+
+	it('paints an account choice even when the browser copy cannot be updated', async () => {
+		const b = browser();
+		signIn();
+		applyThemeChoice('light');
+		vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+			throw new Error('quota');
+		});
+		vi.mocked(getPreferences).mockResolvedValue(account('dark'));
+		await initPreferences();
+		expect(b.saved()).toBe('light');
+		expect(get(themeChoice)).toBe('dark');
 		expect(b.showing()).toBe('dark');
 	});
 
@@ -238,14 +297,16 @@ describe("the account's value arrives", () => {
 		expect(b.saved()).toBe('dark');
 	});
 
-	it('does not repaint when the account agrees with the browser', async () => {
+	it('reconciles this document even when another tab has already stored the account theme', async () => {
 		const b = browser();
-		b.values.set(LQAI_THEME_STORAGE_KEY, 'dark');
 		signIn();
-		vi.mocked(getPreferences).mockResolvedValue(account('dark'));
-		await initPreferences();
+		applyThemeChoice('light');
+		b.values.set(LQAI_THEME_STORAGE_KEY, 'dark');
+		expect(b.showing()).toBe('light');
+		vi.mocked(patchPreferences).mockResolvedValue({ ...account('dark'), trust_pills: 'dots' });
+		await setPreference('trust_pills', 'dots');
 		expect(get(themeChoice)).toBe('dark');
-		expect(b.showing()).toBeUndefined();
+		expect(b.showing()).toBe('dark');
 	});
 });
 

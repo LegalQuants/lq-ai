@@ -321,6 +321,19 @@ describe('LQ.AI theme: the inline script in app.html agrees with the module', ()
 		}
 	});
 
+	it('retains a page-only choice on navigation and device changes', () => {
+		const f = fixture('/lq-ai/chats', { lq: 'light' }, false);
+		runInNewContext(bootstrap, f.context);
+		f.win.localStorage.setItem = () => {
+			throw new Error('quota');
+		};
+		setLQAIThemeChoice(asWindow(f), 'dark');
+		expect(syncThemeToPath(asWindow(f))).toBe('dark');
+		f.listeners.forEach((listener) => listener({ matches: false }));
+		expect(f.state()).toEqual(DARK);
+		expect(f.values.get(LQAI_THEME_STORAGE_KEY)).toBe('light');
+	});
+
 	it.each(['light', 'dark'])('keeps %s when the device changes its colour scheme', (lq) => {
 		const f = fixture('/lq-ai/chats', { lq, upstream: 'system' }, false);
 		runInNewContext(bootstrap, f.context);

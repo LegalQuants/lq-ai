@@ -39,7 +39,7 @@
 		height: 18px;
 		padding: 2px;
 		border-radius: 999px;
-		background: var(--lq-border, #e4e4e7);
+		background: var(--lq-border-strong, #80828a);
 		cursor: pointer;
 		transition: background 120ms ease;
 	}

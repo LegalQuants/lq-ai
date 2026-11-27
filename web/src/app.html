@@ -53,13 +53,16 @@
 				const isLQAI = () =>
 					window.location.pathname === '/lq-ai' || window.location.pathname.startsWith('/lq-ai/');
 				const lqaiTheme = (prefersDark) => {
-					let saved = null;
-					try {
-						saved = localStorage.getItem('lq-ai.theme');
-					} catch (e) {
-						saved = null;
+					if (!window.lqThemeChoice) {
+						let saved;
+						try {
+							saved = localStorage.getItem('lq-ai.theme');
+						} catch (e) {
+							// Storage is optional. Keep the choice on this page.
+						}
+						window.lqThemeChoice = saved === 'light' || saved === 'dark' ? saved : 'system';
 					}
-					if (saved === 'light' || saved === 'dark') return saved;
+					if (window.lqThemeChoice !== 'system') return window.lqThemeChoice;
 					return prefersDark ? 'dark' : 'light';
 				};
 				const applyLQAITheme = (prefersDark) => {
