@@ -339,7 +339,7 @@ def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
             and re.search(entitlement, text)
         ):
             return True
-    if identity == "Survival of General Information" and "trade secret" in text:
+    if identity == "Survival of General Information" and re.search(r"\btrade[- ]secrets?\b", text):
         return True
     if identity == "Survival of Trade Secrets":
         if re.search(r"\b(?:general|all other|other confidential)\b.{0,35}\binformation\b", text):

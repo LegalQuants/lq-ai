@@ -114,3 +114,51 @@ def test_ongoing_qualification_and_issue_scoped_strategy_are_preserved() -> None
         [CASES[1]["standard_language"]],
         "Align general-information obligations with the agreement term.",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("spelling", ["trade-secret", "trade secret", "trade-secrets"])
+async def test_hyphenated_trade_secret_instruction_is_removed_from_general_strategy(
+    spelling: str,
+) -> None:
+    """The fresh live strategy bypassed the space-only scope guard."""
+    position = PositionCreate(
+        issue="Survival of General Information",
+        standard_language=CASES[1]["standard_language"],
+        description="Obligations for general confidential information last for the agreement term.",
+        redline_strategy=f"If the contract caps survival at expiration, expand it to at least the 3-year {spelling} tail.",
+        severity_if_missing="medium",
+    )
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = ChatCompletionResponse(
+        id="hyphenated-live-replay",
+        model="smart",
+        created=0,
+        choices=[
+            ChatCompletionChoice(
+                index=0,
+                finish_reason="stop",
+                message=ChatCompletionMessage(
+                    role="assistant",
+                    content=json.dumps(
+                        {
+                            "checks": [
+                                {
+                                    "id": "position/0",
+                                    "description_supported": True,
+                                    "redline_supported": True,
+                                    "source_quotes": [position.standard_language],
+                                }
+                            ]
+                        }
+                    ),
+                ),
+            )
+        ],
+    )
+    await _ground_metadata([position], gateway=gateway, judge_model="smart")
+    assert (
+        position.description
+        == "Obligations for general confidential information last for the agreement term."
+    )
+    assert position.redline_strategy == "Review deviations against the selected standard language."
