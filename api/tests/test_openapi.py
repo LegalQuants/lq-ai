@@ -133,6 +133,8 @@ EXPECTED_PATHS: frozenset[str] = frozenset(
         "/api/v1/admin/word-addin/manifest",
         # M3-B8 — Word add-in version handshake (unauthenticated)
         "/api/v1/word-addin/version",
+        # M3-B3 — Word add-in document-chat (stateless, forced-tool-call citations)
+        "/api/v1/word-addin/document-chat",
         # M3-A2 — Playbook executor surface
         "/api/v1/playbooks/{playbook_id}/execute",
         "/api/v1/playbook-executions/{execution_id}",
@@ -399,7 +401,9 @@ async def test_openapi_paths_match_sketch() -> None:
     # ADR 0038 adds two more (163 -> 165): the owner's read of how one session
     # of a run was set up, and the text of an engine prompt file.
     # Matter access adds eight administration and sharing paths (165 -> 173).
-    assert len(actual) == 173
+    # M3-B3 adds the Word add-in document-chat path (173 -> 174):
+    # /api/v1/word-addin/document-chat
+    assert len(actual) == 174
 
 
 @pytest.mark.unit

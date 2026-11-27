@@ -13,10 +13,11 @@ Office.js task pane add-in for Microsoft Word. The manifest, task pane JS bundle
 | File | What it is |
 |---|---|
 | `manifest.xml` | Office Add-in XML manifest 1.1+ template. Tokens like `{{ DEPLOYMENT_ORIGIN }}` are substituted by the LQ.AI admin UI's "Generate manifest" flow before an operator sideloads via Microsoft 365 Admin Center. |
-| `src/taskpane/` | React 18 + TypeScript task pane shell. `taskpane.html` is the page Office loads; `taskpane.tsx` is the React entry point; `components/` holds the header, tab strip, and deep-link card. |
+| `taskpane.html` / `commands.html` | Vite's multi-page entry HTML, at the project root (standard Vite convention). Office loads these directly. |
+| `src/taskpane/` | React + TypeScript task pane shell. `taskpane.tsx` is the React entry point; `components/` holds the header, tab strip, and chat/skills surfaces. |
 | `src/commands/` | Office.js ribbon command surface (no commands wired in M3-B1; feature work lands here). |
 | `assets/` | Manifest icons (placeholders for v0.3.0; design pass before v0.3.0 final). |
-| `webpack.config.js` | Bundles to `dist/`. Per [Decision B-1](../docs/superpowers/plans/2026-05-21-m3-phase-b-word-addin-plumbing.md), webpack is the bundler of record. |
+| `vite.config.ts` | Bundles straight to `../web/static/word-addin/`. Per [ADR 0022](../docs/adr/0022-word-addin-vite-over-webpack.md), Vite is the bundler of record (supersedes the original webpack decision — see the ADR for why). |
 
 ---
 
@@ -32,12 +33,12 @@ Office.js task pane add-in for Microsoft Word. The manifest, task pane JS bundle
 ```bash
 cd word-addin
 npm install
-npm run build           # production build → dist/
-npm run build:dev       # dev build with source maps
+npm run build           # production build
+npm run build:dev       # dev-mode build with source maps
 npm run watch           # rebuild on every change
 ```
 
-The build output is `word-addin/dist/`. Until M3-B8 ships the deployment-served bundle endpoint, deploy by copying `dist/` to the operator's `web/static/word-addin/` directory (or via the `docker-compose.yml` volume mount documented in the root `docker-compose.yml` `web` service).
+The build output goes straight to `web/static/word-addin/` (not a local `dist/`) — the existing `web` container's `COPY . .` picks it up automatically, no manual copy step or volume mount needed.
 
 ## Validate the manifest
 
@@ -47,13 +48,47 @@ npm run validate
 
 Runs `office-addin-manifest validate manifest.xml`. The CI workflow at `.github/workflows/word-addin-ci.yml` (added when M3-B7 lands) runs the same check on every PR.
 
-## Run inside Word for local testing
+## Local development
 
-```bash
-npm run start
-```
+The manifest checked into this directory is a **template** — `{{ DEPLOYMENT_ORIGIN }}` and friends are only substituted by the admin UI's "Generate manifest" flow (`GET /api/v1/admin/word-addin/manifest`), which requires a running, authenticated LQ.AI deployment. For local iteration you don't want that dependency, so there's a separate dev path:
 
-`office-addin-debugging start manifest.xml` opens Word with the add-in sideloaded against a local dev server at `https://localhost:3001`. Useful for component-level UI iteration without going through the deployment's static-file serving path.
+1. **Trust a local HTTPS cert.** Office Add-ins require the task pane to be served over HTTPS even in dev — Word's embedded browser enforces it, no exceptions. One-time per machine:
+   ```bash
+   npx office-addin-dev-certs install
+   ```
+   This generates and trusts a cert for `localhost`, matching the `server` block in `vite.config.ts` (port 3001, `https` set from this same cert).
+
+2. **Generate a dev manifest pointed at `localhost`, not a real deployment:**
+   ```bash
+   npm run manifest:dev
+   ```
+   Writes `manifest.dev.xml` (gitignored — never commit a manifest with a live deployment origin). Uses the same 4-token substitution as the backend's `render_manifest()` (`api/app/api/word_addin.py`), pointed at `https://localhost:3001`.
+
+3. **Build and serve the bundle:**
+   ```bash
+   npm run watch          # rebuild on change, or:
+   npm run dev-server      # Vite dev server on https://localhost:3001/word-addin/
+   ```
+   `dev-server` proxies `/api` through to `http://localhost:8000` (the `api`
+   container's default host port — set `LQ_AI_DEV_API_ORIGIN` if yours maps
+   elsewhere) so `auth.ts`'s `deploymentOrigin()` — which resolves to
+   `window.location.origin`, i.e. this dev server — still reaches a real
+   backend for login/refresh/version-check instead of 404ing against
+   the dev server itself. Bring up at least `postgres`, `redis`, and
+   `api` from the repo-root `docker-compose.yml` first.
+
+4. **Sideload into Word:**
+   ```bash
+   npm run start:dev
+   ```
+   Runs `manifest:dev` then `office-addin-debugging start manifest.dev.xml`. This tool claims macOS support via a `--desktop-platform mac` flag, but sideload automation on Mac has known reliability gaps. **If it doesn't work, use the manual fallback** (always reliable, Microsoft-documented):
+   - Finder → `Cmd+Shift+G` → go to `/Users/<you>/Library/Containers/com.microsoft.Word/Data/Documents/wef` (create the `wef` folder if it doesn't exist).
+   - Copy `manifest.dev.xml` into that folder.
+   - Restart Word, open a document, **Home → Add-ins**, select LQ.AI.
+
+   `npm run stop:dev` un-registers the sideload when you're done (automated path only — the manual path is undone by deleting the file from `wef`).
+
+This path bypasses the deployment's static-file serving, but real login now goes through the proxy to a genuine `api` backend (see step 3) — there's no fake/bypassed session. To test against the fully-dockerized stack instead (built assets served by `web`, no dev server), use the `npm run start` / M365 Admin Center path below against a deployment running the actual `docker-compose.yml` stack.
 
 ## Lint + format + typecheck
 

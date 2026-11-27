@@ -1,4 +1,4 @@
-"""Word add-in plumbing surface (M3-B1, M3-B2, M3-B8).
+"""Word add-in plumbing surface (M3-B1, M3-B2, M3-B8) + document-chat (M3-B3).
 
 Surfaces (current):
 
@@ -11,6 +11,10 @@ Surfaces (current):
   the user even sees the sign-in screen, so an out-of-date add-in
   surfaces an "Update needed" overlay without the operator getting
   stuck at a broken OAuth handshake (M3-B8).
+* ``POST /api/v1/word-addin/document-chat`` — authenticated; one-shot,
+  document-grounded chat turn for the task pane's Chat tab (M3-B3). See
+  that section below for why this is a dedicated, stateless endpoint
+  rather than an extension of ``POST /chats/{chat_id}/messages``.
 
 OAuth (M3-B2) reuses ``/api/v1/auth/login`` + ``/auth/refresh`` from the
 existing auth surface — no Word-add-in-specific endpoint required.
@@ -22,23 +26,60 @@ _endpoints` asserts the two files match byte-for-byte so any change to
 the add-in's manifest flows into the api package.
 
 Per [PRD §9 DE-287](docs/PRD.md), the user-facing feature tabs inside
-the add-in are descoped to M4 / community contribution; this M3 plumbing
-ships the install-authenticate-version-check surface only.
+the add-in are descoped to M4 / community contribution; M3 shipped the
+install-authenticate-version-check plumbing only. ``document-chat``
+below is the first feature-surface piece to land ahead of that.
+
+--- document-chat (M3-B3) -----------------------------------------------
+
+Deliberately stateless: no ``db`` dependency on the handler below, no
+``chat_id``/``message_id``, nothing written to ``chats``/``messages``.
+Reasoning (settled after the DE-287 text itself was found to be silent
+on this): on the web app, the persisted chat *is* the state — a
+resumable, cross-session conversation. In the add-in, the open Word
+document is the state; every turn re-derives its context by
+re-enumerating the document's paragraphs fresh (never cached — see
+``word-addin/src/services/documentChatClient.ts``). Persisting a
+parallel transcript in Postgres would just be a second, driftable copy
+of a conversation whose real ground truth is a document that can be
+edited between turns. ``inference_routing_log`` still gets a row per
+call (gateway-written, metadata only — no content columns), same as
+every other inference call; that's cost/audit accounting, not chat
+history, and isn't something this endpoint can or should opt out of.
+
+``DocumentChatCreate.user_instruction`` is a client-built JSON string
+(see ``documentChatClient.ts``'s ``toDocumentChatInstruction``) carrying
+the document's paragraphs, the user's actual question, and input/output/
+citation schema documentation together — this handler forwards it
+verbatim as the user message content; it does not parse it. Structured
+output (``DocumentChatResponse.content`` + ``.citations``) comes back via
+a forced ``emit_answer`` tool call (``EMIT_ANSWER_TOOL``) — provider-
+enforced schema conformance, not prompt-based JSON.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid as _uuid_mod
 from importlib import resources
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app import __version__ as _api_version
-from app.api.dependencies import AdminUser
+from app.api.dependencies import ActiveUser, AdminUser
+from app.clients.gateway import GatewayClient, get_gateway_client
+from app.errors import LQAIError
+from app.schemas.gateway import (
+    ChatCompletionMessage,
+    ChatCompletionRequest,
+    ChatCompletionResponse,
+)
+
+log = logging.getLogger(__name__)
 
 admin_router = APIRouter(prefix="/admin/word-addin", tags=["admin"])
 """Admin-only routes (manifest generation). Mounted under the standard
@@ -49,6 +90,13 @@ public_router = APIRouter(prefix="/word-addin", tags=["word-addin"])
 the version endpoint before the user has signed in, so the gate must
 not require an auth token. Mounted without the ``ActiveUser`` dependency
 in :mod:`app.api.__init__` (same pattern as ``bootstrap.router``)."""
+
+authenticated_router = APIRouter(prefix="/word-addin", tags=["word-addin"])
+"""Authenticated routes (document-chat). Same URL prefix as
+``public_router`` but mounted separately under the standard ``_active``
+(bearer token + must_change_password=false) dependency group in
+:mod:`app.api.__init__`, same split pattern as ``admin_router`` vs.
+``public_router``."""
 
 # Back-compat alias for callers that imported ``router`` directly before
 # M3-B8 introduced the split. New code should reference ``admin_router``
@@ -329,3 +377,272 @@ async def get_version(request: Request) -> WordAddinVersionResponse:
         taskpane_bundle_url=f"{origin}/word-addin/taskpane.html",
         taskpane_bundle_hash=None,
     )
+
+
+# ---------------------------------------------------------------------------
+# M3-B3 — Document-chat. One-shot, document-grounded chat turn for the task
+# pane's Chat tab. See the module docstring's "document-chat" section for
+# why this is a dedicated, stateless endpoint rather than an extension of
+# ``POST /chats/{chat_id}/messages``.
+# ---------------------------------------------------------------------------
+
+# Bound on the whole request body. The document, the model's input/output
+# schema documentation, and the user's question all now travel together as
+# one opaque JSON string (`user_instruction`) built client-side — see
+# `word-addin/src/services/documentChatClient.ts`'s `toDocumentChatInstruction`.
+# That means there's no longer a separate, Pydantic-enforced cap on paragraph
+# *count* (the old `paragraphs: list[...] = Field(max_length=...)` — the
+# invariant moved from two dimensions (count + char length) to one (char
+# length only), a deliberate tradeoff since the char cap still bounds worst-
+# case payload size. Sized generously above the old 120_000-char document-only
+# cap to cover the JSON wrapper/schema boilerplate plus the extra per-
+# paragraph overhead of `{"paragraphId":N,"text":"..."}` vs. the old flat
+# `[P<id>] text` line format.
+MAX_USER_INSTRUCTION_CHARS = 300_000
+
+DOCUMENT_CHAT_SYSTEM_PROMPT = (
+    "You are assisting a user with a Microsoft Word document that is "
+    "currently open in their editor. The user's message below is a JSON "
+    "object with four top-level keys: `input_schema` (the shape of this "
+    "object's own `input` field), `citations_schema` (an explanation of "
+    "how to cite specific paragraphs), `output_schema` (the shape you must "
+    "return), and `input` (the actual document paragraphs plus the user's "
+    "instruction). Read `input.paragraphs` as the document's content — each "
+    "entry has a `paragraphId` and `text` — and `input.instruction` as the "
+    "user's actual question. You MUST respond by calling the `emit_answer` "
+    "function; never reply in plain text."
+)
+
+
+class DocumentChatCreate(BaseModel):
+    """POST body for ``/api/v1/word-addin/document-chat``. Accepted on
+    the wire as ``userInstruction`` (the frontend's own camelCase
+    choice). ``user_instruction`` is a client-built JSON string (see
+    ``documentChatClient.ts``'s ``toDocumentChatInstruction``) carrying
+    the document paragraphs, the user's question, and input/output/
+    citation schema documentation together — this handler passes it
+    through verbatim as the user message content; it does not parse it
+    server-side."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    user_instruction: str = Field(
+        min_length=1, max_length=MAX_USER_INSTRUCTION_CHARS, alias="userInstruction"
+    )
+    skills: list[str] | None = Field(default=None, max_length=16)
+    model: str | None = Field(default=None, max_length=200)
+    stream: bool = False
+    """Accepted for forward-compatibility with the frontend's
+    ``DocumentChatCreate`` shape; always treated as ``False`` here.
+    This endpoint doesn't support streaming yet — see the module
+    docstring."""
+
+
+class DocumentChatCitation(BaseModel):
+    """Points an answer back at a specific paragraph of the request's
+    snapshot — resolved client-side via ``docxHelper.paragraph.search()``
+    against the live Word document, not verified server-side (there's
+    no persisted copy of an open Word document to verify against, unlike
+    the KB Citation Engine's ``documents.normalized_content``). Serialized
+    on the wire as ``paragraphId`` — FastAPI's ``response_model_by_alias``
+    defaults to ``True``, so this alias applies on the way out the same
+    way ``DocumentChatParagraph``'s applies on the way in."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    paragraph_id: int = Field(alias="paragraphId")
+    quote: str
+
+
+class DocumentChatResponse(BaseModel):
+    """Non-streaming response for ``POST /word-addin/document-chat``."""
+
+    content: str
+    citations: list[DocumentChatCitation] = Field(default_factory=list)
+
+
+# Forced tool-calling gets the structured {content, citations} response
+# via provider-enforced schema conformance (grammar-constrained decoding
+# under `strict` mode) rather than asking the model nicely to reply in
+# JSON — see the PR discussion for why this beats prompt-based JSON
+# framing (skill-instruction collisions, no guarantee of valid JSON).
+# This is the actual enforcement mechanism — the client also sends an
+# `output_schema` inside `user_instruction`'s JSON (see documentChatClient.ts's
+# `OUTPUT_SCHEMA`) as reinforcing documentation in the prompt, not a second
+# enforcement path. Keep the two in sync by hand: `parameters` below must
+# mirror `OUTPUT_SCHEMA` (same fields, same `paragraph_id` snake_case) —
+# no shared source of truth between the two languages/files.
+EMIT_ANSWER_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "emit_answer",
+        "description": (
+            "Emit the answer to the user's question, with citations pointing "
+            "back to the paragraph(s) (by [P<id>] index) the answer is "
+            "grounded in. Always call this instead of replying in plain text."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "response": {
+                    "type": "string",
+                    "description": (
+                        "The answer to the user's question, in Markdown. When your "
+                        "answer relies on a specific quote from the document, wrap "
+                        "the relevant phrase from your own response in a Markdown "
+                        "link to `citation:<n>`, where <n> is that citation's "
+                        '0-based index in the citations array — e.g. "...allows '
+                        "[30 days' written notice](citation:0)...\". The link text "
+                        "is the only visible signal of what's being cited (no "
+                        "separate preview), so wrap a natural, meaningful phrase, "
+                        "not a bare number or symbol — the sentence should read the "
+                        "same with the link markup stripped out."
+                    ),
+                },
+                "citations": {
+                    "type": "array",
+                    "description": (
+                        "Verbatim quotes from the document supporting the "
+                        "answer. Empty if the answer isn't grounded in any "
+                        "specific paragraph."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "paragraph_id": {
+                                "type": "integer",
+                                "description": "The [P<id>] index this citation is grounded in.",
+                            },
+                            "quote": {
+                                "type": "string",
+                                "description": (
+                                    "Verbatim text from that paragraph — must be an "
+                                    "exact substring, not a paraphrase, so the client "
+                                    "can locate and highlight it in the live document."
+                                ),
+                            },
+                        },
+                        "required": ["paragraph_id", "quote"],
+                    },
+                },
+            },
+            "required": ["response", "citations"],
+        },
+    },
+}
+
+EMIT_ANSWER_TOOL_CHOICE: dict[str, Any] = {
+    "type": "function",
+    "function": {"name": "emit_answer"},
+}
+
+
+class _EmitAnswerCitation(BaseModel):
+    paragraph_id: int = Field(ge=0)
+    quote: str
+
+
+class _EmitAnswerArgs(BaseModel):
+    """Shape of ``emit_answer``'s tool-call arguments — validated after
+    ``json.loads`` the same way ``app.autonomous.structured_output``
+    tolerantly parses model JSON elsewhere in this codebase."""
+
+    response: str
+    citations: list[_EmitAnswerCitation] = Field(default_factory=list)
+
+
+def _parse_document_chat_response(gw_response: ChatCompletionResponse) -> DocumentChatResponse:
+    """Read ``emit_answer``'s forced tool-call arguments off the gateway
+    response. Tolerant by design, never raises: a model that didn't call
+    the tool (shouldn't happen with forced ``tool_choice``, but providers
+    are not code) or emitted malformed arguments falls back to whatever
+    plain-text content came back, with no citations — an honest
+    "unstructured" result rather than a 500."""
+
+    choice = gw_response.choices[0] if gw_response.choices else None
+    tool_calls = choice.message.tool_calls if choice else None
+
+    if not tool_calls:
+        content = choice.message.content if choice and choice.message.content else ""
+        return DocumentChatResponse(content=content, citations=[])
+
+    raw_args = tool_calls[0].get("function", {}).get("arguments", "")
+    try:
+        parsed = _EmitAnswerArgs.model_validate_json(raw_args)
+    except (ValueError, TypeError):
+        log.warning(
+            "document-chat: emit_answer arguments failed to parse; falling back to raw content",
+            extra={"event": "document_chat_tool_parse_failed"},
+        )
+        return DocumentChatResponse(content=raw_args, citations=[])
+
+    return DocumentChatResponse(
+        content=parsed.response,
+        citations=[
+            # populate_by_name=True genuinely allows constructing by the
+            # Python field name at runtime (verified) — the pydantic mypy
+            # plugin just doesn't model that, hence the ignore.
+            DocumentChatCitation(paragraph_id=c.paragraph_id, quote=c.quote)  # type: ignore[call-arg]
+            for c in parsed.citations
+        ],
+    )
+
+
+@authenticated_router.post(
+    "/document-chat",
+    response_model=DocumentChatResponse,
+    summary="One-shot, document-grounded chat turn for the Word add-in's Chat tab (M3-B3).",
+    description=(
+        "Takes the user's question plus a snapshot of the open document's "
+        "paragraphs, and returns a single model answer grounded in that "
+        "snapshot, via a forced emit_answer tool call for structured "
+        "citations. No persistence — every call is independent and "
+        "nothing is written to chats/messages, unlike POST /chats/"
+        "{chat_id}/messages. Non-streaming."
+    ),
+)
+async def document_chat(
+    body: DocumentChatCreate,
+    request: Request,
+    user: ActiveUser,
+    gateway: Annotated[GatewayClient, Depends(get_gateway_client)],
+) -> DocumentChatResponse:
+    gw_request = ChatCompletionRequest(
+        model=body.model or "smart",
+        messages=[
+            # No lq_ai_skip_anonymization here: the whole user_instruction
+            # JSON (document paragraphs included, now embedded inside it —
+            # see documentChatClient.ts's toDocumentChatInstruction) goes
+            # through anonymization like any other message. Whatever the
+            # model quotes back gets rehydrated to the original text
+            # automatically before this handler ever sees the response
+            # (gateway's post_anonymize_response, unconditional whenever
+            # pre_anonymize_request actually pseudonymized something) —
+            # see the PR discussion for why this preserves citation
+            # fidelity without needing the skip flag.
+            ChatCompletionMessage(role="system", content=DOCUMENT_CHAT_SYSTEM_PROMPT),
+            ChatCompletionMessage(role="user", content=body.user_instruction),
+        ],
+        stream=False,
+        tools=[EMIT_ANSWER_TOOL],
+        tool_choice=EMIT_ANSWER_TOOL_CHOICE,
+        lq_ai_skills=body.skills or [],
+        lq_ai_user_id=str(user.id),
+    )
+
+    try:
+        gw_response = await gateway.chat_completion(
+            gw_request, request_id=request.headers.get("x-request-id")
+        )
+    except LQAIError as exc:
+        log.warning(
+            "document-chat gateway call failed",
+            extra={
+                "event": "document_chat_gateway_error",
+                "user_id": str(user.id),
+                "error_code": exc.code,
+            },
+        )
+        raise
+
+    return _parse_document_chat_response(gw_response)

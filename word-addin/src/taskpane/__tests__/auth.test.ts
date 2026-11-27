@@ -17,7 +17,14 @@ import {
   updateTokens,
   type LoginResponseWire,
   type TokenRefreshResponseWire,
-} from "../auth";
+} from "@/taskpane/auth";
+// Deliberately the *real* generated function, not mocked — this is the
+// module-load-registered `client.interceptors.request.use(...)` in
+// taskpane/auth.ts under test, not skillClient.ts itself. Every
+// services/*Client.ts test mocks @/generated/sdk.gen entirely, so none
+// of them would have caught a regression here — this file is the one
+// place that exercises the real client → interceptor → fetch pipeline.
+import { listSkillsApiV1SkillsGet } from "@/generated/sdk.gen";
 
 const LOGIN_FIXTURE: LoginResponseWire = {
   access_token: "access-1",
@@ -66,10 +73,7 @@ describe("session storage helpers", () => {
     localStorage.setItem("lq-ai-word-addin-session", "not-json");
     expect(getSession()).toBeNull();
 
-    localStorage.setItem(
-      "lq-ai-word-addin-session",
-      JSON.stringify({ access_token: "x" })
-    );
+    localStorage.setItem("lq-ai-word-addin-session", JSON.stringify({ access_token: "x" }));
     // Missing required fields → should be cleaned up + null returned.
     expect(getSession()).toBeNull();
     expect(localStorage.getItem("lq-ai-word-addin-session")).toBeNull();
@@ -136,14 +140,15 @@ describe("refreshAccessToken", () => {
     expect(result!.access_token).toBe("access-2");
     expect(result!.refresh_token).toBe("refresh-2");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0][0]).toContain("/api/v1/auth/refresh");
+    // The generated client calls `fetch(request)` with one constructed
+    // Request, not `fetch(url, init)` — see taskpane/auth.ts's docstring.
+    const request = fetchSpy.mock.calls[0][0] as Request;
+    expect(request.url).toContain("/api/v1/auth/refresh");
   });
 
   it("on backend error: clears session + returns null", async () => {
     storeSession(LOGIN_FIXTURE);
-    vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response("nope", { status: 401 })
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue(new Response("nope", { status: 401 }));
 
     const result = await refreshAccessToken();
     expect(result).toBeNull();
@@ -243,8 +248,10 @@ describe("authenticatedFetch", () => {
     expect(res.status).toBe(200);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
 
-    // Second call (the refresh) hits /auth/refresh.
-    expect(fetchSpy.mock.calls[1][0]).toContain("/api/v1/auth/refresh");
+    // Second call (the refresh) hits /auth/refresh, via the generated
+    // client's single-Request-argument fetch call.
+    const refreshRequest = fetchSpy.mock.calls[1][0] as Request;
+    expect(refreshRequest.url).toContain("/api/v1/auth/refresh");
 
     // Third call (the retry) carries the new bearer token.
     const retryInit = fetchSpy.mock.calls[2][1] as RequestInit;
@@ -278,10 +285,10 @@ describe("logout", () => {
 
     await logout();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0][0]).toContain("/api/v1/auth/logout");
-    const init = fetchSpy.mock.calls[0][1] as RequestInit;
-    const headers = new Headers(init.headers);
-    expect(headers.get("Authorization")).toBe("Bearer access-1");
+    // Generated client: single Request argument, not (url, init).
+    const request = fetchSpy.mock.calls[0][0] as Request;
+    expect(request.url).toContain("/api/v1/auth/logout");
+    expect(request.headers.get("Authorization")).toBe("Bearer access-1");
     expect(getSession()).toBeNull();
   });
 
@@ -297,5 +304,42 @@ describe("logout", () => {
     const fetchSpy = vi.spyOn(global, "fetch");
     await logout();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("generated client auth interceptor", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("attaches the bearer token to generated-client requests", async () => {
+    storeSession(LOGIN_FIXTURE);
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    await listSkillsApiV1SkillsGet();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const request = fetchSpy.mock.calls[0][0] as Request;
+    expect(request.headers.get("Authorization")).toBe("Bearer access-1");
+  });
+
+  it("attaches no Authorization header when no session exists", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    await listSkillsApiV1SkillsGet();
+
+    const request = fetchSpy.mock.calls[0][0] as Request;
+    expect(request.headers.has("Authorization")).toBe(false);
   });
 });
