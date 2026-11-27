@@ -37,12 +37,15 @@ When a release ships, verify with cosign:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/' \
+  --new-bundle-format=false \
+  --certificate-identity-regexp '^https://github\.com/LegalQuants/lq-ai/\.github/workflows/release\.yml@refs/tags/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/legalquants/lq-ai-api:vX.Y.Z
 ```
 
-Detailed verification instructions land in `releases/README.md` at M1.
+With cosign 2.4 or earlier, leave out `--new-bundle-format=false`. The
+[release verification guide](releases/README.md) covers all four images, the SBOM and the build
+provenance, and says why the flag is there.
 
 ## Why supply-chain transparency matters
 

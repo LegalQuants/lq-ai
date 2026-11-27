@@ -112,8 +112,8 @@ first-run admin password retrieval, the `web` port-forward, and the `cosign veri
 the image tag you set — but that file lives at the chart root, not under
 `deploy/helm/lq-ai/templates/`, so Helm does not print it automatically after `helm install` or
 `helm upgrade` the way a chart's `templates/NOTES.txt` would; read the file directly rather than
-waiting for its contents to appear in your terminal. The `cosign verify` command it gives checks a
-keyless-OIDC signature against this repository's GitHub Actions identity — see
+waiting for its contents to appear in your terminal. The `cosign verify` command it gives checks
+the keyless-OIDC signature that this repository's release workflow put on the image — see
 [`docs/security/releases/README.md`](../security/releases/README.md) if you sign with an
 operator-controlled key instead.
 
