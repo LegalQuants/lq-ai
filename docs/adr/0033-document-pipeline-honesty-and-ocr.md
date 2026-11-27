@@ -1,5 +1,10 @@
 # ADR 0033 — Document-pipeline honesty, the OCR un-deferral, and a local embedding path
 
+**2026-11-21 update:** [ADR 0045](0045-short-embedding-storage-compatibility.md)
+extends decision 5's dimension constraint with zero-padding at storage and
+query boundaries. The database stays at 1,536 dimensions; shorter native
+model outputs are supported without a column/index migration.
+
 **Status:** Accepted (2026-10-04) — committee-ratified at the weekly call
 **Date:** 2026-09-09
 **Owner:** Maintainer team (houfu)

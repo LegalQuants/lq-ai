@@ -265,6 +265,8 @@ services:
       # Inference Gateway
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
+      LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT: ${LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT:-}
+      LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS: ${LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       # Autonomous sessions (#681): fallback model the analysis node passes to
       # the gateway when a watch/schedule trigger pins none. Defaults to the
@@ -384,6 +386,8 @@ services:
       # (`hybrid_alpha < 1.0`).
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
+      LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT: ${LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT:-}
+      LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS: ${LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     # Persist Docling's Hugging Face model cache and EasyOCR's detection
@@ -451,6 +455,8 @@ services:
       # Phase 5 doesn't need a second docker-compose edit.
       LQ_AI_GATEWAY_URL: ${LQ_AI_GATEWAY_URL:-http://gateway:8001}
       LQ_AI_GATEWAY_TIMEOUT_SECONDS: ${LQ_AI_GATEWAY_TIMEOUT_SECONDS:-900}
+      LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT: ${LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT:-}
+      LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS: ${LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS:-900}
       LQ_AI_GATEWAY_KEY: ${LQ_AI_GATEWAY_KEY:?LQ_AI_GATEWAY_KEY is required}
       # Autonomous sessions (#681): fallback model the analysis node passes to
       # the gateway when a watch/schedule trigger pins none. Defaults to the

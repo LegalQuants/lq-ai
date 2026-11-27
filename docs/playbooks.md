@@ -110,15 +110,13 @@ retrieve → classify → redline → compile → END
 ### Verdict and confidence
 
 The classifier prompt (`_CLASSIFY_SYSTEM_PROMPT`) instructs the model
-to bias toward `low` confidence and toward `missing` on uncertainty —
-the documented rationale is that false positives ("this missing clause
-matches") do more damage in contract review than false negatives.
+to use `low` confidence when interpretation is ambiguous and reserve
+`missing` for an absent issue, never an incomplete or failed answer.
 Confidence is one of `high` / `medium` / `low`, mapped to the numeric
 `0.9` / `0.7` / `0.5` (`_CONFIDENCE_NUMERIC`) — the same scale the M2-C1
 paraphrase judge uses, so future telemetry can unify on one
-verdict-confidence schema. Unparseable verdicts coerce to `missing`;
-unparseable confidence coerces to `low` (`_coerce_verdict`,
-`_coerce_confidence`).
+verdict-confidence schema. Invalid verdicts/confidences and unexplained
+classifications fail explicitly before any per-position result is added.
 
 ### Retrieval is lexical-only
 
@@ -137,10 +135,10 @@ executor does not currently consume it for retrieval.
 
 Any node may set `state["error"]` to short-circuit later nodes;
 `compile_node` checks for it and flips the row to `error`. A gateway
-transport or JSON-parse failure inside a `classify` / `redline` call
-does **not** crash the graph — `_dispatch_structured_call` returns an
-empty dict, which the classifier treats as a low-confidence `missing`
-(its "I have nothing to say" failure mode). The executor catches any
+transport, truncation or JSON-parse failure inside a `classify` / `redline`
+call produces a typed error and no fabricated absence finding. Earlier
+valid classifications are retained, remaining positions are not assessed,
+and no further redline calls are made. The executor catches any
 uncaught in-graph exception at the `graph.ainvoke` boundary and writes
 `status='error'` with a truncated `error` string, so the kick-off
 endpoint's poller always sees a terminal state.
@@ -163,6 +161,79 @@ The `judge_model` for the classify + redline calls defaults to the
 per-execution model selection today; the docstring flags inheriting it
 from `project.minimum_inference_tier` or playbook-level config as a
 future enhancement.
+
+## Easy Playbook model configuration and failed generations
+
+Per [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md), position count
+is diagnostic: preserve coherent issues and outliers instead of forcing a
+5–10 ceiling. Both centroid merging and singleton folding require a compatible
+issue identity from a bounded synonym registry; unknown labels stay separate.
+Definitions/exclusions, permitted/compelled disclosures, recipient liability/
+remedies, agreement duration/survival, and governing law/forum remain distinct.
+
+Quotes must match contiguous source text at clause boundaries. The application
+publishes the original slice with derived offsets, deduplicates chunk overlap,
+and makes one source-based repair attempt for invalid quotes. A repeated
+dangling `; and` or `; or` item may use its complete, verified source context;
+other failed repair fails generation. Model guesses never become source anchors. Overlapping
+citations are allowed when a complete sentence genuinely governs two issues.
+
+Descriptions use the selected standard rather than the other corpus variants.
+A batched source-consistency check requires strict verdicts and matched evidence;
+unsupported prose becomes literal source text and neutral review instructions.
+This does not certify legal correctness. Fallback descriptions compare wording
+without claiming that the alternative is legally acceptable.
+
+The targeted source checks also keep explicit technical safeguards out of
+disclosure-prohibition groups and correct comparisons of simple agreement
+durations, general-information survival timing, and acknowledgement actors.
+They do not infer conditional or ambiguous terms. Generated descriptions and
+the existing attorney edit step remain the normal workflow.
+Checks also reject a no-license prohibition described as a license grant,
+unsupported care benchmarks or legal rationales, and omitted conditional court
+priority through the same existing fallbacks.
+
+Comparisons stay on the named issue in shared quotations and describe matching
+explicit requirements when no difference is supported. Remedies extraction
+retains an adjacent acknowledgement/relief pair from the same source passage.
+Checks also reject unsupported narrowing of implied rights and inferred
+exclusions based only on omitted examples from an all-information clause.
+
+Local-model responses may include a prose preamble before one JSON answer or
+exact duplicate fenced copies of that answer. The reader accepts those wrappers
+without changing the answer. Invalid JSON, conflicting answers, malformed
+response shapes, and extraction transport failures produce an explicit error;
+they cannot silently drop a document and publish a partial-corpus draft.
+
+`LQ_AI_EASY_PLAYBOOK_JOB_TIMEOUT_SECONDS` controls this task only (default
+900, range 60–7200). Record any longer local-model timeout with the walkthrough;
+it does not satisfy the default-model performance target automatically.
+
+
+For local Qwen thinking models, set
+`LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` and recreate the API and
+ARQ worker. This uses the gateway's existing reasoning control for both
+extraction and description calls. Leave it empty for provider defaults;
+provider support for individual reasoning settings varies. Extraction has
+an 8,192-token answer budget. Hidden reasoning is never treated as clause
+JSON.
+
+Extraction and descriptions accept bare JSON or one complete JSON code
+block with surrounding model prose. Multiple blocks and malformed JSON
+are rejected; the answer is not repaired or inferred from prose.
+
+Corpus embedding calls pass through the document workflow's authorization
+wrapper, rechecking the actor and all source matters before delegating to
+the configured gateway client. The wrapper owns no HTTP transport. This
+keeps centroid merging and folding available without bypassing access
+checks; missing or revoked access prevents dispatch.
+
+A missing or token-truncated extraction answer ends the generation with
+`status='error'`. A corpus with no usable clauses, or an assembled draft
+with zero positions, also fails. The wizard shows the generation's error
+message and retry action. A successfully parsed response containing no
+clauses can still be appropriate for one non-contract document; a corpus
+containing only such documents cannot produce a successful playbook.
 
 ## Persisted row shape (executor)
 
@@ -270,7 +341,7 @@ job `easy_playbook_generation_job` on queue `arq:m3a6`):
    1,500-char overlap between spans for long documents) over the
    document's `normalized_content`. Emits a list of
    `{issue, clause_text, source_offsets}` entries — verbatim clause
-   text plus best-effort `[start, end)` offsets (the same half-open
+   text plus source-derived `[start, end)` offsets (the same half-open
    offset semantics as the M2 Citation Engine). The prompt is a Python
    mirror of `skills/playbook-easy-extract/SKILL.md` — the SKILL.md is
    the human-readable, forkable source of truth; the constant in the
@@ -316,8 +387,10 @@ job `easy_playbook_generation_job` on queue `arq:m3a6`):
 
 The worker writes the assembled `PlaybookCreate.model_dump(mode="json")`
 into `easy_playbook_generations.draft_playbook` and flips the row to
-`completed`. Critically: **worker "success" means the pipeline produced
-a structurally valid draft — not that the playbook is correct,
+`completed` only when the draft contains positions. Missing/truncated
+extraction answers or an empty corpus/draft terminate with `error`.
+Critically: **worker "success" means the pipeline produced
+a non-empty, structurally valid draft — not that the playbook is correct,
 complete, or fit for use.** The wizard's Step 3 inline editor is where
 the user-attorney validates and edits before saving.
 
@@ -334,6 +407,25 @@ substrate the M2-E2 Citation Engine cost calibration uses.
 `temperature` is omitted intentionally: Anthropic Opus 4.x reasoning
 models rejected the parameter as of 2026-05, and the gateway only
 forwards non-None values to providers.
+
+Output budgets include provider reasoning tokens. Position descriptions allow
+2,048 tokens, alternatives 1,536, and consistency checks 8,192 for batches of
+three items. The draft/check/source-fallback flow is retained. Source checks
+preserve the difference between seeking relief and entitlement to relief,
+keep survival metadata on its named issue, and retain continuing trade-secret
+qualification. Recognized survival rules have an issue-scoped factual fallback
+instead of copying a combined general-information/trade-secret paragraph.
+
+Executor limits default to 4,096 tokens each, configured through
+`LQ_AI_PLAYBOOK_CLASSIFY_MAX_TOKENS` and `LQ_AI_PLAYBOOK_REDLINE_MAX_TOKENS`
+(256–32,768). `LQ_AI_PLAYBOOK_EXECUTOR_REASONING_EFFORT=none` separately requests
+no reasoning for local-model executor calls; blank preserves provider defaults.
+Unfinished (including valid JSON with a `length` finish), empty, malformed,
+unexplained or transport-failed replies end the execution with `status='error'`
+and an actionable message. Earlier valid classifications remain available;
+the failed position is not counted as `missing`, and redlining stops. A real
+`missing` verdict requires a complete, valid classification with a justification.
+No new verdict, database migration, or automatic retry is introduced.
 
 ## Persisted row shape (wizard)
 
@@ -496,13 +588,41 @@ clustering quality fell short of the corpus README's target:
   document) with zero fallback tiers.
 
 The engine is **functional**; this is a tuning follow-on, not a
-correctness bug. DE-308 scopes the investigation (why near-synonym
-families aren't merged; why "Standard of Care" didn't cluster) and
-candidate fixes (a post-clustering merge/dedup pass; a
-minimum-document-support threshold for singleton positions). It is the
-exact kind of clustering-quality signal the corpus README flags as
-file-worthy — and the Step 3 inline editor is the safety net the
-quality bar relies on in the meantime.
+correctness bug. It is the exact kind of clustering-quality signal the
+corpus README flags as file-worthy — and the Step 3 inline editor is
+the safety net the quality bar relies on in the meantime.
+
+**DE-308 mitigations landed (2026-07-25); live re-verification
+pending.** Two fixes shipped:
+
+- A **minimum-document-support fold pass** in
+  `api/app/playbooks/easy/clustering.py`: after the centroid
+  label-merge, position groups backed by only one source document fold
+  into their nearest supported cluster when the clause-centroid cosine
+  similarity clears a floor (`0.80` default) — the folded clause
+  becomes a fallback-tier candidate instead of a standalone singleton
+  position. The supported group's label and modal standard are selected
+  from its members before folding. Setting `label_merge_threshold=None`
+  disables both merging and folding for exact-label grouping. Fold
+  diagnostics record aggregate counts. Below the floor the group stays
+  standalone (fail-closed:
+  a genuinely distinct outlier keeps its own visible position rather
+  than being buried inside another cluster).
+- The **missed "Standard of Care" axis** traced to the extractor
+  prompt: the sample NDAs embed the care standard inside the
+  "Obligations of Receiving Party" section with no dedicated heading,
+  and the prompt's issue vocabulary never named the axis. The prompt
+  (`extractor.py` and its mirror `skills/playbook-easy-extract/SKILL.md`,
+  v1.1.0) now names `"Standard of Care"` and instructs
+  one-entry-per-issue splitting for sections that bundle multiple
+  positions.
+
+These are validated by deterministic unit tests and a fixture-based
+corpus-replay test (`api/tests/test_easy_playbook_corpus_replay.py`)
+asserting 5–10 positions with all five designed axes — against
+synthetic embeddings and recorded-style extraction fixtures, **not** a
+live pipeline run. A live wizard re-run over the sample corpus and the
+reviewing-attorney walk-through remain the confirmation steps.
 
 ### Executor citations are not Citation-Engine-verified
 

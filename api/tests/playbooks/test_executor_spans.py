@@ -66,6 +66,7 @@ class _StubMessage:
 @dataclass
 class _StubChoice:
     message: _StubMessage
+    finish_reason: str = "stop"
 
 
 @dataclass

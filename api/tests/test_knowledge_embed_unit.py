@@ -7,6 +7,7 @@ functions against a respx-mocked GatewayClient.
 
 from __future__ import annotations
 
+import math
 from typing import Any, cast
 
 import httpx
@@ -21,6 +22,7 @@ from app.knowledge.embed import (
     _batched as batched,
     _format_vector,
     count_tokens,
+    prepare_storage_embedding,
     request_embedding_vector,
     request_embedding_vectors,
 )
@@ -81,6 +83,34 @@ def test_embedding_dimension_matches_column_type() -> None:
     """C6: EMBEDDING_DIMENSION is 1536 — matches the vector(1536) column."""
 
     assert EMBEDDING_DIMENSION == 1536
+
+
+@pytest.mark.unit
+def test_zero_padding_preserves_native_values_and_cosine() -> None:
+    left = [0.6, -0.8] + [0.0] * 766
+    right = [0.8, 0.6] + [0.0] * 766
+    padded_left = prepare_storage_embedding(left)
+    padded_right = prepare_storage_embedding(right)
+    assert len(padded_left) == EMBEDDING_DIMENSION
+    assert padded_left[:768] == left
+    assert padded_left[768:] == [0.0] * 768
+    assert len(left) == 768  # caller data stays native
+
+    def cosine(a: list[float], b: list[float]) -> float:
+        return sum(x * y for x, y in zip(a, b, strict=True)) / (
+            math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+        )
+
+    assert cosine(left, right) == pytest.approx(cosine(padded_left, padded_right))
+    native = [0.25] * EMBEDDING_DIMENSION
+    assert prepare_storage_embedding(native) == native
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("vector", [[], [1.0] * 1537, [float("nan")], [float("inf")]])
+def test_invalid_storage_vectors_are_rejected(vector: list[float]) -> None:
+    with pytest.raises(GatewayInvalidResponse):
+        prepare_storage_embedding(vector)
 
 
 # --- Batching -----------------------------------------------------------

@@ -30,15 +30,31 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.clients.gateway import GatewayClient
+from app.config import get_settings
+from app.errors import GatewayInvalidResponse
 from app.models.document import Document
+from app.playbooks.easy.issue_identity import issue_identity
+from app.playbooks.easy.json_output import unwrap_json_answer
+from app.playbooks.easy.source_anchor import (
+    anchor_quote,
+    complete_connected_item,
+    remedy_context,
+    repair_context,
+)
+from app.playbooks.easy.source_facts import source_issue
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 
 logger = logging.getLogger(__name__)
+
+
+class ExtractionResponseError(GatewayInvalidResponse):
+    """A missing or truncated answer cannot be accepted as corpus evidence."""
 
 
 # ---------------------------------------------------------------------------
@@ -70,9 +86,8 @@ class ExtractedClause(BaseModel):
     Clause text is verbatim — the clustering step embeds these
     strings for variant detection.
 
-    Source offsets are best-effort. If the model could not identify
-    exact offsets, the field is ``None`` and the UI's "open in
-    document" affordance is omitted for that clause.
+    Extraction derives exact offsets from a verified source slice. The
+    field stays nullable for callers constructing intermediate candidates.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -95,20 +110,66 @@ emit a structured list of the negotiated positions it takes.
 Identify every clause that:
 
 1. Takes a substantive position on a recurring contract issue
-   (confidentiality definition, term, limitation of liability,
-   indemnification, payment terms, governing law, etc.).
+   (confidentiality definition, term, standard of care, limitation
+   of liability, indemnification, payment terms, governing law,
+   etc.).
 2. Is recognizable as a position, not pure boilerplate. Skip
    standard severability / notice / integration clauses UNLESS the
    contract takes an unusual position on them.
 3. Is contained in identifiable, contiguous text. Don't emit
-   overlapping or fragmentary spans.
+   fragmentary spans.
+
+A single section often bundles positions on MORE than one issue —
+e.g., an "Obligations of Receiving Party" section that both fixes
+the standard of care and restricts use and disclosure. Emit one
+entry per issue, each quoting only the sentence(s) or list item(s)
+that carry that position; do not collapse distinct positions into
+one section-sized entry. Prefer disjoint sentences or list items. If one
+complete sentence genuinely governs multiple issues, it may be quoted for
+each issue to preserve context; do not reconstruct fragments.
+The standard of care is a recurring negotiated position in
+confidentiality agreements — extract it as its own "Standard of
+Care" entry even when it has no dedicated heading.
+
+Keep definitions separate from exclusions; permitted disclosures separate from
+compelled disclosures; recipient liability separate from remedies; agreement
+duration separate from confidentiality survival; and governing law separate
+from forum/venue. Use specific survival labels for trade secrets and general
+confidential information when the source supports separate entries. Preserve
+other genuine issues; do not target a fixed number of entries.
+
+Keep technical security safeguards (such as encryption and access controls)
+separate from a prohibition on disclosure and from the benchmark for the
+standard of care. Use "Security Safeguards" for those measures. When a uniform
+survival rule expressly covers trade secrets and other confidential information,
+identify both issues using the complete shared sentence(s), without inventing
+a separate survival period.
+
+For remedies, retain the immediately adjacent acknowledgement of irreparable
+harm and the relief entitlement when they form one passage. Do not quote only
+the injunction sentence and thereby omit who acknowledges the harm.
+
+For an NDA, reuse these labels when they fit: "Definition of Confidential
+Information", "Exclusions from Confidential Information", "Standard of Care",
+"Permitted Use", "Restriction on Disclosure", "Permitted Disclosures",
+"Compelled Disclosure", "Recipient Liability", "Term of Agreement",
+"Survival of Trade Secrets", "Survival of General Information", "Return or
+Destruction", "Archival Copy Exception", "Remedies", "Governing Law",
+"Jurisdiction", and "No License". These are label conventions, not a required
+set or a limit. Keep a genuinely different or combined issue under its own label.
+
+Quote contiguous source text only. Never join a list header to a non-adjacent
+item, stitch items (a) and (c), or insert connecting words. Include enough
+adjacent context to preserve the actor, conditions, and negation. If offsets
+are uncertain, use null; the application validates quotes and derives offsets.
 
 For each identified clause, emit one entry with:
 
 * ``issue`` — short descriptive noun phrase from common contract
   vocabulary ("Limitation of Liability", "Permitted Disclosures",
-  "Term of Confidentiality Obligation"). Reuse common labels when
-  they fit — clustering downstream depends on label consistency.
+  "Standard of Care", "Term of Confidentiality Obligation"). Reuse
+  common labels when they fit — clustering downstream depends on
+  label consistency.
 * ``clause_text`` — verbatim quote from the contract. Preserve
   original wording, casing, and punctuation. Do not paraphrase.
 * ``source_offsets`` — half-open character interval
@@ -152,9 +213,9 @@ DEFAULT_CHARACTER_BUDGET = 50_000
 # Prevents clauses that straddle a span boundary from being missed.
 SPAN_OVERLAP_CHARACTERS = 1_500
 
-# Max output tokens. 20 clauses at ~120 tokens each = 2400; 3500 keeps
-# headroom for verbose clauses without letting the model meander.
-EASY_EXTRACT_MAX_TOKENS = 3500
+# Verbatim quotes from a short contract plus JSON labels/offsets can exceed
+# 3500 tokens. Reasoning is controlled separately, never parsed as the answer.
+EASY_EXTRACT_MAX_TOKENS = 8192
 
 # Default judge-model alias. Matches the M3-A2 executor's default;
 # the alias resolves to the deployment-configured "smart" model
@@ -183,11 +244,10 @@ async def extract_clauses_from_document(
     parses the structured-JSON response, and returns the merged list
     of :class:`ExtractedClause` instances.
 
-    Returns an empty list if the document has no normalized content
-    or if every LLM call returned malformed output. Failure-of-the-
-    LLM is non-fatal for the corpus-level pipeline — one bad
-    extraction reduces clustering signal but doesn't kill the
-    generation.
+    Returns an empty list for a document without normalized content or a valid
+    empty extraction. Transport failures, malformed response shapes, missing
+    content and token-truncated answers raise ``ExtractionResponseError``:
+    these cannot be accepted as evidence that a document has no positions.
 
     Args:
         document: the source document. ``normalized_content`` is
@@ -237,6 +297,8 @@ async def extract_clauses_from_document(
                 span_offset=offset,
                 contract_type=contract_type,
             )
+        except ExtractionResponseError:
+            raise
         except Exception as exc:
             logger.warning(
                 "easy_extract: span extraction failed",
@@ -248,8 +310,26 @@ async def extract_clauses_from_document(
                     "error": str(exc),
                 },
             )
-            continue
+            raise ExtractionResponseError(
+                "Clause extraction request failed; retry generation."
+            ) from exc
         merged.extend(clauses)
+
+    # Correct the narrow source/label mismatch observed in the walkthrough.
+    # Keep the complete source quotation and coordinates unchanged.
+    merged = [
+        clause.model_copy(update={"issue": source_issue(clause.issue, clause.clause_text)})
+        for clause in merged
+    ]
+
+    # Overlapping input spans must not give the same source clause extra votes.
+    merged = list(
+        {
+            (issue_identity(c.issue), c.source_offsets.start, c.source_offsets.end): c
+            for c in merged
+            if c.source_offsets is not None
+        }.values()
+    )
 
     logger.info(
         "easy_extract: extraction complete",
@@ -334,6 +414,7 @@ async def _extract_one_span(
         model=model,
         messages=messages,
         max_tokens=EASY_EXTRACT_MAX_TOKENS,
+        reasoning_effort=get_settings().lq_ai_easy_playbook_reasoning_effort or None,
         # `temperature` is omitted: Anthropic Opus 4.x reasoning models
         # rejected the parameter as of 2026-05, and the gateway already
         # only forwards non-None values to providers. Determinism for
@@ -343,15 +424,122 @@ async def _extract_one_span(
         lq_ai_purpose="playbook_easy_extract",
     )
 
+    parsed = await _dispatch_extraction(gateway, request)
+    anchored, rejected = _anchor_extracted_clauses(parsed, span_text)
+    if rejected:
+        logger.warning(
+            "easy_extract: repairing unmatched source quotations",
+            extra={"event": "easy_extract_source_repair", "unanchored_count": len(rejected)},
+        )
+        repair_request = request.model_copy(
+            update={
+                "lq_ai_purpose": "playbook_easy_extract_repair",
+                "messages": [
+                    *messages,
+                    ChatCompletionMessage(
+                        role="user",
+                        content=(
+                            "Re-extract ONLY the issues listed below from DOCUMENT TEXT. The previous "
+                            "quotes did not match a contiguous source slice. Copy one contiguous sentence "
+                            "or list item for each issue. Do not join a header to a non-adjacent item or "
+                            "stitch items (a) and (c). Do not add connecting words. Set source_offsets to null; "
+                            "the application locates the quote. Return the same extracted_clauses JSON shape.\n"
+                            "When a source_context is supplied, copy its COMPLETE sentence, including "
+                            "all conditions and both survival alternatives. Do not split at a comma. "
+                            "The same full sentence may be quoted for two distinct issues.\n"
+                            + json.dumps(
+                                [
+                                    {
+                                        "issue": c.issue,
+                                        "rejected_quote": c.clause_text,
+                                        "source_context": repair_context(span_text, c.clause_text),
+                                    }
+                                    for c in rejected
+                                ]
+                            )
+                        ),
+                    ),
+                ],
+            }
+        )
+        try:
+            repaired = await _dispatch_extraction(gateway, repair_request)
+        except ExtractionResponseError:
+            raise
+        except Exception as exc:
+            raise ExtractionResponseError(
+                "Source quotation repair failed; retry generation."
+            ) from exc
+        repaired, still_rejected = _anchor_extracted_clauses(repaired, span_text)
+        unresolved: list[ExtractedClause] = []
+        for clause in still_rejected:
+            complete = complete_connected_item(span_text, clause.clause_text)
+            if complete is None:
+                unresolved.append(clause)
+            else:
+                repaired.append(
+                    clause.model_copy(
+                        update={
+                            "clause_text": complete.text,
+                            "source_offsets": ExtractedClauseSourceOffsets(
+                                start=complete.start, end=complete.end
+                            ),
+                        }
+                    )
+                )
+        still_rejected = unresolved
+        if still_rejected or Counter(issue_identity(c.issue) for c in repaired) != Counter(
+            issue_identity(c.issue) for c in rejected
+        ):
+            raise ExtractionResponseError(
+                "Clause extraction could not produce contiguous source quotations after repair. "
+                "Review the source documents or retry with a different model."
+            )
+        anchored.extend(repaired)
+    return [_rebase_offsets(c, delta=span_offset) for c in anchored]
+
+
+def _anchor_extracted_clauses(
+    clauses: list[ExtractedClause], source: str
+) -> tuple[list[ExtractedClause], list[ExtractedClause]]:
+    anchored: list[ExtractedClause] = []
+    rejected: list[ExtractedClause] = []
+    for clause in clauses:
+        match = anchor_quote(source, clause.clause_text)
+        if match is None:
+            rejected.append(clause)
+        else:
+            if issue_identity(clause.issue) == "Remedies":
+                match = remedy_context(source, match.text) or match
+            anchored.append(
+                clause.model_copy(
+                    update={
+                        "clause_text": match.text,
+                        "source_offsets": ExtractedClauseSourceOffsets(
+                            start=match.start, end=match.end
+                        ),
+                    }
+                )
+            )
+    return anchored, rejected
+
+
+async def _dispatch_extraction(
+    gateway: GatewayClient, request: ChatCompletionRequest
+) -> list[ExtractedClause]:
     response = await gateway.chat_completion(request)
+    if response.choices and getattr(response.choices[0], "finish_reason", None) == "length":
+        raise ExtractionResponseError(
+            "Clause extraction reached the model output limit. "
+            "Configure the model's reasoning effort or use a model with sufficient output capacity."
+        )
     content = _extract_response_content(response)
     if not content:
-        return []
+        raise ExtractionResponseError(
+            "Clause extraction returned no answer content. Check the model's reasoning configuration."
+        )
 
-    parsed = _parse_extracted_clauses(content)
-    if span_offset > 0:
-        parsed = [_rebase_offsets(clause, delta=span_offset) for clause in parsed]
-    return parsed
+    return _parse_extracted_clauses(content, strict=True)
 
 
 def _extract_response_content(response: Any) -> str | None:
@@ -372,26 +560,20 @@ def _extract_response_content(response: Any) -> str | None:
     return content
 
 
-def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
-    """Lenient JSON parse + Pydantic validation; drop malformed entries.
+def _parse_extracted_clauses(content: str, *, strict: bool = False) -> list[ExtractedClause]:
+    """Parse JSON and validate entries, with explicit failures in production.
 
     Tolerates a leading ``` ```json ``` fence (some models wrap output).
     A top-level non-object response returns an empty list; a top-level
     object missing ``extracted_clauses`` returns an empty list. Per-entry
     validation failures log a WARNING and skip the entry rather than
     rejecting the whole response — a model that produces 19 valid entries
-    plus 1 malformed one is still useful.
+    plus 1 malformed one is still useful. With ``strict=True`` (the dispatch
+    path), invalid JSON, invalid shape or all-invalid entries raise instead of
+    silently treating a failed response as a valid empty extraction.
     """
 
-    stripped = content.strip()
-    if stripped.startswith("```"):
-        # Drop a leading ``` or ```json fence and the trailing fence.
-        parts = stripped.split("```", 2)
-        if len(parts) >= 2:
-            stripped = parts[1]
-        if stripped.startswith("json"):
-            stripped = stripped[4:]
-        stripped = stripped.rstrip("`").strip()
+    stripped = unwrap_json_answer(content)
 
     try:
         parsed = json.loads(stripped)
@@ -403,12 +585,20 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
                 "error": str(exc),
             },
         )
+        if strict:
+            raise ExtractionResponseError(
+                "Clause extraction returned invalid JSON; retry generation."
+            ) from exc
         return []
 
     if not isinstance(parsed, dict):
+        if strict:
+            raise ExtractionResponseError("Clause extraction returned an invalid response shape.")
         return []
     raw_clauses = parsed.get("extracted_clauses")
     if not isinstance(raw_clauses, list):
+        if strict:
+            raise ExtractionResponseError("Clause extraction returned an invalid response shape.")
         return []
 
     out: list[ExtractedClause] = []
@@ -428,6 +618,8 @@ def _parse_extracted_clauses(content: str) -> list[ExtractedClause]:
                 },
             )
             continue
+    if strict and raw_clauses and not out:
+        raise ExtractionResponseError("Clause extraction returned no valid clause entries.")
     return out
 
 

@@ -1,0 +1,23 @@
+{
+  "generation_id": "8348649f-0f04-4332-9d19-0671e8ea8cbc",
+  "cases": [
+    {
+      "issue": "Remedies",
+      "standard_language": "The Parties acknowledge that any breach of this Agreement may cause irreparable harm for\nwhich monetary damages may be inadequate, and that the Disclosing Party shall be entitled\nto seek injunctive and other equitable relief, in addition to any other remedies available at law\nor in equity, without the necessity of posting a bond.",
+      "description": "The Parties acknowledge that breach may cause irreparable harm for which monetary damages may be inadequate, and the Disclosing Party is entitled to injunctive and other equitable relief in addition to other remedies at law or in equity, without posting a bond.",
+      "redline_strategy": "If the contract lacks or dilutes this language, add or restore an express irreparable-harm acknowledgment and an entitlement to injunctive and other equitable relief in addition to legal remedies, with no bond requirement. Do not rely on silence or a damages-only clause."
+    },
+    {
+      "issue": "Survival of General Information",
+      "standard_language": "Notwithstanding such expiration, the Receiving Party's obligations with respect to\nConfidential Information shall continue (a) for a period of three (3) years following\nexpiration or termination with respect to information that constitutes trade secrets under\napplicable law, and (b) for the duration of the term with respect to all other Confidential\nInformation.",
+      "description": "Selected standard: Notwithstanding such expiration, the Receiving Party's obligations with respect to\nConfidential Information shall continue (a) for a period of three (3) years following\nexpiration or termination with respect to information that constitutes trade secrets under\napplicable law, and (b) for the duration of the term with respect to all other Confidential\nInformation.",
+      "redline_strategy": "Review deviations against the selected standard language."
+    },
+    {
+      "issue": "Survival of Trade Secrets",
+      "standard_language": "The Receiving Party's obligations of confidentiality and non-use shall survive for the term of\nthis Agreement and continue thereafter as follows: (a) with respect to information that\nconstitutes a trade secret under applicable law, for so long as such information\ncontinues to qualify as a trade secret; and (b) with respect to all other Confidential\nInformation, for a period of five (5) years following expiration or termination.",
+      "description": "Confidentiality and non-use obligations continue beyond the term: indefinitely for information qualifying as a trade secret, and for five years after expiration or termination for all other Confidential Information.",
+      "redline_strategy": "If the contract shortens or omits survival, add/restore survival that tracks trade-secret status indefinitely and provides a five-year tail for all other Confidential Information. Push to avoid a flat expiration at termination or a one-size-fits-all tail that under-protects trade secrets."
+    }
+  ]
+}

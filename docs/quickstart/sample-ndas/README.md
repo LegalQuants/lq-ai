@@ -13,7 +13,7 @@ These NDAs are **synthetic and for testing only**. They are not real agreements 
 3. Pick contract type `NDA` (or `NDA — Mutual`).
 4. Upload all five PDFs from this directory.
 5. Click **Generate playbook**. The wizard uploads → polls until each file is parsed → kicks off generation → polls every 5 seconds until the worker completes.
-6. The Step 3 inline editor should surface ~5–10 positions. Expect at least the five variant axes below to appear as distinct positions, each with the modal value in `standard_language` and the off-modal variants in `fallback_tiers`.
+6. Review the count as a diagnostic; the historical ~5–10 estimate is not a cap. Preserve all coherent issues and genuine outliers. Expect at least the five variant axes below as distinct positions, with a source-backed selected standard and same-issue alternatives in `fallback_tiers`.
 7. Edit / approve / save.
 
 Typical end-to-end runtime against the default `smart` alias: 3–6 minutes for the five-document corpus.
@@ -48,16 +48,16 @@ If the wizard *misses* an axis — e.g., conflates "permitted disclosures" with 
 ## What this corpus does NOT test
 
 - **Wide-form-variation handling**: the corpus is all mutual NDAs with consistent boilerplate. A real operator's library has form variation (different lawyers, different decades, different deal types) that this corpus doesn't stress.
-- **Edge cases in extraction**: e.g., NDAs where the definition is split across multiple sections, or where the standard of care is embedded in the obligations clause without its own heading. The synthetic corpus uses clean section structure.
+- **Edge cases in extraction**: e.g., NDAs where the definition is split across multiple sections, or where the standard of care is embedded in the obligations clause without its own heading. Standard of care is embedded in the obligations section; it does not have a dedicated heading.
 - **Unilateral NDAs**: all five are mutual. The wizard's clustering on a mixed mutual + unilateral corpus is a separate test.
-- **Very long agreements**: each is ~2 pages. The 50,000-character chunking limit in `extractor.py` only kicks in on much longer documents.
+- **Very long agreements**: the rendered PDFs are 3–4 pages each. The 50,000-character chunking limit in `extractor.py` only kicks in on much longer documents.
 
 For a "harder" smoke test, mix in a real-form NDA or two and observe whether the wizard's clusters degrade gracefully.
 
 ## Source files
 
 - `nda-N-*.md` — the markdown source for each agreement. Edit these and re-run `render.py` (in `/tmp/lq-ai-test-ndas/`) to regenerate PDFs.
-- `nda-N-*.pdf` — the rendered PDFs the wizard ingests. Roughly 95–110 KB each, 1–2 pages.
+- `nda-N-*.pdf` — the rendered PDFs the wizard ingests. The rendered PDFs are 3–4 pages each.
 
 ## See also
 

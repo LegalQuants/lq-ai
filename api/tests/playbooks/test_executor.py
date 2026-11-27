@@ -32,6 +32,7 @@ from app.models.playbook import Playbook, PlaybookExecution, PlaybookPosition
 from app.models.user import User
 from app.playbooks.executor import run_playbook_execution
 from app.playbooks.nodes import (
+    PlaybookResponseError,
     _coerce_chunk_indices,
     _coerce_confidence,
     _coerce_verdict,
@@ -55,10 +56,10 @@ def test_coerce_verdict_accepts_canonical_values() -> None:
 
 
 @pytest.mark.unit
-def test_coerce_verdict_defaults_to_missing_for_unknown() -> None:
-    assert _coerce_verdict("yes") == "missing"
-    assert _coerce_verdict(None) == "missing"
-    assert _coerce_verdict(42) == "missing"
+def test_coerce_verdict_rejects_unknown_instead_of_claiming_absence() -> None:
+    for value in ("yes", None, 42):
+        with pytest.raises(PlaybookResponseError):
+            _coerce_verdict(value)
 
 
 @pytest.mark.unit
@@ -135,6 +136,7 @@ class _StubMessage:
 @dataclass
 class _StubChoice:
     message: _StubMessage
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -504,18 +506,12 @@ async def test_executor_marks_missing_when_keyword_not_in_document(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("failure", ["transport", "truncated", "empty", "malformed"])
 async def test_executor_persists_error_on_gateway_failure(
     db_session: AsyncSession,
+    failure: str,
 ) -> None:
-    """A gateway exception inside the classifier surfaces as a low-confidence missing.
-
-    The structured-call dispatcher swallows transport errors and
-    returns ``{}`` — :func:`_coerce_verdict` then maps the empty dict
-    to ``missing`` at ``low`` confidence. The execution still
-    completes successfully (status='completed') because the failure
-    is per-position, not per-execution; partial robustness is a
-    feature, not a bug.
-    """
+    """A provider failure cannot become a successful missing classification."""
     owner = await _make_user(db_session)
     _file, doc, _chunks = await _make_doc_with_chunks(
         db_session,
@@ -539,7 +535,23 @@ async def test_executor_persists_error_on_gateway_failure(
 
     class _FailingGateway:
         async def chat_completion(self, request: Any) -> Any:
-            raise RuntimeError("gateway unreachable")
+            if failure == "transport":
+                raise RuntimeError("gateway unreachable")
+            content = {
+                "truncated": json.dumps(
+                    {"verdict": "missing", "confidence": "high", "justification": "Absent."}
+                ),
+                "empty": "",
+                "malformed": "{broken",
+            }[failure]
+            return _StubResponse(
+                choices=[
+                    _StubChoice(
+                        message=_StubMessage(content=content),
+                        finish_reason="length" if failure == "truncated" else "stop",
+                    )
+                ]
+            )
 
     await run_playbook_execution(
         db_session,
@@ -548,10 +560,10 @@ async def test_executor_persists_error_on_gateway_failure(
     )
 
     await db_session.refresh(execution)
-    # The gateway swallowed the error per-call; the executor still
-    # writes a completed row with a 'missing' verdict for the position.
-    assert execution.status == "completed"
+    assert execution.status == "error"
+    assert execution.error is not None
+    assert "Unable to classify Test" in execution.error
     assert execution.results is not None
     positions = execution.results["positions"]
-    assert positions[0]["verdict"] == "missing"
-    assert positions[0]["confidence"] == 0.5  # low → 0.5
+    assert positions == []
+    assert execution.results["summary"]["missing"] == 0

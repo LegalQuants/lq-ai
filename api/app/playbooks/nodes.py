@@ -40,6 +40,8 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.gateway import GatewayClient
+from app.config import get_settings
+from app.errors import GatewayInvalidResponse
 from app.graph_types import AsyncStateNode
 from app.models.document import DocumentChunk
 from app.models.playbook import PlaybookExecution
@@ -59,15 +61,7 @@ logger = logging.getLogger(__name__)
 # even on cheap models.
 RETRIEVAL_TOP_K = 4
 
-# Maximum tokens for the classify call. The structured output is
-# short — verdict + confidence + matched_text + justification — so
-# 600 tokens is generous without letting a chatty model run away.
-CLASSIFY_MAX_TOKENS = 600
-
-# Maximum tokens for the redline call. Slightly larger because the
-# redline output includes old_text + new_text + justification, all
-# free-form English.
-REDLINE_MAX_TOKENS = 800
+# Limits are operator-configurable; reasoning also consumes output capacity.
 
 # Classifier output JSON schema (documented in the prompt; parsed by
 # :func:`_parse_classify_response`). The verdict + confidence pair
@@ -78,6 +72,10 @@ _VALID_VERDICTS: frozenset[str] = frozenset(
 )
 _VALID_CONFIDENCES: frozenset[str] = frozenset({"high", "medium", "low"})
 _CONFIDENCE_NUMERIC: dict[str, float] = {"high": 0.9, "medium": 0.7, "low": 0.5}
+
+
+class PlaybookResponseError(GatewayInvalidResponse):
+    """The model did not return a complete, usable playbook answer."""
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +281,8 @@ the chunks (in the order they were presented below) whose content
 supports your verdict. Always include at least one index for
 non-``missing`` verdicts.
 
-Bias toward "low" confidence and toward ``missing`` on uncertainty.
-False positives — calling a missing position "matches" — do more
-damage in contract review than false negatives.
+Use "low" confidence when interpretation is ambiguous. Reserve ``missing``
+for a genuinely absent issue, never an incomplete analysis or failed answer.
 """
 
 
@@ -317,14 +314,38 @@ def make_classify_node(
                 )
                 chunks = retrievals_by_position.get(pos["id"], [])
                 messages = _build_classify_messages(pos, chunks)
-                verdict_data = await _dispatch_structured_call(
-                    gateway=gateway,
-                    model=judge_model,
-                    messages=messages,
-                    max_tokens=CLASSIFY_MAX_TOKENS,
-                )
-
-                verdict = _coerce_verdict(verdict_data.get("verdict"))
+                try:
+                    verdict_data = await _dispatch_structured_call(
+                        gateway=gateway,
+                        model=judge_model,
+                        messages=messages,
+                        max_tokens=get_settings().lq_ai_playbook_classify_max_tokens,
+                    )
+                    verdict = _coerce_verdict(verdict_data.get("verdict"))
+                    if (
+                        not isinstance(verdict_data.get("confidence"), str)
+                        or verdict_data["confidence"] not in _VALID_CONFIDENCES
+                        or not isinstance(verdict_data.get("justification"), str)
+                        or not verdict_data["justification"].strip()
+                    ):
+                        raise PlaybookResponseError(
+                            message="Classification is incomplete or unexplained."
+                        )
+                    if verdict != "missing" and (
+                        not isinstance(verdict_data.get("matched_text"), str)
+                        or not verdict_data["matched_text"].strip()
+                        or not _coerce_chunk_indices(
+                            verdict_data.get("cited_chunk_indices"), n_chunks=len(chunks)
+                        )
+                    ):
+                        raise PlaybookResponseError(
+                            message="Classification lacks matched text or target chunk references."
+                        )
+                except PlaybookResponseError as exc:
+                    return {
+                        "per_position_results": results,
+                        "error": f"Unable to classify {pos['issue']}: {exc}",
+                    }
                 confidence_str = _coerce_confidence(verdict_data.get("confidence"))
                 cited_indices = _coerce_chunk_indices(
                     verdict_data.get("cited_chunk_indices"), n_chunks=len(chunks)
@@ -440,6 +461,8 @@ def make_redline_node(
     positions_index: dict[str, dict[str, Any]] = {}
 
     async def redline_node(state: PlaybookExecutionState) -> dict[str, Any]:
+        if state.get("error"):
+            return {}
         # Rebuild the per-position index for redline_strategy lookup.
         # Typed-as-Any because the position items are TypedDict; mypy
         # narrows them to ``_PositionInput`` and refuses the
@@ -461,12 +484,26 @@ def make_redline_node(
                 continue
 
             messages = _build_redline_messages(pos, result)
-            redline_data = await _dispatch_structured_call(
-                gateway=gateway,
-                model=judge_model,
-                messages=messages,
-                max_tokens=REDLINE_MAX_TOKENS,
-            )
+            try:
+                redline_data = await _dispatch_structured_call(
+                    gateway=gateway,
+                    model=judge_model,
+                    messages=messages,
+                    max_tokens=get_settings().lq_ai_playbook_redline_max_tokens,
+                )
+                if (
+                    any(
+                        not isinstance(redline_data.get(k), str)
+                        for k in ("old_text", "new_text", "justification")
+                    )
+                    or not redline_data["justification"].strip()
+                    or (redline_data["old_text"].strip() and not redline_data["new_text"].strip())
+                ):
+                    raise PlaybookResponseError(
+                        message="Redline answer is incomplete or unexplained."
+                    )
+            except PlaybookResponseError as exc:
+                return {"error": f"Unable to draft redline for {pos['issue']}: {exc}"}
             redline = {
                 "old_text": str(redline_data.get("old_text") or ""),
                 "new_text": str(redline_data.get("new_text") or ""),
@@ -605,14 +642,14 @@ async def _dispatch_structured_call(
     verify it; ``lq_ai_purpose='playbook_executor'`` so the routing log
     can be filtered for cost calibration.
 
-    Returns an empty dict on transport / parse failure; the caller
-    treats that as a low-confidence ``missing`` (the classifier's
-    "I have nothing to say" failure mode).
+    Unfinished, empty, malformed and transport-failed answers raise a typed
+    error. Only an explicit, complete classification can mean ``missing``.
     """
     request = ChatCompletionRequest(
         model=model,
         messages=messages,
         max_tokens=max_tokens,
+        reasoning_effort=get_settings().lq_ai_playbook_executor_reasoning_effort or None,
         anonymize=False,
         lq_ai_purpose="playbook_executor",
     )
@@ -627,19 +664,32 @@ async def _dispatch_structured_call(
                 "error_type": type(exc).__name__,
             },
         )
-        return {}
+        raise PlaybookResponseError(
+            message="Model request failed; retry the execution when the provider is available."
+        ) from exc
 
     try:
         choices = response.choices
         if not choices:
-            return {}
+            raise PlaybookResponseError(message="Model returned no answer.")
+        if choices[0].finish_reason != "stop":
+            raise PlaybookResponseError(
+                message=f"Model answer was unfinished ({choices[0].finish_reason}) at a {max_tokens}-token limit. Review the configured output limit/reasoning setting and retry."
+            )
         content = choices[0].message.content
-    except AttributeError:
-        return {}
-    if not content:
-        return {}
+    except AttributeError as exc:
+        raise PlaybookResponseError(
+            message="Model response is missing completion metadata."
+        ) from exc
+    if not isinstance(content, str) or not content.strip():
+        raise PlaybookResponseError(message="Model returned an empty answer.")
 
-    return _parse_json_object(content)
+    parsed = _parse_json_object(content)
+    if not parsed:
+        raise PlaybookResponseError(
+            message="Model returned invalid or empty JSON; retry the execution."
+        )
+    return parsed
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:
@@ -666,10 +716,10 @@ def _parse_json_object(content: str) -> dict[str, Any]:
 
 
 def _coerce_verdict(raw: Any) -> PositionVerdict:
-    """Normalize the model's verdict to the canonical enum or default ``missing``."""
+    """Accept an explicit canonical verdict; invalid output is not absence."""
     if isinstance(raw, str) and raw in _VALID_VERDICTS:
         return raw  # type: ignore[return-value]
-    return "missing"
+    raise PlaybookResponseError(message="Model did not return a valid classification verdict.")
 
 
 def _coerce_confidence(raw: Any) -> str:

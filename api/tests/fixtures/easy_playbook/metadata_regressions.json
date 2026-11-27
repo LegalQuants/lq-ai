@@ -1,0 +1,33 @@
+{
+  "captured_head": "3269ba0b8a09f1308aca7006f1acbd2824fe826d",
+  "generation_id": "0e444848-28c0-4d30-be0a-c814b8121b91",
+  "cases": [
+    {
+      "issue": "No License",
+      "field": "tier_description",
+      "standard": "No license under any patent, trademark, copyright, or other intellectual\nproperty right is granted or implied by this Agreement.",
+      "alternative": "Nothing herein grants the Receiving Party any rights, by license or otherwise, in\nor to any intellectual property of the Disclosing Party.",
+      "generated_prose": "Alternative limits the license grant to the Receiving Party and the Disclosing Party's intellectual property, whereas the standard applies a mutual no-license prohibition to all intellectual property rights under the agreement."
+    },
+    {
+      "issue": "Standard of Care",
+      "field": "tier_description",
+      "standard": "The Receiving Party shall protect the Confidential Information using at least the same\ndegree of care that it uses to protect its own confidential and proprietary\ninformation of similar nature and importance, but in no event less than reasonable\ncare.",
+      "alternative": "The Receiving Party agrees to: (a) hold the Confidential Information in confidence and use\nreasonable care to prevent its unauthorized use, disclosure, or duplication;",
+      "generated_prose": "Standard of care reduced from the greater of customary or reasonable care to reasonable care only."
+    },
+    {
+      "issue": "Jurisdiction",
+      "field": "tier_description",
+      "standard": "Each Party irrevocably consents\nto the exclusive jurisdiction of the state and federal courts located in Wilmington, Delaware\nfor any action arising out of or relating to this Agreement.",
+      "alternative": "The Parties consent to exclusive jurisdiction\nin the Delaware Court of Chancery (or, if such court lacks subject-matter jurisdiction, the\nfederal courts located in Delaware).",
+      "generated_prose": "Consent to exclusive jurisdiction in the Delaware Court of Chancery or federal courts in Delaware instead of state and federal courts located in Wilmington, Delaware."
+    },
+    {
+      "issue": "Exclusions from Confidential Information",
+      "field": "redline_strategy",
+      "standard": "Confidential Information does not include information that: (a) is or becomes generally\navailable to the public through no breach of this Agreement; (b) was in the Receiving Party's\n\nlawful possession prior to disclosure and not subject to any prior confidentiality obligation;\n(c) is independently developed by the Receiving Party without reference to the Confidential\nInformation, as demonstrated by competent written records; or (d) is rightfully obtained from\na third party not in breach of any confidentiality obligation.",
+      "generated_prose": "If the contract narrows these exclusions or omits specific categories (e.g., independent development or public availability), insert the four-part standard language to ensure the Receiving Party is not penalized for information that legally does not require protection. Push for explicit requirements such as 'competent written records' for independent development to provide objective verification."
+    }
+  ]
+}

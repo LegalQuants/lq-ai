@@ -1,0 +1,80 @@
+{
+  "head_sha": "ca3ae67d527fe30517a598531840a86cb6aee283",
+  "generation_id": "72c8848b-7045-440f-a613-45f861c3756a",
+  "verdict": "HOLD ATTESTATION: six prose/context corrections require review",
+  "edits": [
+    {
+      "position": 6,
+      "issue": "No License",
+      "tier": 1,
+      "generated_description": "The alternative omits estoppel as a means of granting rights, narrowing the prohibition to express license or other direct rights rather than implied rights.",
+      "reason": "The generated text infers a narrowing to express/direct rights from omission of estoppel, although the alternative retains \"or otherwise\". That legal inference is not established by the source wording.",
+      "proposed_description_for_attorney_review": "The alternative expressly names the Receiving Party and omits the word estoppel; both clauses state that no intellectual-property rights are granted.",
+      "standard_language": "No License or Other Rights. Nothing in this Agreement grants, by license, estoppel, or\notherwise, any rights to any intellectual property of the Disclosing Party.",
+      "alternative_language": "Nothing herein grants the Receiving Party any rights, by license or otherwise, in\nor to any intellectual property of the Disclosing Party.",
+      "applied": false
+    },
+    {
+      "position": 10,
+      "issue": "Return or Destruction",
+      "tier": 2,
+      "generated_description": "Decision on whether to return or destroy Confidential Information shifts from the Receiving Party to the Disclosing Party, and the scope of destruction excludes extracts and derivative materials.",
+      "reason": "The alternative does not expressly exclude extracts or derivative materials. Omission of those examples from an all-information clause is not evidence of an exclusion.",
+      "proposed_description_for_attorney_review": "The alternative gives the Disclosing Party the return-or-destroy election; the standard gives it to the Receiving Party. Both cover all Confidential Information.",
+      "standard_language": "Upon written request of the Disclosing Party at any time, or promptly following expiration or\ntermination of this Agreement, the Receiving Party shall, at its option, either return or destroy\nall Confidential Information in its possession or control, including all copies, extracts, and\nderivative materials, and certify such return or destruction in writing.",
+      "alternative_language": "Upon the Disclosing Party's written request, or upon expiration or termination of this\nAgreement, the Receiving Party shall, at the Disclosing Party's election, promptly return or\ndestroy all Confidential Information in its possession or control, and shall certify such return\nor destruction in writing.",
+      "applied": false
+    },
+    {
+      "position": 11,
+      "issue": "Standard of Care",
+      "tier": 2,
+      "generated_description": "Adopts a standard of care based on reasonable care no less than the care used for the Receiving Party's own confidential information, whereas the standard requires care at least equal to its own but with an independent reasonable care floor.",
+      "reason": "Both quoted clauses contain the reasonable-care and own-information floors; the drafted contrast implies a difference without identifying one.",
+      "proposed_description_for_attorney_review": "Both clauses require at least reasonable care and at least the care used for the Receiving Party\u2019s own similar confidential information.",
+      "standard_language": "The Receiving Party shall protect the Confidential Information using at least the same\ndegree of care that it uses to protect its own confidential and proprietary\ninformation of similar nature and importance, but in no event less than reasonable\ncare.",
+      "alternative_language": "use\nreasonable care to protect the Confidential Information from unauthorized disclosure or\nuse, which shall in no event be less than the care it uses to protect its own confidential\ninformation of similar importance;",
+      "applied": false
+    },
+    {
+      "position": 12,
+      "issue": "Survival of General Information",
+      "tier": 2,
+      "generated_description": "Post-expiration confidentiality duration for trade secrets extended from three years to five years.",
+      "reason": "This tier is under General Information, but its generated description compares the three- and five-year trade-secret periods from the shared quotations.",
+      "proposed_description_for_attorney_review": "Both clauses limit protection for general confidential information to the agreement term.",
+      "standard_language": "Notwithstanding such expiration, the Receiving Party's obligations with respect to\nConfidential Information shall continue (a) for a period of three (3) years following\nexpiration or termination with respect to information that constitutes trade secrets under\napplicable law, and (b) for the duration of the term with respect to all other Confidential\nInformation.",
+      "alternative_language": "The obligations of confidentiality and non-use set forth herein shall survive\nexpiration or termination of this Agreement for an additional five (5) years with respect to\ninformation constituting trade secrets, and shall otherwise terminate upon expiration of the\nTerm.",
+      "applied": false
+    },
+    {
+      "position": 13,
+      "issue": "Survival of Trade Secrets",
+      "tier": 2,
+      "generated_description": "Survival of trade secret obligations stated indefinitely rather than tied to the term of the Agreement.",
+      "reason": "The selected standard expressly continues after the agreement term while the information qualifies as a trade secret. The generated description wrongly contrasts indefinite survival with survival tied to the agreement term.",
+      "proposed_description_for_attorney_review": "Both tie continuing trade-secret protection to the information continuing to qualify as a trade secret.",
+      "standard_language": "The Receiving Party's obligations of confidentiality and non-use shall survive for the term of\nthis Agreement and continue thereafter as follows: (a) with respect to information that\nconstitutes a trade secret under applicable law, for so long as such information\ncontinues to qualify as a trade secret; and (b) with respect to all other Confidential\nInformation, for a period of five (5) years following expiration or termination.",
+      "alternative_language": "the Receiving Party's obligations with respect to Confidential Information that\nconstitutes a trade secret under applicable law shall continue indefinitely, for so long\nas such information continues to qualify as a trade secret",
+      "applied": false
+    },
+    {
+      "position": 9,
+      "issue": "Remedies",
+      "tier": 1,
+      "generated_description": "Omits acknowledgement of irreparable harm, the right to equitable relief beyond injunctions, and the waiver of bond posting.",
+      "reason": "The selected Cypress excerpt contains only the injunction sentence. The actual source paragraph immediately before it contains the Receiving Party acknowledgement, so saying the alternative omits acknowledgement misrepresents the full source context.",
+      "proposed_description_for_attorney_review": "The alternative has the Receiving Party acknowledge irreparable harm and permits the Disclosing Party to seek an injunction; the standard has both parties acknowledge harm and expressly waives bond.",
+      "standard_language": "The Parties acknowledge that any breach of this Agreement may cause irreparable harm for\nwhich monetary damages may be inadequate, and that the Disclosing Party shall be entitled\nto seek injunctive and other equitable relief, in addition to any other remedies available at law\nor in equity, without the necessity of posting a bond.",
+      "alternative_language": "The Disclosing Party shall be entitled to seek injunctive relief in addition to all\nother remedies available at law or in equity.",
+      "applied": false,
+      "proposed_alternative_language_for_attorney_review": "The Receiving Party acknowledges that the disclosure or unauthorized use of Confidential\nInformation would cause irreparable harm and that monetary damages alone would be\ninsufficient. The Disclosing Party shall be entitled to seek injunctive relief in addition to all\nother remedies available at law or in equity.",
+      "source_document_id": "2fef6cda-ea73-4fcc-9198-cdf31bf421b8",
+      "source_offsets": {
+        "start": 3667,
+        "end": 3981
+      }
+    }
+  ],
+  "remedy_source": "Mutual Non-Disclosure Agreement\nThis Mutual Non-Disclosure Agreement (this \"Agreement\") is entered into as of February 3,\n2026 (the \"Effective Date\"), by and between Cypress Holdings, LLC, a Delaware limited\nliability company (\"Cypress\"), and Delta Systems Corp., a Nevada corporation (\"Delta\").\nCypress and Delta are sometimes referred to herein individually as a \"Party\" and collectively\nas the \"Parties.\"\n1. Purpose\nThe Parties wish to evaluate a potential commercial transaction (the \"Purpose\"). In\nconnection therewith, each Party may exchange certain Confidential Information with the\nother under the terms set forth in this Agreement.\n2. Definition of Confidential Information\n\"Confidential Information\" means information that is (a) disclosed by a Party (the\n\"Disclosing Party\") to the other Party (the \"Receiving Party\") in tangible form (including\nin writing or electronically) and is conspicuously marked or labeled as \"Confidential,\"\n\"Proprietary,\" or with a similar designation at the time of disclosure, or (b) disclosed orally\nand identified as confidential at the time of oral disclosure, provided that the Disclosing Party\nreduces such oral disclosure to a writing marked \"Confidential\" and delivers such writing to\nthe Receiving Party within thirty (30) days of the oral disclosure.\nConfidential Information does not include information that: (a) is or becomes publicly\navailable through no fault of the Receiving Party; (b) was already in the Receiving Party's\npossession prior to disclosure, free of any obligation of confidence; (c) is independently\ndeveloped by the Receiving Party without use of the Confidential Information; or (d) is\nlawfully obtained from a third party without restriction.\n3. Obligations of Receiving Party\nThe Receiving Party shall: (a) maintain the Confidential Information in confidence using a\nstandard of care consistent with industry practice for information of similar\nsensitivity; (b) use the Confidential Information only for the Purpose; and (c) not disclose,\ncopy, distribute, or otherwise make available the Confidential Information to any person\nother than as permitted herein.\n4. Permitted Disclosures\nThe Receiving Party may disclose Confidential Information solely to its employees who have\na legitimate need to know the information in furtherance of the Purpose and who are bound\n\nby written confidentiality obligations at least as restrictive as those set forth in this\nAgreement. The Receiving Party shall be liable for any unauthorized disclosure or use by such\nemployees.\nThe Receiving Party may disclose Confidential Information to the extent legally compelled by\na court of competent jurisdiction or governmental authority, provided that the Receiving\nParty gives prompt written notice to the Disclosing Party (where lawful) and reasonably\ncooperates with any efforts by the Disclosing Party to seek a protective order.\n5. Term and Survival\nThis Agreement shall continue in effect for a period of two (2) years from the Effective Date.\nThe obligations of confidentiality and non-use shall continue for the full term and shall expire\nupon expiration of this Agreement. No separate or extended survival period applies to\ninformation designated as trade secrets; the same two-year period governs all Confidential\nInformation.\n6. Return or Destruction\nUpon termination or expiration of this Agreement, or upon the Disclosing Party's written\nrequest at any time, the Receiving Party shall promptly destroy all Confidential Information\nin its possession, including any copies, summaries, or extracts thereof, and shall provide\nwritten certification of such destruction to the Disclosing Party.\n7. Remedies\nThe Receiving Party acknowledges that the disclosure or unauthorized use of Confidential\nInformation would cause irreparable harm and that monetary damages alone would be\ninsufficient. The Disclosing Party shall be entitled to seek injunctive relief in addition to all\nother remedies available at law or in equity.\n8. Governing Law\nThis Agreement is governed by the laws of the State of Delaware, without regard to its\nconflict-of-laws provisions. Any dispute shall be resolved exclusively in the state or federal\ncourts located in New Castle County, Delaware, and each Party submits to the jurisdiction of\nsuch courts.\n9. Miscellaneous\nNo License or Other Rights. This Agreement does not grant any license under any patent,\ncopyright, trademark, or other intellectual property right.\n\nEntire Agreement. This Agreement is the entire agreement of the Parties as to its subject\nmatter and supersedes all prior or contemporaneous understandings. No modification is\neffective unless in a writing signed by both Parties.\nSeverability. If any provision is held to be unenforceable, the remaining provisions shall\nremain in full force.\nIN WITNESS WHEREOF, the Parties have executed this Agreement as of the Effective\nDate.\nCYPRESS HOLDINGS, LLC\nDELTA SYSTEMS CORP.\nBy: _______\nBy: _______\nName: Marcus Lee\nName: Eleanor Ramirez\nTitle: Managing Partner\nTitle: General Counsel\n"
+}

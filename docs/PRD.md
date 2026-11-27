@@ -699,6 +699,14 @@ The API endpoint `GET /api/v1/skills/{id}/inputs` returns the skill's input sche
 
 ### 3.5 Files / Knowledge Bases
 
+**Local embedding compatibility.** Native embedding vectors shorter than
+1,536 dimensions are zero-padded on document writes and search queries,
+preserving same-model cosine similarity in the existing database/index.
+Provider output and in-memory playbook clustering keep native dimensions.
+Empty, non-finite, or oversized vectors are rejected before storage.
+Switching embedding models requires re-embedding stored documents; see
+[ADR 0045](adr/0045-short-embedding-storage-compatibility.md).
+
 **M1 + M2 status:** Shipped. Knowledge base create, document attach, PDF upload, and ingest-to-`ready` (pgvector + FTS hybrid retrieval) wired end-to-end in M1; the Citation Engine's byte-level verification step landed in M2-A through M2-D and now runs against every model-emitted citation per [§3.3](#33-citation-engine-exact-quote). An operator can verify at `api/app/api/knowledge_bases.py`, `api/app/pipeline/ingest.py`, `api/app/workers/document_pipeline.py`, and `api/app/citation/verification.py`; Cypress E2E coverage in `web/cypress/e2e/wave-m1-final-surfaces.cy.ts` Test 2 (M1 retrieval) and `web/cypress/e2e/m2-c2-citation-states.cy.ts` (M2 citation-rendering states). See [HONEST-STATE.md §1](HONEST-STATE.md#1-conversational-and-workspace-surface) and [HONEST-STATE.md §3](HONEST-STATE.md#3-m2--citation-engine-and-anonymization-layer).
 
 **Description.** Persistent collections of documents accessible across chats. Files are uploaded once, ingested into the citation pipeline, and made available for retrieval. Knowledge Bases group files for shared access (e.g., "Privacy Compliance Library," "Standard Templates").
@@ -779,7 +787,7 @@ The API endpoint `GET /api/v1/skills/{id}/inputs` returns the skill's input sche
 
 ### 3.7 Playbooks
 
-**M3 status: SHIPPED (v0.3.0).** The LangGraph playbook executor (retrieve → classify → redline → compile) landed in M3-A2; the Easy Playbook auto-generation wizard (extract → cluster → assemble) in M3-A6; five built-in playbooks (NDA-Mutual, NDA-Unilateral, MSA-SaaS, MSA-Commercial-Purchase, DPA-GDPR) are seeded. Endpoints: `GET/POST /api/v1/playbooks`, `POST /api/v1/playbooks/{id}/execute`, `POST /api/v1/playbooks/easy` + poll. Implementation companion: [docs/playbooks.md](playbooks.md). **Honesty caveat:** per-position assessments carry verbatim `matched_text` + `cited_chunk_ids` (lexical-FTS anchoring), **not** the M2 Citation Engine verification cascade — Citation Engine integration for the playbook executor is deferred (see [docs/playbooks.md](playbooks.md#citations-are-chunk-references-not-verified-citations-today)). Easy Playbook clustering over-segments today (see [§9 DE-308](#9-deferred-enhancements-and-identified-future-work)).
+**M3 status: SHIPPED (v0.3.0).** The LangGraph playbook executor (retrieve → classify → redline → compile) landed in M3-A2; the Easy Playbook auto-generation wizard (extract → cluster → assemble) in M3-A6; five built-in playbooks (NDA-Mutual, NDA-Unilateral, MSA-SaaS, MSA-Commercial-Purchase, DPA-GDPR) are seeded. Endpoints: `GET/POST /api/v1/playbooks`, `POST /api/v1/playbooks/{id}/execute`, `POST /api/v1/playbooks/easy` + poll. Implementation companion: [docs/playbooks.md](playbooks.md). **Honesty caveat:** per-position assessments carry verbatim `matched_text` + `cited_chunk_ids` (lexical-FTS anchoring), **not** the M2 Citation Engine verification cascade — Citation Engine integration for the playbook executor is deferred (see [docs/playbooks.md](playbooks.md#citations-are-chunk-references-not-verified-citations-today)). Easy Playbook clustering over-segmentation mitigations (low-support fold pass + extractor-prompt axis taxonomy) landed under [§9 DE-308](#9-deferred-enhancements-and-identified-future-work); live-corpus re-verification is pending.
 
 **Description.** Structured, reusable contract-review automation. A Playbook codifies an organization's standard positions and fallback positions on common contract issues. When applied to a contract, the Playbook produces a per-position assessment: matches standard, deviates (with severity), or missing entirely. Includes redline suggestions.
 
@@ -822,10 +830,37 @@ class Position(BaseModel):
 - Commercial MSA Playbook (purchase-side)
 
 *Easy Playbook (auto-generation).* Wizard:
+
+The maintainer's 2026-11-22 coverage decision preserves coherent issues and
+outliers; the sample corpus's 5–10 count is diagnostic rather than a hard cap.
+Issue identities constrain similarity merges/folds. Source quotations and
+offsets must be anchored to actual contiguous text; one-shot quotation repair
+may complete a dangling connected list item from verified source context.
+Other failed repair ends generation. Invalid extraction responses and transport
+failures also fail explicitly rather than silently omitting a document.
+Descriptions are grounded in the selected standard,
+with a separate consistency check and extractive fallback. These checks do
+not replace attorney review. See [ADR 0046](adr/0046-playbook-issue-and-source-grounding.md).
+
+The 2026-11-25 defect fixes retain this drafting behavior: bounded source-fact
+checks separate technical safeguards from disclosure prohibitions and preserve
+the direction of explicit duration, survival, and acknowledgement comparisons.
+The six subsequent prose/context regressions also preserve adjacent remedies
+context and keep comparisons on their named issue, stating matching explicit
+requirements rather than inventing differences or exclusions.
+
 1. Upload 5–20 prior agreements of the same contract type.
 2. System extracts clauses, clusters by issue, identifies the user's most-common positions.
 3. System drafts a Playbook with suggested standard language and fallback tiers.
 4. User reviews, edits, approves.
+
+Generation must contain at least one position to complete. A missing or
+token-truncated extraction answer, an entirely empty clause corpus, or an
+empty assembled draft ends with `status='error'` and an actionable message.
+For local thinking models, operators can set
+`LQ_AI_EASY_PLAYBOOK_REASONING_EFFORT=none` for extraction and description
+calls; an empty value preserves provider defaults. Extraction allows up to
+8,192 output tokens for verbatim clauses and JSON metadata.
 
 *Playbook execution.* LangGraph workflow:
 1. Parse target contract via Document Pipeline.
@@ -833,6 +868,17 @@ class Position(BaseModel):
 3. Classify: matches standard / matches fallback tier N / deviates / missing.
 4. For deviations, draft a redline using the redline_strategy.
 5. Compile into a structured review report with citations.
+
+Incomplete, token-truncated, malformed or transport-failed model answers end
+execution with the existing `error` status rather than fabricating a `missing`
+verdict. Earlier complete classifications are retained; remaining positions are
+not assessed. Classifier/redline limits default to 4,096 tokens each and are
+operator-configurable; executor reasoning effort is independently configurable.
+Easy Playbook descriptions allow 2,048 tokens, alternative descriptions 1,536,
+and source checks 8,192 tokens per three-item batch. Source-grounding checks
+preserve seeking versus obtaining relief and keep each survival position's
+metadata on its own issue, with continuing qualification where the source
+expressly requires it. The existing drafting/check/fallback flow remains.
 
 *Playbook execution in Word.* The same LangGraph workflow runs against the Word document via the Office.js add-in, with redlines applied as Word tracked changes and assessments as Word comments.
 
@@ -4703,11 +4749,21 @@ Two bulk operations as originally written in the M3-C4 spec:
 
 **Specific scope:**
 - Investigate `api/app/playbooks/easy/clustering.py`: why near-synonym positions aren't merged (license family, jurisdiction family, CI-definition family), and why "Standard of Care" didn't cluster into its own position despite varying across all five documents.
-- Tune toward the README's "~5–10 positions, each of the 5 designed axes present" target.
+- Preserve coherent issues and all five axes. The historical ~5–10 count is diagnostic, not a cap (maintainer decision, 2026-11-22).
 - Consider a post-clustering merge/dedup pass and a minimum-document-support threshold for singleton positions.
 - The reviewing-attorney walk-through should weigh whether the over-segmentation or the missed axis affects the legal usefulness of generated playbooks.
 
 **When to ship:** Post-M3; clustering quality is iterative and benefits from real-corpus signal, but the missed-axis behavior is worth an early look.
+
+**Status (2026-07-25): mitigations landed; live-corpus re-verification pending.** Two code-level fixes shipped: (a) a minimum-document-support fold pass in `clustering.py` (`DEFAULT_MIN_DOCUMENT_SUPPORT = 2`, `DEFAULT_SINGLETON_FOLD_FLOOR = 0.80`) — after the centroid label-merge, groups backed by a single document fold into their nearest supported cluster when the clause-centroid cosine clears the floor, and stay standalone below it (fail-closed, so genuinely distinct outliers keep their own position); (b) the missed-axis diagnosis traced to the extractor prompt — the sample NDAs embed the standard of care inside the "Obligations of Receiving Party" section with no dedicated heading, and the prompt's issue vocabulary never named the axis, so it was collapsed into a section-sized obligations entry. The prompt (`extractor.py` + `skills/playbook-easy-extract/SKILL.md`, v1.1.0) now names `"Standard of Care"` and instructs one-entry-per-issue splitting for bundled sections. Validated by deterministic unit tests plus a fixture-based corpus-replay test (`api/tests/test_easy_playbook_corpus_replay.py`) asserting 5–10 positions with all five axes — against synthetic embeddings, not a live run. Remaining: a live wizard re-run over the sample corpus and the reviewing-attorney walk-through.
+
+**2026-11-22 implementation update (attestation pending).** The live local-model
+run exposed cross-concept merging/folding and unsupported excerpts/descriptions.
+ADR 0046 records bounded issue-identity guards, source-derived quotations and
+offsets with one repair attempt, selected-standard descriptions, and a source
+consistency check with extractive fallback. Coverage preserves genuine issues
+and outliers rather than enforcing the former count ceiling. A new full live
+walkthrough is required; fixture results are not live acceptance evidence.
 
 #### DE-309 — Tabular cells: real Citation-Engine-backed provenance (M3-E1 finding F6 follow-on)
 

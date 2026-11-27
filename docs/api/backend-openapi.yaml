@@ -2785,7 +2785,12 @@ paths:
 
         When ``status='completed'``, ``draft_playbook`` carries the
         assembled ``PlaybookCreate`` shape — the wizard's Step 3 inline
-        editor binds to this. When ``status='error'``, ``error_message``
+        editor binds to this, with at least one position. Missing or
+        truncated extraction answers and generations with no usable
+        clauses or no positions terminate with ``status='error'``.
+        Failure to repair unsupported source quotations also terminates with
+        ``status='error'``; accepted quotation offsets are derived from source text.
+        When ``status='error'``, ``error_message``
         is populated. The wizard's Step 2 polls every few seconds until
         a terminal status arrives.
       responses:
@@ -7825,6 +7830,9 @@ components:
       description: |
         One execution of a playbook against a target document.
         Status lifecycle: ``pending → running → completed | error``.
+        An incomplete, truncated, malformed or failed classifier/redline
+        answer produces ``error``, never a fabricated ``missing`` verdict.
+        Earlier valid per-position results may be retained on error.
         ``results`` is populated on ``completed``; ``error`` is populated
         on ``error``. ``completed_at`` is non-null in either terminal state.
       properties:

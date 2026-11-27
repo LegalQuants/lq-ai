@@ -40,11 +40,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.authz.documents import DocumentWorkflowGateway
 from app.clients.gateway import GatewayClient
 from app.db.session import get_session_factory
+from app.errors import GatewayInvalidResponse
 from app.models.document import Document
 from app.models.playbook import EasyPlaybookGeneration
 from app.playbooks.easy.assembly import assemble_playbook
 from app.playbooks.easy.clustering import ClauseInput, cluster_clauses_by_issue
-from app.playbooks.easy.extractor import extract_clauses_from_document
+from app.playbooks.easy.extractor import ExtractionResponseError, extract_clauses_from_document
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,9 @@ async def easy_playbook_generation_job(
 
         generation.status = "running"
         generation.started_at = datetime.now(tz=UTC)
+        generation.completed_at = None
+        generation.error_message = None
+        generation.draft_playbook = None
         await session.commit()
 
         try:
@@ -164,10 +168,10 @@ async def _run_pipeline(
 
     Document-level extraction failures are tolerated — a single bad
     document degrades clustering signal but does not kill the whole
-    run. A 0-clause corpus (every document yielded nothing) still
-    completes with an empty playbook; the wizard's UI will surface
-    "no positions detected" so the user-attorney knows the corpus
-    was too thin or non-contract.
+    run. Transport failures and invalid/missing/truncated model responses
+    are typed extraction failures and fail the generation explicitly.
+    A corpus with no usable clauses or a draft with no positions also
+    fails instead of presenting an empty draft as a successful result.
     """
 
     gateway = DocumentWorkflowGateway(gateway, session, generation.user_id, generation.document_ids)
@@ -183,6 +187,8 @@ async def _run_pipeline(
                 gateway=gateway,
                 contract_type=contract_type,
             )
+        except ExtractionResponseError:
+            raise
         except Exception as exc:
             logger.warning(
                 "easy_playbook_worker: per-document extraction failed; continuing",
@@ -204,6 +210,12 @@ async def _run_pipeline(
                 )
             )
 
+    if not all_clauses:
+        raise GatewayInvalidResponse(
+            "No usable clauses were extracted from the selected documents. "
+            "Check the model configuration and confirm the documents contain contracts."
+        )
+
     clusters = await cluster_clauses_by_issue(
         clauses=all_clauses,
         gateway=gateway,
@@ -216,6 +228,11 @@ async def _run_pipeline(
         contract_type=contract_type,
         gateway=gateway,
     )
+
+    if not draft.positions:
+        raise GatewayInvalidResponse(
+            "Generation produced no playbook positions. Review the corpus and retry."
+        )
 
     await gateway.authorize()
     generation.draft_playbook = draft.model_dump(mode="json")

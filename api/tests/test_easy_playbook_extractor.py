@@ -25,9 +25,37 @@ from app.playbooks.easy.extractor import (
     DEFAULT_CHARACTER_BUDGET,
     SPAN_OVERLAP_CHARACTERS,
     ExtractedClause,
+    ExtractionResponseError,
     _build_spans,
+    _parse_extracted_clauses,
     extract_clauses_from_document,
 )
+
+
+@pytest.mark.unit
+def test_prose_wrapped_fenced_extraction_keeps_verbatim_clauses() -> None:
+    clause = {"issue": "Term", "clause_text": "Three (3) years.", "source_offsets": None}
+    answer = (
+        "I identified one position.\n\n```json\n"
+        + json.dumps({"extracted_clauses": [clause]})
+        + "\n```\nDone."
+    )
+    result = _parse_extracted_clauses(answer)
+    assert [item.model_dump() for item in result] == [clause]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "answer",
+    [
+        'Before ```json\n{"extracted_clauses": []}\n``` and ```json\n{"extracted_clauses": [{"issue": "Term", "clause_text": "Two years."}]}\n```',
+        'Before ```json\n{"extracted_clauses": [BROKEN]}\n```',
+        'Before {"extracted_clauses": []}',
+    ],
+)
+def test_ambiguous_or_malformed_wrapped_extraction_stays_invalid(answer: str) -> None:
+    assert _parse_extracted_clauses(answer) == []
+
 
 # ---------------------------------------------------------------------------
 # Stub gateway — mirrors tests/playbooks/test_executor.py::_StubGateway
@@ -42,6 +70,7 @@ class _StubMessage:
 @dataclass
 class _StubChoice:
     message: _StubMessage
+    finish_reason: str = "stop"
 
 
 @dataclass
@@ -152,7 +181,7 @@ async def test_short_document_single_call_returns_parsed_clauses() -> None:
     assert clauses[0].clause_text == "Confidentiality term is three (3) years."
     assert clauses[0].source_offsets is not None
     assert clauses[0].source_offsets.start == 3
-    assert clauses[0].source_offsets.end == 44
+    assert clauses[0].source_offsets.end == text.index("\n")
     assert clauses[1].issue == "Governing Law"
     # One LLM call.
     assert len(gateway.calls_received) == 1
@@ -198,40 +227,68 @@ async def test_request_carries_lq_ai_purpose_for_audit_routing() -> None:
     assert request.temperature is None
 
 
-# ---------------------------------------------------------------------------
-# Malformed responses (non-fatal)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.unit
-async def test_malformed_json_response_returns_empty_list() -> None:
-    gateway = _StubGateway(payloads=["not valid json {[}"])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
+async def test_local_reasoning_setting_reserves_budget_for_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        "app.playbooks.easy.extractor.get_settings",
+        lambda: Settings(lq_ai_easy_playbook_reasoning_effort="none"),
     )
-    assert clauses == []
+    gateway = _StubGateway(payloads=[{"extracted_clauses": []}])
+    await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
+    request = gateway.calls_received[0]
+    assert request.reasoning_effort == "none"
+    assert request.max_tokens == 8192
 
 
 @pytest.mark.unit
-async def test_top_level_array_response_returns_empty_list() -> None:
+@pytest.mark.parametrize("content", ["", '{"extracted_clauses": []}'])
+async def test_truncated_answer_is_rejected_even_if_valid_json(content: str) -> None:
+    from unittest.mock import AsyncMock
+
+    gateway = AsyncMock()
+    gateway.chat_completion.return_value = _StubResponse(
+        choices=[_StubChoice(message=_StubMessage(content=content), finish_reason="length")]
+    )
+    with pytest.raises(ExtractionResponseError, match="output limit"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)
+
+
+@pytest.mark.unit
+async def test_empty_model_answer_is_an_explicit_extraction_failure() -> None:
+    gateway = _StubGateway(payloads=[""])
+    with pytest.raises(ExtractionResponseError, match="no answer content"):
+        await extract_clauses_from_document(document=_make_doc("Contract."), gateway=gateway)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Malformed responses fail instead of silently omitting a document
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_malformed_json_response_is_an_explicit_failure() -> None:
+    gateway = _StubGateway(payloads=["not valid json {[}"])
+    with pytest.raises(ExtractionResponseError, match="invalid JSON"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+async def test_top_level_array_response_is_an_explicit_failure() -> None:
     """A response that's a JSON array (not an object) is treated as malformed."""
     gateway = _StubGateway(payloads=['[{"issue": "x", "clause_text": "y"}]'])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="invalid response shape"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
-async def test_missing_extracted_clauses_key_returns_empty_list() -> None:
+async def test_missing_extracted_clauses_key_is_an_explicit_failure() -> None:
     gateway = _StubGateway(payloads=[{"clauses": [{"issue": "x"}]}])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some text"),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="invalid response shape"):
+        await extract_clauses_from_document(document=_make_doc("Some text"), gateway=gateway)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -276,19 +333,21 @@ async def test_clause_without_source_offsets_is_accepted() -> None:
         gateway=gateway,  # type: ignore[arg-type]
     )
     assert len(clauses) == 1
-    assert clauses[0].source_offsets is None
+    assert clauses[0].source_offsets is not None
+    assert clauses[0].source_offsets.start == 0
+    assert clauses[0].source_offsets.end == len("Delaware law applies.")
 
 
 @pytest.mark.unit
-async def test_gateway_exception_is_swallowed_returns_empty_list() -> None:
-    """A transport failure on the only span returns ``[]``; doesn't crash the corpus run."""
+async def test_gateway_exception_is_an_explicit_failure() -> None:
+    """A transport failure cannot silently omit a document from the corpus."""
 
     gateway = _StubGateway(payloads=[ConnectionError("gateway down")])
-    clauses = await extract_clauses_from_document(
-        document=_make_doc("Some contract text."),
-        gateway=gateway,  # type: ignore[arg-type]
-    )
-    assert clauses == []
+    with pytest.raises(ExtractionResponseError, match="request failed"):
+        await extract_clauses_from_document(
+            document=_make_doc("Some contract text."),
+            gateway=gateway,  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.unit
@@ -339,7 +398,7 @@ async def test_long_document_multiple_calls_offsets_rebased() -> None:
     # our 100-char test budget.
     budget = 100
     overlap = 20
-    text = "x" * 150  # spans: (0, "x"*100) and (80, "x"*70)
+    text = "Clause A" + "." * 82 + "Clause B" + "." * 52
 
     gateway = _StubGateway(
         payloads=[
@@ -379,19 +438,19 @@ async def test_long_document_multiple_calls_offsets_rebased() -> None:
     assert clauses[0].issue == "Issue A"
     assert clauses[0].source_offsets is not None
     assert clauses[0].source_offsets.start == 0
-    assert clauses[0].source_offsets.end == 50
+    assert clauses[0].source_offsets.end == 8
     # Second clause: span 1 (offset 80), per-span (10, 40) → (90, 120).
     assert clauses[1].issue == "Issue B"
     assert clauses[1].source_offsets is not None
     assert clauses[1].source_offsets.start == 90
-    assert clauses[1].source_offsets.end == 120
+    assert clauses[1].source_offsets.end == 98
 
 
 @pytest.mark.unit
-async def test_one_failed_span_does_not_kill_other_spans() -> None:
-    """A transport failure on span 0 doesn't block span 1 from contributing."""
+async def test_one_failed_span_cannot_publish_a_partial_document() -> None:
+    """A failed span must not silently remove its positions from the corpus."""
 
-    text = "x" * 150
+    text = "." * 90 + "still got this one" + "." * 42
     gateway = _StubGateway(
         payloads=[
             ConnectionError("transient gateway timeout"),
@@ -405,14 +464,14 @@ async def test_one_failed_span_does_not_kill_other_spans() -> None:
             },
         ]
     )
-    clauses = await extract_clauses_from_document(
-        document=_make_doc(text),
-        gateway=gateway,  # type: ignore[arg-type]
-        character_budget=100,
-        span_overlap_characters=20,
-    )
-    assert len(clauses) == 1
-    assert clauses[0].issue == "Recovered"
+    with pytest.raises(ExtractionResponseError, match="request failed"):
+        await extract_clauses_from_document(
+            document=_make_doc(text),
+            gateway=gateway,  # type: ignore[arg-type]
+            character_budget=100,
+            span_overlap_characters=20,
+        )
+    assert len(gateway.calls_received) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +483,52 @@ async def test_one_failed_span_does_not_kill_other_spans() -> None:
 def test_default_character_budget_leaves_room_for_overlap() -> None:
     """Overlap must be strictly less than budget — otherwise stride would be non-positive."""
     assert SPAN_OVERLAP_CHARACTERS < DEFAULT_CHARACTER_BUDGET
+
+
+# ---------------------------------------------------------------------------
+# Prompt taxonomy — DE-308 (missing "Standard of Care" axis)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_prompt_covers_standard_of_care_axis() -> None:
+    """The system prompt must cue the Standard of Care issue explicitly.
+
+    DE-308 diagnosis: the sample-NDA corpus embeds the standard of
+    care inside the "Obligations of Receiving Party" section (no
+    dedicated heading), and the prompt's issue-vocabulary examples
+    never mentioned it — so extractions collapsed the care standard
+    into one section-sized obligations entry and the axis never
+    surfaced as a position. The prompt must (a) name "Standard of
+    Care" in the label vocabulary and (b) instruct one-entry-per-issue
+    splitting for sections that bundle multiple positions.
+    """
+
+    from app.playbooks.easy.extractor import EASY_EXTRACT_SYSTEM_PROMPT
+
+    # (a) the label vocabulary names the axis (quoted example form).
+    assert '"Standard of Care"' in EASY_EXTRACT_SYSTEM_PROMPT
+    # (b) bundled sections must be split one-entry-per-issue.
+    normalized = " ".join(EASY_EXTRACT_SYSTEM_PROMPT.split())
+    assert "one entry per issue" in normalized
+
+
+@pytest.mark.unit
+def test_skill_md_mirror_carries_standard_of_care_taxonomy() -> None:
+    """The SKILL.md is the human-readable mirror of the embedded prompt.
+
+    Per the extractor module docstring, prompt changes must land in
+    both places. This pins the DE-308 taxonomy addition in the
+    SKILL.md so the pair can't silently drift on this axis.
+    """
+
+    from pathlib import Path
+
+    skill_md = (
+        Path(__file__).resolve().parents[2] / "skills" / "playbook-easy-extract" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    assert '"Standard of Care"' in skill_md
+    assert "one entry per issue" in skill_md
 
 
 @pytest.mark.unit
