@@ -110,15 +110,13 @@ retrieve → classify → redline → compile → END
 ### Verdict and confidence
 
 The classifier prompt (`_CLASSIFY_SYSTEM_PROMPT`) instructs the model
-to bias toward `low` confidence and toward `missing` on uncertainty —
-the documented rationale is that false positives ("this missing clause
-matches") do more damage in contract review than false negatives.
+to use `low` confidence when interpretation is ambiguous and reserve
+`missing` for an absent issue, never an incomplete or failed answer.
 Confidence is one of `high` / `medium` / `low`, mapped to the numeric
 `0.9` / `0.7` / `0.5` (`_CONFIDENCE_NUMERIC`) — the same scale the M2-C1
 paraphrase judge uses, so future telemetry can unify on one
-verdict-confidence schema. Unparseable verdicts coerce to `missing`;
-unparseable confidence coerces to `low` (`_coerce_verdict`,
-`_coerce_confidence`).
+verdict-confidence schema. Invalid verdicts/confidences and unexplained
+classifications fail explicitly before any per-position result is added.
 
 ### Retrieval is lexical-only
 
@@ -137,10 +135,10 @@ executor does not currently consume it for retrieval.
 
 Any node may set `state["error"]` to short-circuit later nodes;
 `compile_node` checks for it and flips the row to `error`. A gateway
-transport or JSON-parse failure inside a `classify` / `redline` call
-does **not** crash the graph — `_dispatch_structured_call` returns an
-empty dict, which the classifier treats as a low-confidence `missing`
-(its "I have nothing to say" failure mode). The executor catches any
+transport, truncation or JSON-parse failure inside a `classify` / `redline`
+call produces a typed error and no fabricated absence finding. Earlier
+valid classifications are retained, remaining positions are not assessed,
+and no further redline calls are made. The executor catches any
 uncaught in-graph exception at the `graph.ainvoke` boundary and writes
 `status='error'` with a truncated `error` string, so the kick-off
 endpoint's poller always sees a terminal state.
@@ -409,6 +407,25 @@ substrate the M2-E2 Citation Engine cost calibration uses.
 `temperature` is omitted intentionally: Anthropic Opus 4.x reasoning
 models rejected the parameter as of 2026-05, and the gateway only
 forwards non-None values to providers.
+
+Output budgets include provider reasoning tokens. Position descriptions allow
+2,048 tokens, alternatives 1,536, and consistency checks 8,192 for batches of
+three items. The draft/check/source-fallback flow is retained. Source checks
+preserve the difference between seeking relief and entitlement to relief,
+keep survival metadata on its named issue, and retain continuing trade-secret
+qualification. Recognized survival rules have an issue-scoped factual fallback
+instead of copying a combined general-information/trade-secret paragraph.
+
+Executor limits default to 4,096 tokens each, configured through
+`LQ_AI_PLAYBOOK_CLASSIFY_MAX_TOKENS` and `LQ_AI_PLAYBOOK_REDLINE_MAX_TOKENS`
+(256–32,768). `LQ_AI_PLAYBOOK_EXECUTOR_REASONING_EFFORT=none` separately requests
+no reasoning for local-model executor calls; blank preserves provider defaults.
+Unfinished (including valid JSON with a `length` finish), empty, malformed,
+unexplained or transport-failed replies end the execution with `status='error'`
+and an actionable message. Earlier valid classifications remain available;
+the failed position is not counted as `missing`, and redlining stops. A real
+`missing` verdict requires a complete, valid classification with a justification.
+No new verdict, database migration, or automatic retry is introduced.
 
 ## Persisted row shape (wizard)
 

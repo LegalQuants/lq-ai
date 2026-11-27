@@ -869,6 +869,17 @@ calls; an empty value preserves provider defaults. Extraction allows up to
 4. For deviations, draft a redline using the redline_strategy.
 5. Compile into a structured review report with citations.
 
+Incomplete, token-truncated, malformed or transport-failed model answers end
+execution with the existing `error` status rather than fabricating a `missing`
+verdict. Earlier complete classifications are retained; remaining positions are
+not assessed. Classifier/redline limits default to 4,096 tokens each and are
+operator-configurable; executor reasoning effort is independently configurable.
+Easy Playbook descriptions allow 2,048 tokens, alternative descriptions 1,536,
+and source checks 8,192 tokens per three-item batch. Source-grounding checks
+preserve seeking versus obtaining relief and keep each survival position's
+metadata on its own issue, with continuing qualification where the source
+expressly requires it. The existing drafting/check/fallback flow remains.
+
 *Playbook execution in Word.* The same LangGraph workflow runs against the Word document via the Office.js add-in, with redlines applied as Word tracked changes and assessments as Word comments.
 
 **Non-functional requirements.**

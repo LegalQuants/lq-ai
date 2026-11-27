@@ -7830,6 +7830,9 @@ components:
       description: |
         One execution of a playbook against a target document.
         Status lifecycle: ``pending → running → completed | error``.
+        An incomplete, truncated, malformed or failed classifier/redline
+        answer produces ``error``, never a fabricated ``missing`` verdict.
+        Earlier valid per-position results may be retained on error.
         ``results`` is populated on ``completed``; ``error`` is populated
         on ``error``. ``completed_at`` is non-null in either terminal state.
       properties:

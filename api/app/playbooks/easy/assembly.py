@@ -42,7 +42,11 @@ from app.playbooks.easy.clustering import Cluster
 from app.playbooks.easy.extractor import DEFAULT_JUDGE_MODEL
 from app.playbooks.easy.json_output import unwrap_json_answer
 from app.playbooks.easy.source_anchor import anchor_quote
-from app.playbooks.easy.source_facts import tier_comparison, unsupported_metadata
+from app.playbooks.easy.source_facts import (
+    position_source_summary,
+    tier_comparison,
+    unsupported_metadata,
+)
 from app.schemas.gateway import ChatCompletionMessage, ChatCompletionRequest
 from app.schemas.playbooks import (
     FallbackTier,
@@ -59,25 +63,24 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-DESCRIBE_POSITION_MAX_TOKENS: Final[int] = 600
+DESCRIBE_POSITION_MAX_TOKENS: Final[int] = 2048
 """Max tokens for the per-cluster "describe this position" call.
 Output is description + redline_strategy + severity_if_missing —
-short structured JSON; 600 tokens is generous without letting a
-chatty model run away."""
+bounded structured JSON, including the model's reasoning capacity."""
 
-DESCRIBE_TIER_MAX_TOKENS: Final[int] = 250
+DESCRIBE_TIER_MAX_TOKENS: Final[int] = 1536
 """Max tokens for the per-fallback-tier "why is this acceptable"
-call. Short prose — 250 tokens is plenty."""
+call, allowing room for reasoning before its short JSON answer."""
 
 MAX_KEYWORD_COUNT: Final[int] = 8
 """Cap on ``detection_keywords`` per position. The M3-A2 executor
 uses these for lexical FTS retrieval; more than ~8 dilutes the
 signal (every clause matches at least one keyword on a long contract)."""
 
-VERIFY_BATCH_SIZE: Final[int] = 6
+VERIFY_BATCH_SIZE: Final[int] = 3
 """Bound source-check input/output; a full-corpus check can truncate locally."""
 
-VERIFY_MAX_TOKENS: Final[int] = 4096
+VERIFY_MAX_TOKENS: Final[int] = 8192
 
 _VALID_SEVERITIES: Final[frozenset[str]] = frozenset({"critical", "high", "medium", "low"})
 """Matches the CHECK constraint on ``playbook_positions.severity_if_missing``
@@ -145,6 +148,10 @@ multiple agreements) and produce three short, structured fields:
 * ``description`` — one sentence describing ONLY the SELECTED STANDARD.
   Preserve its conditions, exceptions, duration, and negation. Do not
   describe a preferred market position or infer meaning from the issue label.
+  Keep survival descriptions AND strategies on the named issue: do not add
+  a general-information period inside a trade-secret position, or vice versa.
+  Preserve ongoing trade-secret qualification explicitly. A right to SEEK
+  relief is not an entitlement to obtain relief; retain that distinction.
 * ``redline_strategy`` — one or two sentences telling a contract
   reviewer how to push the contract toward this position when it
   deviates. Concrete and action-oriented.
@@ -580,6 +587,9 @@ async def _ground_metadata(
                 "Keep source_quotes in source_roles order: selected standard first, alternative second. "
                 "Compare the alternative against the standard, never the reverse. Distinguish agreement "
                 "duration from confidentiality survival, and during-term protection from a post-expiry tail. "
+                "Keep survival descriptions and strategies on their named issue; do not import the "
+                "general-information period into a trade-secret position or the reverse. Preserve "
+                "continuing trade-secret qualification and seeking versus obtaining relief. "
                 "Do not fill omissions using the issue name or assumptions. Emit ONLY the JSON object; "
                 "do not include analysis, commentary, reasoning, or Markdown."
             ),
@@ -628,7 +638,10 @@ async def _ground_metadata(
                 f"position/{index}", [position.standard_language], "description_supported"
             )
         ):
-            position.description = "Selected standard: " + position.standard_language
+            position.description = (
+                position_source_summary(position.issue, position.standard_language)
+                or "Selected standard: " + position.standard_language
+            )
             position.severity_if_missing = "medium"
             fallback_count += 1
         if (

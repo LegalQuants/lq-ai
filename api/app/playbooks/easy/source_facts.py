@@ -299,6 +299,24 @@ def unsupported_court_type(sources: list[str], prose: str) -> bool:
     return bool((prose_words & terms) - source_words)
 
 
+def position_source_summary(issue: str, source: str) -> str | None:
+    """Issue-scoped fallback for explicit survival rules; never change source language.
+
+    Only recognized, unambiguous rules are summarized. Other language retains
+    the existing extractive fallback and human review path.
+    """
+    identity = issue_identity(issue)
+    if identity == "Survival of General Information":
+        rule = _general_survival(source)
+        if rule and rule.timing == "during_term":
+            return "Obligations for general confidential information last for the agreement term."
+        if rule and rule.timing == "after_term":
+            return f"Obligations for general confidential information continue for {rule.duration} after expiration or termination."
+    if identity == "Survival of Trade Secrets" and _while_trade_secret(source):
+        return "Trade-secret obligations continue for so long as the information continues to qualify as a trade secret."
+    return None
+
+
 def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
     """Catch the remaining explicit wording mismatches from the live draft.
 
@@ -310,6 +328,32 @@ def unsupported_metadata(issue: str, sources: list[str], prose: str) -> bool:
     identity = issue_identity(issue)
     source = _text(" ".join(sources)).casefold()
     text = _text(prose).casefold()
+    if identity == "Remedies":
+        entitlement = r"\b(?:entitled|entitlement|right)\s+to\s+(?!seek\b|request\b|apply\b)(?:\w+\s+){0,3}?(?:injunctive|equitable|injunction)\b"
+        if (
+            all(
+                re.search(r"\bseek\b.{0,50}\b(?:injunctive|equitable)\b", _text(s), re.I)
+                for s in sources
+            )
+            and not re.search(entitlement, source)
+            and re.search(entitlement, text)
+        ):
+            return True
+    if identity == "Survival of General Information" and "trade secret" in text:
+        return True
+    if identity == "Survival of Trade Secrets":
+        if re.search(r"\b(?:general|all other|other confidential)\b.{0,35}\binformation\b", text):
+            return True
+        if (
+            len(sources) == 1
+            and _while_trade_secret(sources[0])
+            and re.search(r"\b(?:indefinit\w*|surviv\w*|continu\w*)\b", text)
+            and not re.search(
+                r"\b(?:continu\w*|remain\w*)\b.{0,35}\bqualif\w*\b|\bfor (?:so|as) long as\b.{0,70}\bqualif\w*\b",
+                text,
+            )
+        ):
+            return True
     if identity == "Standard of Care":
         return any(word in text and word not in source for word in ("customary", "industry"))
     if identity == "No License":

@@ -50,6 +50,14 @@ class Settings(BaseSettings):
     ] = ""
     lq_ai_easy_playbook_job_timeout_seconds: int = Field(default=900, ge=60, le=7200)
 
+    # Structured playbook answers need room for reasoning and quoted clauses.
+    # These are hard per-call ceilings, not targets or unbounded retries.
+    lq_ai_playbook_classify_max_tokens: int = Field(default=4096, ge=256, le=32768)
+    lq_ai_playbook_redline_max_tokens: int = Field(default=4096, ge=256, le=32768)
+    lq_ai_playbook_executor_reasoning_effort: Literal[
+        "", "none", "minimal", "low", "medium", "high"
+    ] = ""
+
     # ----- Postgres -----
     # SQLAlchemy async URL form, e.g. postgresql+asyncpg://user:pass@host:5432/db.
     # In Compose this is composed in docker-compose.yml; in local dev it is
