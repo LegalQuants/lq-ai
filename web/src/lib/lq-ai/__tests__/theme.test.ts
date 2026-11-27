@@ -9,7 +9,6 @@ import {
 	LQAI_THEME_STORAGE_KEY,
 	applyCurrentLQAITheme,
 	applyLQAITheme,
-	isLQAIFixedLightPath,
 	isLQAIThemeChoice,
 	leaveLQAITheme,
 	nextLQAIThemeChoice,
@@ -203,15 +202,18 @@ describe('LQ.AI theme: resolving the choice', () => {
 		expect(() => writeLQAIThemeChoice(undefined, 'dark')).not.toThrow();
 	});
 
-	it("keeps the Word add-in's sign-in dialog light, whatever is stored", () => {
-		expect(isLQAIFixedLightPath('/lq-ai/word-addin/oauth-start')).toBe(true);
-		expect(isLQAIFixedLightPath('/lq-ai/word-addins')).toBe(false);
-		expect(isLQAIFixedLightPath('/lq-ai/chats')).toBe(false);
-		expect(resolveLQAITheme('dark', true, '/lq-ai/word-addin/oauth-start')).toBe('light');
-		expect(resolveLQAITheme('system', true, '/lq-ai/word-addin/oauth-start')).toBe('light');
-		const f = fixture('/lq-ai/word-addin/oauth-start', { lq: 'dark' });
-		expect(applyCurrentLQAITheme(asWindow(f))).toBe('light');
-		expect(f.state()).toEqual(LIGHT);
+	it("themes the Word add-in's sign-in dialog like any other LQ.AI page", () => {
+		// It used to be pinned to light, because it did not load the tokens. It loads them now.
+		for (const [lq, prefersDark, want] of [
+			['dark', false, DARK],
+			['light', true, LIGHT],
+			['system', true, DARK],
+			['system', false, LIGHT]
+		] as const) {
+			const f = fixture('/lq-ai/word-addin/oauth-start', { lq }, prefersDark);
+			expect(applyCurrentLQAITheme(asWindow(f))).toBe(want.lqTheme);
+			expect(f.state()).toEqual(want);
+		}
 	});
 });
 
@@ -298,9 +300,8 @@ describe('LQ.AI theme: the inline script in app.html agrees with the module', ()
 			applyCurrentLQAITheme(asWindow(applied));
 			expect(booted.state()).toEqual(applied.state());
 			expect(booted.events).toEqual(applied.events);
-			// Light and Dark are fixed; anything else follows the device. One page is always light.
-			const dark =
-				!isLQAIFixedLightPath(path) && (lq === 'dark' || (lq !== 'light' && prefersDark));
+			// Light and Dark are fixed; anything else follows the device. That holds on every LQ.AI path.
+			const dark = lq === 'dark' || (lq !== 'light' && prefersDark);
 			expect(booted.state()).toEqual(dark ? DARK : LIGHT);
 			// The shell never writes Open WebUI's saved theme.
 			expect(booted.values.get('theme')).toBe(upstream);

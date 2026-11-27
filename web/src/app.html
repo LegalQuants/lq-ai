@@ -53,9 +53,6 @@
 				const isLQAI = () =>
 					window.location.pathname === '/lq-ai' || window.location.pathname.startsWith('/lq-ai/');
 				const lqaiTheme = (prefersDark) => {
-					const path = window.location.pathname;
-					// The Word add-in's sign-in dialog does not load the tokens; it stays light.
-					if (path === '/lq-ai/word-addin' || path.startsWith('/lq-ai/word-addin/')) return 'light';
 					let saved = null;
 					try {
 						saved = localStorage.getItem('lq-ai.theme');

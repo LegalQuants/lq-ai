@@ -126,14 +126,9 @@ interface Allowed {
 	why: string;
 }
 
-const ALLOWED: readonly Allowed[] = [
-	{
-		file: 'src/routes/lq-ai/word-addin/oauth-start/+page.svelte',
-		rule: 'fallback',
-		count: 22,
-		why: 'renders under the root layout (Office OAuth hop) where the token file is not loaded; the fallbacks go when that is fixed. Three were added with rule 6, for the on-accent text (twice) and the shadow ink, which would otherwise have no value there'
-	}
-];
+// Empty since the Word add-in's sign-in dialog began loading the token file. It was the last
+// entry: its fallbacks stood in for tokens that page could not read.
+const ALLOWED: readonly Allowed[] = [];
 
 interface Hit {
 	rule: Rule;

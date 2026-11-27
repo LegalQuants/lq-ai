@@ -183,14 +183,22 @@ describe('contrast, recomputed from the shipped values (ADR 0045 §1)', () => {
 		'--lq-danger'
 	];
 
-	it('keeps the standalone Office sign-in field edge and focus ring visible without shell tokens', () => {
-		const page = read(join(webRoot, 'src/routes/lq-ai/word-addin/oauth-start/+page.svelte'));
+	it('gives the standalone Office sign-in page the tokens, and a visible field edge and focus ring', () => {
+		// The page resets the layout chain, so its own layout must load the token file.
+		const dir = join(webRoot, 'src/routes/lq-ai/word-addin/oauth-start');
+		expect(read(join(dir, '+layout@.svelte'))).toContain(
+			"import '$lib/lq-ai/styles/practice.css';"
+		);
+		const page = read(join(dir, '+page.svelte'));
+		// With the tokens loaded it follows the theme, so it carries no fixed fallback.
+		expect(page.match(/var\(\s*--lq-[\w-]+\s*,/g) ?? []).toEqual([]);
+		const style = page.slice(page.indexOf('<style>'));
+		for (const name of new Set([...style.matchAll(/var\((--lq-[\w-]+)\)/g)].map((m) => m[1])))
+			expect(tokens.has(name), `${name} is defined`).toBe(true);
 		const input = page.match(/\.form-row input\s*\{([^}]+)\}/)?.[1];
 		const focus = page.match(/\.form-row input:focus\s*\{([^}]+)\}/)?.[1];
-		expect(input).toContain(
-			`border: 1px solid var(--lq-border-strong, ${resolveToken('--lq-border-strong')})`
-		);
-		expect(focus).toContain(`outline: 2px solid var(--lq-accent, ${resolveToken('--lq-accent')})`);
+		expect(input).toContain('border: 1px solid var(--lq-border-strong)');
+		expect(focus).toContain('outline: 2px solid var(--lq-accent)');
 		expect(focus).toContain('outline-offset: 2px;');
 	});
 

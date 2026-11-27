@@ -65,15 +65,6 @@ export function nextLQAIThemeChoice(choice: LQAIThemeChoice): LQAIThemeChoice {
 	return LQAI_THEME_CHOICES[(index + 1) % LQAI_THEME_CHOICES.length];
 }
 
-/**
- * The Word add-in's sign-in dialog is an `/lq-ai` path that resets the layout
- * chain, so the token file is not loaded there and its colours are fixed light
- * fallbacks. It stays light until that page loads the tokens.
- */
-export function isLQAIFixedLightPath(pathname: string): boolean {
-	return pathname === '/lq-ai/word-addin' || pathname.startsWith('/lq-ai/word-addin/');
-}
-
 /** Reads the browser's copy of the choice. A missing or foreign value, or no storage, is `system`. */
 export function readLQAIThemeChoice(
 	storage: Pick<Storage, 'getItem'> | undefined
@@ -98,12 +89,7 @@ export function writeLQAIThemeChoice(
 	}
 }
 
-export function resolveLQAITheme(
-	choice: LQAIThemeChoice,
-	prefersDark: boolean,
-	pathname = '/lq-ai'
-): LQAITheme {
-	if (isLQAIFixedLightPath(pathname)) return 'light';
+export function resolveLQAITheme(choice: LQAIThemeChoice, prefersDark: boolean): LQAITheme {
 	if (choice === 'light' || choice === 'dark') return choice;
 	return prefersDark ? 'dark' : 'light';
 }
@@ -133,11 +119,7 @@ function prefersDark(win: Window): boolean {
 
 /** Resolves the theme for the page the window is on, applies it, announces it and returns it. */
 export function applyCurrentLQAITheme(win: Window): LQAITheme {
-	const theme = resolveLQAITheme(
-		readLQAIThemeChoice(storageOf(win)),
-		prefersDark(win),
-		win.location.pathname
-	);
+	const theme = resolveLQAITheme(readLQAIThemeChoice(storageOf(win)), prefersDark(win));
 	applyLQAITheme(win.document, theme);
 	try {
 		win.dispatchEvent(new CustomEvent(LQAI_THEME_EVENT, { detail: theme }));
