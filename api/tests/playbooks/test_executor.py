@@ -561,6 +561,7 @@ async def test_executor_persists_error_on_gateway_failure(
 
     await db_session.refresh(execution)
     assert execution.status == "error"
+    assert execution.error is not None
     assert "Unable to classify Test" in execution.error
     assert execution.results is not None
     positions = execution.results["positions"]
