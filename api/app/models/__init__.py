@@ -62,6 +62,7 @@ from app.models.user_export import UserExportJob
 from app.models.user_skill import UserSkill
 from app.models.work_product import WorkProductAttribution
 from app.models.work_product_fiduciary_gate import WorkProductFiduciaryGate
+from app.models.workspace_event import WorkspaceEvent
 
 __all__ = [
     "AuditLog",
@@ -125,6 +126,7 @@ __all__ = [
     "UserSkill",
     "WorkProductAttribution",
     "WorkProductFiduciaryGate",
+    "WorkspaceEvent",
 ]
 
 from .storage_deletion import StorageDeletion as StorageDeletion
