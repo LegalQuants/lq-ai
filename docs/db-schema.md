@@ -70,7 +70,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |
 | `trust_pills` | 0019 | Ambient trust label format: `labels` (full text) vs. `dots` (minimal). |
 | `provenance_pills` | 0019 | Per-message skill/tier/provider pill row: `always` visible vs. `collapsed`. |
-| `appearance_theme` | 0080 | LQ.AI shell theme ([ADR 0045 §2](adr/0045-lq-ai-shell-redesign.md)): `light`, `dark`, or `system` (Match system; the default, which existing users receive). CHECK `chk_users_appearance_theme_enum`. Stored and returned by the API only: the web shell renders light until the dark theme ships. |
+| `appearance_theme` | 0080 | LQ.AI shell theme ([ADR 0045 §2](adr/0045-lq-ai-shell-redesign.md)): `light`, `dark`, or `system` (Match system; the default, which existing users receive). CHECK `chk_users_appearance_theme_enum`. |
 | `autonomous_enabled` | 0044 | M4-C2 Autonomous Layer opt-in. `FALSE` by default; the autonomous executor and trigger surfaces are inert for a user until they flip this on. |
 
 `must_change_password` is set to TRUE for:

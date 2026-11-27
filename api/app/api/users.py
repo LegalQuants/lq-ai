@@ -36,7 +36,7 @@ from app.api.dependencies import ActiveUser, CurrentUser, get_active_user
 from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
-from app.models.user import User, UserSession
+from app.models.user import AppearanceTheme, User, UserSession
 from app.models.user_export import UserExportJob
 from app.storage import presigned_get_url
 from app.workers.queue import enqueue_user_export_job
@@ -87,11 +87,6 @@ FeaturedTools = Literal["prominent", "inline"]
 WorkspaceLayout = Literal["three_pane", "two_pane", "one_pane"]
 TrustPills = Literal["labels", "dots"]
 ProvenancePills = Literal["always", "collapsed"]
-
-# ADR 0045 §2 — LQ.AI shell theme. ``system`` is "Match system" (the default).
-# Stored and returned only: the web shell renders light until the dark theme
-# ships, so nothing acts on this value yet.
-AppearanceTheme = Literal["light", "dark", "system"]
 
 
 class UserPreferencesUpdate(BaseModel):

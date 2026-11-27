@@ -9133,9 +9133,8 @@ components:
           default: system
           description: |
             ADR 0045 §2 (migration 0080). LQ.AI shell theme: ``light``,
-            ``dark``, or ``system`` (Match system; default). Stored and
-            returned only: the web shell renders light until the dark
-            theme ships. Modifiable via ``PATCH /users/me/preferences``.
+            ``dark``, or ``system`` (Match system, the default).
+            Modifiable via ``PATCH /users/me/preferences``.
         created_at: {type: string, format: date-time}
         last_login_at: {type: string, format: date-time, nullable: true}
         deletion_scheduled_at:
@@ -9176,9 +9175,8 @@ components:
           enum: [light, dark, system]
           default: system
           description: |
-            ADR 0045 §2. Shell theme; ``system`` is Match system. Stored
-            and returned only: the web shell renders light until the dark
-            theme ships.
+            ADR 0045 §2. Account preference for the LQ.AI shell theme.
+            ``system`` (Match system) follows the device's colour scheme.
         autonomous_enabled:
           type: boolean
 
@@ -9209,9 +9207,8 @@ components:
           type: string
           enum: [light, dark, system]
           description: |
-            ADR 0045 §2. Shell theme; ``system`` is Match system. Stored
-            and returned only: the web shell renders light until the dark
-            theme ships.
+            ADR 0045 §2. Account preference for the LQ.AI shell theme.
+            ``system`` (Match system) follows the device's colour scheme.
         autonomous_enabled:
           type: boolean
 

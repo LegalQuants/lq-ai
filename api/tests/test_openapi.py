@@ -423,3 +423,11 @@ async def test_openapi_version_is_3_1() -> None:
     spec = response.json()
     # FastAPI >= 0.99 emits OpenAPI 3.1.x by default.
     assert spec["openapi"].startswith("3.1.")
+
+
+@pytest.mark.unit
+def test_account_theme_enum_on_profile_and_preferences() -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    for model in ("UserPublic", "UserPreferencesResponse"):
+        theme = schemas[model]["properties"]["appearance_theme"]
+        assert theme["enum"] == ["light", "dark", "system"]

@@ -9152,6 +9152,10 @@ components:
       properties:
         appearance_theme:
           default: system
+          enum:
+          - light
+          - dark
+          - system
           title: Appearance Theme
           type: string
         created_at:

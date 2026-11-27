@@ -12,9 +12,6 @@ The column ships with a DB-level CHECK constraint
 enforcement in the API layer — the same defense-in-depth pattern as migration
 0019's personalization preferences.
 
-This migration only stores the value. Nothing reads it yet: the web shell
-renders light until the dark theme ships.
-
 Revision ID: 0080
 Revises: 0079
 """

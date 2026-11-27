@@ -18,6 +18,9 @@ from app.db.base import Base
 MUTATING_ROLES: frozenset[str] = frozenset({"admin", "member"})
 
 
+AppearanceTheme = Literal["light", "dark", "system"]
+
+
 class User(Base):
     """A LQ.AI user. Auth-owning per ADR 0002.
 
@@ -84,9 +87,8 @@ class User(Base):
         String, nullable=False, server_default=text("'always'")
     )
     # ADR 0045 §2 — LQ.AI shell theme: Light, Dark or Match system (the
-    # default). Stored and returned only; nothing reads it yet. CHECK
-    # constraint enforced at the DB layer in migration 0080.
-    appearance_theme: Mapped[Literal["light", "dark", "system"]] = mapped_column(
+    # default). Migration 0080 enforces these values in the database.
+    appearance_theme: Mapped[AppearanceTheme] = mapped_column(
         String, nullable=False, server_default=text("'system'")
     )
 
