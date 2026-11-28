@@ -442,6 +442,20 @@
 {/if}
 
 <style>
+	.prose :global(blockquote) {
+		margin-block: var(--lq-space-3);
+		padding: var(--lq-space-2) var(--lq-space-3);
+		border-inline-start: 4px solid var(--lq-border-strong);
+		background-color: var(--lq-surface-muted);
+		color: var(--lq-text);
+	}
+	.prose :global(blockquote > :first-child) {
+		margin-block-start: 0;
+	}
+	.prose :global(blockquote > :last-child) {
+		margin-block-end: 0;
+	}
+
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
 	.lq-t-border {
 		border-color: var(--lq-border);

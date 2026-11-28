@@ -313,9 +313,9 @@ it('centers a shared reading column and keeps each message aligned within it', (
 	}
 });
 
-function luminance(element: Element): number {
-	const rgb = getComputedStyle(element).backgroundColor.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
-	expect(rgb, 'opaque switch colour').to.exist;
+function luminance(color: string): number {
+	const rgb = color.match(/^rgb\((\d+), (\d+), (\d+)\)$/);
+	expect(rgb, 'opaque colour').to.exist;
 	const [r, g, b] = rgb!.slice(1).map((channel) => {
 		const c = Number(channel) / 255;
 		return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
@@ -323,7 +323,49 @@ function luminance(element: Element): number {
 	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+function contrast(first: string, second: string): number {
+	const a = luminance(first);
+	const b = luminance(second);
+	return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
 for (const theme of ['light', 'dark']) {
+	it(`distinguishes a Markdown blockquote in an assistant reply in ${theme}`, () => {
+		const quote = 'Bring the updated notes to the meeting';
+		visitFixture('/lq-ai/chats?id=existing', () => {
+			cy.intercept('GET', '**/api/v1/users/me/preferences', {
+				appearance_theme: theme,
+				autonomous_enabled: false
+			});
+			cy.intercept('GET', '**/chats/existing/messages?*', {
+				items: [
+					{
+						id: 'answer',
+						chat_id: 'existing',
+						role: 'assistant',
+						created_at: '2026-01-01',
+						content: `The handover includes this instruction:\n\n> ${quote}\n\nKeep a copy for the file.`
+					}
+				],
+				next_cursor: null
+			});
+		});
+		cy.get('html').should('have.attr', 'data-lq-theme', theme);
+		cy.get('[data-testid="lq-ai-message-answer"] blockquote')
+			.should('be.visible')
+			.and('contain.text', quote)
+			.and(($quote) => {
+				const style = getComputedStyle($quote[0]);
+				expect(parseFloat(style.borderInlineStartWidth), 'quote rule width').to.be.at.least(3);
+				expect(
+					contrast(style.borderInlineStartColor, style.backgroundColor),
+					'rule contrast'
+				).to.be.at.least(3);
+				const text = getComputedStyle($quote.find('p')[0]).color;
+				expect(contrast(text, style.backgroundColor), 'quote text contrast').to.be.at.least(4.5);
+			});
+	});
+
 	it(`shows the Keep skills on thumb in both states in ${theme}`, () => {
 		visitFixture('/lq-ai/chats?id=existing', () => {
 			cy.intercept('GET', '**/api/v1/users/me/preferences', {
@@ -337,10 +379,9 @@ for (const theme of ['light', 'dark']) {
 			if (checked) cy.get(toggle).click();
 			cy.get(toggle).should(($toggle) => {
 				expect($toggle.attr('aria-checked')).to.equal(String(checked));
-				const track = luminance($toggle[0]);
-				const thumb = luminance($toggle.find('.lq-switch-thumb')[0]);
-				const contrast = (Math.max(track, thumb) + 0.05) / (Math.min(track, thumb) + 0.05);
-				expect(contrast, 'thumb against track').to.be.at.least(3);
+				const track = getComputedStyle($toggle[0]).backgroundColor;
+				const thumb = getComputedStyle($toggle.find('.lq-switch-thumb')[0]).backgroundColor;
+				expect(contrast(track, thumb), 'thumb against track').to.be.at.least(3);
 			});
 		}
 	});
