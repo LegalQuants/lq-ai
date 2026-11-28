@@ -159,7 +159,7 @@
 
 	{#if open}
 		<div
-			class="lq-dropdown absolute z-10 w-72 overflow-auto rounded-md shadow-lg {openUp
+			class="lq-dropdown absolute z-10 w-72 overflow-auto rounded-md {openUp
 				? 'bottom-full mb-1'
 				: 'mt-1'}"
 			style="max-height: {maxHeight}px"
@@ -322,6 +322,10 @@
 	.lq-dropdown {
 		border: 1px solid var(--lq-border);
 		background: var(--lq-canvas);
+		/* Mixes the shadow ink, so dark has no shadow (ADR 0045 §1). */
+		box-shadow:
+			0 10px 15px -3px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent),
+			0 4px 6px -4px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent);
 	}
 
 	.lq-empty {

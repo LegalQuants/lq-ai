@@ -42,7 +42,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { beforeNavigate, afterNavigate } from '$app/navigation';
-	import { applyLQAILightTheme } from '$lib/lq-ai/light-theme';
+	import { LQAI_THEME_EVENT, applyCurrentLQAITheme, syncThemeToPath } from '$lib/lq-ai/theme';
 	import { isLQAIPath } from '$lib/lq-ai/paths';
 	import { updated } from '$app/state';
 
@@ -106,12 +106,19 @@
 	});
 
 	// Also cover client-side entry into the LQ.AI shell.
+	// LQ.AI's own theme inside the shell (ADR 0045 §2); Open WebUI's again on the way out.
 	afterNavigate(() => {
-		if (isLQAIPath(window.location.pathname)) {
-			applyLQAILightTheme(document);
-			theme.set('light');
-		}
+		const lqTheme = syncThemeToPath(window);
+		// Outside the shell the store goes back to Open WebUI's saved theme, as on a fresh load.
+		theme.set(lqTheme ?? localStorage.theme ?? 'system');
 	});
+	// A theme applied without a navigation (a choice in Appearance or the sidebar, the
+	// account's value arriving, the device changing) reaches the toasts through this.
+	if (typeof window !== 'undefined') {
+		window.addEventListener(LQAI_THEME_EVENT, (event) => {
+			theme.set(event.detail);
+		});
+	}
 
 	setContext('i18n', i18n);
 
@@ -918,8 +925,7 @@
 		}
 		if (event.type === 'theme:update' && event.data?.theme) {
 			if (isLQAIPath(window.location.pathname)) {
-				applyLQAILightTheme(document);
-				theme.set('light');
+				theme.set(applyCurrentLQAITheme(window));
 				return;
 			}
 			const newTheme = event.data.theme;
@@ -930,10 +936,8 @@
 			const themes = ['dark', 'light', 'oled-dark'];
 			let themeToApply =
 				newTheme === 'oled-dark' ? 'dark' : newTheme === 'her' ? 'light' : newTheme;
-			// LQ.AI: dark mode isn't a supported deployment theme (see app.html);
-			// 'system' always resolves to light rather than the OS preference.
 			if (newTheme === 'system') {
-				themeToApply = 'light';
+				themeToApply = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 			}
 			themes
 				.filter((e) => e !== themeToApply)
@@ -1061,7 +1065,7 @@
 
 		if (typeof window !== 'undefined') {
 			if (isLQAIPath(window.location.pathname)) {
-				applyLQAILightTheme(document);
+				applyCurrentLQAITheme(window);
 			} else if (window.applyTheme) {
 				window.applyTheme();
 			}
@@ -1136,7 +1140,11 @@
 		// Call visibility change handler initially to set state on load
 		handleVisibilityChange();
 
-		theme.set(isLQAIPath(window.location.pathname) ? 'light' : (localStorage.theme ?? 'system'));
+		theme.set(
+			isLQAIPath(window.location.pathname)
+				? applyCurrentLQAITheme(window)
+				: (localStorage.theme ?? 'system')
+		);
 
 		mobile.set(window.innerWidth < BREAKPOINT);
 
@@ -1358,7 +1366,13 @@
 {/if}
 
 <Toaster
-	theme={isLQAIPath($page.url.pathname) ? 'light' : $theme.includes('dark') ? 'dark' : 'light'}
+	theme={$theme.includes('dark')
+		? 'dark'
+		: $theme === 'system'
+			? window.matchMedia('(prefers-color-scheme: dark)').matches
+				? 'dark'
+				: 'light'
+			: 'light'}
 	richColors
 	position="top-right"
 	closeButton

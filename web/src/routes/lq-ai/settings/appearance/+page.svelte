@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { preferences, setPreference, initPreferences } from '$lib/lq-ai/stores/preferences';
 	import SettingsToggleGroup from '$lib/lq-ai/components/SettingsToggleGroup.svelte';
+	import ThemeChoiceCards from '$lib/lq-ai/components/ThemeChoiceCards.svelte';
 	import type { FeaturedTools, WorkspaceLayout, TrustPills, ProvenancePills } from '$lib/lq-ai/types';
 	import {
 		AUTO_ENHANCE_STORAGE_KEY,
@@ -45,6 +46,8 @@
 	Tune how LQ.AI presents itself. Brave choices are on by default; you can dial them back if you
 	want less ceremony.
 </LqText>
+
+<ThemeChoiceCards />
 
 <SettingsToggleGroup
 	label="Featured tools"

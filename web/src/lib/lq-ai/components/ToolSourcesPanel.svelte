@@ -67,7 +67,7 @@
 		font-size: 12px;
 		line-height: 1.4;
 		margin-top: 8px;
-		border: 1px solid rgba(107, 114, 128, 0.24);
+		border: 1px solid color-mix(in srgb, var(--lq-text-tertiary) 24%, transparent);
 		border-radius: 6px;
 		overflow: hidden;
 	}
@@ -78,7 +78,7 @@
 		gap: 6px;
 		width: 100%;
 		padding: 6px 10px;
-		background: rgba(107, 114, 128, 0.06);
+		background: color-mix(in srgb, var(--lq-text-tertiary) 6%, transparent);
 		border: none;
 		cursor: pointer;
 		font: inherit;
@@ -89,7 +89,7 @@
 		transition: background-color 0.15s ease;
 	}
 	.lq-sources-header:hover {
-		background: rgba(107, 114, 128, 0.12);
+		background: color-mix(in srgb, var(--lq-text-tertiary) 12%, transparent);
 	}
 	.lq-sources-header:focus-visible {
 		outline: 2px solid var(--lq-accent);
@@ -119,7 +119,7 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 6px 10px;
-		border-top: 1px solid rgba(107, 114, 128, 0.16);
+		border-top: 1px solid color-mix(in srgb, var(--lq-text-tertiary) 16%, transparent);
 		font-size: 12px;
 	}
 	.lq-source-row:first-child {

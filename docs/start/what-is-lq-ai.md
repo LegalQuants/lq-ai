@@ -26,6 +26,8 @@ The [quickstart](../quickstart.md) takes you through installation, sign-in, and 
 
 Use the repository's [fictional NDA](../quickstart/sample-nda.md) for the example. Keep real client material out of the first experiment. Before connecting a model, review [what information may leave the deployment](../trust/what-leaves-my-deployment.md).
 
+The workspace follows your device’s colour scheme by default. To keep it light on a dark device, open **Account settings › Appearance** and select **Light**. You can also change the theme at the foot of the left sidebar.
+
 ## Next
 
 - [Is LQ.AI right for your team?](is-it-for-you.md)

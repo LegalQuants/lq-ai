@@ -349,7 +349,7 @@
 	.csm-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.35);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 35%, transparent);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -444,7 +444,7 @@
 	}
 	.primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 8px 16px;
 		border-radius: var(--lq-radius-pill);

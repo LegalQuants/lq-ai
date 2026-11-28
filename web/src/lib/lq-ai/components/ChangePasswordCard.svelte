@@ -40,7 +40,7 @@
 </script>
 
 <form
-	class="max-w-md mx-auto mt-12 p-6 rounded-lg shadow border lq-t-border lq-t-canvas space-y-3"
+	class="max-w-md mx-auto mt-12 p-6 rounded-lg lq-t-panel lq-t-canvas space-y-3"
 	on:submit|preventDefault={submit}
 	data-testid="lq-ai-change-password-form"
 >
@@ -106,8 +106,12 @@
 
 <style>
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
-	.lq-t-border {
-		border-color: var(--lq-border);
+	/* The card's edge and shadow. The shadow mixes the shadow ink, so dark has none (ADR 0045 §1). */
+	.lq-t-panel {
+		border: 1px solid var(--lq-border);
+		box-shadow:
+			0 1px 3px 0 color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent),
+			0 1px 2px -1px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent);
 	}
 	.lq-t-border-strong {
 		border-color: var(--lq-border-strong);

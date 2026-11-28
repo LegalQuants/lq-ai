@@ -6,9 +6,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPreferences, patchPreferences } from '../api/preferences';
-import { clearSession, setSession } from '../auth/store';
+import { clearSession, getAccessToken, setSession } from '../auth/store';
+import { chooseTheme } from '../stores/preferences';
 import { LQAIApiError } from '../api/client';
-import type { Preferences } from '../types';
+import type { Preferences, User } from '../types';
 
 const realFetch = global.fetch;
 
@@ -50,6 +51,45 @@ describe('preferences API client', () => {
 		const [url] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
 		expect(url).toContain('/users/me/preferences');
 	});
+
+	it.each([200, 401])(
+		'discards the old account’s delayed refresh (%s) during a theme save',
+		async (status) => {
+			const user: User = {
+				id: 'a',
+				email: 'a@example.test',
+				is_admin: false,
+				mfa_enabled: false,
+				must_change_password: false,
+				created_at: '2026-01-01T00:00:00Z'
+			};
+			setSession({ user, access_token: 'a', refresh_token: 'refresh-a', expires_in: 900 });
+			let finish!: (response: Response) => void;
+			const refresh = new Promise<Response>((resolve) => {
+				finish = resolve;
+			});
+			const fetchSpy = vi
+				.fn()
+				.mockResolvedValueOnce(jsonResponse(401, {}))
+				.mockReturnValueOnce(refresh);
+			global.fetch = fetchSpy;
+			const saving = chooseTheme('dark');
+			await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+			expect(fetchSpy.mock.calls[1][0]).toContain('/auth/refresh');
+			clearSession();
+			setSession({ user: { ...user, id: 'b' }, access_token: 'b', expires_in: 900 });
+			finish(
+				jsonResponse(status, {
+					access_token: 'renewed-a',
+					refresh_token: 'rotated-a',
+					expires_in: 900
+				})
+			);
+			await saving;
+			expect(getAccessToken()).toBe('b');
+			expect(fetchSpy).toHaveBeenCalledTimes(2);
+		}
+	);
 
 	it('patchPreferences PATCHes with the diff body and returns parsed response', async () => {
 		const patched = { ...FULL_PREFS, featured_tools: 'inline' as const };

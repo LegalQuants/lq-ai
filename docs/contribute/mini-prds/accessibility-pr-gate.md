@@ -20,22 +20,45 @@ The initial measurement comes from main at `3ecf284177b97ff6acdcaff5eda57bee0bf8
 
 Subsequent exceptions may only shrink relative to the PR base. Fixed entries are flagged as stale and must be removed or have their count reduced. The job rejects new exceptions/count growth and scanner/matrix changes. An intentional policy change or scanner upgrade needs its own maintainer-reviewed decision and update to these controls, not automatic regeneration to green.
 
-## Light-only LQ.AI appearance
+## LQ.AI themes
 
-LQ.AI renders light regardless of the saved upstream appearance preference.
-The 28 inventory keys remain stable for exact baseline comparisons; their
-final `light`/`dark` segment now explicitly identifies the saved input, not a
-supported rendered theme. Test titles state that the expected UI is light.
-Every route/viewport/input combination asserts the light root class, absence
-of dark/OLED/custom-theme classes, light native controls and a white browser
-theme color. The populated notification-bell checks use the same assertions.
+[ADR 0045 §3](../../adr/0045-lq-ai-shell-redesign.md) is the maintainer-reviewed decision
+for this section. It replaces the earlier "Light-only LQ.AI appearance" rule.
 
-The shared branding footer uses darker light-palette text. Its 120 old contrast
-exceptions are removed, leaving 110 existing exceptions for other elements;
-the complete footer is also scanned for contrast with zero exceptions before
-each page audit. No new exceptions, scanner changes or reduced state coverage
-are introduced. These source changes require a fresh gate and negative-proof
-run; the historical acceptance results below do not verify this revision.
+LQ.AI has a light and a dark theme of its own. The 28 inventory keys are
+unchanged, so the baseline still compares exactly. Their final `light` or
+`dark` segment used to name a saved Open WebUI preference that always rendered
+light; it now names the theme the variant renders. Test titles say the same.
+
+Each variant pins its theme. It saves the theme as LQ.AI's own choice
+(`localStorage['lq-ai.theme']`) before the page loads, so no variant follows
+the runner's OS setting. It saves the opposite theme as Open WebUI's
+preference, so a variant passes only if that preference stays out of the
+shell. Each variant then asserts what was applied: the root
+class, `data-lq-theme` on `<html>`, `color-scheme` (native controls) and the
+browser theme colour (`#ffffff` in light, `#08080a` in dark), with no OLED or
+custom-theme class. The populated notification-bell checks pin and assert the
+same way.
+
+Dark variants were measured once, in the pull request that added dark. A
+finding that a dark variant has and its light variant of the same state does
+not have is fixed, never added to the baseline. That pull request added no
+exception: the baseline had no entries before it and has none after.
+
+People choose Light, Dark or Match system, and Match system, the default,
+follows the device. No variant uses it: each pins Light or Dark, so the check
+never depends on the runner's setting. The account's saved choice
+(`appearance_theme`) would win over the pinned browser copy if a response
+carried it, so the check's synthetic preferences leave it out, as they did
+before the preference existed. The Appearance state now includes the three
+theme cards, in both themes.
+
+The shared branding footer is scanned for contrast with zero exceptions before
+each page audit, in both themes. It reads the `--lq-*` tokens.
+
+No scanner change and no reduced state coverage are introduced. The scanner
+configuration (`cypress.a11y.config.ts`) is unchanged: the state inventory it
+checks the baseline against has the same 28 keys.
 
 ## Reproduce
 

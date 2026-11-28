@@ -16,7 +16,7 @@
  * before matching (`/* *\/` in CSS and script, `//` in script, `<!-- -->` in
  * markup), so an issue number such as `#282` in a comment is not a colour.
  *
- * Five rules, each with its own context:
+ * Seven rules, each with its own context:
  *
  * 1. No hex colour literal in CSS contexts: `.css` files, `<style>` blocks,
  *    `style="…"` attributes and `style:prop=` values. The token files are where
@@ -30,8 +30,11 @@
  *    contexts: `class=` attribute values, `class:name` directives, and string
  *    literals in `<script>` blocks and `.ts`/`.js` files (conditional class
  *    names live in ternaries and helper functions).
- * 4. No `dark:` utility in the same class contexts: the shell is light-only.
- *    The rules are independent, so `dark:bg-gray-900` counts under 3 and 4.
+ * 4. No `dark:` utility in the same class contexts. LQ.AI's dark theme comes
+ *    from the `--lq-*` tokens under `data-lq-theme` (ADR 0045 §2), never from
+ *    Tailwind's `dark:` variants. The rules are independent, so
+ *    `dark:bg-gray-900` counts under 3 and 4. This rule has no allowlist
+ *    entries.
  * 5. No retired typography class (`lq-text-label`, `-caption`, `-body-sm`,
  *    `-body`, `-panel-h`, `-page-h`, `-welcome`, and the never-defined
  *    `-section-h` and `-h4`) anywhere outside comments: in markup, CSS
@@ -39,6 +42,21 @@
  *    The `--lq-text-*` colour tokens and the `lq-text-mono` and
  *    `lq-text-truncate` classes that `LqText` emits are not matched. This rule
  *    has no allowlist entries.
+ * 6. No colour written as a function or a keyword: `rgb()`, `rgba()`, `hsl()`
+ *    and `hsla()` with literal channels, in CSS contexts and in string literals
+ *    in `<script>` blocks and `.ts`/`.js` files (shadow scales live there); and
+ *    the keywords `white` and `black` in CSS contexts. Rule 1 does not see
+ *    these, and a dark theme cannot reach them. A shadow or a backdrop mixes an
+ *    ink token instead: `color-mix(in srgb, var(--lq-shadow-ink) 18%,
+ *    transparent)`. A function whose first argument is a `var()` is
+ *    token-driven and passes. `var()` fallbacks are removed first, as in rule
+ *    1. The token files are not scanned.
+ * 7. No Tailwind shadow class (`shadow`, `shadow-sm` … `shadow-2xl`,
+ *    `shadow-inner`) in the same class contexts as rule 3. Tailwind draws those
+ *    shadows in black whatever the theme, and ADR 0045 §1 says dark has no
+ *    shadows. A shadow is written in the component's `<style>` block and mixes
+ *    `--lq-shadow-ink`, as in rule 6. `shadow-none` passes. This rule has no
+ *    allowlist entries.
  *
  * Code that predates the rules is listed in ALLOWED with an exact count per
  * file and rule and a reason. The list only shrinks: a count above the entry
@@ -64,14 +82,23 @@ const TOKEN_FILES = new Set([
 /** ADR 0043 primitives may carry fallbacks. Not scanned by rule 2. */
 const FALLBACK_DIRECTORY = 'src/lib/lq-ai/components/shared/';
 
-type Rule = 'hex' | 'fallback' | 'palette-class' | 'dark-class' | 'type-class';
+type Rule =
+	| 'hex'
+	| 'fallback'
+	| 'palette-class'
+	| 'dark-class'
+	| 'type-class'
+	| 'colour-literal'
+	| 'shadow-class';
 
 const RULE_TEXT: Record<Rule, string> = {
 	hex: 'rule 1, hex colour literal in CSS',
 	fallback: 'rule 2, var(--lq-…, fallback)',
 	'palette-class': 'rule 3, Tailwind palette colour class',
 	'dark-class': 'rule 4, dark: utility',
-	'type-class': 'rule 5, retired .lq-text-* typography class'
+	'type-class': 'rule 5, retired .lq-text-* typography class',
+	'colour-literal': 'rule 6, rgb()/hsl() colour or white/black keyword',
+	'shadow-class': 'rule 7, Tailwind shadow class'
 };
 
 const RULE_FIX: Record<Rule, string> = {
@@ -80,9 +107,14 @@ const RULE_FIX: Record<Rule, string> = {
 		'write var(--lq-…) without a fallback; define the token in practice.css if it is missing',
 	'palette-class':
 		'use a class in the component <style> block that reads a --lq-* token (the lq-t-* classes are the pattern)',
-	'dark-class': 'remove it; the LQ.AI shell is light-only and dark: never applies',
+	'dark-class':
+		'remove it and use a --lq-* token; the dark theme redefines the tokens under data-lq-theme (ADR 0045 §2)',
 	'type-class':
-		'use LqText or LqTitle (components/shared/) with a size from LQ_TYPE_SCALE, per ADR 0045 §4'
+		'use LqText or LqTitle (components/shared/) with a size from LQ_TYPE_SCALE, per ADR 0045 §4',
+	'colour-literal':
+		'use a --lq-* token; for a shadow or a backdrop mix an ink token: color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent)',
+	'shadow-class':
+		'write the shadow in the component <style> block and mix the shadow ink: color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent)'
 };
 
 interface Allowed {
@@ -94,32 +126,9 @@ interface Allowed {
 	why: string;
 }
 
-const ALLOWED: readonly Allowed[] = [
-	{
-		file: 'src/routes/lq-ai/word-addin/oauth-start/+page.svelte',
-		rule: 'fallback',
-		count: 19,
-		why: 'renders under the root layout (Office OAuth hop) where the token file is not loaded; the fallbacks go when that is fixed'
-	},
-	{
-		file: 'src/lib/lq-ai/components/DualBrandingFooter.svelte',
-		rule: 'palette-class',
-		count: 6,
-		why: 'pre-token footer; S1-5 rewrites it'
-	},
-	{
-		file: 'src/lib/lq-ai/components/DualBrandingFooter.svelte',
-		rule: 'dark-class',
-		count: 3,
-		why: 'pre-token footer; S1-5 rewrites it'
-	},
-	{
-		file: 'src/lib/lq-ai/components/MessageBubble.svelte',
-		rule: 'dark-class',
-		count: 1,
-		why: 'dark:prose-invert is not a colour class but is still a dark: utility; counted until P1.2 decides on dark mode'
-	}
-];
+// Empty since the Word add-in's sign-in dialog began loading the token file. It was the last
+// entry: its fallbacks stood in for tokens that page could not read.
+const ALLOWED: readonly Allowed[] = [];
 
 interface Hit {
 	rule: Rule;
@@ -132,6 +141,8 @@ interface Hit {
 const paletteClass =
 	/(?<![\w-])(?:bg|text|border|ring|from|to|via|fill|stroke|outline|decoration|divide|placeholder|accent|caret|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-\d{2,3})?(?:\/\d{1,3})?(?![\w-])/g;
 const darkClass = /(?<![\w-])dark:(?:[\w-]+:)*[\w-]+(?:\/\d+)?/g;
+// `shadow` alone or with a size. `shadow-none` and names that merely contain the word pass.
+const shadowClass = /(?<![\w-])shadow(?:-(?:2xs|xs|sm|md|lg|xl|2xl|inner))?(?![\w-])/g;
 const hexColour = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/g;
 const lqFallback = /var\(\s*--lq-[\w-]+\s*,/g;
 // The lookbehind keeps the --lq-text-* colour tokens out; lq-text-mono and
@@ -139,6 +150,10 @@ const lqFallback = /var\(\s*--lq-[\w-]+\s*,/g;
 const retiredTypeClass =
 	/(?<![\w-])lq-text-(?:label|caption|body-sm|body|panel-h|page-h|welcome|section-h|h4)(?![\w-])/g;
 const anyFallback = /var\(\s*--[\w-]+\s*,/g;
+// A colour function with literal channels. `rgb(var(--x) / 0.5)` is token-driven and passes.
+const colourFunction = /(?<![\w-])(?:rgba?|hsla?)\(\s*(?!var\()/gi;
+// `white-space`, `.white-label` and `--lq-black` are not the keyword.
+const colourKeyword = /(?<![\w.#-])(?:white|black)(?![\w-])/gi;
 
 function walk(dir: string, out: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {
@@ -484,6 +499,16 @@ function hitsIn(file: string, src: string): Hit[] {
 		for (const span of css) {
 			const text = withoutFallbacks(code.slice(span.start, span.end));
 			for (const m of text.matchAll(hexColour)) add('hex', m[0], span.start + (m.index ?? 0));
+			for (const m of text.matchAll(colourFunction))
+				add('colour-literal', m[0], span.start + (m.index ?? 0));
+			for (const m of text.matchAll(colourKeyword))
+				add('colour-literal', m[0], span.start + (m.index ?? 0));
+		}
+		// Script strings: shadow scales and inline style strings are built there.
+		for (const span of classes) {
+			const text = withoutFallbacks(code.slice(span.start, span.end));
+			for (const m of text.matchAll(colourFunction))
+				add('colour-literal', m[0], span.start + (m.index ?? 0));
 		}
 	}
 	if (!file.startsWith(FALLBACK_DIRECTORY)) {
@@ -495,6 +520,8 @@ function hitsIn(file: string, src: string): Hit[] {
 		for (const m of text.matchAll(paletteClass))
 			add('palette-class', m[0], span.start + (m.index ?? 0));
 		for (const m of text.matchAll(darkClass)) add('dark-class', m[0], span.start + (m.index ?? 0));
+		for (const m of text.matchAll(shadowClass))
+			add('shadow-class', m[0], span.start + (m.index ?? 0));
 	}
 	return hits;
 }
@@ -556,6 +583,101 @@ describe('LQ.AI code uses --lq-* tokens, not hard-coded colours', () => {
 			{ rule: 'type-class', text: 'lq-text-caption', line: 1 },
 			{ rule: 'type-class', text: 'lq-text-label', line: 4 }
 		]);
+	});
+
+	it('catches colour functions and keywords, and lets token-driven ones pass', () => {
+		expect(ALLOWED.filter((a) => a.rule === 'colour-literal')).toEqual([]);
+		const hits = (file: string, src: string) =>
+			hitsIn(file, src)
+				.filter((h) => h.rule === 'colour-literal')
+				.map((h) => `${h.line}: ${h.text}`);
+		// Every spelling of a literal colour function, and both keywords, in a style block.
+		expect(
+			hits(
+				'sample.svelte',
+				[
+					'<style>',
+					'.a { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }',
+					'.b { background: rgb(15 23 42 / 0.55); }',
+					'.c { border-color: rgba(0,0,0,.2); }',
+					'.d { color: hsl(0 0% 100%); background: HSLA(0, 0%, 0%, 0.5); }',
+					'.e { color: white; background: black; }',
+					'.f { background: color-mix(in srgb, var(--lq-accent) 82%, white); }',
+					'</style>'
+				].join('\n')
+			)
+		).toEqual([
+			'2: rgba(',
+			'3: rgb(',
+			'4: rgba(',
+			'5: hsl(',
+			'5: HSLA(',
+			'6: white',
+			'6: black',
+			'7: white'
+		]);
+		// Token-driven colours, fallbacks, comments and look-alike words pass.
+		expect(
+			hits(
+				'sample.svelte',
+				[
+					'<!-- rgba(0, 0, 0, 0.1) and white in a comment -->',
+					'<p class="white-label">black box</p>',
+					'<style>',
+					'/* was rgba(0, 0, 0, 0.35) */',
+					'.a { white-space: nowrap; color: var(--lq-on-accent, white); }',
+					'.b { box-shadow: 0 1px 2px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent); }',
+					'.c { background: rgb(var(--lq-accent-rgb) / 0.1); }',
+					'.white-label, #black { color: var(--lq-text); }',
+					'</style>'
+				].join('\n')
+			)
+		).toEqual([]);
+		// An inline style attribute is a CSS context.
+		expect(hits('sample.svelte', '<div style="background: rgba(0, 0, 0, 0.4)">x</div>')).toEqual([
+			'1: rgba('
+		]);
+		// Script strings: functions are caught; keywords are not (prose uses the words).
+		expect(
+			hits(
+				'sample.ts',
+				"export const shadow = '0 1px 2px rgba(0, 0, 0, 0.05)';\nexport const label = 'white glove';\n// rgb(0 0 0)\n"
+			)
+		).toEqual(['1: rgba(']);
+		// The token files are where literal colours belong.
+		expect(
+			hits(
+				'src/lib/lq-ai/styles/practice.css',
+				':root { --lq-surface-hover: rgba(0, 0, 0, 0.04); }'
+			)
+		).toEqual([]);
+	});
+
+	it('catches Tailwind shadow classes and lets other names pass', () => {
+		const rules = (file: string, src: string) =>
+			hitsIn(file, src)
+				.filter((hit) => hit.rule === 'shadow-class')
+				.map((hit) => hit.text);
+		expect(ALLOWED.filter((a) => a.rule === 'shadow-class')).toEqual([]);
+		expect(
+			rules(
+				'src/lib/lq-ai/components/X.svelte',
+				'<div class="rounded shadow"></div><p class="p-2 shadow-xl border"></p><i class:shadow-lg={on}></i>'
+			)
+		).toEqual(['shadow', 'shadow-xl', 'shadow-lg']);
+		expect(
+			rules(
+				'src/lib/lq-ai/components/X.svelte',
+				'<div class="shadow-none skill-shadow-badge box-shadow-x" data-testid="shadow-row"></div>' +
+					'<style>.a { box-shadow: 0 1px 2px color-mix(in srgb, var(--lq-shadow-ink) 5%, transparent); }</style>'
+			)
+		).toEqual([]);
+	});
+
+	it('allows no dark: utility or palette class anywhere', () => {
+		expect(ALLOWED.filter((a) => a.rule === 'dark-class' || a.rule === 'palette-class')).toEqual(
+			[]
+		);
 	});
 
 	it('keeps the allowlist exact', () => {

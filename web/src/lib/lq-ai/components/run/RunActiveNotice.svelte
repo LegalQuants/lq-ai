@@ -127,7 +127,7 @@
 	.close {
 		background: var(--lq-accent);
 		border-color: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 	}
 	.error {
 		margin-top: 0.35rem;

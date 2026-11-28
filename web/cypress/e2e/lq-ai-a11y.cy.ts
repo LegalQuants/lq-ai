@@ -6,7 +6,7 @@ import {
 	type Finding,
 	type Impact
 } from '../support/a11y-gate';
-import { states, viewports, savedThemePreferences } from '../support/a11y-states';
+import { states, viewports, themes, type A11yTheme } from '../support/a11y-states';
 
 const user = {
 	id: 'a11y-user',
@@ -89,31 +89,42 @@ function fixtures(dashboard = false, delayBootstrap = false) {
 	});
 	return releaseActivity;
 }
-// The final inventory-key segment records the saved input preference only.
-// Assert the actual palette rather than treating a saved dark value as dark UI.
-function assertLightOnlyUI() {
+// The final inventory-key segment names the theme the variant renders (ADR 0045 §3).
+// Assert what was actually applied, so a variant cannot pass in the other theme:
+// the root class, LQ.AI's own attribute, native controls and the browser theme colour.
+const themeColor: Record<A11yTheme, string> = { light: '#ffffff', dark: '#08080a' };
+function assertTheme(theme: A11yTheme) {
+	const other = theme === 'dark' ? 'light' : 'dark';
 	cy.get('html')
-		.should('have.class', 'light')
-		.and('not.have.class', 'dark')
+		.should('have.class', theme)
+		.and('not.have.class', other)
 		.and('not.have.class', 'oled-dark')
 		.and('not.have.class', 'her')
-		.and('have.css', 'color-scheme', 'light');
-	cy.get('meta[name="theme-color"]').should('have.attr', 'content', '#ffffff');
+		.and('have.attr', 'data-lq-theme', theme)
+		.and('have.css', 'color-scheme', theme);
+	cy.get('meta[name="theme-color"]').should('have.attr', 'content', themeColor[theme]);
+}
+// Pin both saved values. LQ.AI's own choice decides the theme. Open WebUI's is
+// set to the opposite one, so a variant passes only if that value stays out of
+// the shell: a leak would render, and assert, the wrong theme.
+function saveTheme(win: Window, theme: A11yTheme) {
+	win.localStorage.setItem('theme', theme === 'dark' ? 'light' : 'dark');
+	win.localStorage.setItem('lq-ai.theme', theme);
 }
 
 describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', () => {
 	for (const state of states)
 		for (const viewport of viewports)
-			for (const savedTheme of savedThemePreferences) {
-				const id = `${state.id}/${viewport.id}/${savedTheme}`;
-				it(`${state.id}/${viewport.id}/light UI (saved ${savedTheme})`, () => {
+			for (const theme of themes) {
+				const id = `${state.id}/${viewport.id}/${theme}`;
+				it(`${state.id}/${viewport.id}/${theme} UI`, () => {
 					const releaseActivity = fixtures(state.id === 'dashboard', id === 'skills/desktop/light');
 					cy.viewport(viewport.width, viewport.height);
 					cy.visit(state.path, {
 						onBeforeLoad(win) {
 							win.localStorage.clear();
 							win.localStorage.setItem('locale', 'en-US');
-							win.localStorage.setItem('theme', savedTheme);
+							saveTheme(win, theme);
 							win.localStorage.setItem('token', 'synthetic-a11y-token');
 							if (state.id !== 'login')
 								win.localStorage.setItem(
@@ -134,7 +145,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					const bootstrapTimeout = { requestTimeout: 30000, responseTimeout: 30000 };
 					cy.wait(['@a11yConfig', '@a11ySession', '@a11yConfig'], bootstrapTimeout);
 					if (state.id !== 'login') cy.wait('@a11yUser', bootstrapTimeout);
-					assertLightOnlyUI();
+					assertTheme(theme);
 					if ('ready' in state) cy.get(state.ready, { timeout: 15000 }).should('be.visible');
 					if ('heading' in state)
 						cy.contains('h1,h2', state.heading, { timeout: 15000 }).should('be.visible');
@@ -191,7 +202,7 @@ describe('DE-232 exact accessibility gate (source credit: @SaifAlYounan #437)', 
 					cy.document().then(async (doc) => {
 						await doc.fonts.ready;
 					});
-					assertLightOnlyUI();
+					assertTheme(theme);
 					if (Cypress.env('injectViolation') && id === 'login/desktop/light')
 						cy.document().then((doc) => {
 							const button = doc.createElement('button');
@@ -267,8 +278,8 @@ function docBody(win: Window) {
 // the right sidebar (a sheet on a phone); both are checked.
 describe('DE-324 populated notification bell accessibility', () => {
 	for (const viewport of viewports)
-		for (const savedTheme of savedThemePreferences) {
-			it(`populated bell/${viewport.id}/light UI (saved ${savedTheme})`, () => {
+		for (const theme of themes) {
+			it(`populated bell/${viewport.id}/${theme} UI`, () => {
 				fixtures();
 				cy.intercept('GET', '**/api/v1/users/me/preferences', {
 					...preferences,
@@ -296,7 +307,7 @@ describe('DE-324 populated notification bell accessibility', () => {
 					onBeforeLoad(win) {
 						win.localStorage.clear();
 						win.localStorage.setItem('locale', 'en-US');
-						win.localStorage.setItem('theme', savedTheme);
+						saveTheme(win, theme);
 						win.localStorage.setItem(
 							'lq_ai_auth',
 							JSON.stringify({
@@ -308,7 +319,7 @@ describe('DE-324 populated notification bell accessibility', () => {
 						);
 					}
 				});
-				assertLightOnlyUI();
+				assertTheme(theme);
 				const bell =
 					viewport.id === 'phone'
 						? '[data-testid="lq-shell-bell-strip"]'
@@ -321,7 +332,7 @@ describe('DE-324 populated notification bell accessibility', () => {
 				cy.document().then(async (doc) => {
 					await doc.fonts.ready;
 				});
-				assertLightOnlyUI();
+				assertTheme(theme);
 				cy.injectAxe();
 				cy.checkA11y(
 					{ include: [[bell], ['[data-testid="lq-right-sidebar"]']] },

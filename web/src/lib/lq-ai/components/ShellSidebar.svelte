@@ -58,12 +58,17 @@
 		IconUserCircle,
 		IconChevronDown,
 		IconFileDescription,
-		IconLock
+		IconLock,
+		IconSun,
+		IconMoon,
+		IconDeviceDesktop
 	} from '@tabler/icons-svelte';
 	import { autonomousApi } from '$lib/lq-ai/api';
 	import { badgeText } from '$lib/lq-ai/autonomous/notification-bell';
 	import { createNotificationBell } from '$lib/lq-ai/autonomous/notification-bell-controller';
-	import { preferences } from '$lib/lq-ai/stores/preferences';
+	import { chooseTheme, preferences } from '$lib/lq-ai/stores/preferences';
+	import { themeChoice } from '$lib/lq-ai/stores/theme';
+	import { LQAI_THEME_LABEL, nextLQAIThemeChoice, type LQAIThemeChoice } from '$lib/lq-ai/theme';
 	import { activeChatStore, chatsStore } from '$lib/lq-ai/stores';
 	import { createListedChat } from '$lib/lq-ai/chat/selection';
 	import { chatHref } from '$lib/lq-ai/run/links';
@@ -119,6 +124,12 @@
 	const SECTION_LABELS: Partial<Record<string, string>> = {
 		matters: 'Matters',
 		chats: 'Chats'
+	};
+
+	const THEME_ICONS: Record<LQAIThemeChoice, typeof IconHome> = {
+		light: IconSun,
+		dark: IconMoon,
+		system: IconDeviceDesktop
 	};
 
 	const ICONS: Record<NavItemId, typeof IconHome> = {
@@ -606,29 +617,48 @@
 					{/each}
 				</div>
 
-				{#if foot.length > 0}
-					<ul class="lq-sidebar-list lq-sidebar-foot" data-section="foot">
-						{#each foot as item (item.id)}
-							<li>
-								<a
-									class="lq-sidebar-row"
-									class:lq-sidebar-row-current={currentNav(item.id)}
-									href={item.route}
-									aria-current={currentNav(item.id) ? 'page' : undefined}
-									data-nav-id={item.id}
-								>
-									<svelte:component
-										this={ICONS[item.id]}
-										size={16}
-										stroke={1.75}
-										aria-hidden="true"
-									/>
-									<span class="lq-sidebar-row-label">{item.label}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-				{/if}
+				<ul class="lq-sidebar-list lq-sidebar-foot" data-section="foot">
+					{#each foot as item (item.id)}
+						<li>
+							<a
+								class="lq-sidebar-row"
+								class:lq-sidebar-row-current={currentNav(item.id)}
+								href={item.route}
+								aria-current={currentNav(item.id) ? 'page' : undefined}
+								data-nav-id={item.id}
+							>
+								<svelte:component
+									this={ICONS[item.id]}
+									size={16}
+									stroke={1.75}
+									aria-hidden="true"
+								/>
+								<span class="lq-sidebar-row-label">{item.label}</span>
+							</a>
+						</li>
+					{/each}
+					<!-- The theme toggle (ADR 0045 §2). Each press moves to the next choice. -->
+					<li>
+						<button
+							type="button"
+							class="lq-sidebar-row"
+							aria-label="Theme: {LQAI_THEME_LABEL[$themeChoice]}. Switch to {LQAI_THEME_LABEL[
+								nextLQAIThemeChoice($themeChoice)
+							]}."
+							data-testid="lq-shell-theme"
+							data-theme-choice={$themeChoice}
+							on:click={() => void chooseTheme(nextLQAIThemeChoice($themeChoice))}
+						>
+							<svelte:component
+								this={THEME_ICONS[$themeChoice]}
+								size={16}
+								stroke={1.75}
+								aria-hidden="true"
+							/>
+							<span class="lq-sidebar-row-label">Theme: {LQAI_THEME_LABEL[$themeChoice]}</span>
+						</button>
+					</li>
+				</ul>
 			</nav>
 
 			<div class="lq-sidebar-attribution">

@@ -138,7 +138,7 @@
 
 	.lq-learn-card:hover {
 		border-color: var(--lq-accent);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+		box-shadow: 0 4px 16px color-mix(in srgb, var(--lq-shadow-ink) 6%, transparent);
 	}
 
 	.lq-learn-card:focus-visible {

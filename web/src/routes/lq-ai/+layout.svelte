@@ -29,6 +29,7 @@
 	import { startTracker, stopTracker, noteActivity } from '$lib/lq-ai/stores/sessionActivity';
 	import '$lib/lq-ai/styles/practice.css';
 	import '$lib/lq-ai/styles/typography.css';
+	import '$lib/lq-ai/styles/prose.css';
 
 	let booted = false;
 	let mounted = false;

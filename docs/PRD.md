@@ -5646,6 +5646,16 @@ Timeout has no per-request path: it is fixed per provider (`timeout_s`, default 
 
 **Priority:** P3 · **Effort:** M · **Status (2026-09-15): filed (lands with [PR #280](https://github.com/LegalQuants/lq-ai/pull/280), which carries the stopgap below).**
 
+**Status (2026-11-27): built in the web shell; in no release yet.** [ADR 0045](adr/0045-lq-ai-shell-redesign.md) §1 to §3 decide the questions below, and each part is now built:
+
+- **(a) A dark palette.** Dark values for the `--lq-*` tokens sit under `data-lq-theme` in `practice.css`. A theme module (`web/src/lib/lq-ai/theme.ts`) applies them.
+- **(b) Coverage.** A sweep loaded the screens the accessibility check does not, in both themes: 51 of the 53 LQ.AI routes and 10 dialogs. It found no failure that dark has and light lacks, after two fixes. Not seen in dark: two routes (`/lq-ai/autonomous/orchestration/chat/[id]`, `/lq-ai/knowledge/[id]`), four dialogs, and most admin and Autonomous lists with data in them.
+- **(c) What "System" resolves to.** LQ.AI's own choice is Light, Dark or Match system, in Account settings › Appearance and on a row at the foot of the left sidebar. Match system is the default and follows the device. The browser keeps a copy for first paint. With an API that supports `appearance_theme`, the choice is also saved to the account and follows the person across devices. #280's stopgap is reverted in its five upstream files, so Open WebUI's own `system` follows the device again, as upstream has it.
+- **(d) Open WebUI's themes.** Its shell at `/` keeps its own theme menu, untouched. LQ.AI does not read it.
+- **(e) Guards.** The source check's rules 4, 6 and 7 (no `dark:` utility, no colour function or keyword, no Tailwind shadow class) and the accessibility check, whose 28 variants pin and assert a theme each, 14 of them dark.
+
+The Word add-in's sign-in dialog follows the theme too. It sits outside the shell's layout, so it loads the tokens itself.
+
 Dark mode was **deferred, not rejected**. The M1 frontend design spec lists it among the M1 non-goals: "Dark mode (parallel palette specified but light-only at M1)" (`docs/superpowers/specs/2026-05-10-m1-frontend-design.md` §2). The `--lq-*` semantic tokens in `web/src/lib/lq-ai/styles/practice.css` are built to take a second palette, but no dark values exist. The 2026-05-13 and 2026-05-14 handoffs flagged "dark-mode tokens for `practice.css`" as a DE candidate that was never filed; this entry absorbs it. Meanwhile the carried OpenWebUI shell still offers **Dark** and **OLED Dark** in Settings → General, and dark coverage is uneven. Some LQ.AI components (`ChatPanel`, `MessageBubble`) carry a few `dark:` utilities. Others (`CaptureSkillModal`, `AttachKBModal`, `MessageOverflowMenu`) have none. The AliasForm contrast fix went the other way and removed its `dark:` variants to match the light admin chrome (see the AliasForm entry above). Result: a visitor who ends up in dark sees a half-light, half-dark UI. Before PR #280, that happened automatically to anyone on the default **System** theme with OS dark mode on. PR #280 makes `system` resolve to light as a **stopgap** until this entry is picked up. That stopgap is not the intended end state.
 
 Scope when picked up:

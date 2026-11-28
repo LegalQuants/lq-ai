@@ -162,7 +162,7 @@
 	}
 
 	.lq-btn-secondary {
-		background: white;
+		background: var(--lq-canvas);
 		color: var(--lq-accent);
 		border: 1px solid var(--lq-accent-border);
 		border-radius: var(--lq-radius-pill);

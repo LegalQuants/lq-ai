@@ -406,7 +406,7 @@
     font-size: 13px;
     font-weight: 500;
     background: var(--lq-error);
-    color: white;
+    color: var(--lq-on-accent);
     border: 0;
     border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-3);
@@ -543,7 +543,7 @@
     font-size: 13px;
     font-weight: 500;
     background: var(--lq-accent);
-    color: white;
+    color: var(--lq-on-accent);
     border: 0;
     border-radius: var(--lq-radius-pill);
     padding: var(--lq-space-1) var(--lq-space-4);

@@ -78,7 +78,7 @@
 		line-height: 0;
 	}
 	.lq-pill-remove:hover {
-		background: rgba(0, 0, 0, 0.08);
+		background: color-mix(in srgb, var(--lq-text, #111114) 8%, transparent);
 	}
 	.lq-pill-remove:focus-visible {
 		outline: 2px solid currentColor;

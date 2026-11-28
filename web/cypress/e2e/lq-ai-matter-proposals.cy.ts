@@ -54,9 +54,11 @@ const envelope = (rows: ReturnType<typeof proposal>[], total_count = rows.length
 	limit: 50
 });
 
-function visitMatter() {
+function visitMatter(theme?: 'light' | 'dark') {
 	cy.visit(`/lq-ai/matters/${A}`, {
 		onBeforeLoad(win) {
+			// LQ.AI's own saved choice decides the theme (ADR 0045 §2); a root class set by hand does not.
+			if (theme) win.localStorage.setItem('lq-ai.theme', theme);
 			win.localStorage.setItem('token', 'fake-inbox-token');
 			win.localStorage.setItem('locale', 'en-US');
 			win.localStorage.setItem(
@@ -272,14 +274,11 @@ describe('DE-323 Matter proposal inbox regressions', () => {
 						envelope([long, ...Array.from({ length: 49 }, (_, i) => proposal(`phone-${i}`))], 51)
 					);
 					cy.viewport(1440, 900);
-					visitMatter();
+					visitMatter(theme as 'light' | 'dark');
+					cy.get('html').should('have.attr', 'data-lq-theme', theme).and('have.class', theme);
 					cy.get('[data-testid="lq-ai-chat-phone-chat"]').click();
 					cy.get('[data-testid="lq-ai-composer-input"]').should('exist');
 					cy.viewport(width, height);
-					cy.document().then((doc) => {
-						doc.documentElement.classList.remove('light', 'dark');
-						doc.documentElement.classList.add(theme);
-					});
 					if (optedIn) cy.get('.proposal-row').should('have.length', 50);
 					else cy.get('.proposal-banner').should('not.exist');
 					usableComposer(width, height);

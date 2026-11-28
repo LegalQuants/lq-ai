@@ -271,7 +271,7 @@
 	.send {
 		padding: 0 16px;
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border-radius: var(--lq-radius-pill);
 		border: 0;
 		font-weight: 500;

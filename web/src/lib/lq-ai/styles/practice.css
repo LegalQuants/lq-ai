@@ -53,6 +53,30 @@
   --lq-warning-soft: var(--lq-surface-muted);
   --lq-warning-border: var(--lq-border);
 
+  /* Shadow and scrim inks (ADR 0045 §1, "Shadows"). Components keep their own
+     shadow shape and strength and mix this ink into it, so a theme can switch
+     every shadow at once: color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent).
+     Modal backdrops do the same with the scrim ink. */
+  --lq-shadow-ink: #000000;
+  --lq-scrim-ink: #000000;
+
+  /* The edge of a raised surface that has no border of its own, such as a
+     dialog. Light shows such a surface by its shadow or by its fill against
+     the dimmed page, so the edge is clear. Dark has no shadows and the
+     surface has the page's colour, so there the edge is a hairline:
+     box-shadow: ..., 0 0 0 1px var(--lq-raised-edge). */
+  --lq-raised-edge: transparent;
+
+  /* Theme previews in Appearance. A preview shows its own theme whatever the
+     page is in, so these do not change with the theme. A test holds each one
+     equal to the value its theme gives the token it is named after. */
+  --lq-preview-light-canvas: #ffffff;
+  --lq-preview-light-inset: #f9f9fa;
+  --lq-preview-light-text: #111114;
+  --lq-preview-dark-canvas: #0e0f12;
+  --lq-preview-dark-inset: #08080a;
+  --lq-preview-dark-text: #f4f4f5;
+
   /* Radii (ADR 0045 §5). Names from the design system's tokens.json. */
   --lq-radius-tile: 10px;
   --lq-radius-input: 12px;
@@ -101,4 +125,42 @@
   --lq-surface-hover: rgba(0, 0, 0, 0.04);
   --lq-bg: var(--lq-canvas);
   --lq-text-primary: var(--lq-text);
+}
+
+/* Dark (ADR 0045 §1 and §2). The theme module sets data-lq-theme on <html>
+   (src/lib/lq-ai/theme.ts, and the inline script in src/app.html). Only the
+   tokens that carry a literal colour are restated: every soft, border and
+   compatibility token above derives from these and follows by itself.
+   People choose Light, Dark or Match system; see the theme module's header. */
+:root[data-lq-theme='dark'] {
+  /* Neutrals */
+  --lq-canvas: #0e0f12;
+  --lq-inset: #08080a;
+  --lq-surface-muted: #1a1b1f;
+  --lq-raised: #141518;
+  --lq-selected: #1e1f23;
+  --lq-border: #25262b;
+  --lq-border-strong: #6a6b72;
+
+  /* Text */
+  --lq-text: #f4f4f5;
+  --lq-text-secondary: #b4b4bb;
+  --lq-text-tertiary: #8e8e96;
+
+  /* Accent: ink, which is white on a dark page. */
+  --lq-accent: #ffffff;
+  --lq-on-accent: #08080a;
+  --lq-accent-rgb: 255, 255, 255;
+
+  --lq-governance: #f26b1f;
+  --lq-danger: #fda29b;
+
+  /* ADR 0045 §1: "light keeps a soft shadow on raised surfaces; dark has none."
+     Backdrops stay black. */
+  --lq-shadow-ink: transparent;
+  --lq-raised-edge: var(--lq-border);
+
+  /* The hover wash turns from a darkening to a lightening. The ADR states no
+     value for it; 6% white is this file's choice. */
+  --lq-surface-hover: rgba(255, 255, 255, 0.06);
 }

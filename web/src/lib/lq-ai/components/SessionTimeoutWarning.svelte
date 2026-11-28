@@ -31,7 +31,7 @@
 		border-left: 3px solid var(--lq-warn);
 		border-radius: var(--lq-radius-lg);
 		padding: var(--lq-space-4);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+		box-shadow: 0 8px 24px color-mix(in srgb, var(--lq-shadow-ink) 10%, transparent);
 		max-width: 360px;
 		z-index: 60;
 	}

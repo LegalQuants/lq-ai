@@ -8,6 +8,8 @@ import { auth } from '../auth/store';
 import { shouldShowBell } from '../autonomous/notification-bell';
 import type { Preferences, PreferencesUpdate } from '../types';
 import { getPreferences, patchPreferences } from '../api/preferences';
+import type { LQAIThemeChoice } from '../theme';
+import { adoptAccountTheme, applyThemeChoice } from './theme';
 
 const STORAGE_KEY = 'lq-ai:preferences-cache';
 
@@ -58,11 +60,18 @@ export const autonomousChromeEnabled = derived(
 
 let currentUserId: string | null = null;
 let generation = 0;
+// PATCH responses carry every preference. Send writes in selection order and
+// let a subsequent GET read the committed result, including an account theme.
+let lastWrite: Promise<void> | null = null;
+let accountRequests = new AbortController();
 let pending: { generation: number; promise: Promise<void> } | null = null;
 
 auth.subscribe((session) => {
 	const nextUserId = session.access_token ? (session.user?.id ?? null) : null;
 	if (nextUserId === currentUserId) return;
+	accountRequests.abort();
+	accountRequests = new AbortController();
+	lastWrite = null;
 	currentUserId = nextUserId;
 	generation++;
 	pending = null;
@@ -77,17 +86,20 @@ export function initPreferences(): Promise<void> {
 
 	const request = ++generation;
 	preferencesReadyFor.set(null);
-	const cached = readCache();
+	const cached = lastWrite ? null : readCache();
 	if (cached) preferences.set(cached);
 	// Defer so pending is assigned before the request can settle, even with a throwing client.
-	const promise = Promise.resolve().then(async () => {
+	const signal = accountRequests.signal;
+	const promise = (lastWrite ?? Promise.resolve()).then(async () => {
 		if (request !== generation || userId !== currentUserId) return;
 		try {
-			const fresh = await getPreferences();
+			const fresh = await getPreferences(signal);
 			if (request !== generation || userId !== currentUserId) return;
 			preferences.set(fresh);
 			writeCache(fresh);
 			preferencesReadyFor.set(userId);
+			// The account's theme wins over the browser's copy once it arrives (ADR 0045 §2).
+			adoptAccountTheme(fresh.appearance_theme);
 		} catch {
 			// Cached appearance remains available; autonomous chrome stays unconfirmed.
 		} finally {
@@ -112,13 +124,34 @@ export async function setPreference<K extends keyof Preferences>(
 		writeCache(next);
 		return next;
 	});
-	try {
-		const fresh = await patchPreferences({ [key]: value } as PreferencesUpdate);
-		if (!userId || request !== generation || userId !== currentUserId) return;
-		preferences.set(fresh);
-		writeCache(fresh);
-		preferencesReadyFor.set(userId);
-	} catch {
-		// Keep existing optimistic appearance behavior; a failed opt-in never enables chrome.
+	if (!userId) return;
+	const signal = accountRequests.signal;
+	async function save() {
+		if (signal.aborted) return;
+		try {
+			const fresh = await patchPreferences({ [key]: value } as PreferencesUpdate, signal);
+			if (request !== generation) return;
+			preferences.set(fresh);
+			writeCache(fresh);
+			preferencesReadyFor.set(userId);
+			adoptAccountTheme(fresh.appearance_theme);
+		} catch {
+			// Keep optimistic appearance. A failed opt-in never enables chrome.
+		}
 	}
+	const write = lastWrite ? lastWrite.then(save) : save();
+	lastWrite = write;
+	await write;
+	if (lastWrite === write) lastWrite = null;
+}
+
+/**
+ * A person chose a theme. This browser shows and remembers it at once; when
+ * someone is signed in it is also saved to the account. If that save fails the
+ * browser keeps the choice until the account's older value next arrives, as
+ * with every other preference here.
+ */
+export function chooseTheme(choice: LQAIThemeChoice): Promise<void> {
+	applyThemeChoice(choice);
+	return currentUserId ? setPreference('appearance_theme', choice) : Promise.resolve();
 }

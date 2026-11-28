@@ -91,7 +91,7 @@
 	.diff-overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(15, 23, 42, 0.55);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 55%, transparent);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -104,7 +104,9 @@
 		max-height: 80vh;
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+		box-shadow:
+			0 12px 32px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent),
+			0 0 0 1px var(--lq-raised-edge);
 	}
 	header {
 		display: flex;

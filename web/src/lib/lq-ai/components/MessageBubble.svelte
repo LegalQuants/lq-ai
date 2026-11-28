@@ -278,7 +278,7 @@
 			<div class="rounded-lg px-3 py-2 {bubbleClasses} max-w-full">
 				{#if message.role === 'assistant'}
 					<div
-						class="prose prose-sm dark:prose-invert max-w-none"
+						class="prose prose-sm max-w-none"
 						data-testid="lq-ai-message-content"
 						use:decorateCitationsInline={{
 							citations: fetchedCitations ?? [],
@@ -442,6 +442,20 @@
 {/if}
 
 <style>
+	.prose :global(blockquote) {
+		margin-block: var(--lq-space-3);
+		padding: var(--lq-space-2) var(--lq-space-3);
+		border-inline-start: 4px solid var(--lq-border-strong);
+		background-color: var(--lq-surface-muted);
+		color: var(--lq-text);
+	}
+	.prose :global(blockquote > :first-child) {
+		margin-block-start: 0;
+	}
+	.prose :global(blockquote > :last-child) {
+		margin-block-end: 0;
+	}
+
 	/* Colour tokens replacing Tailwind palette utilities (S1-1b). */
 	.lq-t-border {
 		border-color: var(--lq-border);

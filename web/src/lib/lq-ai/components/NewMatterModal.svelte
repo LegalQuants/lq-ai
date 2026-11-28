@@ -238,7 +238,7 @@
 	.nmm-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.35);
+		background: color-mix(in srgb, var(--lq-scrim-ink) 35%, transparent);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -251,7 +251,9 @@
 		padding: var(--lq-space-6);
 		max-width: 520px;
 		width: calc(100% - 32px);
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+		box-shadow:
+			0 24px 64px color-mix(in srgb, var(--lq-shadow-ink) 18%, transparent),
+			0 0 0 1px var(--lq-raised-edge);
 		max-height: calc(100vh - 64px);
 		overflow-y: auto;
 	}
@@ -361,7 +363,7 @@
 
 	.nmm-btn-primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		border-radius: var(--lq-radius-pill);
 		padding: var(--lq-space-2) var(--lq-space-4);

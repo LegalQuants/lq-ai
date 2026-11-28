@@ -48,19 +48,19 @@ export const LQ_GAP_VAR: Record<LqGap, string> = {
 	xl: 'var(--lq-space-8, 32px)'
 };
 
-// Mantine-style elevation scale. Not backed by a practice.css token today
-// (there's no --lq-shadow-* set yet) — values are plain box-shadow strings
-// here, one place to promote them to CSS custom properties later without
-// touching any component that consumes LqShadow.
+// Mantine-style elevation scale. The shapes and strengths live here; the colour
+// is practice.css's --lq-shadow-ink, so a theme switches every shadow at once
+// (ADR 0045 §1: light keeps a soft shadow, dark has none). In light,
+// color-mix(in srgb, #000000 N%, transparent) is rgba(0, 0, 0, N/100).
 export const LQ_SHADOWS = ['xs', 'sm', 'md', 'lg', 'xl'] as const;
 export type LqShadow = (typeof LQ_SHADOWS)[number];
 
 export const LQ_SHADOW_VAR: Record<LqShadow, string> = {
-	xs: '0 1px 2px rgba(0, 0, 0, 0.05)',
-	sm: '0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06)',
-	md: '0 4px 6px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06)',
-	lg: '0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05)',
-	xl: '0 20px 25px rgba(0, 0, 0, 0.12), 0 8px 10px rgba(0, 0, 0, 0.06)'
+	xs: '0 1px 2px color-mix(in srgb, var(--lq-shadow-ink, #000000) 5%, transparent)',
+	sm: '0 1px 3px color-mix(in srgb, var(--lq-shadow-ink, #000000) 8%, transparent), 0 1px 2px color-mix(in srgb, var(--lq-shadow-ink, #000000) 6%, transparent)',
+	md: '0 4px 6px color-mix(in srgb, var(--lq-shadow-ink, #000000) 8%, transparent), 0 2px 4px color-mix(in srgb, var(--lq-shadow-ink, #000000) 6%, transparent)',
+	lg: '0 10px 15px color-mix(in srgb, var(--lq-shadow-ink, #000000) 10%, transparent), 0 4px 6px color-mix(in srgb, var(--lq-shadow-ink, #000000) 5%, transparent)',
+	xl: '0 20px 25px color-mix(in srgb, var(--lq-shadow-ink, #000000) 12%, transparent), 0 8px 10px color-mix(in srgb, var(--lq-shadow-ink, #000000) 6%, transparent)'
 };
 
 // Text weight scale — named steps (rather than raw fw numbers, like

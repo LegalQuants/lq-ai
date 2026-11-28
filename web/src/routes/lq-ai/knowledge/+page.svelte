@@ -424,7 +424,7 @@
 
 	.lq-kb-card:hover {
 		border-color: var(--lq-accent);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+		box-shadow: 0 4px 12px color-mix(in srgb, var(--lq-shadow-ink) 4%, transparent);
 	}
 
 	.lq-kb-card:focus-visible {
@@ -522,7 +522,7 @@
 
 	.lq-btn-primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		border-radius: var(--lq-radius-pill);
 		padding: 8px 16px;

@@ -89,7 +89,7 @@
 
   .matter-card:hover {
     border-color: var(--lq-accent-border);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--lq-shadow-ink) 6%, transparent);
   }
 
   .matter-card:focus-visible {

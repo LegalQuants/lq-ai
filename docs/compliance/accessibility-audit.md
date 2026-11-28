@@ -6,7 +6,7 @@ Source credit: @SaifAlYounan's accessibility inventory and audit plan in [#437](
 
 ## Automated coverage
 
-The dedicated pull-request job scans the production frontend using mocked API responses at desktop (1440×900) and phone (390×844) widths with explicit light/dark preference variants. Testing those variants does not assert that dark mode is a supported product capability; the inherited styling and supported-theme limitations remain as documented by the application. Every intended state must reach its page-specific ready condition before scanning.
+The dedicated pull-request job scans the production frontend using mocked API responses at desktop (1440×900) and phone (390×844) widths in LQ.AI's light theme and in its dark theme. Each variant pins its theme and asserts the one that was applied ([ADR 0045 §3](../adr/0045-lq-ai-shell-redesign.md)). Dark is a theme people can choose, so a finding that only a dark variant has is fixed, not accepted. The job covers the seven states below; it says nothing about the other screens in either theme. Every intended state must reach its page-specific ready condition before scanning.
 
 | State                       | Fixture                    |
 | --------------------------- | -------------------------- |

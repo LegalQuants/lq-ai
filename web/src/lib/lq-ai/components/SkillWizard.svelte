@@ -820,7 +820,7 @@
 	}
 	.primary {
 		background: var(--lq-accent);
-		color: white;
+		color: var(--lq-on-accent);
 		border: 0;
 		padding: 8px 16px;
 		border-radius: var(--lq-radius-pill);
