@@ -29,6 +29,16 @@ const longMatter = {
 	attached_skill_names: []
 };
 
+const personalSkill = {
+	id: 'notice-review',
+	slug: 'commercial-contract-notice-period-review',
+	display_name: 'Commercial contract notice period review',
+	scope: 'user',
+	description: 'Check the notice period before renewal.',
+	version: '1.0.0',
+	updated_at: '2026-01-12T08:00:00Z'
+};
+
 function visit(path: string, width: number) {
 	rejectUnexpectedApiRequests();
 	cy.intercept('GET', '**/api/config', {
@@ -45,6 +55,23 @@ function visit(path: string, width: number) {
 		}
 		cy.intercept('GET', '**/api/v1/models*', { body: { data: [] } });
 		cy.intercept('GET', '**/api/v1/admin/usage*', { body: { rows: [], total_request_count: 0 } });
+	}
+	if (path === '/lq-ai/skills') {
+		cy.intercept('GET', '**/api/v1/skills*', [
+			{ name: 'nda-review', title: 'NDA review', scope: 'builtin' }
+		]);
+		cy.intercept('GET', '**/api/v1/teams*', []);
+		cy.intercept('GET', '**/api/v1/user-skills*', [personalSkill]);
+		cy.intercept('GET', '**/api/v1/skills/' + personalSkill.slug, {
+			...personalSkill,
+			name: personalSkill.slug,
+			title: personalSkill.display_name,
+			content_md: 'Review the notice period.',
+			content_yaml: 'name: ' + personalSkill.slug
+		});
+		cy.intercept('GET', '**/api/v1/skills/' + personalSkill.slug + '/inputs', {
+			required: [], optional: []
+		});
 	}
 	cy.intercept('GET', '**/api/v1/chats*', { body: { items: [], next_cursor: null } });
 	cy.intercept('GET', '**/api/v1/knowledge-bases*', { body: [] });
@@ -100,7 +127,32 @@ function checkPageWidth() {
 }
 
 for (const width of [390, 768, 1440]) {
-	describe('Result and Knowledge layouts at ' + width + 'px', () => {
+	describe('Responsive layouts at ' + width + 'px', () => {
+		it('shows a readable editable skill before the built-ins and opens it', () => {
+			visit('/lq-ai/skills', width);
+			const row = '[data-testid="lq-ai-user-skill-row"]';
+			cy.get('[data-testid="lq-ai-builtin-table-skills"]').should(($catalog) => {
+				const skill = $catalog[0].ownerDocument.querySelector(row)!;
+				expect(skill.getBoundingClientRect().bottom).to.be.at.most(
+					$catalog[0].getBoundingClientRect().top
+				);
+			});
+			cy.contains(row + ' a', personalSkill.display_name).should(($link) => {
+				expect(textRects($link[0]).length, 'lines of skill title').to.be.within(1, 3);
+			});
+			cy.get(row + ' code').should(($slug) => {
+				expect(textRects($slug[0]).length, 'lines of slug').to.be.within(1, 3);
+			});
+			cy.get(row).find('a, button').each(($action) => {
+				const rect = $action[0].getBoundingClientRect();
+				expect(rect.left).to.be.at.least(0);
+				expect(rect.right).to.be.at.most(width);
+			});
+			checkPageWidth();
+			cy.contains(row + ' a', personalSkill.display_name).click();
+			cy.contains('h1', personalSkill.display_name).should('be.visible');
+		});
+
 		it('keeps the long Recent Matters link inside its card and focusable', () => {
 			visit('/lq-ai', width);
 			const grid = '[data-testid="lq-ai-recent-activity"]';

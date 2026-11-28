@@ -311,7 +311,9 @@ describe('Wave B v2 — new surfaces', () => {
 
 		cy.visit('/lq-ai/skills');
 		cy.intercept('GET', `**/api/v1/skills/${skillSlug}`).as('loadSkill');
-		cy.get(`a[href="/lq-ai/skills/${skillSlug}"]`).should('be.visible').click();
+		const skillLink = `a[href="/lq-ai/skills/${skillSlug}"]`;
+		cy.get(skillLink).scrollIntoView();
+		cy.get(skillLink).should('be.visible').click();
 		cy.url().should('match', /\/lq-ai\/skills\/[^/]+$/);
 		cy.wait('@loadSkill', { timeout: 60000 }).its('response.statusCode').should('eq', 200);
 

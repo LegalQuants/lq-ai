@@ -171,8 +171,8 @@
 	});
 </script>
 
-<div class="p-4 max-w-5xl mx-auto" data-testid="lq-ai-user-skills">
-	<header class="mb-4 flex items-center justify-between">
+<div class="skills-page p-4 max-w-5xl mx-auto" data-testid="lq-ai-user-skills">
+	<header class="skills-header mb-4 flex items-center justify-between gap-3">
 		<div>
 			<LqTitle order={1} size="20" weight="bold" tone="primary">My skills</LqTitle>
 			<LqText as="p" size="12" tone="tertiary" class="mt-1">
@@ -180,7 +180,7 @@
 				admin. A skill at the same slug as a built-in shadows the built-in for the relevant scope.
 			</LqText>
 		</div>
-		<div class="flex gap-2">
+		<div class="flex flex-wrap gap-2">
 			<a href="/lq-ai/skills/workspaces" class="lq-btn-secondary text-xs">Saved work</a>
 			<a
 				href="/lq-ai"
@@ -259,8 +259,116 @@
 		</div>
 	{/if}
 
+	{#if loading}
+		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
+	{:else if rows.length === 0}
+		<div
+			class="lq-empty-state p-6 text-center"
+		>
+			<LqText as="p" size="14" tone="secondary">You haven't created any skills yet.</LqText>
+			<LqText as="p" size="14" tone="primary" class="mt-2">
+				<a href="/lq-ai/skills/new" class="lq-link">
+					Create your first skill
+				</a>
+				, or fork a built-in from the picker.
+			</LqText>
+		</div>
+	{:else if visibleRows.length === 0}
+		<LqText
+			as="p"
+			size="12"
+			tone="tertiary"
+			data-testid="lq-ai-user-skills-empty-filtered"
+		>
+			None of your skills match the "{chipLabel(activeFormat)}" filter.
+		</LqText>
+	{:else}
+		<div class="lq-table-wrap overflow-x-auto">
+			<LqText as="table" size="13.5" tone="primary" class="min-w-full" aria-label="Editable skills">
+				<thead class="lq-thead">
+					<tr>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Title</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Slug</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Scope</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Version</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Updated</LqText>
+						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-right px-3 py-2">Actions</LqText>
+					</tr>
+				</thead>
+				<tbody class="lq-tbody">
+					{#each visibleRows as row (row.id)}
+						<tr data-testid="lq-ai-user-skill-row" data-scope={row.scope}>
+							<td class="px-3 py-2" style="color: var(--lq-text);">
+								<a
+									href={`/lq-ai/skills/${encodeURIComponent(row.slug)}`}
+									class="font-medium lq-link hover:underline"
+								>
+									{row.display_name}
+								</a>
+								{#if row.description}
+									<LqText as="div" size="12" tone="tertiary" class="mt-0.5 line-clamp-1">{row.description}</LqText>
+								{/if}
+							</td>
+							<td class="px-3 py-2">
+								<span class="compact-label" aria-hidden="true">Slug</span>
+								<LqText as="code" size="12" tone="secondary" class="font-mono">{row.slug}</LqText>
+								{#if builtinSlugs.has(row.slug)}
+									<span class="ml-2" data-testid="lq-ai-user-skill-shadow-chip">
+										<TrustPill
+											variant="tier"
+											tone="sage"
+											label="Shadows built-in"
+										/>
+									</span>
+								{/if}
+							</td>
+							<td class="px-3 py-2">
+								<span class="compact-label" aria-hidden="true">Scope</span>
+								{#if row.scope === 'team'}
+									<span data-testid="lq-ai-user-skill-team-chip" title="Team-scope skill — visible to every member of this team.">
+										<TrustPill
+											variant="tier"
+											tone="sage"
+											label={`Team · ${row.owner_team_id ? (teamNamesById.get(row.owner_team_id) ?? 'unknown') : 'unknown'}`}
+										/>
+									</span>
+								{:else}
+									<span class="lq-scope-personal" data-testid="lq-ai-user-skill-personal-chip">
+										Personal
+									</span>
+								{/if}
+							</td>
+							<LqText as="td" size="12" tone="secondary" class="px-3 py-2 lq-tabular">
+								<span class="compact-label" aria-hidden="true">Version</span> {row.version}
+							</LqText>
+							<LqText as="td" size="12" tone="tertiary" class="px-3 py-2">
+								<span class="compact-label" aria-hidden="true">Updated</span> {shortDate(row.updated_at)}
+							</LqText>
+							<td class="px-3 py-2 text-right whitespace-nowrap">
+								<a
+									href={`/lq-ai/skills/${row.id}/edit`}
+									class="lq-btn-secondary"
+								>
+									Edit
+								</a>
+								<button
+									type="button"
+									class="ml-1 lq-btn-danger"
+									on:click={() => archive(row)}
+									data-testid="lq-ai-user-skill-archive-btn"
+								>
+									Archive
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</LqText>
+		</div>
+	{/if}
+
 	{#if !loading && builtins.length > 0}
-		<section class="mb-6" data-testid="lq-ai-builtin-table-skills">
+		<section class="mt-6" data-testid="lq-ai-builtin-table-skills">
 			<LqTitle order={2} size="14.5" weight="semibold" tone="primary" class="mb-2">Built-in skills</LqTitle>
 			<LqText as="p" size="12" tone="secondary" class="mb-3">
 				Read-only skills that ship with LQ.AI. Open one to read its description
@@ -316,111 +424,16 @@
 			{/if}
 		</section>
 	{/if}
-
-	{#if loading}
-		<LqText as="p" size="14" tone="secondary">Loading…</LqText>
-	{:else if rows.length === 0}
-		<div
-			class="lq-empty-state p-6 text-center"
-		>
-			<LqText as="p" size="14" tone="secondary">You haven't created any skills yet.</LqText>
-			<LqText as="p" size="14" tone="primary" class="mt-2">
-				<a href="/lq-ai/skills/new" class="lq-link">
-					Create your first skill
-				</a>
-				, or fork a built-in from the picker.
-			</LqText>
-		</div>
-	{:else if visibleRows.length === 0}
-		<LqText
-			as="p"
-			size="12"
-			tone="tertiary"
-			data-testid="lq-ai-user-skills-empty-filtered"
-		>
-			None of your skills match the "{chipLabel(activeFormat)}" filter.
-		</LqText>
-	{:else}
-		<div class="lq-table-wrap overflow-x-auto">
-			<LqText as="table" size="13.5" tone="primary" class="min-w-full">
-				<thead class="lq-thead">
-					<tr>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Title</LqText>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Slug</LqText>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Scope</LqText>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Version</LqText>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-left px-3 py-2">Updated</LqText>
-						<LqText as="th" size="12" weight="semibold" tone="tertiary" transform="uppercase" tracking="wide" class="text-right px-3 py-2">Actions</LqText>
-					</tr>
-				</thead>
-				<tbody class="lq-tbody">
-					{#each visibleRows as row (row.id)}
-						<tr data-testid="lq-ai-user-skill-row" data-scope={row.scope}>
-							<td class="px-3 py-2" style="color: var(--lq-text);">
-								<a
-									href={`/lq-ai/skills/${encodeURIComponent(row.slug)}`}
-									class="font-medium lq-link hover:underline"
-								>
-									{row.display_name}
-								</a>
-								{#if row.description}
-									<LqText as="div" size="12" tone="tertiary" class="mt-0.5 line-clamp-1">{row.description}</LqText>
-								{/if}
-							</td>
-							<td class="px-3 py-2">
-								<LqText as="code" size="12" tone="secondary" class="font-mono">{row.slug}</LqText>
-								{#if builtinSlugs.has(row.slug)}
-									<span class="ml-2" data-testid="lq-ai-user-skill-shadow-chip">
-										<TrustPill
-											variant="tier"
-											tone="sage"
-											label="Shadows built-in"
-										/>
-									</span>
-								{/if}
-							</td>
-							<td class="px-3 py-2">
-								{#if row.scope === 'team'}
-									<span data-testid="lq-ai-user-skill-team-chip" title="Team-scope skill — visible to every member of this team.">
-										<TrustPill
-											variant="tier"
-											tone="sage"
-											label={`Team · ${row.owner_team_id ? (teamNamesById.get(row.owner_team_id) ?? 'unknown') : 'unknown'}`}
-										/>
-									</span>
-								{:else}
-									<span class="lq-scope-personal" data-testid="lq-ai-user-skill-personal-chip">
-										Personal
-									</span>
-								{/if}
-							</td>
-							<LqText as="td" size="12" tone="secondary" class="px-3 py-2 lq-tabular">{row.version}</LqText>
-							<LqText as="td" size="12" tone="tertiary" class="px-3 py-2">{shortDate(row.updated_at)}</LqText>
-							<td class="px-3 py-2 text-right whitespace-nowrap">
-								<a
-									href={`/lq-ai/skills/${row.id}/edit`}
-									class="lq-btn-secondary"
-								>
-									Edit
-								</a>
-								<button
-									type="button"
-									class="ml-1 lq-btn-danger"
-									on:click={() => archive(row)}
-									data-testid="lq-ai-user-skill-archive-btn"
-								>
-									Archive
-								</button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</LqText>
-		</div>
-	{/if}
 </div>
 
 <style>
+	.skills-page {
+		container: skills / inline-size;
+	}
+	.compact-label {
+		display: none;
+	}
+
 	/* DE-298 — filter / sort toolbar */
 	.lq-browser-toolbar {
 		display: flex;
@@ -459,7 +472,7 @@
 		padding: 0;
 		margin: 0;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
 		gap: 0.5rem;
 	}
 	.lq-table-skill-card {
@@ -530,10 +543,49 @@
 
 	.lq-thead {
 		background: var(--lq-inset);
+		white-space: nowrap;
 	}
 
 	.lq-tbody tr {
 		border-top: 1px solid var(--lq-border);
+	}
+
+	@container skills (max-width: 45rem) {
+		.skills-header {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+		.lq-table-wrap :global(table),
+		.lq-tbody {
+			display: block;
+		}
+		/* Keep column headers available to assistive technology in the stacked layout. */
+		.lq-thead {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+		}
+		.lq-tbody tr {
+			display: grid;
+			gap: 0.375rem;
+			padding: 0.75rem;
+		}
+		.lq-tbody tr:first-child {
+			border-top: 0;
+		}
+		.lq-tbody :global(td) {
+			min-width: 0;
+			padding: 0;
+			overflow-wrap: anywhere;
+			text-align: start;
+		}
+		.compact-label {
+			display: inline-block;
+			margin-inline-end: 0.375rem;
+			color: var(--lq-text-secondary);
+		}
 	}
 
 	.lq-scope-personal {
