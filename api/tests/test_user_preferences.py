@@ -20,9 +20,11 @@ from collections.abc import AsyncIterator, Callable
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.users import UserPreferencesUpdate
 from app.db.session import get_db
 from app.main import app
 from app.models import AuditLog, User
@@ -74,7 +76,7 @@ async def test_get_preferences_defaults_to_disclosure(client: AsyncClient, calle
 
 @pytest.mark.integration
 async def test_get_preferences_defaults_full_snapshot(client: AsyncClient, caller: User) -> None:
-    """All 6 preference fields return their 'brave choice' server defaults."""
+    """All 7 preference fields return their server defaults."""
     resp = await client.get("/api/v1/users/me/preferences", headers=_bearer(caller))
     assert resp.status_code == 200
     data = resp.json()
@@ -83,6 +85,7 @@ async def test_get_preferences_defaults_full_snapshot(client: AsyncClient, calle
     assert data["workspace_layout"] == "three_pane"
     assert data["trust_pills"] == "labels"
     assert data["provenance_pills"] == "always"
+    assert data["appearance_theme"] == "system"
     assert data["autonomous_enabled"] is False
 
 
@@ -394,3 +397,133 @@ async def test_idempotent_patch_no_audit_on_new_field(
         .all()
     )
     assert audits == []
+
+
+# ---------------------------------------------------------------------------
+# ADR 0045 §2 — appearance_theme (migration 0080)
+#
+# The preference is stored and returned only; nothing acts on it yet. These
+# tests pin the storage contract: default, round trip, audit, validation.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["light", "dark", "system"])
+def test_appearance_theme_update_model_accepts_each_choice(value: str) -> None:
+    """No database: the PATCH body accepts exactly the ADR's three values."""
+    parsed = UserPreferencesUpdate.model_validate({"appearance_theme": value})
+    assert parsed.appearance_theme == value
+
+
+@pytest.mark.parametrize("value", ["oled", "Dark", "", "auto"])
+def test_appearance_theme_update_model_rejects_other_values(value: str) -> None:
+    """No database: anything else fails validation (OLED Dark is Open WebUI's)."""
+    with pytest.raises(ValidationError):
+        UserPreferencesUpdate.model_validate({"appearance_theme": value})
+
+
+@pytest.mark.integration
+async def test_users_me_surfaces_appearance_theme_default(
+    client: AsyncClient, caller: User
+) -> None:
+    """A user who has never chosen reads ``system`` on the profile too."""
+    resp = await client.get("/api/v1/users/me", headers=_bearer(caller))
+    assert resp.status_code == 200
+    assert resp.json()["appearance_theme"] == "system"
+
+
+@pytest.mark.integration
+async def test_patch_preferences_appearance_theme_change_persists_and_writes_audit(
+    client: AsyncClient, db_session: AsyncSession, caller: User
+) -> None:
+    resp = await client.patch(
+        "/api/v1/users/me/preferences",
+        headers=_bearer(caller),
+        json={"appearance_theme": "dark"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["appearance_theme"] == "dark"
+    # Other preferences untouched — still at defaults.
+    assert data["provenance_pills"] == "always"
+
+    # Persisted: both read surfaces return the new value.
+    again = await client.get("/api/v1/users/me/preferences", headers=_bearer(caller))
+    assert again.status_code == 200
+    assert again.json()["appearance_theme"] == "dark"
+    me = await client.get("/api/v1/users/me", headers=_bearer(caller))
+    assert me.status_code == 200
+    assert me.json()["appearance_theme"] == "dark"
+
+    # Exactly one audit row, naming only this field, with before/after.
+    audit = (
+        await db_session.execute(
+            select(AuditLog).where(
+                AuditLog.action == "user.preferences_updated",
+                AuditLog.resource_id == str(caller.id),
+            )
+        )
+    ).scalar_one()
+    assert audit.details is not None
+    changes = audit.details["changes"]
+    assert set(changes) == {"appearance_theme"}
+    assert changes["appearance_theme"] == {"before": "system", "after": "dark"}
+
+
+@pytest.mark.integration
+async def test_patch_preferences_appearance_theme_idempotent_no_audit(
+    client: AsyncClient, db_session: AsyncSession, caller: User
+) -> None:
+    """Re-supplying the stored value (the ``system`` default) writes no audit row."""
+    resp = await client.patch(
+        "/api/v1/users/me/preferences",
+        headers=_bearer(caller),
+        json={"appearance_theme": "system"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["appearance_theme"] == "system"
+
+    audits = (
+        (
+            await db_session.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "user.preferences_updated",
+                    AuditLog.resource_id == str(caller.id),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert audits == []
+
+
+@pytest.mark.integration
+async def test_patch_preferences_invalid_appearance_theme_returns_422(
+    client: AsyncClient, caller: User
+) -> None:
+    resp = await client.patch(
+        "/api/v1/users/me/preferences",
+        headers=_bearer(caller),
+        json={"appearance_theme": "oled"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.integration
+async def test_users_check_constraint_blocks_invalid_appearance_theme_value(
+    db_session: AsyncSession, caller: User
+) -> None:
+    """DB-level CHECK (migration 0080) rejects a value written past the API.
+
+    Asserts on the driver error (``orig``), which names the constraint.
+    The SQLAlchemy wrapper's own text carries the whole failing statement,
+    so matching on it would pass whichever constraint fired.
+    """
+
+    from sqlalchemy.exc import IntegrityError
+
+    caller.appearance_theme = "oled"  # type: ignore[assignment]  # intentionally invalid
+    with pytest.raises(IntegrityError) as excinfo:
+        await db_session.flush()
+    assert "chk_users_appearance_theme_enum" in str(excinfo.value.orig)
+    await db_session.rollback()

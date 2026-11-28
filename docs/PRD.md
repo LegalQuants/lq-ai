@@ -433,6 +433,8 @@ This section specifies each major capability. Every capability section follows t
 | `trust_pills` | text | `labels`, `dots` | `labels` | Ambient trust pill format — full label `● self-hosted` vs. minimal dot only |
 | `provenance_pills` | text | `always`, `collapsed` | `always` | Per-message skill / tier / provider pill row visibility |
 
+**Added after M1: `appearance_theme`.** Migration `0080` adds a sixth column in this group under [ADR 0045 §2](adr/0045-lq-ai-shell-redesign.md): `appearance_theme`, text, `light` / `dark` / `system` (Match system), default `system`, `NOT NULL` with the CHECK constraint `chk_users_appearance_theme_enum`. Existing users receive `system` from the column default. It rides the same endpoints as the five above: `GET /users/me/preferences` and `GET /users/me` return it, and `PATCH /users/me/preferences` accepts it and audits a change like any other field. Older, light-only web clients continue to render light for all three values. (The preferences endpoints also carry `autonomous_enabled`, the Autonomous Layer opt-in from [§3.10](#310-autonomous-layer-m4), which this section does not count.)
+
 **Non-functional requirements.**
 - All five columns are `NOT NULL` with a `server_default` equal to the "brave choice" default. New users get the full-disclosure experience without any explicit write.
 - Each column carries a DB-level `CHECK` constraint (named `chk_users_<field>_enum`) that mirrors the Pydantic `Literal` type enforcement in the API layer. This is defense-in-depth: invalid values are rejected at the storage layer even if they bypass the API validator.
@@ -5655,6 +5657,8 @@ Scope when picked up:
 - **(e) A guard.** A test or visual check so coverage does not quietly regress through quarterly OpenWebUI refreshes.
 
 Pure `web/` work with no API, DB or gateway surface. The only structural wrinkle is (c): the theme resolution lives in upstream files, so the change is a carried patch under ADR 0001 and the rebase runbook.
+
+**Update (2026-11-26).** [ADR 0045 §2](adr/0045-lq-ai-shell-redesign.md) decides these questions and changes the line above: the choice is saved to the account, so there is one API and DB surface after all. That surface has landed as `users.appearance_theme` (migration `0080`; see [§3.2.1](#321-user-personalization-preferences-m1)). The API change can ship independently of the theme controls.
 
 #### DE-395 — Raise the gateway coverage ratchet from 88% to the documented 90% target
 

@@ -44,6 +44,8 @@ CREATE TABLE users (
     workspace_layout      TEXT NOT NULL DEFAULT 'three_pane',  -- CHECK (workspace_layout IN ('three_pane','two_pane','one_pane'))
     trust_pills           TEXT NOT NULL DEFAULT 'labels',      -- CHECK (trust_pills IN ('labels','dots'))
     provenance_pills      TEXT NOT NULL DEFAULT 'always',      -- CHECK (provenance_pills IN ('always','collapsed'))
+    -- ADR 0045 §2 (migration 0080) — shell theme preference; stored, not yet acted on.
+    appearance_theme      TEXT NOT NULL DEFAULT 'system',      -- CHECK (appearance_theme IN ('light','dark','system'))
     -- M4-C2 (migration 0044) — Autonomous Layer per-user opt-in; off by default.
     autonomous_enabled    BOOLEAN NOT NULL DEFAULT FALSE,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -68,6 +70,7 @@ CREATE INDEX idx_users_deletion_scheduled ON users(deletion_scheduled_at) WHERE 
 | `workspace_layout` | 0019 | Matter workspace pane count for Wave C: `three_pane`, `two_pane`, `one_pane`. |
 | `trust_pills` | 0019 | Ambient trust label format: `labels` (full text) vs. `dots` (minimal). |
 | `provenance_pills` | 0019 | Per-message skill/tier/provider pill row: `always` visible vs. `collapsed`. |
+| `appearance_theme` | 0080 | LQ.AI shell theme ([ADR 0045 §2](adr/0045-lq-ai-shell-redesign.md)): `light`, `dark`, or `system` (Match system; the default, which existing users receive). CHECK `chk_users_appearance_theme_enum`. |
 | `autonomous_enabled` | 0044 | M4-C2 Autonomous Layer opt-in. `FALSE` by default; the autonomous executor and trigger surfaces are inert for a user until they flip this on. |
 
 `must_change_password` is set to TRUE for:

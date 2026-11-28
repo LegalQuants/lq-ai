@@ -18,6 +18,9 @@ from app.db.base import Base
 MUTATING_ROLES: frozenset[str] = frozenset({"admin", "member"})
 
 
+AppearanceTheme = Literal["light", "dark", "system"]
+
+
 class User(Base):
     """A LQ.AI user. Auth-owning per ADR 0002.
 
@@ -82,6 +85,11 @@ class User(Base):
     )
     provenance_pills: Mapped[Literal["always", "collapsed"]] = mapped_column(
         String, nullable=False, server_default=text("'always'")
+    )
+    # ADR 0045 §2 — LQ.AI shell theme: Light, Dark or Match system (the
+    # default). Migration 0080 enforces these values in the database.
+    appearance_theme: Mapped[AppearanceTheme] = mapped_column(
+        String, nullable=False, server_default=text("'system'")
     )
 
     # M4-C2 — Autonomous Layer per-user opt-in (PRD §3.10: off by default).

@@ -45,7 +45,7 @@ from app.audit import audit_action
 from app.config import get_settings
 from app.db.session import get_db
 from app.errors import Conflict
-from app.models.user import User, UserSession
+from app.models.user import AppearanceTheme, User, UserSession
 from app.security import (
     create_access_token,
     create_mfa_token,
@@ -106,6 +106,8 @@ class UserPublic(BaseModel):
     workspace_layout: str = "three_pane"
     trust_pills: str = "labels"
     provenance_pills: str = "always"
+    # ADR 0045 §2 — account preference shared with /users/me/preferences.
+    appearance_theme: AppearanceTheme = "system"
     created_at: datetime
     last_login_at: datetime | None = None
     # GDPR Article 17 grace-period delete: non-null while a deletion is
@@ -129,6 +131,7 @@ class UserPublic(BaseModel):
             workspace_layout=getattr(user, "workspace_layout", "three_pane"),
             trust_pills=getattr(user, "trust_pills", "labels"),
             provenance_pills=getattr(user, "provenance_pills", "always"),
+            appearance_theme=getattr(user, "appearance_theme", "system"),
             created_at=user.created_at,
             last_login_at=user.last_login_at,
             deletion_scheduled_at=user.deletion_scheduled_at,
