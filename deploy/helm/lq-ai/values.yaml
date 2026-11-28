@@ -35,7 +35,7 @@ redis:
 # RustFS 1.0.3, pinned by multi-arch index digest; operator values stay generic.
 objectStore:
   enabled: true
-  image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
+  image: rustfs/rustfs:1.0.6@sha256:ee717072290bec9b11abfc0365f8310b00df1cd9b3639943edae47bdef05044a
   pullPolicy: IfNotPresent
   storage: ""
   storageClass: ""
